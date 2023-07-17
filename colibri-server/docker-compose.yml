@@ -1,0 +1,13 @@
+version: '3.4'
+services:
+  colibri:
+    build: .
+    restart: unless-stopped
+    container_name: colibri
+    tty: true
+    volumes:
+        - ./data/:/srv/colibri/data
+    ports:
+      - 8001:8001 # web interface / web sockets
+      - 8002:8002 # unity
+      - "8003:8003/udp" # voice

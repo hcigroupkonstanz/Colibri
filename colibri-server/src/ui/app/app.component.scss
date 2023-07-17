@@ -1,0 +1,25 @@
+@import '../sass/nord.scss';
+
+.container {
+    display: grid;
+    // grid-template-columns: [main] 1fr [sidebar] 350px;
+    grid-template-columns: [main] 1fr [sidebar] 0px;
+    grid-template-rows: 100%;
+
+    width: 100%;
+    height: 100%;
+
+    .main {
+        width: 100%;
+        height: 100%;
+        background-color: $nord0;
+        grid-column: main;
+    }
+
+    .sidebar {
+        height: 100%;
+        display: inline-block;
+        overflow: auto;
+        grid-column: sidebar;
+    }
+}

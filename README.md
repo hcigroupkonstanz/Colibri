@@ -7,6 +7,6 @@ Provides easy model synchronization and easy access to data for faster cross rea
 ## Requirements
 
 - Unity 2019.4 or higher
-- NodeJS 18 or higher (for the server; also available on DockerHub)
+- NodeJS 12 or higher (for the server; also available on DockerHub)
 
-## More coming soon
+## More information coming soon
