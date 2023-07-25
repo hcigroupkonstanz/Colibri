@@ -46,62 +46,62 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             switch (command)
             {
-                case "bool":
+                case "broadcast::bool":
                     Invoke(channel, _boolListeners, data.Value<bool>());
                     break;
-                case "int":
+                case "broadcast::int":
                     Invoke(channel, _intListeners, data.Value<int>());
                     break;
-                case "float":
+                case "broadcast::float":
                     Invoke(channel, _floatListeners, data.Value<float>());
                     break;
-                case "string":
+                case "broadcast::string":
                     Invoke(channel, _stringListeners, data.Value<string>());
                     break;
-                case "vector2":
+                case "broadcast::vector2":
                     Invoke(channel, _vector2Listeners, data.ToVector2());
                     break;
-                case "vector3":
+                case "broadcast::vector3":
                     Invoke(channel, _vector3Listeners, data.ToVector3());
                     break;
-                case "quaternion":
+                case "broadcast::quaternion":
                     Invoke(channel, _quaternionListeners, data.ToQuaternion());
                     break;
-                case "color":
+                case "broadcast::color":
                     Invoke(channel, _colorListeners, data.ToColor());
                     break;
 
-                case "bool[]":
+                case "broadcast::bool[]":
                     Invoke(channel, _boolArrayListeners, data.Select(x => (bool)x).ToArray());
                     break;
-                case "int[]":
+                case "broadcast::int[]":
                     Invoke(channel, _intArrayListeners, data.Select(x => (int)x).ToArray());
                     break;
-                case "float[]":
+                case "broadcast::float[]":
                     Invoke(channel, _floatArrayListeners, data.Select(x => (float)x).ToArray());
                     break;
-                case "string[]":
+                case "broadcast::string[]":
                     Invoke(channel, _stringArrayListeners, data.Select(x => (string)x).ToArray());
                     break;
-                case "vector2[]":
+                case "broadcast::vector2[]":
                     Invoke(channel, _vector2ArrayListeners, data.Select(x => x.ToVector2()).ToArray());
                     break;
-                case "vector3[]":
+                case "broadcast::vector3[]":
                     Invoke(channel, _vector3ArrayListeners, data.Select(x => x.ToVector3()).ToArray());
                     break;
-                case "quaternion[]":
+                case "broadcast::quaternion[]":
                     Invoke(channel, _quaternionArrayListeners, data.Select(x => x.ToQuaternion()).ToArray());
                     break;
-                case "color[]":
+                case "broadcast::color[]":
                     Invoke(channel, _colorArrayListeners, data.Select(x => x.ToColor()).ToArray());
                     break;
 
-                case "JSON":
+                case "broadcast::JSON":
                     Invoke(channel, _jsonListeners, data);
                     break;
 
-                case "modelUpdate":
-                    // cause TypeLoadExceptions sometimes??
+                case "model::update":
+                    // TODO: cause TypeLoadExceptions sometimes??
                     //Invoke<JObject>(channel, _modelUpdateListeners, (JObject)data);
                     if (_modelUpdateListeners.ContainsKey(channel))
                     {
@@ -113,8 +113,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     }
                     break;
 
-                case "modelDelete":
-                    // cause TypeLoadExceptions sometimes??
+                case "model::delete":
+                    // TODO: cause TypeLoadExceptions sometimes??
                     //Invoke<JObject>(channel, _modelDeleteListeners, (JObject)data);
                     if (_modelDeleteListeners.ContainsKey(channel))
                     {
@@ -144,27 +144,26 @@ namespace HCIKonstanz.Colibri.Synchronization
         /*
          *  Sending data
          */
-        public static void SendData(string channel, bool data) => Connection().SendCommand(channel, "bool", data);
-        public static void SendData(string channel, int data) => Connection().SendCommand(channel, "int", data);
-        public static void SendData(string channel, float data) => Connection().SendCommand(channel, "float", data);
-        public static void SendData(string channel, string data) => Connection().SendCommand(channel, "string", data);
-        public static void SendData(string channel, Vector2 data) => Connection().SendCommand(channel, "vector2", data.ToJson());
-        public static void SendData(string channel, Vector3 data) => Connection().SendCommand(channel, "vector3", data.ToJson());
-        public static void SendData(string channel, Quaternion data) => Connection().SendCommand(channel, "quaternion", data.ToJson());
-        public static void SendData(string channel, Color data) => Connection().SendCommand(channel, "color", data.ToJson());
-        public static void SendData(string channel, bool[] data) => Connection().SendCommand(channel, "bool[]", new JArray(data));
-        public static void SendData(string channel, int[] data) => Connection().SendCommand(channel, "int[]", new JArray(data));
-        public static void SendData(string channel, float[] data) => Connection().SendCommand(channel, "float[]", new JArray(data));
-        public static void SendData(string channel, string[] data) => Connection().SendCommand(channel, "string[]", new JArray(data));
-        public static void SendData(string channel, Vector2[] data) => Connection().SendCommand(channel, "vector2[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, Vector3[] data) => Connection().SendCommand(channel, "vector3[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, Quaternion[] data) => Connection().SendCommand(channel, "quaternion[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, Color[] data) => Connection().SendCommand(channel, "color[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, JToken data) => Connection().SendCommand(channel, "JSON", data);
+        public static void SendData(string channel, bool data) => Connection().SendCommand(channel, "broadcast::bool", data);
+        public static void SendData(string channel, int data) => Connection().SendCommand(channel, "broadcast::int", data);
+        public static void SendData(string channel, float data) => Connection().SendCommand(channel, "broadcast::float", data);
+        public static void SendData(string channel, string data) => Connection().SendCommand(channel, "broadcast::string", data);
+        public static void SendData(string channel, Vector2 data) => Connection().SendCommand(channel, "broadcast::vector2", data.ToJson());
+        public static void SendData(string channel, Vector3 data) => Connection().SendCommand(channel, "broadcast::vector3", data.ToJson());
+        public static void SendData(string channel, Quaternion data) => Connection().SendCommand(channel, "broadcast::quaternion", data.ToJson());
+        public static void SendData(string channel, Color data) => Connection().SendCommand(channel, "broadcast::color", data.ToJson());
+        public static void SendData(string channel, bool[] data) => Connection().SendCommand(channel, "broadcast::bool[]", new JArray(data));
+        public static void SendData(string channel, int[] data) => Connection().SendCommand(channel, "broadcast::int[]", new JArray(data));
+        public static void SendData(string channel, float[] data) => Connection().SendCommand(channel, "broadcast::float[]", new JArray(data));
+        public static void SendData(string channel, string[] data) => Connection().SendCommand(channel, "broadcast::string[]", new JArray(data));
+        public static void SendData(string channel, Vector2[] data) => Connection().SendCommand(channel, "broadcast::vector2[]", new JArray(data.Select(x => x.ToJson())));
+        public static void SendData(string channel, Vector3[] data) => Connection().SendCommand(channel, "broadcast::vector3[]", new JArray(data.Select(x => x.ToJson())));
+        public static void SendData(string channel, Quaternion[] data) => Connection().SendCommand(channel, "broadcast::quaternion[]", new JArray(data.Select(x => x.ToJson())));
+        public static void SendData(string channel, Color[] data) => Connection().SendCommand(channel, "broadcast::color[]", new JArray(data.Select(x => x.ToJson())));
+        public static void SendData(string channel, JToken data) => Connection().SendCommand(channel, "broadcast::JSON", data);
 
-        public static void SendModelUpdate(string channel, JObject data) => Connection().SendCommand(channel, "modelUpdate", data);
-        public static void SendModelDelete(string channel, int id) => Connection().SendCommand(channel, "modelDelete", new JObject { { "Id", id } });
-        public static void SendModelDelete(string channel, string id) => Connection().SendCommand(channel, "modelDelete", new JObject { { "Id", id } });
+        public static void SendModelUpdate(string channel, JObject data) => Connection().SendCommand(channel, "model::update", data);
+        public static void SendModelDelete(string channel, string id) => Connection().SendCommand(channel, "model::delete", new JObject { { "id", id } });
 
 
 
@@ -246,19 +245,13 @@ namespace HCIKonstanz.Colibri.Synchronization
         public static void AddModelUpdateListener(string channel, Action<JObject> listener)
         {
             AddListener(channel, _modelUpdateListeners, listener);
-            Connection().SendCommand(channel, "modelInitialState", null);
-        }
-
-        public static void AddModelUpdateListener(string channel, Action<JObject> listener, int fetchInitialStateId)
-        {
-            AddListener(channel, _modelUpdateListeners, listener);
-            Connection().SendCommand(channel, "modelInitialState", new JObject { { "Id", fetchInitialStateId } });
+            Connection().SendCommand(channel, "model::request", null);
         }
 
         public static void AddModelUpdateListener(string channel, Action<JObject> listener, string fetchInitialStateId)
         {
             AddListener(channel, _modelUpdateListeners, listener);
-            Connection().SendCommand(channel, "modelInitialState", new JObject { { "Id", fetchInitialStateId } });
+            Connection().SendCommand(channel, "model::request", new JObject { { "id", fetchInitialStateId } });
         }
 
         public static void RemoveModelUpdateListener(string channel, Action<JObject> listener) => RemoveListener(channel, _modelUpdateListeners, listener);

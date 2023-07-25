@@ -1,8 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import * as _ from 'lodash';
 import * as colibri from './modules';
 import { Config } from './configuration';
 
 // Better TypeScript error messages
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 require('source-map-support').install();
 
 /**
@@ -13,21 +16,19 @@ require('source-map-support').install();
 Error.stackTraceLimit = Infinity;
 
 // Print console errors in GUI
-// const redirectConsole = new arts.RedirectConsole();
-
-
+// const redirectConsole = new colibri.RedirectConsole();
 const dataStore = new colibri.DataStore();
-
-
 
 
 /**
  *    Servers
  */
 const webServer = new colibri.WebServer(Config.WEBSERVER_PORT, Config.WEBSERVER_ROOT);
+const voiceServer = new colibri.VoiceServer(Config.DATA_ROOT);
+
 const unityServer = new colibri.UnityServerProxy();
 const socketioServer = new colibri.SocketIOServer();
-const voiceServer = new colibri.VoiceServer(Config.DATA_ROOT);
+const connectionPool = new colibri.ConnectionPool(unityServer, socketioServer);
 
 
 /**
@@ -38,15 +39,16 @@ const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer);
 /**
  *    Plumbing
  */
-const messageDistributor = new colibri.MessageDistributor(unityServer, socketioServer, dataStore);
 const unityLog = new colibri.UnityClientLogger(unityServer);
 const webLog = new colibri.WebLog(socketioServer);
+const modelsync = new colibri.ModelSynchronization(connectionPool, dataStore);
+const broadcaster = new colibri.Broadcaster(connectionPool);
 
 /**
  *    Startup
  */
 
-async function startup() {
+const startup = async () => {
     for (const service of colibri.Service.Current) {
         await service.init();
     }
@@ -55,6 +57,6 @@ async function startup() {
     socketioServer.start(httpServer);
     unityServer.start(Config.UNITY_PORT);
     voiceServer.start(Config.VOICE_PORT);
-}
+};
 
 startup();

@@ -1,16 +1,18 @@
 import { Service } from '../core';
 import * as dgram from 'dgram';
 import { AddressInfo } from 'net';
+import { WaveFile } from 'wavefile';
+import { writeFileSync } from 'fs';
 
-class VoiceClient {
-    public ip: string;
-    public port: number;
-    public userId: number;
-    public lastHeartbeat: number;
-    public frameSize: number; // How many samples are sent at one time
-    public frameSizeMillis: number;
-    public recordingStartDate: Date;
-    public recordingData: number[];
+interface VoiceClient {
+    ip: string;
+    port: number;
+    userId: number;
+    lastHeartbeat: number;
+    frameSize: number; // How many samples are sent at one time
+    frameSizeMillis: number;
+    recordingStartDate: Date;
+    recordingData: number[];
 }
 
 export class VoiceServer extends Service {
@@ -18,7 +20,7 @@ export class VoiceServer extends Service {
     public get serviceName(): string { return 'VoiceServer'; }
     public get groupName(): string { return 'web'; }
 
-    private udpSocket: dgram.Socket;
+    private udpSocket!: dgram.Socket;
     private clients: Map<string, VoiceClient> = new Map<string, VoiceClient>();
     private disconnectTimeoutMillis = 2000;
     private samplingRate = 48000; // Default Unity sampling rate
@@ -47,32 +49,39 @@ export class VoiceServer extends Service {
             const userId = message.readIntLE(0, 2); // .net (Unity) decodes default in little-endian order
 
             // Current voice client
-            let voiceClient: VoiceClient;
+            let voiceClient: VoiceClient | undefined;
 
             // Add to clients if new client
             if (!this.clients.has(remote.address)) {
-                voiceClient = new VoiceClient();
-                voiceClient.ip = remote.address;
-                voiceClient.port = remote.port;
-                voiceClient.userId = userId;
-                voiceClient.lastHeartbeat = nowMillis;
-                voiceClient.frameSize = (message.length - 2) / 4; // First 2 bytes userId, every float needs 4 bytes
-                voiceClient.frameSizeMillis = voiceClient.frameSize / this.samplingRate * 1000;
-                voiceClient.recordingStartDate = now;
-                voiceClient.recordingData = [];
+                const frameSize = (message.length - 2) / 4;
+                voiceClient = {
+                    ip: remote.address,
+                    port: remote.port,
+                    userId: userId,
+                    lastHeartbeat: nowMillis,
+                    frameSize, // First 2 bytes userId, every float needs 4 bytes
+                    frameSizeMillis: frameSize / this.samplingRate * 1000,
+                    recordingStartDate: now,
+                    recordingData: [],
+                };
                 this.clients.set(remote.address, voiceClient);
                 this.logDebug(`New voice client connected from ${remote.address}:${remote.port} ID: ${userId}`);
             } else {
                 voiceClient = this.clients.get(remote.address);
             }
 
+            if (!voiceClient) {
+                this.logError('Unknown voice client!');
+                return;
+            }
+
             // Update heartbeat time
-            this.clients.get(remote.address).lastHeartbeat = nowMillis;
+            voiceClient.lastHeartbeat = nowMillis;
 
             // Send message to all other clients
-            this.clients.forEach((value, key, map) => {
+            this.clients.forEach((value, key) => {
                 if (key !== remote.address) {
-                    this.udpSocket.send(message, 0, message.length, value.port, value.ip, (err, bytes) => {
+                    this.udpSocket.send(message, 0, message.length, value.port, value.ip, (err) => {
                         if (err) {
                             throw err;
                         }
@@ -106,7 +115,7 @@ export class VoiceServer extends Service {
 
     private checkClientsDisconnected(context: VoiceServer) {
         const now = Date.now();
-        context.clients.forEach((value, key, map) => {
+        context.clients.forEach((value, key) => {
             // Remove inactive clients
             if (now - value.lastHeartbeat > context.disconnectTimeoutMillis) {
 
@@ -114,14 +123,12 @@ export class VoiceServer extends Service {
                 if (value.recordingData.length > 0) {
 
                     // Create wave file from recording data
-                    const WaveFile = require('wavefile');
                     const wav = new WaveFile();
                     wav.fromScratch(context.channels, context.samplingRate, '32f', value.recordingData); // 32f means 32 bit floating data ranging from -1 to 1
 
                     // Save wave file
-                    const fs = require('fs');
-                    const dateString = context.filenameTimestamp(value.recordingStartDate);
-                    fs.writeFileSync(`${this.voiceRecordingPath} rec_${dateString}_ID_${value.userId}.wav`, wav.toBuffer());
+                    const dateString = value.recordingStartDate.toISOString().replace(':', '_');
+                    writeFileSync(`${this.voiceRecordingPath} rec_${dateString}_ID_${value.userId}.wav`, wav.toBuffer());
                 }
 
                 // Delete client
@@ -130,20 +137,4 @@ export class VoiceServer extends Service {
             }
         });
     }
-
-
-    private filenameTimestamp(date: Date): string {
-        // Create an array with the date parts
-        const dateArray: any[] = [date.getFullYear() + '', date.getMonth() + 1, date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()];
-
-        // Add leading zeros
-        for (let i = 1; i < 6; i++) {
-            if (dateArray[i] < 10) {
-                dateArray[i] = '0' + date[i];
-            }
-        }
-
-        return dateArray.join('_');
-    }
-
 }

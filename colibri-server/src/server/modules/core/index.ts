@@ -1,7 +1,5 @@
-export * from './data-store';
 export * from './error-handler';
 export * from './log-message';
-export * from './message';
 export * from './redirect-console';
 export * from './serializable';
 export * from './service';

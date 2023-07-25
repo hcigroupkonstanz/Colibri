@@ -32,7 +32,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             base.Awake();
             Action<JToken> addCmd = obj =>
             {
-                var objId = obj["Id"];
+                var objId = obj["id"];
                 if (objId != null)
                 {
                     var id = objId.Value<int>();
@@ -62,8 +62,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             AddCommand("remove", obj =>
             {
-                if (obj["Id"] != null)
-                    RemoveModel(obj["Id"].Value<int>());
+                if (obj["id"] != null)
+                    RemoveModel(obj["id"].Value<int>());
             });
         }
 
@@ -212,7 +212,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (!_isAddingModel)
             {
                 model.Id = _random.Next();
-                _connection.SendCommand(Channel, "add", new JObject { { "Id", model.Id } });
+                _connection.SendCommand(Channel, "add", new JObject { { "id", model.Id } });
                 _connection.SendCommand(Channel, "update", model.ToJson());
                 RegisterModel(model);
             }
@@ -222,7 +222,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             if (_currentModels.Contains(model))
             {
-                _connection.SendCommand(Channel, "remove", new JObject { { "Id", model.Id } });
+                _connection.SendCommand(Channel, "remove", new JObject { { "id", model.Id } });
                 RemoveModel(model);
             }
         }

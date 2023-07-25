@@ -36,7 +36,8 @@ export abstract class Service {
         Service.Current.push(this);
     }
 
-    public init() { }
+    // eslint-disable-next-line no-empty-function
+    public async init() { }
 
     private outputMsg(lvl: LogLevel, msg: string): void {
         this.outputStream$.next({

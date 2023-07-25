@@ -1,4 +1,4 @@
 export interface WorkerMessage {
     channel: string;
-    content: any;
+    content: { [key: string]: unknown };
 }

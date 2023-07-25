@@ -3,6 +3,11 @@ import { LogLevel } from './log-message';
 import * as threads from 'worker_threads';
 import { Subject } from 'rxjs';
 
+export interface WorkerLogMessage {
+    level: LogLevel;
+    msg: string;
+}
+
 export abstract class WorkerService {
     private readonly parentMessages = new Subject<WorkerMessage>();
     protected readonly parentMessages$ = this.parentMessages.asObservable();
@@ -40,22 +45,22 @@ export abstract class WorkerService {
     }
 
 
-    protected postMessage(channel: string, content: any) {
+    protected postMessage(channel: string, content: { [key: string]: unknown }) {
         const msg: WorkerMessage = {
             channel: channel,
             content: content
         };
 
         if (this.useWorkers) {
-            threads.parentPort.postMessage(msg);
-        } else {
+            threads.parentPort?.postMessage(msg);
+        } else if (process.send) {
             process.send(msg);
         }
     }
 
     public constructor(private useWorkers: boolean) {
         if (useWorkers) {
-            threads.parentPort.on('message', (msg: WorkerMessage) => {
+            threads.parentPort?.on('message', (msg: WorkerMessage) => {
                 this.parentMessages.next(msg);
             });
         } else {

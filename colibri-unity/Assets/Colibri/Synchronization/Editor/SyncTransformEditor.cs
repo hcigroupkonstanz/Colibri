@@ -1,6 +1,7 @@
 ﻿using UnityEditor;
 using UnityEngine;
 using System.Linq;
+using System;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
@@ -26,7 +27,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (synctransform)
             {
                 if (GUILayout.Button("Generate ID"))
-                    synctransform.Id = new System.Random().Next();
+                    synctransform.Id = Guid.NewGuid().ToString();
             }
         }
     }

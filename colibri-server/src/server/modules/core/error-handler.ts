@@ -6,23 +6,23 @@ export class ErrorHandler extends Service {
     public serviceName = 'Internal Error';
     public groupName = 'core';
 
-    static initialize() {
+    static initialize(): void {
         this._instance = new ErrorHandler();
     }
 
-    public static logInfo(msg: string) {
+    public static logInfo(msg: string): void {
         this._instance.logInfo(msg);
     }
 
-    public static logDebug(msg: string) {
+    public static logDebug(msg: string): void {
         this._instance.logDebug(msg);
     }
 
-    public static logWarning(msg: string) {
+    public static logWarning(msg: string): void {
         this._instance.logWarning(msg);
     }
 
-    public static logError(msg: string) {
+    public static logError(msg: string): void {
         this._instance.logError(msg);
     }
 }

@@ -9,7 +9,7 @@ export class RestAPI extends Service {
     public serviceName = 'RestAPI';
     public groupName = 'web';
 
-    private data: any = {};
+    private data: { [key: string]: { [key: string]: unknown } } = {};
     private storeFilePath: string;
 
     public constructor(dataPath: string, webserver: WebServer) {
@@ -26,7 +26,7 @@ export class RestAPI extends Service {
             .get('/:app', (req, res) => {
                 const app = this.data[req.params.app];
                 // If app not exist return an error
-                if (app == null) {
+                if (!app) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
                 } else {
                     // Return all available values of the app
@@ -37,12 +37,12 @@ export class RestAPI extends Service {
             .get('/:app/:value', (req, res) => {
                 const app = this.data[req.params.app];
                 // If app not exist return an error
-                if (app == null) {
+                if (!app) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
                 } else {
                     const value = app[req.params.value];
                     // If value not exist return an error
-                    if (value == null) {
+                    if (value === undefined) {
                         res.status(404).json({ error: 'Value with name ' + req.params.value + ' not found' });
                     } else {
                         // Return data of value
@@ -53,10 +53,10 @@ export class RestAPI extends Service {
             .put('/:app/:value', (req, res) => {
                 let statusCode = 200;
                 // If app name not exist create app name
-                if (this.data[req.params.app] == null) {
+                if (!this.data[req.params.app]) {
                     this.data[req.params.app] = {};
                     statusCode = 201;
-                } else if (this.data[req.params.app][req.params.value] == null) {
+                } else if (!this.data[req.params.app][req.params.value]) {
                     statusCode = 201;
                 }
                 // Set data to the corresponding value
@@ -69,7 +69,7 @@ export class RestAPI extends Service {
             .delete('/:app', (req, res) => {
                 const app = this.data[req.params.app];
                 // If app not exist return an error
-                if (app == null) {
+                if (!app) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
                 } else {
                     // Delete the app
@@ -83,12 +83,12 @@ export class RestAPI extends Service {
             .delete('/:app/:value', (req, res) => {
                 const app = this.data[req.params.app];
                 // If app not exist return an error
-                if (app == null) {
+                if (!app) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
                 } else {
                     const value = app[req.params.value];
                     // If value not exist return an error
-                    if (value == null) {
+                    if (value === undefined) {
                         res.status(404).json({ error: 'Value with name ' + req.params.value + ' not found' });
                     } else {
                         // Delete the value
@@ -106,7 +106,7 @@ export class RestAPI extends Service {
     }
 
     private async readData() {
-        fs.stat(this.storeFilePath, (err, stat) => {
+        fs.stat(this.storeFilePath, (err) => {
             const fileExists = !err;
 
             if (fileExists) {

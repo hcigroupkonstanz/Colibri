@@ -20,7 +20,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 if (_id != value)
                 {
                     _id = value;
-                    TriggerLocalChange("Id");
+                    TriggerLocalChange("id");
                 }
             }
         }
@@ -118,11 +118,11 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             var fullJson = ToJson();
             var filteredJson = new JObject {
-                { "Id", Id }
+                { "id", Id }
             };
 
             // transform c# name pattern ("AttributeOne") to json pattern ("attributeOne")
-            var lowercaseProperties = properties.Distinct().Where(k => k != "Id");
+            var lowercaseProperties = properties.Distinct();
 
             foreach (var prop in lowercaseProperties)
             {

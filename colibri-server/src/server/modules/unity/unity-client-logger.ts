@@ -6,30 +6,30 @@ export class UnityClientLogger extends Service {
     public get serviceName(): string { return 'UnityClientLogger'; }
     public get groupName(): string { return 'unity'; }
 
-    public constructor(private unityServer: UnityServerProxy) {
+    public constructor(unityServer: UnityServerProxy) {
         super();
 
         unityServer.messages$
             .pipe(filter(m => m.channel === 'log'))
             .subscribe(m => {
+                const id = m.origin?.id || 'UNKNOWN';
                 switch (m.command) {
+                    case 'info':
+                        this.logInfo(`[${id}] ${m.payload}`);
+                        break;
 
-                case 'info':
-                    this.logInfo(`[${m.origin.name}] ${m.payload}`);
-                    break;
+                    case 'warning':
+                        this.logWarning(`[${id}] ${m.payload}`);
+                        break;
 
-                case 'warning':
-                    this.logWarning(`[${m.origin.name}] ${m.payload}`);
-                    break;
+                    case 'error':
+                        this.logError(`[${id}] ${m.payload}`, false);
+                        break;
 
-                case 'error':
-                    this.logError(`[${m.origin.name}] ${m.payload}`, false);
-                    break;
-
-                case 'debug':
-                default:
-                    this.logDebug(`[${m.origin.name}] ${m.payload}`);
-                    break;
+                    case 'debug':
+                    default:
+                        this.logDebug(`[${id}] ${m.payload}`);
+                        break;
                 }
             });
     }

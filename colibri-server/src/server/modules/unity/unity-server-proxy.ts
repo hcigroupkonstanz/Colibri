@@ -1,34 +1,25 @@
 import * as _ from 'lodash';
 import { UNITY_SERVER_WORKER } from './unity-server-worker';
-import { Message, WorkerServiceProxy } from '../core';
-import { Subject } from 'rxjs';
+import { WorkerServiceProxy } from '../core';
+import { Observable, Subject } from 'rxjs';
+import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks';
 
-export class UnityClient {
-    public id: number;
-    public group = '';
-    public name = '';
-}
-
-export interface UnityMessage extends Message {
-    origin: UnityClient;
-}
-
-export class UnityServerProxy extends WorkerServiceProxy {
+export class UnityServerProxy extends WorkerServiceProxy implements NetworkServer {
     public serviceName = 'UnityServer';
     public groupName = 'unity';
 
-    private clients: UnityClient[] = [];
-    private clientStream = new Subject<UnityClient[]>();
-    private clientAddedStream = new Subject<UnityClient>();
-    private clientRemovedStream = new Subject<UnityClient>();
+    private clients: NetworkClient[] = [];
+    private clientStream = new Subject<NetworkClient[]>();
+    private clientAddedStream = new Subject<NetworkClient>();
+    private clientRemovedStream = new Subject<NetworkClient>();
 
-    private messageStream = new Subject<UnityMessage>();
+    private messageStream = new Subject<NetworkMessage>();
 
-    public get clients$() { return this.clientStream.asObservable(); }
-    public get currentClients(): ReadonlyArray<UnityClient> { return this.clients; }
-    public get clientsAdded$() { return this.clientAddedStream.asObservable(); }
-    public get clientsRemoved$() { return this.clientRemovedStream.asObservable(); }
-    public get messages$() { return this.messageStream.asObservable(); }
+    public get clients$(): Observable<NetworkClient[]> { return this.clientStream.asObservable(); }
+    public get currentClients(): ReadonlyArray<NetworkClient> { return this.clients; }
+    public get clientsAdded$(): Observable<NetworkClient> { return this.clientAddedStream.asObservable(); }
+    public get clientsRemoved$(): Observable<NetworkClient> { return this.clientRemovedStream.asObservable(); }
+    public get messages$(): Observable<NetworkMessage> { return this.messageStream.asObservable(); }
 
 
     public constructor() {
@@ -38,15 +29,15 @@ export class UnityServerProxy extends WorkerServiceProxy {
         this.workerMessages$.subscribe(msg => {
             switch (msg.channel) {
                 case 'clientConnected$':
-                    this.onClientConnected(msg.content.id);
+                    this.onClientConnected(msg.content.id as string, msg.content.app as string);
                     break;
 
                 case 'clientDisconnected$':
-                    this.onClientDisconnected(msg.content.id);
+                    this.onClientDisconnected(msg.content.id as string);
                     break;
 
                 case 'clientMessage$':
-                    this.onClientMessage(msg.content.id, msg.content.packet);
+                    this.onClientMessage(msg.content as unknown as NetworkMessage);
                     break;
             }
         });
@@ -61,17 +52,20 @@ export class UnityServerProxy extends WorkerServiceProxy {
         this.postMessage('m:stop');
     }
 
-    public broadcast(msg: Message, clients: ReadonlyArray<UnityClient> = this.clients): void {
+    public broadcast(msg: NetworkMessage, clients: ReadonlyArray<NetworkClient> = this.clients): void {
         this.postMessage('m:broadcast', {
-            msg: msg,
-            clients: _.map(clients, c => c.id)
+            msg: {
+                channel: msg.channel,
+                command: msg.command,
+                payload: msg.payload
+            },
+            clients: clients.map(c => c.id)
         });
     }
 
 
-    private onClientConnected(id: number) {
-        const client = new UnityClient();
-        client.id = id;
+    private onClientConnected(id: string, app: string): void {
+        const client: NetworkClient = { id, app };
 
         this.clients.push(client);
 
@@ -79,7 +73,7 @@ export class UnityServerProxy extends WorkerServiceProxy {
         this.clientStream.next(this.clients);
     }
 
-    private onClientDisconnected(id: number): void {
+    private onClientDisconnected(id: string): void {
         const removedClients = _.remove(this.clients, c => c.id === id);
         for (const client of removedClients) {
             this.clientRemovedStream.next(client);
@@ -87,11 +81,7 @@ export class UnityServerProxy extends WorkerServiceProxy {
         this.clientStream.next(this.clients);
     }
 
-    private onClientMessage(id: number, msg: UnityMessage): void {
-        const client = _.find(this.clients, c => c.id === id);
-        if (client) {
-            msg.origin = client;
-            this.messageStream.next(msg);
-        }
+    private onClientMessage(msg: NetworkMessage): void {
+        this.messageStream.next(msg);
     }
 }

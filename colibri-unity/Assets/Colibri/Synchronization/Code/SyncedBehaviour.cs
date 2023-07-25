@@ -169,14 +169,14 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void OnModelUpdate(JObject data)
         {
-            var id = data["Id"].Value<string>();
+            var id = data["id"].Value<string>();
             if (id == Id)
             {
                 _hasReceivedFirstUpdate = true;
 
                 foreach (var prop in data)
                 {
-                    if (prop.Key != "Id")
+                    if (prop.Key != "id")
                         UpdateAttribute(prop.Key, prop.Value);
                 }
             }
@@ -191,7 +191,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void OnModelDelete(JObject data)
         {
-            var id = data["Id"].Value<string>();
+            var id = data["id"].Value<string>();
             if (id == Id)
             {
                 _hasReceivedDestroyCommand = true;
@@ -209,7 +209,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
 
             if (_nextUpdate == null)
-                _nextUpdate = new JObject { { "Id", Id } };
+                _nextUpdate = new JObject { { "id", Id } };
 
             if (_nextUpdate.ContainsKey(name))
                 _nextUpdate[name] = value.ToJson();

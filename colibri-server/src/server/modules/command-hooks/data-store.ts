@@ -1,35 +1,40 @@
 import * as _ from 'lodash';
-import { Service } from './service';
+import { Service } from '../core/service';
+
+export interface SyncModel {
+    id: string;
+    [key: string]: unknown;
+}
 
 export class DataStore extends Service {
     public serviceName = 'DataStore';
     public groupName = 'core';
 
-    private store: { [key: string]: any[] } = {};
+    private store: { [key: string]: SyncModel[] } = {};
 
     public constructor() {
         super();
     }
 
-    public addModel(group: string, channel: string, Id: number): void {
+    public addModel(group: string, channel: string, id: string): void {
         const key = group + channel;
         if (!this.store[key]) {
             this.store[key] = [];
         }
 
-        if (!this.getModel(group, channel, Id)) {
-            this.store[key].push({ Id: Id });
+        if (!this.getModel(group, channel, id)) {
+            this.store[key].push({ id });
         }
     }
 
 
-    public updateModel(group: string, channel: string, model: any): void {
+    public updateModel(group: string, channel: string, model: SyncModel): void {
         const key = group + channel;
         if (!this.store[key]) {
             this.store[key] = [];
         }
 
-        const existingModel = this.getModel(group, channel, model.Id);
+        const existingModel = this.getModel(group, channel, model.id);
         if (!existingModel) {
             this.store[key].push(model);
         } else {
@@ -40,10 +45,10 @@ export class DataStore extends Service {
     }
 
 
-    public removeModel(group: string, channel: string, Id: any): void {
+    public removeModel(group: string, channel: string, id: string): void {
         const key = group + channel;
         if (this.store[key]) {
-            _.remove(this.store[key], m => m.Id === Id);
+            _.remove(this.store[key], m => m.id === id);
         }
     }
 
@@ -59,15 +64,15 @@ export class DataStore extends Service {
         }
     }
 
-    public getModel(group: string, channel: string, Id: number | string): any {
+    public getModel(group: string, channel: string, id: string): SyncModel | undefined {
         const key = group + channel;
         if (this.store[key]) {
-            return _.find(this.store[key], m => m.Id === Id);
+            return _.find(this.store[key], m => m.id === id);
         }
         return undefined;
     }
 
-    public getAll(group: string, channel: string): any {
+    public getAll(group: string, channel: string): SyncModel[] {
         const key = group + channel;
         return this.store[key] || [];
     }

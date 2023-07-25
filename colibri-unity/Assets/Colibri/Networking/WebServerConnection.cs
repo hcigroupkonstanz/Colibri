@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using UniRx;
 using UnityEngine;
@@ -88,11 +89,11 @@ namespace HCIKonstanz.Colibri.Networking
 
         private struct OutPacket
         {
-            public string group;
             public string channel;
             public string command;
             public JToken payload;
         }
+
 
 
 
@@ -176,7 +177,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                     socket.Connect(ip, UNITY_SERVER_PORT);
                     socket.BeginReceive(_receiveBuffer, _receiveBufferOffset, _receiveBuffer.Length - _receiveBufferOffset, SocketFlags.None, _receiveCallback, null);
-                    SendCommandSync("group", "set", new JObject { { "name", $"TODO" } });
+                    await SendCommandNow("colibri", "set_app", new JObject { { "name", SyncConfiguration.APP_NAME } });
                     Debug.Log("Connection to web server established");
                     Status = ConnectionStatus.Connected;
                     LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -385,14 +386,21 @@ namespace HCIKonstanz.Colibri.Networking
 
 
 
-        private void SendDataAsync(byte[] data)
+        private async Task<bool> SendDataAsync(byte[] data)
         {
             if (_socket != null)
             {
                 SocketAsyncEventArgs socketAsyncData = new SocketAsyncEventArgs();
                 socketAsyncData.SetBuffer(data, 0, data.Length);
                 _socket.SendAsync(socketAsyncData);
+                var signal = new SemaphoreSlim(0, 1);
+
+                socketAsyncData.Completed += (sender, e) => signal.Release();
+
+                await signal.WaitAsync();
             }
+
+            return false;
         }
 
         private bool SendData(byte[] data)
@@ -406,39 +414,32 @@ namespace HCIKonstanz.Colibri.Networking
             {
                 Debug.LogError(e.Message);
             }
-
             return false;
+        }
+
+        private async Task<bool> SendCommandNow(string channel, string command, JToken payload)
+        {
+            var packet = new OutPacket
+            {
+                channel = channel,
+                command = command,
+                payload = payload
+            };
+
+            var encoding = new UTF8Encoding();
+            var rawData = encoding.GetBytes(JsonConvert.SerializeObject(packet));
+            return await SendDataAsync(rawData);
+        }
+
+        public async Task<bool> SendCommandAsync(string channel, string command, JToken payload)
+        {
+            await Connected;
+            return await SendCommandNow(channel, command, payload);
         }
 
         public void SendCommand(string channel, string command, JToken payload)
         {
-            var packet = new OutPacket
-            {
-                group = "GROUP_" + SyncConfiguration.APP_NAME,
-                channel = channel,
-                command = command,
-                payload = payload
-            };
-
-            var encoding = new UTF8Encoding();
-            var rawData = encoding.GetBytes(JsonConvert.SerializeObject(packet));
-            SendDataAsync(rawData);
-        }
-
-        public bool SendCommandSync(string channel, string command, JToken payload)
-        {
-            var packet = new OutPacket
-            {
-                group = "GROUP_" + SyncConfiguration.APP_NAME,
-                channel = channel,
-                command = command,
-                payload = payload
-            };
-
-            var encoding = new UTF8Encoding();
-            var rawData = encoding.GetBytes(JsonConvert.SerializeObject(packet));
-
-            return SendData(rawData);
+            _ = SendCommandAsync(channel, command, payload);
         }
     }
 }

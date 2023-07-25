@@ -1,24 +1,29 @@
 import * as net from 'net';
 import * as _ from 'lodash';
-import { Message, WorkerService } from '../core';
+import { WorkerService } from '../core';
 import * as threads from 'worker_threads';
+import { NetworkMessage } from 'modules/command-hooks';
 
 
 export const UNITY_SERVER_WORKER = __filename;
 
-class TcpClient {
-    public id: number;
-    public socket: net.Socket;
-    public leftOverBuffer: string;
-    public address: string;
+interface TcpClient {
+    id: string;
+    socket: net.Socket;
+    leftOverBuffer: string;
+    address: string;
+    app: string;
 }
 
 export class UnityServerWorker extends WorkerService {
-    private server: net.Server;
+    private server!: net.Server;
 
+    // waiting for client to specify app name
+    private readonly waitingClients: TcpClient[] = [];
+    // properly connected clients
     private readonly clients: TcpClient[] = [];
 
-    private heartbeatInterval: NodeJS.Timer;
+    private heartbeatInterval!: NodeJS.Timer;
     private idCounter = 0;
 
     public constructor() {
@@ -27,21 +32,22 @@ export class UnityServerWorker extends WorkerService {
         this.parentMessages$.subscribe(msg => {
             switch (msg.channel) {
                 case 'm:start':
-                    this.start(msg.content.port);
+                    this.start(msg.content.port as number);
                     break;
 
                 case 'm:stop':
                     this.stop();
                     break;
 
-                case 'm:broadcast':
-                    const clients = _(msg.content.clients)
-                        .map(id => _.find(this.clients, c => c.id === id))
-                        .filter(c => !!c)
-                        .value();
+                case 'm:broadcast': {
+                    const ids = msg.content.clients as string[];
+                    const clients = ids
+                        .map(id => this.clients.find(c => c.id === id))
+                        .filter((c): c is TcpClient => !!c);
 
-                    this.broadcast(msg.content.msg, clients);
+                    this.broadcast(msg.content.msg as NetworkMessage, clients);
                     break;
+                }
             }
         });
     }
@@ -61,7 +67,7 @@ export class UnityServerWorker extends WorkerService {
 
 
 
-    public broadcast(msg: Message, clients: ReadonlyArray<TcpClient> = this.clients): void {
+    public broadcast(msg: NetworkMessage, clients: ReadonlyArray<TcpClient>): void {
         if (clients.length === 0) {
             return;
         }
@@ -80,19 +86,18 @@ export class UnityServerWorker extends WorkerService {
     }
 
     private handleConnection(socket: net.Socket): void {
-        const id = ++this.idCounter;
-        this.logDebug(`New unity client (${id}) connected from ${socket.remoteAddress}`);
+        const id = (++this.idCounter).toString();
+        this.logDebug(`New unity client (${id}) connected from ${socket.remoteAddress}, waiting for app name`);
         socket.setNoDelay(true);
 
         const tcpClient: TcpClient = {
-            id: id,
+            id,
+            socket,
             leftOverBuffer: '',
-            socket: socket,
-            address: socket.remoteAddress
+            address: socket.remoteAddress || 'UNDEFINED',
+            app: ''
         };
-        this.clients.push(tcpClient);
-
-        this.postMessage('clientConnected$', { id: id });
+        this.waitingClients.push(tcpClient);
 
         socket.on('data', (data) => {
             this.handleSocketData(tcpClient, data);
@@ -113,12 +118,30 @@ export class UnityServerWorker extends WorkerService {
         for (const msg of msgs) {
             try {
                 const packet = JSON.parse(msg);
-                this.postMessage('clientMessage$', { id: client.id, packet: packet });
+                if (packet.command === 'set_app') {
+                    this.assignApp(client, (packet.payload as { name: string }).name as string);
+                } else if (client.app) {
+                    packet.origin = { id: client.id, app: client.app };
+                    this.postMessage('clientMessage$', packet);
+                } else {
+                    this.logError(`Ignoring message (${packet.channel} / ${packet.command}) from client ${client.id} without app`);
+                }
             } catch (err) {
-                this.logError(err.message);
+                if (err instanceof Error) {
+                    this.logError(err.message);
+                }
+
                 this.logError(msg);
             }
         }
+    }
+
+    private assignApp(client: TcpClient, app: string): void {
+        this.logDebug(`Setting app of unity client "${client.id}" to "${app}"`);
+        client.app = app;
+        _.pull(this.waitingClients, client);
+        this.clients.push(client);
+        this.postMessage('clientConnected$', { id: client.id, app });
     }
 
 
@@ -130,12 +153,17 @@ export class UnityServerWorker extends WorkerService {
     private handleSocketDisconnect(client: TcpClient): void {
         this.logDebug(`Unity client ${client.address} disconnected`);
         _.pull(this.clients, client);
+        _.pull(this.waitingClients, client);
         this.postMessage('clientDisconnected$', { id: client.id });
     }
 
 
     private handleHeartbeat() {
         for (const client of this.clients) {
+            client.socket.write('\0\0\0h\0');
+        }
+
+        for (const client of this.waitingClients) {
             client.socket.write('\0\0\0h\0');
         }
     }
@@ -219,5 +247,6 @@ export class UnityServerWorker extends WorkerService {
 
 
 if (!threads.isMainThread) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const server = new UnityServerWorker();
 }

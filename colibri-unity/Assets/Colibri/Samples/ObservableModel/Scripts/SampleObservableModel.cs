@@ -57,7 +57,7 @@ public class SampleObservableModel : ObservableModel<SampleObservableModel>
     {
         return new JObject
         {
-            { "Id", Id },
+            { "id", Id },
             { "TestString", _testString },
             { "Position", new JArray { _position.x, _position.y, _position.z } },
             { "Rotation", new JArray { _rotation.x, _rotation.y, _rotation.z, _rotation.w } }

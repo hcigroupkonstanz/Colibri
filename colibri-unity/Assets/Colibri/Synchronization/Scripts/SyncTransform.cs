@@ -10,7 +10,7 @@ namespace HCIKonstanz.Colibri.Synchronization
     {
         public const string CHANNEL = "synctransform";
 
-        public int Id = -1;
+        public string Id = null;
 
         public bool SyncPosition = true;
         public bool SyncRotation = true;
@@ -28,7 +28,6 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private readonly ReactiveProperty<bool> _initializedSubject = new ReactiveProperty<bool>(false);
 
-        private static readonly System.Random random = new System.Random();
         private static readonly Subject<SyncTransform> _modelCreateSubject = new Subject<SyncTransform>();
         public static IObservable<SyncTransform> ModelCreated() => _modelCreateSubject.AsObservable();
 
@@ -39,7 +38,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private async void Awake()
         {
             if (AutoGenerateId)
-                Id = random.Next();
+                Id = Guid.NewGuid().ToString();
             if (AutoInitialize)
                 Initialize();
             await _initializedSubject.Where(v => v).Take(1);
@@ -108,7 +107,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void OnModelDelete(JObject data)
         {
-            var id = data["Id"].Value<int>();
+            var id = data["id"].Value<string>();
             if (id == Id)
             {
                 _hasReceivedDestroyCommand = true;
@@ -128,7 +127,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (_isQuitting || _hasReceivedDestroyCommand)
                 return;
 
-            Sync.SendModelDelete(CHANNEL, Id);
+            Sync.SendModelDelete(CHANNEL, Id.ToString());
         }
 
 
@@ -136,7 +135,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             if (SyncPosition)
             {
-                var id = data["Id"].Value<int>();
+                var id = data["id"].Value<string>();
                 _hasReceivedFirstUpdate |= id == Id;
                 if (id == Id && data["Position"] != null)
                 {
@@ -151,7 +150,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             if (SyncRotation)
             {
-                var id = data["Id"].Value<int>();
+                var id = data["id"].Value<string>();
                 _hasReceivedFirstUpdate |= id == Id;
                 if (id == Id && data["Rotation"] != null)
                 {
@@ -166,7 +165,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             if (SyncScale)
             {
-                var id = data["Id"].Value<int>();
+                var id = data["id"].Value<string>();
                 _hasReceivedFirstUpdate |= id == Id;
                 if (id == Id && data["Scale"] != null)
                 {
@@ -188,7 +187,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         public void TriggerSync()
         {
-            var update = new JObject { { "Id", Id }, };
+            var update = new JObject { { "id", Id }, };
             var t = transform;
             if (SyncPosition)
                 update.Add("Position", new JArray { t.localPosition.x, t.localPosition.y, t.localPosition.z });

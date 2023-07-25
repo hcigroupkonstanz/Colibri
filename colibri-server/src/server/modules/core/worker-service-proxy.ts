@@ -4,10 +4,11 @@ import * as threads from 'worker_threads';
 import { Subject } from 'rxjs';
 import { LogLevel } from './log-message';
 import cluster, { Worker } from 'cluster';
+import { WorkerLogMessage } from './worker-service';
 
 export abstract class WorkerServiceProxy extends Service {
-    private threadWorker: threads.Worker;
-    private clusterWorker: Worker;
+    private threadWorker!: threads.Worker;
+    private clusterWorker!: Worker;
 
 
     private readonly workerMessages = new Subject<WorkerMessage>();
@@ -17,7 +18,7 @@ export abstract class WorkerServiceProxy extends Service {
         super();
     }
 
-    protected initCluster(path: string, env?: any): void {
+    protected initCluster(path: string, env?: unknown): void {
         cluster.setupPrimary({
             exec: path
         });
@@ -37,14 +38,14 @@ export abstract class WorkerServiceProxy extends Service {
 
         this.clusterWorker.on('message', (data: WorkerMessage) => {
             if (data.channel === 'log') {
-                this.handleLogMessage(data.content);
+                this.handleLogMessage(data.content as unknown as WorkerLogMessage);
             } else {
                 this.workerMessages.next(data);
             }
         });
     }
 
-    protected initWorker(path: string, workerData?: any): void {
+    protected initWorker(path: string, workerData?: unknown): void {
         this.threadWorker = new threads.Worker(path, { workerData: workerData });
 
         this.threadWorker.on('error', err => {
@@ -61,17 +62,17 @@ export abstract class WorkerServiceProxy extends Service {
 
         this.threadWorker.on('message', (data: WorkerMessage) => {
             if (data.channel === 'log') {
-                this.handleLogMessage(data.content);
+                this.handleLogMessage(data.content as unknown as WorkerLogMessage);
             } else {
                 this.workerMessages.next(data);
             }
         });
     }
 
-    protected postMessage(channel: string, content?: any) {
+    protected postMessage(channel: string, content?: { [key: string]: unknown }) {
         const msg: WorkerMessage = {
             channel: channel,
-            content: content
+            content: content || {}
         };
 
         if (this.threadWorker) {
@@ -81,7 +82,7 @@ export abstract class WorkerServiceProxy extends Service {
         }
     }
 
-    private handleLogMessage(log: any): void {
+    private handleLogMessage(log: WorkerLogMessage): void {
         switch (log.level) {
             case LogLevel.Debug:
                 this.logDebug(log.msg);

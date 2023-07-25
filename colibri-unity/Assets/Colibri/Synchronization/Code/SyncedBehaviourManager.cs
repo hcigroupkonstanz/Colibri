@@ -44,7 +44,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void OnModelUpdate(JObject data)
         {
-            var id = data["Id"].Value<string>();
+            var id = data["id"].Value<string>();
             if (!_existingObjects.Any(t => t.Id == id))
             {
                 Template.enabled = false;

@@ -3,28 +3,26 @@ import * as _ from 'lodash';
 import { Server as HttpServer } from 'http';
 import { Observable, Subject } from 'rxjs';
 
-import { Service, Message } from '../core';
+import { Service } from '../core';
+import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks';
 
-class SocketIoClient {
+interface SocketIoClient extends NetworkClient {
+    id: string;
     socket: io.Socket;
-    group: string;
+    app: string;
 }
 
-interface SocketMessage extends Message {
-    origin: SocketIoClient;
-}
-
-export class SocketIOServer extends Service {
+export class SocketIOServer extends Service implements NetworkServer {
     public get serviceName(): string { return 'SocketIO'; }
-    public get groupName(): string { return 'tangibles'; }
+    public get groupName(): string { return 'networking'; }
 
-    private ioServer: io.Server;
+    private ioServer!: io.Server;
 
     private readonly clients: SocketIoClient[] = [];
     private readonly clientStream = new Subject<SocketIoClient[]>();
     private readonly clientConnectedStream = new Subject<SocketIoClient>();
     private readonly clientDisconnectedStream = new Subject<SocketIoClient>();
-    private readonly messageStream = new Subject<SocketMessage>();
+    private readonly messageStream = new Subject<NetworkMessage>();
 
     public constructor() {
         super();
@@ -67,30 +65,42 @@ export class SocketIOServer extends Service {
         return this.clients;
     }
 
-    public get messages$(): Observable<SocketMessage> {
+    public get messages$(): Observable<NetworkMessage> {
         return this.messageStream.asObservable();
     }
 
 
-    public broadcast(msg: Message, clients: ReadonlyArray<SocketIoClient> = this.clients): void {
+    public broadcast(msg: NetworkMessage, clients: ReadonlyArray<SocketIoClient>): void {
         for (const client of clients) {
-            client.socket.emit(msg.channel, msg);
+            client.socket.emit(msg.channel, {
+                command: msg.command,
+                payload: msg.payload
+            });
         }
     }
 
-
     private handleNewClient(socket: io.Socket): void {
-        const client = new SocketIoClient();
-        client.socket = socket;
+        const client: SocketIoClient = {
+            id: socket.id,
+            app: socket.handshake.query.app as string,
+            socket
+        };
+
+        if (!client.app) {
+            this.logError('Websocket connection has no app specified; aborting connection');
+            socket.disconnect();
+            return;
+        } else {
+            this.logInfo(`New websocket client (${client.id}) connected for '${client.app}' from ${socket.handshake.address}`);
+        }
 
         this.clients.push(client);
         this.clientConnectedStream.next(client);
         this.clientStream.next(this.clients);
 
         socket.use(([channel, content]: io.Event, next) => {
-            const msg: SocketMessage = {
+            const msg: NetworkMessage = {
                 origin: client,
-                group: content.group || '',
                 channel: channel,
                 command: content.command,
                 payload: content.payload

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Injectable, NgZone } from '@angular/core';
 import { Subject, Observable } from 'rxjs';
 import * as _ from 'lodash';
@@ -9,21 +10,15 @@ import * as io from 'socket.io-client';
 export class SocketIOService {
     private socket: io.Socket<any, any>;
     private listeners: { [name: string]: Subject<any> } = {};
-    private triggerAngularChanges: Function;
+    private triggerAngularChanges: () => void;
 
     constructor(private zone: NgZone) {
-        this.socket = io.connect();
+        this.socket = io.connect('', { query: { app: 'colibri' } });
+        // eslint-disable-next-line no-empty-function
         this.triggerAngularChanges = _.throttle(() => this.zone.run(() => {}), 100);
-        this.socket.emit('group', {
-            command: 'set',
-            group: 'log',
-            payload: { empty: 'TODO: should be empty' }
-        });
 
         this.socket.emit('log', {
-            command: 'request',
-            group: 'log',
-            payload: { empty: 'TODO: remains empty' }
+            command: 'requestLog'
         });
     }
 

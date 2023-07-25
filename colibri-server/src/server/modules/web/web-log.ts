@@ -3,7 +3,7 @@ import { SocketIOServer } from './socket-io-server';
 import { filter, merge } from 'rxjs';
 import * as _ from 'lodash';
 
-const LOGGING_GROUP = 'log';
+const LOGGING_APP = 'colibri';
 
 interface WebMessage {
     origin: string;
@@ -23,19 +23,24 @@ export class WebLog extends Service {
         super();
     }
 
-    public init(): void {
+    public override async init(): Promise<void> {
         super.init();
 
         this.socketio.messages$
-            .pipe(filter(msg => msg.group === LOGGING_GROUP && msg.command === 'request'))
-            .subscribe(c => {
-                for (const msg of this.logMessages) {
-                    this.socketio.broadcast({
-                        channel: 'log',
-                        command: 'message',
-                        payload: msg,
-                        group: LOGGING_GROUP
-                    }, [c.origin]);
+            .pipe(filter(msg => msg.origin !== undefined && msg.origin.app === LOGGING_APP && msg.command === 'requestLog'))
+            .subscribe(networkMsg => {
+                const socketClient = this.socketio.currentClients.find(c => c === networkMsg.origin);
+
+                if (socketClient) {
+                    for (const msg of this.logMessages) {
+                        this.socketio.broadcast({
+                            channel: 'log',
+                            command: 'message',
+                            payload: msg
+                        }, [ socketClient ]);
+                    }
+                } else {
+                    this.logError('Unkown origin requested log messages');
                 }
             });
 
@@ -54,12 +59,11 @@ export class WebLog extends Service {
             };
             this.logMessages.push(webMsg);
 
-            const clients = this.socketio.currentClients.filter(c => c.group === LOGGING_GROUP);
+            const clients = this.socketio.currentClients.filter(c => c.app === LOGGING_APP);
             this.socketio.broadcast({
                 channel: 'log',
                 command: 'message',
-                payload: webMsg,
-                group: 'log'
+                payload: webMsg
             }, clients);
         });
     }

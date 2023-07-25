@@ -1,0 +1,56 @@
+import { Observable, merge } from 'rxjs';
+import { Service } from '../core';
+
+export interface NetworkMessage {
+    origin?: NetworkClient;
+    channel: string;
+    command: string;
+    payload?: unknown;
+}
+
+export interface NetworkClient {
+    id: string;
+    app: string;
+}
+
+export abstract class NetworkServer {
+    public abstract get currentClients(): ReadonlyArray<NetworkClient>;
+    public abstract get messages$(): Observable<NetworkMessage>;
+    public abstract broadcast(message: NetworkMessage, clients: ReadonlyArray<NetworkClient>): void;
+}
+
+export class ConnectionPool extends Service {
+    public serviceName = 'ConnectionPool';
+    public groupName = 'colibri';
+
+    private readonly servers: NetworkServer[];
+
+    public get messages$(): Observable<NetworkMessage> {
+        return merge(...this.servers.map(c => c.messages$));
+    }
+
+    public get currentClients(): NetworkClient[] {
+        return this.servers.flatMap(c => c.currentClients);
+    }
+
+    public constructor(...servers: NetworkServer[]) {
+        super();
+        this.servers = servers;
+    }
+
+
+    public broadcast(message: NetworkMessage, app = message.origin?.app): void {
+        for (const connection of this.servers) {
+            const clients = connection.currentClients.filter(client => client.app === app && client !== message.origin) || [];
+            connection.broadcast(message, clients);
+        }
+    }
+
+    public emit(message: NetworkMessage, client: NetworkClient): void {
+        for (const connection of this.servers) {
+            if (connection.currentClients.find(c => c.id === client.id)) {
+                connection.broadcast(message, [ client ]);
+            }
+        }
+    }
+}

@@ -79,7 +79,7 @@ namespace HCIKonstanz.Colibri.Networking
         private void SendLog()
         {
             _isSending = true;
-            var sendTask = Observable.Start(() =>
+            var sendTask = Observable.Start(async () =>
             {
                 var msgs = new List<LogMsg>();
                 while (_messages.Dequeue(out var logMsg))
@@ -93,7 +93,7 @@ namespace HCIKonstanz.Colibri.Networking
                 foreach (var msg in msgs)
                 {
                     if (hasSent)
-                        hasSent = _server.SendCommandSync("log", msg.Type, msg.Message);
+                        hasSent = await _server.SendCommandAsync("log", msg.Type, msg.Message);
 
                     if (!hasSent)
                         _messages.Enqueue(msg);
@@ -106,9 +106,10 @@ namespace HCIKonstanz.Colibri.Networking
                 .WhenAll(sendTask)
                 .TakeUntilDisable(this)
                 .ObserveOnMainThread()
-                .Subscribe(result => {
+                .Subscribe(async result =>
+                {
                     _isSending = false;
-                    if (!result[0])
+                    if (!await result[0])
                         _msgSubject.OnNext(0);
                 });
         }

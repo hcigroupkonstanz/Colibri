@@ -2,11 +2,11 @@ import * as _ from 'lodash';
 import { Subject, merge } from 'rxjs';
 import { buffer, auditTime, share, map, filter } from 'rxjs/operators';
 
-export abstract class Serializable {
-    public id: number;
+export abstract class Serializable<T> {
+    public id: string;
 
-    private currentChangeSource: any = null;
-    private readonly changeSource = new Subject<any>();
+    private currentChangeSource: unknown = null;
+    private readonly changeSource = new Subject<unknown>();
     protected readonly modelChanges = new Subject<string>();
     public readonly modelChanges$ = this.modelChanges.pipe(
         buffer(
@@ -24,23 +24,30 @@ export abstract class Serializable {
         this.modelChanges.next(prop);
     }
 
+    public constructor(id: string) {
+        this.id = id;
+    }
+
     public delete(): void {
         this.modelChanges.complete();
     }
 
-    public update(updates: any, source: any): void {
+
+    public update(updates: Partial<T>, source: unknown): void {
         this.currentChangeSource = source;
         for (const key of Object.keys(updates)) {
             if (key !== 'id') {
-                this[key] = updates[key];
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (this as any)[key as keyof Serializable<T>] = updates[key as keyof T];
             }
         }
         this.changeSource.next(source);
         this.currentChangeSource = null;
     }
 
-    public toJson(attributes: string[] = []): {[key: string]: any} {
-        const json = { id: this.id };
+    public toJson(attributes: string[] = []): {[key: string]: unknown} {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const json: any = { id: this.id };
 
         if (attributes.length === 0) {
             attributes = _
@@ -50,7 +57,7 @@ export abstract class Serializable {
         }
 
         for (const attribute of attributes) {
-            json[attribute] = this[`_${attribute}`];
+            json[attribute] = this[`_${attribute}` as keyof Serializable<T>];
         }
 
         return json;

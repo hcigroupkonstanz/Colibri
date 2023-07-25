@@ -15,7 +15,8 @@ export class LogComponent implements OnInit, AfterViewChecked {
     }
 
     ngOnInit() {
-        this.scrollContainer.nativeElement.addEventListener('wheel', (ev: any) => this.onScroll(ev.deltaY));
+        this.scrollContainer.nativeElement.addEventListener('wheel', (ev: WheelEvent) => this.onScroll(ev.deltaY));
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const ps = new PerfectScrollbar(this.scrollContainer.nativeElement);
     }
 
@@ -33,7 +34,7 @@ export class LogComponent implements OnInit, AfterViewChecked {
         }
     }
 
-    getId(index: number, entry: GroupedLogMessage): number {
+    getId(entry: GroupedLogMessage): number {
         return entry.id;
     }
 

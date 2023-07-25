@@ -1,4 +1,4 @@
-import { Component, OnInit, Input } from '@angular/core';
+import { Component, Input } from '@angular/core';
 import { GroupedLogMessage } from '../../services';
 
 @Component({
@@ -6,13 +6,9 @@ import { GroupedLogMessage } from '../../services';
     templateUrl: './log-message.component.html',
     styleUrls: ['./log-message.component.scss']
 })
-export class LogMessageComponent implements OnInit {
+export class LogMessageComponent {
 
     @Input() public log!: GroupedLogMessage;
 
     constructor() { }
-
-    ngOnInit() {
-    }
-
 }

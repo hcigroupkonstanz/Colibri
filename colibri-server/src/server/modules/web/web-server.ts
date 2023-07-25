@@ -12,7 +12,7 @@ export class WebServer extends Service {
     public get groupName(): string { return 'web'; }
 
     private app: express.Application;
-    private server: http.Server;
+    private server!: http.Server;
     private isRunning = false;
 
     public constructor(private webPort: number, private webRoot: string) {
@@ -36,7 +36,7 @@ export class WebServer extends Service {
 
     public start(): http.Server {
         // add default route for 404s last
-        this.app.use((req, res, next) => {
+        this.app.use((req, res) => {
             res.sendFile(path.join(this.webRoot, 'index.html'));
             this.logWarning(`Unmatched route: ${req.path}`);
         });
