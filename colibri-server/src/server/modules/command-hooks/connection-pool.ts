@@ -16,6 +16,8 @@ export interface NetworkClient {
 export abstract class NetworkServer {
     public abstract get currentClients(): ReadonlyArray<NetworkClient>;
     public abstract get messages$(): Observable<NetworkMessage>;
+    public abstract get clientConnected$(): Observable<NetworkClient>;
+    public abstract get clientDisconnected$(): Observable<NetworkClient>;
     public abstract broadcast(message: NetworkMessage, clients: ReadonlyArray<NetworkClient>): void;
 }
 
@@ -27,6 +29,14 @@ export class ConnectionPool extends Service {
 
     public get messages$(): Observable<NetworkMessage> {
         return merge(...this.servers.map(c => c.messages$));
+    }
+
+    public get clientConnected$(): Observable<NetworkClient> {
+        return merge(...this.servers.map(c => c.clientConnected$));
+    }
+
+    public get clientDisconnected$(): Observable<NetworkClient> {
+        return merge(...this.servers.map(c => c.clientDisconnected$));
     }
 
     public get currentClients(): NetworkClient[] {
@@ -41,7 +51,7 @@ export class ConnectionPool extends Service {
 
     public broadcast(message: NetworkMessage, app = message.origin?.app): void {
         for (const connection of this.servers) {
-            const clients = connection.currentClients.filter(client => client.app === app && client !== message.origin) || [];
+            const clients = connection.currentClients.filter(client => client.app === app && client.id !== message.origin?.id) || [];
             connection.broadcast(message, clients);
         }
     }

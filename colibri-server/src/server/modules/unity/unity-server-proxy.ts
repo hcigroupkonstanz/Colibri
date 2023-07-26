@@ -17,8 +17,8 @@ export class UnityServerProxy extends WorkerServiceProxy implements NetworkServe
 
     public get clients$(): Observable<NetworkClient[]> { return this.clientStream.asObservable(); }
     public get currentClients(): ReadonlyArray<NetworkClient> { return this.clients; }
-    public get clientsAdded$(): Observable<NetworkClient> { return this.clientAddedStream.asObservable(); }
-    public get clientsRemoved$(): Observable<NetworkClient> { return this.clientRemovedStream.asObservable(); }
+    public get clientConnected$(): Observable<NetworkClient> { return this.clientAddedStream.asObservable(); }
+    public get clientDisconnected$(): Observable<NetworkClient> { return this.clientRemovedStream.asObservable(); }
     public get messages$(): Observable<NetworkMessage> { return this.messageStream.asObservable(); }
 
 

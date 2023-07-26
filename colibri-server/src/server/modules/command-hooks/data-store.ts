@@ -56,7 +56,7 @@ export class DataStore extends Service {
         delete this.store[group + channel];
     }
 
-    public clearGroup(group: string): void {
+    public clearApp(group: string): void {
         for (const key of Object.keys(this.store)) {
             if (key.startsWith(group)) {
                 delete this.store[key];

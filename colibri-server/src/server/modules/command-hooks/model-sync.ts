@@ -21,6 +21,15 @@ export class ModelSynchronization extends Service {
         connectionPool.messages$
             .pipe(filter(msg => msg.command === 'model::delete'))
             .subscribe(this.onModelDelete.bind(this));
+
+        
+        // clear datastore when all clients from the same app disconnect
+        connectionPool.clientDisconnected$.subscribe(client => {
+            const hasClients = this.connectionPool.currentClients.some(c => c.app === client.app);
+            if (!hasClients) {
+                this.store.clearApp(client.app);
+            }
+        });
     }
 
     public sendInitialState(msg: NetworkMessage): void {

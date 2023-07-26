@@ -7,14 +7,12 @@ import { Service } from '../core';
 import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks';
 
 interface SocketIoClient extends NetworkClient {
-    id: string;
     socket: io.Socket;
-    app: string;
 }
 
 export class SocketIOServer extends Service implements NetworkServer {
-    public get serviceName(): string { return 'SocketIO'; }
-    public get groupName(): string { return 'networking'; }
+    public readonly serviceName = 'SocketIO';
+    public readonly groupName = 'networking';
 
     private ioServer!: io.Server;
 
@@ -23,11 +21,6 @@ export class SocketIOServer extends Service implements NetworkServer {
     private readonly clientConnectedStream = new Subject<SocketIoClient>();
     private readonly clientDisconnectedStream = new Subject<SocketIoClient>();
     private readonly messageStream = new Subject<NetworkMessage>();
-
-    public constructor() {
-        super();
-    }
-
 
     public start(server: HttpServer): void {
         this.ioServer = new io.Server(server, {
@@ -53,11 +46,11 @@ export class SocketIOServer extends Service implements NetworkServer {
         return this.clientStream.asObservable();
     }
 
-    public get clientConnected$(): Observable<SocketIoClient> {
+    public get clientConnected$(): Observable<NetworkClient> {
         return this.clientConnectedStream.asObservable();
     }
 
-    public get clientDisconnected$(): Observable<SocketIoClient> {
+    public get clientDisconnected$(): Observable<NetworkClient> {
         return this.clientDisconnectedStream.asObservable();
     }
 
