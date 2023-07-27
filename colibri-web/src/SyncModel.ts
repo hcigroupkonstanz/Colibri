@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { Subject, auditTime, filter, map, share } from 'rxjs';
+import { Subject, auditTime, buffer, bufferTime, filter, map, share } from 'rxjs';
 
 export abstract class SyncModel<T> {
     public readonly id: string;
@@ -13,7 +13,7 @@ export abstract class SyncModel<T> {
 
     public readonly modelChanges = new Subject<string>();
     public readonly modelChanges$ = this.modelChanges.pipe(
-        auditTime(1),
+        bufferTime(1),
         map(changes => _.uniq(changes)),
         filter(changes => changes.length > 0),
         share());
@@ -63,7 +63,10 @@ export abstract class SyncModel<T> {
         // TODO: only changed properties
         const syncedProps = Object.getPrototypeOf(this).syncedProperties;
         for (const key of Object.keys(syncedProps)) {
-            json[key] = this[syncedProps[key] as keyof SyncModel<T>];
+            const localKey = syncedProps[key] as keyof SyncModel<T>;
+            if (attributes.length === 0 || attributes.includes(localKey)) {
+                json[key] = this[localKey];
+            }
         }
 
         return json;

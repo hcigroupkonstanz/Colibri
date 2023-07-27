@@ -48,7 +48,7 @@ export const Synced = <T>(syncedName: string = ''): PropertyDecorator => {
 
             descriptor.set = function (newval: T) {
                 const model = this as SyncModel<T>;
-                model.modelChanges.next(syncedName);
+                model.modelChanges.next(String(key));
 
                 if (originalAccessors.set) {
                     originalAccessors.set.call(this, newval);

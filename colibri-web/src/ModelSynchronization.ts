@@ -48,7 +48,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             newModel.modelChanges$.subscribe(changes => {
                 // If we did the changes, we'll ignore it
                 if (!newModel.ignoreNextChange) {
-                    SendMessage(`${name}`, 'model::update', newModel.toJson());
+                    SendMessage(`${name}`, 'model::update', newModel.toJson(changes));
                 }
                 newModel.ignoreNextChange = false;
                 models.next([...models.value]);
@@ -69,7 +69,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         model.modelChanges$.subscribe(changes => {
             // If we did the changes, we'll ignore it
             if (!model.ignoreNextChange) {
-                SendMessage(`${name}`, 'model::update', model.toJson());
+                SendMessage(`${name}`, 'model::update', model.toJson(changes));
             }
             model.ignoreNextChange = false;
         });
