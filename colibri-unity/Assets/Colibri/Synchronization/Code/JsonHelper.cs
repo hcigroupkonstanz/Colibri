@@ -55,6 +55,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return q.ToJson();
             if (obj is Color c)
                 return c.ToJson();
+            if (obj is JObject jobj)
+                return jobj;
+            if (obj is JToken jtok)
+                return jtok;
 
             if (obj is bool[])
                 return new JArray((bool[])obj);

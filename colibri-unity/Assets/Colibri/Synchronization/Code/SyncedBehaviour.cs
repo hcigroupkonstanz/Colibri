@@ -267,6 +267,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 attribute.Setter(this as T, value.Select(x => x.ToQuaternion()).ToArray());
             else if (attribute.PropertyType == typeof(Color[]))
                 attribute.Setter(this as T, value.Select(x => x.ToColor()).ToArray());
+            else if (attribute.PropertyType == typeof(JObject))
+                attribute.Setter(this as T, value);
             else
                 Debug.LogError($"Unable to update attribute {name}: Unsupported type {attribute.PropertyType}");
         }
