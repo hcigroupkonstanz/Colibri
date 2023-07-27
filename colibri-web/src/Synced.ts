@@ -10,6 +10,7 @@ export const Synced = <T>(syncedName: string = ''): PropertyDecorator => {
     return function (target: any, key: string | symbol, descriptor?: PropertyDescriptor): void {
         if (!syncedName)
             syncedName = key.toString();
+        syncedName = syncedName.toLowerCase();
 
         if (!(target instanceof SyncModel)) {
             console.error('Synced decorator can only be used on SyncModel properties');

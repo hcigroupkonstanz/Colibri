@@ -46,7 +46,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     var syncAttribute = attr as SyncAttribute;
                     if (syncAttribute != null)
                     {
-                        _syncedAttributes.Add(prop.Name, new SyncedAttribute
+                        _syncedAttributes.Add(prop.Name.ToLower(), new SyncedAttribute
                         {
                             Getter = BuildUntypedGetter(prop),
                             Setter = BuildUntypedSetter(prop),
@@ -65,7 +65,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     var syncAttribute = attr as SyncAttribute;
                     if (syncAttribute != null)
                     {
-                        _syncedAttributes.Add(field.Name, new SyncedAttribute
+                        _syncedAttributes.Add(field.Name.ToLower(), new SyncedAttribute
                         {
                             Getter = t => field.GetValue(t),
                             Setter = (t, val) => field.SetValue(t, val),
