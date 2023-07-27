@@ -40,11 +40,18 @@ export abstract class SyncModel<T> {
     }
 
     public update(updates: Partial<T>): void {
-        this.ignoreNextChange = true;
+        const syncedProps = Object.getPrototypeOf(this).syncedProperties;
+
         for (const key of Object.keys(updates)) {
             if (key !== 'id') {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (this as any)[key as keyof SyncModel<T>] = updates[key as keyof T];
+                const localKey = syncedProps[key];
+                if (localKey) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (this as any)[localKey as keyof SyncModel<T>] = updates[key as keyof T];
+                    this.ignoreNextChange = true;
+                } else {
+                    console.warn(`Unknown property ${key} in ${this.constructor.name}`);
+                }
             }
         }
     }

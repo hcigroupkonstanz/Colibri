@@ -12,10 +12,7 @@ interface ModelSyncRegistration<T> {
     type: { new(id: string): T };
 }
 
-interface ModelSync<T> {
-    models: Observable<T[]>,
-    register: (model: T) => void
-}
+type ModelSync<T> = [ Observable<T[]>, (model: T) => void ];
 
 export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyncRegistration<T>): ModelSync<T> => {
     const name = registration.name || registration.type.name.toLowerCase();
@@ -47,8 +44,6 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             models.next([...models.value]);
         } else if (modelData.id) {
             const newModel = new registration.type(modelData.id);
-            newModel.update(modelData);
-            models.next([...models.value, newModel]);
 
             newModel.modelChanges$.subscribe(changes => {
                 // If we did the changes, we'll ignore it
@@ -56,7 +51,11 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
                     SendMessage(`${name}`, 'model::update', newModel.toJson());
                 }
                 newModel.ignoreNextChange = false;
+                models.next([...models.value]);
             });
+
+            newModel.update(modelData);
+            models.next([...models.value, newModel]);
         }
     };
 
@@ -77,12 +76,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
         // send initial model
         SendMessage(`${name}`, 'model::update', model.toJson());
+        models.next([...models.value, model]);
     };
 
-    return {
-        models: models.asObservable(),
-        register: registerModel
-    };
+    return [ models.asObservable(), registerModel ];
 };
 export { SyncModel };
 

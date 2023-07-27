@@ -123,7 +123,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         protected virtual void Awake()
         {
             _modelCreateSubject.OnNext(this);
-            Channel = typeof(T).Name;
+            Channel = typeof(T).Name.ToLower();
         }
 
 
@@ -231,9 +231,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void UpdateAttribute(string name, JToken value)
         {
-            _hasReceivedUpdate[name] = true;
-
             var attribute = _syncedAttributes[name];
+            var oldValue = attribute.Getter(this as T);
 
             if (attribute.PropertyType == typeof(bool))
                 attribute.Setter(this as T, value.Value<bool>());
@@ -271,6 +270,9 @@ namespace HCIKonstanz.Colibri.Synchronization
                 attribute.Setter(this as T, value);
             else
                 Debug.LogError($"Unable to update attribute {name}: Unsupported type {attribute.PropertyType}");
+
+            var newValue = attribute.Getter(this as T);
+            _hasReceivedUpdate[name] = !newValue.Equals(oldValue);
         }
     }
 }

@@ -13,11 +13,14 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private readonly List<T> _existingObjects = new List<T>();
 
-        private void OnEnable()
+        private void Start()
         {
-            var Channel = typeof(T).Name;
+            var Channel = typeof(T).Name.ToLower();
             var existingBehaviours = FindObjectsOfType<T>();
             _existingObjects.AddRange(existingBehaviours);
+
+            foreach (var existingBehaviour in existingBehaviours)
+                existingBehaviour.TriggerSync();
 
             Sync.AddModelUpdateListener(Channel, OnModelUpdate);
             SyncedBehaviour<T>.ModelCreated()
@@ -36,7 +39,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 .Subscribe(m => _existingObjects.Remove(m as T));
         }
 
-        private void OnDisable()
+        private void OnDestroy()
         {
             var Channel = typeof(T).Name;
             Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);

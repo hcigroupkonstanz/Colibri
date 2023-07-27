@@ -85,5 +85,5 @@ export const RegisterRpc = (method: string, fn: rpcMethod): void => {
 
 // for debugging
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).SendMessage = SendMessage;
-messageSubject.subscribe(console.log);
+// (window as any).SendMessage = SendMessage;
+// messageSubject.subscribe(console.log);
