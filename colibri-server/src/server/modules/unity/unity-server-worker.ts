@@ -2,6 +2,8 @@ import * as net from 'net';
 import * as _ from 'lodash';
 import { WorkerService } from '../core';
 import * as threads from 'worker_threads';
+import * as flatbuffers from 'flatbuffers';
+import { Message } from './message';
 import { NetworkMessage } from 'modules/command-hooks';
 
 
@@ -10,7 +12,7 @@ export const UNITY_SERVER_WORKER = __filename;
 interface TcpClient {
     id: string;
     socket: net.Socket;
-    leftOverBuffer: string;
+    leftOverBuffer: Buffer;
     address: string;
     app: string;
 }
@@ -72,15 +74,30 @@ export class UnityServerWorker extends WorkerService {
             return;
         }
 
-        const msgString = JSON.stringify(msg);
-        const msgBytes = this.toUTF8Array(msgString);
+        const builder = new flatbuffers.Builder(1024);
+        const channel = builder.createString(msg.channel);
+        const command = builder.createString(msg.command);
+        // TODO: replace this with dictionary to avoid JSON serialization
+        //       see: https://flatbuffers.dev/flatbuffers_guide_use_c-sharp.html#autotoc_md93
+        const payload = builder.createString(JSON.stringify(msg.payload));
+
+        Message.startMessage(builder);
+        Message.addChannel(builder, channel);
+        Message.addCommand(builder, command);
+        Message.addPayload(builder, payload);
+        const message = Message.endMessage(builder);
+        builder.finish(message);
+
+        const msgBytes = builder.asUint8Array();
+        // FIXME: we don't want to deal with big/little endian, so we just use utf8 encoding for packet length
+        const packetHeader = new TextEncoder().encode(`\0\0\0${msgBytes.length.toString()}\0`);
 
         for (const client of clients) {
             // message format:
             // \0\0\0(PacketHeader)\0(ActualMessage)
             const tcpClient = client;
-            tcpClient.socket.write('\0\0\0' + msgBytes.length.toString() + '\0');
-            tcpClient.socket.write(msgString);
+            tcpClient.socket.write(packetHeader);
+            tcpClient.socket.write(msgBytes);
         }
 
     }
@@ -93,7 +110,7 @@ export class UnityServerWorker extends WorkerService {
         const tcpClient: TcpClient = {
             id,
             socket,
-            leftOverBuffer: '',
+            leftOverBuffer: Buffer.alloc(0),
             address: socket.remoteAddress || 'UNDEFINED',
             app: ''
         };
@@ -113,25 +130,63 @@ export class UnityServerWorker extends WorkerService {
     }
 
     private handleSocketData(client: TcpClient, data: Buffer): void {
-        const msgs = this.splitJson(data.toString(), client);
+        let buffer = Buffer.concat([client.leftOverBuffer, data]);
+        const msgs: NetworkMessage[] = [];
 
-        for (const msg of msgs) {
+        while (buffer.length > 0) {
+            const headerStart = buffer.indexOf('\0\0\0');
+
+            if (headerStart === -1) {
+                // invalid packet?!
+                this.logError(`Invalid packet received from client ${client.id}, discarding buffer`);
+                client.leftOverBuffer = Buffer.alloc(0);
+                break;
+            }
+
+            const headerEnd = buffer.indexOf('\0', headerStart + 4);
+            const packetLengthBuffer = buffer.subarray(headerStart + 3, headerEnd);
+            // FIXME: we don't want to deal with big/little endian, so we just use utf8 encoding for packet length
+            const packetLength = Number(packetLengthBuffer.toString('utf8'));
+            const packetEnd = headerEnd + 1 + packetLength;
+            
+            if (packetEnd > buffer.length) {
+                // incomplete packet, store leftovers
+                client.leftOverBuffer = buffer;
+                break;
+            }
+
+            const packet = buffer.subarray(headerEnd + 1, );
+            const packetBuffer = new flatbuffers.ByteBuffer(packet);
+            const message = Message.getRootAsMessage(packetBuffer);
+
             try {
-                const packet = JSON.parse(msg);
-                if (packet.command === 'set_app') {
-                    this.assignApp(client, (packet.payload as { name: string }).name as string);
-                } else if (client.app) {
-                    packet.origin = { id: client.id, app: client.app };
-                    this.postMessage('clientMessage$', packet);
-                } else {
-                    this.logError(`Ignoring message (${packet.channel} / ${packet.command}) from client ${client.id} without app`);
-                }
+                msgs.push({
+                    channel: message.channel() || '',
+                    command: message.command() || '',
+                    payload: JSON.parse(message.payload() || '{}'),
+                    origin: { id: client.id, app: client.app }
+                });
             } catch (err) {
-                if (err instanceof Error) {
-                    this.logError(err.message);
-                }
+                console.log(err);
+            }
 
-                this.logError(msg);
+            // if there are multiple packets in the buffer, begin anew
+            buffer = buffer.subarray(headerEnd + 1 + packetLength);
+        }
+
+        // clear leftover buffers once we're finished
+        if (buffer.length === 0) {
+            client.leftOverBuffer = Buffer.alloc(0);
+        }
+
+        // pass on actual messages
+        for (const msg of msgs) {
+            if (msg.command === 'set_app') {
+                this.assignApp(client, (msg.payload as { name: string }).name as string);
+            } else if (client.app) {
+                this.postMessage('clientMessage$', msg as unknown as { [key: string]: unknown });
+            } else {
+                this.logError(`Ignoring message (${msg.channel} / ${msg.command}) from client ${client.id} without app`);
             }
         }
     }
@@ -195,53 +250,6 @@ export class UnityServerWorker extends WorkerService {
             }
         }
         return utf8;
-    }
-
-
-
-
-    // TODO: breaks easily, but sufficient for current purpose
-    // TODO: see equivalent implementation in unity listener InteractiveSurfaceClient.cs
-    private splitJson(text: string, client: TcpClient): string[] {
-        const jsonPackets: string[] = [];
-
-        let leftBracketIndex = -1;
-        let rightBracketIndex = -1;
-
-        let bracketCounter = 0;
-        let startPos = 0;
-
-        const fullText = client.leftOverBuffer ? client.leftOverBuffer + text : text;
-
-        for (let i = 0; i < fullText.length; i++) {
-            const ch = fullText.charAt(i);
-
-            if (ch === '{') {
-                if (bracketCounter === 0) {
-                    leftBracketIndex = i;
-                }
-
-                bracketCounter++;
-            } else if (ch === '}') {
-                bracketCounter--;
-
-                if (bracketCounter <= 0) {
-                    rightBracketIndex = i;
-                    bracketCounter = 0;
-
-                    jsonPackets.push(fullText.substring(leftBracketIndex, rightBracketIndex + 1));
-                    startPos = i + 1;
-                }
-            }
-        }
-
-        if (startPos < fullText.length) {
-            client.leftOverBuffer = fullText.substring(startPos);
-        } else {
-            client.leftOverBuffer = '';
-        }
-
-        return jsonPackets;
     }
 }
 

@@ -1,5 +1,6 @@
-﻿using HCIKonstanz.Colibri.Core;
-using Newtonsoft.Json;
+﻿using Colibri.Networking;
+using Google.FlatBuffers;
+using HCIKonstanz.Colibri.Core;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Net.Sockets;
@@ -87,17 +88,6 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
 
-        private struct OutPacket
-        {
-            public string channel;
-            public string command;
-            public JToken payload;
-        }
-
-
-
-
-
 
         private void OnEnable()
         {
@@ -164,6 +154,7 @@ namespace HCIKonstanz.Colibri.Networking
 
             Task.Run(async () =>
             {
+                Debug.Log("Connecting to " + ip);
                 if (isReconnect)
                 {
                     Status = ConnectionStatus.Reconnecting;
@@ -270,18 +261,22 @@ namespace HCIKonstanz.Colibri.Networking
                     {
                         byte[] rawPacket = new byte[_expectedPacketSize];
                         Buffer.BlockCopy(_receiveBuffer, processingOffset, rawPacket, 0, rawPacket.Length);
-                        var packet = _encoding.GetString(rawPacket);
+
+                        var message = Message.GetRootAsMessage(new ByteBuffer(rawPacket));
 
                         try
                         {
                             // messages have to be handled in main update() thread, to avoid possible threading issues in handlers
-                            var incomingPacket = JsonConvert.DeserializeObject<InPacket>(packet);
-                            _queuedCommands.Enqueue(incomingPacket);
+                            _queuedCommands.Enqueue(new InPacket
+                            {
+                                channel = message.Channel,
+                                command = message.Command,
+                                payload = JObject.Parse(message.Payload)
+                            });
                         }
                         catch (Exception e)
                         {
                             Debug.LogError(e.Message);
-                            Debug.LogError(packet);
                         }
 
                         processingOffset += _expectedPacketSize;
@@ -390,45 +385,60 @@ namespace HCIKonstanz.Colibri.Networking
         {
             if (_socket != null)
             {
-                SocketAsyncEventArgs socketAsyncData = new SocketAsyncEventArgs();
-                socketAsyncData.SetBuffer(data, 0, data.Length);
-                _socket.SendAsync(socketAsyncData);
-                var signal = new SemaphoreSlim(0, 1);
+                try
+                {
+                    SocketAsyncEventArgs socketAsyncData = new SocketAsyncEventArgs();
+                    var encoding = new UTF8Encoding();
+                    // TODO: could reuse byte buffer to avoid unnecessary memory allocation
+                    var header = encoding.GetBytes($"\0\0\0{data.Length}\0");
+                    // TODO: could be more efficient!
+                    var buffer = new byte[header.Length + data.Length];
+                    header.CopyTo(buffer, 0);
+                    data.CopyTo(buffer, header.Length);
 
-                socketAsyncData.Completed += (sender, e) => signal.Release();
+                    socketAsyncData.SetBuffer(buffer, 0, buffer.Length);
+                    _socket.SendAsync(socketAsyncData);
+                    var signal = new SemaphoreSlim(0, 1);
 
-                await signal.WaitAsync();
+                    socketAsyncData.Completed += (sender, e) => signal.Release();
+
+                    await signal.WaitAsync();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError(e);
+                }
             }
 
-            return false;
-        }
-
-        private bool SendData(byte[] data)
-        {
-            try
-            {
-                _socket.Send(data);
-                return true;
-            }
-            catch (Exception e)
-            {
-                Debug.LogError(e.Message);
-            }
             return false;
         }
 
         private async Task<bool> SendCommandNow(string channel, string command, JToken payload)
         {
-            var packet = new OutPacket
-            {
-                channel = channel,
-                command = command,
-                payload = payload
-            };
+            var builder = new FlatBufferBuilder(512);
 
-            var encoding = new UTF8Encoding();
-            var rawData = encoding.GetBytes(JsonConvert.SerializeObject(packet));
-            return await SendDataAsync(rawData);
+            try
+            {
+                // order is important because "calls cannot be nested"
+                var fbChannel = builder.CreateString(channel);
+                var fbCommand = builder.CreateString(command);
+                // TODO: replace this with dictionary to avoid JSON serialization
+                //       see: https://flatbuffers.dev/flatbuffers_guide_use_c-sharp.html#autotoc_md93
+                var fbPayload = builder.CreateString(payload?.ToString());
+
+                Message.StartMessage(builder);
+                Message.AddChannel(builder, fbChannel);
+                Message.AddCommand(builder, fbCommand);
+                Message.AddPayload(builder, fbPayload);
+                var msg = Message.EndMessage(builder);
+                builder.Finish(msg.Value);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(e);
+            }
+
+            return await SendDataAsync(builder.SizedByteArray());
         }
 
         public async Task<bool> SendCommandAsync(string channel, string command, JToken payload)
