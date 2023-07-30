@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using HCIKonstanz.Colibri.Core;
+using HCIKonstanz.Colibri.Setup;
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Networking
@@ -27,7 +28,7 @@ namespace HCIKonstanz.Colibri.Networking
         private void OnEnable()
         {
             DontDestroyOnLoad(this);
-            if (!String.IsNullOrEmpty(SyncConfiguration.SERVER_IP))
+            if (!String.IsNullOrEmpty(ColibriConfig.Load().ServerAddress))
                 Connect();
         }
 
@@ -53,7 +54,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         private void Connect()
         {
-            var ip = Dns.GetHostEntry(SyncConfiguration.SERVER_IP);
+            var ip = Dns.GetHostEntry(ColibriConfig.Load().ServerAddress);
             if (ip.AddressList.Length > 0)
             {
                 sendIPEndPoint = new IPEndPoint(ip.AddressList[0], 9003);
@@ -76,7 +77,7 @@ namespace HCIKonstanz.Colibri.Networking
             }
             else
             {
-                Debug.LogError($"Could not resolve {SyncConfiguration.SERVER_IP}");
+                Debug.LogError($"Could not resolve {ColibriConfig.Load().ServerAddress}");
                 enabled = false;
             }
         }

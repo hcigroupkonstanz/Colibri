@@ -1,6 +1,7 @@
 ﻿using Colibri.Networking;
 using Google.FlatBuffers;
 using HCIKonstanz.Colibri.Core;
+using HCIKonstanz.Colibri.Setup;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Net.Sockets;
@@ -93,7 +94,7 @@ namespace HCIKonstanz.Colibri.Networking
         {
             DontDestroyOnLoad(this);
 
-            if (!String.IsNullOrEmpty(SyncConfiguration.SERVER_IP))
+            if (!String.IsNullOrEmpty(ColibriConfig.Load().ServerAddress))
                 Connect();
 
             // to get rid of unity warning
@@ -148,7 +149,8 @@ namespace HCIKonstanz.Colibri.Networking
             _socket.SendTimeout = SOCKET_TIMEOUT_MS;
 
             // avoid multithreading problems due to variable changes...
-            var ip = SyncConfiguration.SERVER_IP;
+            var ip = ColibriConfig.Load().ServerAddress;
+            var app = ColibriConfig.Load().AppName;
             var socket = _socket;
 
 
@@ -168,7 +170,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                     socket.Connect(ip, UNITY_SERVER_PORT);
                     socket.BeginReceive(_receiveBuffer, _receiveBufferOffset, _receiveBuffer.Length - _receiveBufferOffset, SocketFlags.None, _receiveCallback, null);
-                    await SendCommandNow("colibri", "set_app", new JObject { { "name", SyncConfiguration.APP_NAME } });
+                    await SendCommandNow("colibri", "set_app", new JObject { { "name", app } });
                     Debug.Log("Connection to web server established");
                     Status = ConnectionStatus.Connected;
                     LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -211,7 +213,7 @@ namespace HCIKonstanz.Colibri.Networking
                 }
             }
 
-            if (Status == ConnectionStatus.Disconnected && !String.IsNullOrEmpty(SyncConfiguration.SERVER_IP))
+            if (Status == ConnectionStatus.Disconnected && !String.IsNullOrEmpty(ColibriConfig.Load().AppName))
             {
                 Connect();
             }
