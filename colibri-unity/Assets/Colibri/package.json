@@ -2,13 +2,46 @@
     "name": "de.uni.kn.colibri",
     "displayName": "Colibri",
     "version": "1.0.0",
-    "author": {
-      "name" : "Sebastian Hubenschmid & Daniel Fink, HCI Group, University of Konstanz",
-      "email" : "sebastian.hubenschmid@uni-konstanz.de",
-      "url" : "https://hci.uni-konstanz.de"
-  },
+    "author":
+    {
+        "name": "HCI Group, University of Konstanz",
+        "url": "https://hci.uni-konstanz.de"
+    },
     "unity": "2019.4",
     "description": "Toolkit for Rapid Prototyping of Networking Across Realities for Research Prototypes",
     "license": "MIT",
-    "dependencies": { }
+    "dependencies": {},
+    "samples":
+    [
+        {
+            "displayName": "Observable Model",
+            "description": "TODO",
+            "path": "Samples/ObservableModel"
+        },
+        {
+            "displayName": "REST API",
+            "description": "TODO",
+            "path": "Samples/RestApi"
+        },
+        {
+            "displayName": "SendMessages",
+            "description": "Sending sporadic data / events",
+            "path": "Samples/SendMessages"
+        },
+        {
+            "displayName": "SyncBehaviour",
+            "description": "TODO",
+            "path": "Samples/SyncBehaviour"
+        },
+        {
+            "displayName": "SyncTransform",
+            "description": "TODO",
+            "path": "Samples/SyncTransform"
+        },
+        {
+            "displayName": "Voice Chat",
+            "description": "TODO",
+            "path": "Samples/VoiceChat"
+        }
+    ]
 }
