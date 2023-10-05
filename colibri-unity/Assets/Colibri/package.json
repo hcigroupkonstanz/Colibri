@@ -1,7 +1,12 @@
 {
     "name": "de.uni.kn.colibri",
     "displayName": "Colibri",
-    "version": "0.3.0",
+    "version": "1.0.0",
+    "author": {
+      "name" : "Sebastian Hubenschmid & Daniel Fink, HCI Group, University of Konstanz",
+      "email" : "sebastian.hubenschmid@uni-konstanz.de",
+      "url" : "https://hci.uni-konstanz.de"
+  },
     "unity": "2019.4",
     "description": "Toolkit for Rapid Prototyping of Networking Across Realities for Research Prototypes",
     "license": "MIT",
