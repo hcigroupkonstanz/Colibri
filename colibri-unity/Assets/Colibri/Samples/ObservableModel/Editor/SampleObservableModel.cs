@@ -1,4 +1,5 @@
-﻿using UnityEditor;
+﻿#if UNITY_EDITOR
+using UnityEditor;
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Samples
@@ -26,3 +27,4 @@ namespace HCIKonstanz.Colibri.Samples
         }
     }
 }
+#endif

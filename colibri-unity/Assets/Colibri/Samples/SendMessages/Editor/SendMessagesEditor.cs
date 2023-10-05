@@ -1,4 +1,5 @@
-﻿using HCIKonstanz.Colibri.Synchronization;
+﻿#if UNITY_EDITOR
+using HCIKonstanz.Colibri.Synchronization;
 using UnityEditor;
 using UnityEngine;
 
@@ -51,3 +52,4 @@ namespace HCIKonstanz.Colibri.Samples
         }
     }
 }
+#endif
