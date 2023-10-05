@@ -1,4 +1,3 @@
-using Microsoft.MixedReality.Toolkit.Utilities.Editor;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
@@ -95,7 +94,7 @@ namespace HCIKonstanz.Colibri.Setup
         {
             GUILayout.Label("Colibri Setup", new GUIStyle(EditorStyles.largeLabel)
             {
-                fontSize = InspectorUIUtility.TitleFontSize,
+                fontSize = 22,
                 fontStyle = FontStyle.Bold,
                 fixedWidth = 500
             });
