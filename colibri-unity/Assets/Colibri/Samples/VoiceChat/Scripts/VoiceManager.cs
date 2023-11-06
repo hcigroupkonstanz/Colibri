@@ -43,7 +43,7 @@ public class VoiceManager : MonoBehaviour
         timeSinceLastSended += Time.deltaTime;
         if (timeSinceLastSended > 1f)
         {
-            Sync.SendData(CHANNEL, Id);
+            Sync.Send(CHANNEL, Id);
             timeSinceLastSended = 0f;
         }
 

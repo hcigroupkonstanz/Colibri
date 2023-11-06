@@ -144,23 +144,23 @@ namespace HCIKonstanz.Colibri.Synchronization
         /*
          *  Sending data
          */
-        public static void SendData(string channel, bool data) => Connection().SendCommand(channel, "broadcast::bool", data);
-        public static void SendData(string channel, int data) => Connection().SendCommand(channel, "broadcast::int", data);
-        public static void SendData(string channel, float data) => Connection().SendCommand(channel, "broadcast::float", data);
-        public static void SendData(string channel, string data) => Connection().SendCommand(channel, "broadcast::string", data);
-        public static void SendData(string channel, Vector2 data) => Connection().SendCommand(channel, "broadcast::vector2", data.ToJson());
-        public static void SendData(string channel, Vector3 data) => Connection().SendCommand(channel, "broadcast::vector3", data.ToJson());
-        public static void SendData(string channel, Quaternion data) => Connection().SendCommand(channel, "broadcast::quaternion", data.ToJson());
-        public static void SendData(string channel, Color data) => Connection().SendCommand(channel, "broadcast::color", data.ToJson());
-        public static void SendData(string channel, bool[] data) => Connection().SendCommand(channel, "broadcast::bool[]", new JArray(data));
-        public static void SendData(string channel, int[] data) => Connection().SendCommand(channel, "broadcast::int[]", new JArray(data));
-        public static void SendData(string channel, float[] data) => Connection().SendCommand(channel, "broadcast::float[]", new JArray(data));
-        public static void SendData(string channel, string[] data) => Connection().SendCommand(channel, "broadcast::string[]", new JArray(data));
-        public static void SendData(string channel, Vector2[] data) => Connection().SendCommand(channel, "broadcast::vector2[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, Vector3[] data) => Connection().SendCommand(channel, "broadcast::vector3[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, Quaternion[] data) => Connection().SendCommand(channel, "broadcast::quaternion[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, Color[] data) => Connection().SendCommand(channel, "broadcast::color[]", new JArray(data.Select(x => x.ToJson())));
-        public static void SendData(string channel, JToken data) => Connection().SendCommand(channel, "broadcast::JSON", data);
+        public static void Send(string channel, bool data) => Connection().SendCommand(channel, "broadcast::bool", data);
+        public static void Send(string channel, int data) => Connection().SendCommand(channel, "broadcast::int", data);
+        public static void Send(string channel, float data) => Connection().SendCommand(channel, "broadcast::float", data);
+        public static void Send(string channel, string data) => Connection().SendCommand(channel, "broadcast::string", data);
+        public static void Send(string channel, Vector2 data) => Connection().SendCommand(channel, "broadcast::vector2", data.ToJson());
+        public static void Send(string channel, Vector3 data) => Connection().SendCommand(channel, "broadcast::vector3", data.ToJson());
+        public static void Send(string channel, Quaternion data) => Connection().SendCommand(channel, "broadcast::quaternion", data.ToJson());
+        public static void Send(string channel, Color data) => Connection().SendCommand(channel, "broadcast::color", data.ToJson());
+        public static void Send(string channel, bool[] data) => Connection().SendCommand(channel, "broadcast::bool[]", new JArray(data));
+        public static void Send(string channel, int[] data) => Connection().SendCommand(channel, "broadcast::int[]", new JArray(data));
+        public static void Send(string channel, float[] data) => Connection().SendCommand(channel, "broadcast::float[]", new JArray(data));
+        public static void Send(string channel, string[] data) => Connection().SendCommand(channel, "broadcast::string[]", new JArray(data));
+        public static void Send(string channel, Vector2[] data) => Connection().SendCommand(channel, "broadcast::vector2[]", new JArray(data.Select(x => x.ToJson())));
+        public static void Send(string channel, Vector3[] data) => Connection().SendCommand(channel, "broadcast::vector3[]", new JArray(data.Select(x => x.ToJson())));
+        public static void Send(string channel, Quaternion[] data) => Connection().SendCommand(channel, "broadcast::quaternion[]", new JArray(data.Select(x => x.ToJson())));
+        public static void Send(string channel, Color[] data) => Connection().SendCommand(channel, "broadcast::color[]", new JArray(data.Select(x => x.ToJson())));
+        public static void Send(string channel, JToken data) => Connection().SendCommand(channel, "broadcast::JSON", data);
 
         public static void SendModelUpdate(string channel, JObject data) => Connection().SendCommand(channel, "model::update", data);
         public static void SendModelDelete(string channel, string id) => Connection().SendCommand(channel, "model::delete", new JObject { { "id", id } });
