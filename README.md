@@ -51,7 +51,7 @@ The following research projects were built using (early versions of) Colibri.
 
 
 
-### [STREAM](https://github.com/hcigroupkonstanz/ReLive)
+### [STREAM](https://github.com/hcigroupkonstanz/STREAM)
 
 [![STREAM](http://img.youtube.com/vi/5tEgNzuehuM/0.jpg)](http://www.youtube.com/watch?v=5tEgNzuehuM "STREAM")
 
