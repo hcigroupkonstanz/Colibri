@@ -5,7 +5,7 @@ import * as threads from 'worker_threads';
 import * as flatbuffers from 'flatbuffers';
 import { Message } from './message';
 import { NetworkMessage } from 'modules/command-hooks';
-
+import { v4 as uuidv4 } from 'uuid';
 
 export const UNITY_SERVER_WORKER = __filename;
 
@@ -103,7 +103,7 @@ export class UnityServerWorker extends WorkerService {
     }
 
     private handleConnection(socket: net.Socket): void {
-        const id = (++this.idCounter).toString();
+        const id = uuidv4();
         this.logDebug(`New unity client (${id}) connected from ${socket.remoteAddress}, waiting for app name`);
         socket.setNoDelay(true);
 
