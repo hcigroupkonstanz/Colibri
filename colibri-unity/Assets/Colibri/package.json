@@ -19,7 +19,7 @@
             "path": "Samples/ObservableModel"
         },
         {
-            "displayName": "REST API",
+            "displayName": "Remote Store",
             "description": "TODO",
             "path": "Samples/RestApi"
         },
@@ -42,6 +42,11 @@
             "displayName": "Voice Chat",
             "description": "TODO",
             "path": "Samples/VoiceChat"
+        },
+        {
+            "displayName": "Prefabs",
+            "description": "Prefabs necessary for some features of Colibri (e.g., Remote Logging)",
+            "path": "Prefabs"
         }
     ]
 }
