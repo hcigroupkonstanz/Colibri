@@ -1,13 +1,11 @@
 ﻿{
-    "name": "Colibri",
+    "name": "HCIKonstanz.Colibri",
     "references": [
         "UniRx",
         "UniTask",
         "Unity.TextMeshPro"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
