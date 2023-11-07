@@ -14,33 +14,28 @@
     "samples":
     [
         {
-            "displayName": "Observable Model",
-            "description": "TODO",
-            "path": "Samples/ObservableModel"
-        },
-        {
             "displayName": "Remote Store",
-            "description": "TODO",
+            "description": "Example on how to use Colibri's 'store' API to store / retrieve data from server.",
             "path": "Samples/RestApi"
         },
         {
-            "displayName": "SendMessages",
-            "description": "Sending sporadic data / events",
+            "displayName": "SendData",
+            "description": "Samples on how to use the PubSub methods for sending arbitrary data across the network to other lcients",
             "path": "Samples/SendMessages"
         },
         {
             "displayName": "SyncBehaviour",
-            "description": "TODO",
+            "description": "Examples for using SyncBehaviour, which can be used to synchronize data models across a network (e.g., for using model-view-controller)",
             "path": "Samples/SyncBehaviour"
         },
         {
             "displayName": "SyncTransform",
-            "description": "TODO",
+            "description": "Example scene for SyncTransform script to sync location of objects between clients",
             "path": "Samples/SyncTransform"
         },
         {
             "displayName": "Voice Chat",
-            "description": "TODO",
+            "description": "Example for Colibri's (spatial) voice chat",
             "path": "Samples/VoiceChat"
         },
         {
