@@ -57,8 +57,8 @@ namespace HCIKonstanz.Colibri.Networking
             var ip = Dns.GetHostEntry(ColibriConfig.Load().ServerAddress);
             if (ip.AddressList.Length > 0)
             {
-                sendIPEndPoint = new IPEndPoint(ip.AddressList[0], 9003);
-                receiveIPEndPoint = new IPEndPoint(IPAddress.Any, 9004);
+                sendIPEndPoint = new IPEndPoint(ip.AddressList[0], 9013);
+                receiveIPEndPoint = new IPEndPoint(IPAddress.Any, 9014);
 
                 udpReceive = new UdpClient();
                 udpReceive.ExclusiveAddressUse = false;

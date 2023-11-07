@@ -18,7 +18,7 @@ namespace HCIKonstanz.Colibri.Networking
     [DefaultExecutionOrder(-100)]
     public class WebServerConnection : SingletonBehaviour<WebServerConnection>
     {
-        const int UNITY_SERVER_PORT = 9002;
+        const int UNITY_SERVER_PORT = 9012;
         const int BUFFER_SIZE = 10 * 1024 * 1024;
         const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
         const int SOCKET_TIMEOUT_MS = 500;

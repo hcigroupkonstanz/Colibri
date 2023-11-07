@@ -13,7 +13,7 @@ const messageSubject = new Subject<Message>();
 export const Messages = messageSubject.asObservable();
 
 const location = window.location.hostname;
-const socket = io.connect(location + ':9001', { query: { app: APP_NAME } });
+const socket = io.connect(location + ':9011', { query: { app: APP_NAME } });
 
 socket.onAny((channel, msg) => {
     // if (msg.command === 'rpcRequest') {
