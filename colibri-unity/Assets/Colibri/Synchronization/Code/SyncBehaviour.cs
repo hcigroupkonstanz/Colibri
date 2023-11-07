@@ -10,8 +10,8 @@ using Cysharp.Threading.Tasks;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
-    public abstract class SyncedBehaviour<T> : MonoBehaviour
-        where T : SyncedBehaviour<T>
+    public abstract class SyncBehaviour<T> : MonoBehaviour
+        where T : SyncBehaviour<T>
     {
         private struct SyncedAttribute
         {
@@ -21,11 +21,11 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
-        private static readonly Subject<SyncedBehaviour<T>> _modelCreateSubject = new Subject<SyncedBehaviour<T>>();
-        public static IObservable<SyncedBehaviour<T>> ModelCreated() => _modelCreateSubject.AsObservable();
+        private static readonly Subject<SyncBehaviour<T>> _modelCreateSubject = new Subject<SyncBehaviour<T>>();
+        public static IObservable<SyncBehaviour<T>> ModelCreated() => _modelCreateSubject.AsObservable();
 
-        private static readonly Subject<SyncedBehaviour<T>> _modelDestroySubject = new Subject<SyncedBehaviour<T>>();
-        public static IObservable<SyncedBehaviour<T>> ModelDestroyed() => _modelDestroySubject.AsObservable();
+        private static readonly Subject<SyncBehaviour<T>> _modelDestroySubject = new Subject<SyncBehaviour<T>>();
+        public static IObservable<SyncBehaviour<T>> ModelDestroyed() => _modelDestroySubject.AsObservable();
 
 
         private static readonly Dictionary<string, SyncedAttribute> _syncedAttributes = new Dictionary<string, SyncedAttribute>();

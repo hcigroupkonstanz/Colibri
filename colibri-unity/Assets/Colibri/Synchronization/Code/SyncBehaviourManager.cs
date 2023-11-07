@@ -6,8 +6,8 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
-    public abstract class SyncedBehaviourManager<T> : MonoBehaviour
-        where T : SyncedBehaviour<T>
+    public abstract class SyncBehaviourManager<T> : MonoBehaviour
+        where T : SyncBehaviour<T>
     {
         public T Template;
 
@@ -23,7 +23,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 existingBehaviour.TriggerSync();
 
             Sync.AddModelUpdateListener(Channel, OnModelUpdate);
-            SyncedBehaviour<T>.ModelCreated()
+            SyncBehaviour<T>.ModelCreated()
                 .TakeUntilDisable(this)
                 .Where(m => m is T)
                 .Where(m => !_existingObjects.Any(e => e.Id == m.Id))
@@ -33,7 +33,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     m.TriggerSync();
                 });
 
-            SyncedBehaviour<T>.ModelDestroyed()
+            SyncBehaviour<T>.ModelDestroyed()
                 .TakeUntilDisable(this)
                 .Where(m => m is T)
                 .Subscribe(m => _existingObjects.Remove(m as T));

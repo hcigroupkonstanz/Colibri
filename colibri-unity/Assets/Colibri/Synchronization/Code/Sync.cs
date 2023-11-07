@@ -190,57 +190,58 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        public static void AddBoolListener(string channel, Action<bool> listener) => AddListener(channel, _boolListeners, listener);
-        public static void RemoveBoolListener(string channel, Action<bool> listener) => RemoveListener(channel, _boolListeners, listener);
+        public static void Receive(string channel, Action<bool> listener) => AddListener(channel, _boolListeners, listener);
+        public static void Unregister(string channel, Action<bool> listener) => RemoveListener(channel, _boolListeners, listener);
 
-        public static void AddIntListener(string channel, Action<int> listener) => AddListener(channel, _intListeners, listener);
-        public static void RemoveIntListener(string channel, Action<int> listener) => RemoveListener(channel, _intListeners, listener);
+        // TODO: Some methods have types due to ambiguity?? (e.g., float and int)
+        public static void Receive(string channel, Action<int> listener) => AddListener(channel, _intListeners, listener);
+        public static void Unregister(string channel, Action<int> listener) => RemoveListener(channel, _intListeners, listener);
 
-        public static void AddFloatListener(string channel, Action<float> listener) => AddListener(channel, _floatListeners, listener);
-        public static void RemoveFloatListener(string channel, Action<float> listener) => RemoveListener(channel, _floatListeners, listener);
+        public static void Receive(string channel, Action<float> listener) => AddListener(channel, _floatListeners, listener);
+        public static void Unregister(string channel, Action<float> listener) => RemoveListener(channel, _floatListeners, listener);
 
-        public static void AddStringListener(string channel, Action<string> listener) => AddListener(channel, _stringListeners, listener);
-        public static void RemoveStringListener(string channel, Action<string> listener) => RemoveListener(channel, _stringListeners, listener);
+        public static void Receive(string channel, Action<string> listener) => AddListener(channel, _stringListeners, listener);
+        public static void Unregister(string channel, Action<string> listener) => RemoveListener(channel, _stringListeners, listener);
 
-        public static void AddVector2Listener(string channel, Action<Vector2> listener) => AddListener(channel, _vector2Listeners, listener);
-        public static void RemoveVector2Listener(string channel, Action<Vector2> listener) => RemoveListener(channel, _vector2Listeners, listener);
+        public static void Receive(string channel, Action<Vector2> listener) => AddListener(channel, _vector2Listeners, listener);
+        public static void Unregister(string channel, Action<Vector2> listener) => RemoveListener(channel, _vector2Listeners, listener);
 
-        public static void AddVector3Listener(string channel, Action<Vector3> listener) => AddListener(channel, _vector3Listeners, listener);
-        public static void RemoveVector3Listener(string channel, Action<Vector3> listener) => RemoveListener(channel, _vector3Listeners, listener);
+        public static void Receive(string channel, Action<Vector3> listener) => AddListener(channel, _vector3Listeners, listener);
+        public static void Unregister(string channel, Action<Vector3> listener) => RemoveListener(channel, _vector3Listeners, listener);
 
-        public static void AddQuaternionListener(string channel, Action<Quaternion> listener) => AddListener(channel, _quaternionListeners, listener);
-        public static void RemoveQuaternionListener(string channel, Action<Quaternion> listener) => RemoveListener(channel, _quaternionListeners, listener);
+        public static void Receive(string channel, Action<Quaternion> listener) => AddListener(channel, _quaternionListeners, listener);
+        public static void Unregister(string channel, Action<Quaternion> listener) => RemoveListener(channel, _quaternionListeners, listener);
 
-        public static void AddColorListener(string channel, Action<Color> listener) => AddListener(channel, _colorListeners, listener);
-        public static void RemoveColorListener(string channel, Action<Color> listener) => RemoveListener(channel, _colorListeners, listener);
+        public static void Receive(string channel, Action<Color> listener) => AddListener(channel, _colorListeners, listener);
+        public static void Unregister(string channel, Action<Color> listener) => RemoveListener(channel, _colorListeners, listener);
 
-        public static void AddBoolArrayListener(string channel, Action<bool[]> listener) => AddListener(channel, _boolArrayListeners, listener);
-        public static void RemoveBoolArrayListener(string channel, Action<bool[]> listener) => RemoveListener(channel, _boolArrayListeners, listener);
+        public static void Receive(string channel, Action<bool[]> listener) => AddListener(channel, _boolArrayListeners, listener);
+        public static void Unregister(string channel, Action<bool[]> listener) => RemoveListener(channel, _boolArrayListeners, listener);
 
-        public static void AddIntArrayListener(string channel, Action<int[]> listener) => AddListener(channel, _intArrayListeners, listener);
-        public static void RemoveIntArrayListener(string channel, Action<int[]> listener) => RemoveListener(channel, _intArrayListeners, listener);
+        public static void Receive(string channel, Action<int[]> listener) => AddListener(channel, _intArrayListeners, listener);
+        public static void Unregister(string channel, Action<int[]> listener) => RemoveListener(channel, _intArrayListeners, listener);
 
-        public static void AddFloatArrayListener(string channel, Action<float[]> listener) => AddListener(channel, _floatArrayListeners, listener);
-        public static void RemoveFloatArrayListener(string channel, Action<float[]> listener) => RemoveListener(channel, _floatArrayListeners, listener);
+        public static void Receive(string channel, Action<float[]> listener) => AddListener(channel, _floatArrayListeners, listener);
+        public static void Unregister(string channel, Action<float[]> listener) => RemoveListener(channel, _floatArrayListeners, listener);
 
-        public static void AddStringArrayListener(string channel, Action<string[]> listener) => AddListener(channel, _stringArrayListeners, listener);
-        public static void RemoveStringArrayListener(string channel, Action<string[]> listener) => RemoveListener(channel, _stringArrayListeners, listener);
+        public static void Receive(string channel, Action<string[]> listener) => AddListener(channel, _stringArrayListeners, listener);
+        public static void Unregister(string channel, Action<string[]> listener) => RemoveListener(channel, _stringArrayListeners, listener);
 
-        public static void AddVector2ArrayListener(string channel, Action<Vector2[]> listener) => AddListener(channel, _vector2ArrayListeners, listener);
-        public static void RemoveVector2ArrayListener(string channel, Action<Vector2[]> listener) => RemoveListener(channel, _vector2ArrayListeners, listener);
+        public static void Receive(string channel, Action<Vector2[]> listener) => AddListener(channel, _vector2ArrayListeners, listener);
+        public static void Unregister(string channel, Action<Vector2[]> listener) => RemoveListener(channel, _vector2ArrayListeners, listener);
 
-        public static void AddVector3ArrayListener(string channel, Action<Vector3[]> listener) => AddListener(channel, _vector3ArrayListeners, listener);
-        public static void RemoveVector3ArrayListener(string channel, Action<Vector3[]> listener) => RemoveListener(channel, _vector3ArrayListeners, listener);
+        public static void Receive(string channel, Action<Vector3[]> listener) => AddListener(channel, _vector3ArrayListeners, listener);
+        public static void Unregister(string channel, Action<Vector3[]> listener) => RemoveListener(channel, _vector3ArrayListeners, listener);
 
-        public static void AddQuaternionArrayListener(string channel, Action<Quaternion[]> listener) => AddListener(channel, _quaternionArrayListeners, listener);
-        public static void RemoveQuaternionArrayListener(string channel, Action<Quaternion[]> listener) => RemoveListener(channel, _quaternionArrayListeners, listener);
+        public static void Receive(string channel, Action<Quaternion[]> listener) => AddListener(channel, _quaternionArrayListeners, listener);
+        public static void Unregister(string channel, Action<Quaternion[]> listener) => RemoveListener(channel, _quaternionArrayListeners, listener);
 
-        public static void AddColorArrayListener(string channel, Action<Color[]> listener) => AddListener(channel, _colorArrayListeners, listener);
-        public static void RemoveColorArrayListener(string channel, Action<Color[]> listener) => RemoveListener(channel, _colorArrayListeners, listener);
+        public static void Receive(string channel, Action<Color[]> listener) => AddListener(channel, _colorArrayListeners, listener);
+        public static void Unregister(string channel, Action<Color[]> listener) => RemoveListener(channel, _colorArrayListeners, listener);
 
 
-        public static void AddJSONListener(string channel, Action<JToken> listener) => AddListener(channel, _jsonListeners, listener);
-        public static void RemoveJSONListener(string channel, Action<JToken> listener) => RemoveListener(channel, _jsonListeners, listener);
+        public static void Receive(string channel, Action<JToken> listener) => AddListener(channel, _jsonListeners, listener);
+        public static void Unregister(string channel, Action<JToken> listener) => RemoveListener(channel, _jsonListeners, listener);
 
         public static void AddModelUpdateListener(string channel, Action<JObject> listener)
         {

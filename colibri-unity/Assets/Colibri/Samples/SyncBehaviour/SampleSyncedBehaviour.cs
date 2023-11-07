@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Samples
 {
-    public class SampleSyncedBehaviour : SyncedBehaviour<SampleSyncedBehaviour>
+    public class SampleSyncedBehaviour : SyncBehaviour<SampleSyncedBehaviour>
     {
         [Sync, SerializeField]
         private int RandomValue;

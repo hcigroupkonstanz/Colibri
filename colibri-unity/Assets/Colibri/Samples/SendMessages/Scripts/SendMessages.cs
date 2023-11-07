@@ -1,4 +1,6 @@
 ﻿using HCIKonstanz.Colibri.Synchronization;
+using Newtonsoft.Json.Linq;
+using System;
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Samples
@@ -30,44 +32,48 @@ namespace HCIKonstanz.Colibri.Samples
 
         private void OnEnable()
         {
-            Sync.AddBoolListener(Channel, OnBoolMessage);
-            Sync.AddIntListener(Channel, OnIntMessage);
-            Sync.AddFloatListener(Channel, OnFloatMessage);
-            Sync.AddStringListener(Channel, OnStringMessage);
-            Sync.AddVector2Listener(Channel, OnVector2Message);
-            Sync.AddVector3Listener(Channel, OnVector3Message);
-            Sync.AddQuaternionListener(Channel, OnQuaternionMessage);
-            Sync.AddColorListener(Channel, OnColorMessage);
+            Sync.Receive(Channel, OnBoolMessage);
+            Sync.Receive(Channel, OnIntMessage);
+            Sync.Receive(Channel, (Action<float>)OnFloatMessage);
+            Sync.Receive(Channel, OnStringMessage);
+            Sync.Receive(Channel, (Action<Vector2>)OnVector2Message);
+            Sync.Receive(Channel, (Action<Vector3>)OnVector3Message);
+            Sync.Receive(Channel, OnQuaternionMessage);
+            Sync.Receive(Channel, OnColorMessage);
 
-            Sync.AddBoolArrayListener(Channel, OnBoolArrayMessage);
-            Sync.AddIntArrayListener(Channel, OnIntArrayMessage);
-            Sync.AddFloatArrayListener(Channel, OnFloatArrayMessage);
-            Sync.AddStringArrayListener(Channel, OnStringArrayMessage);
-            Sync.AddVector2ArrayListener(Channel, OnVector2ArrayMessage);
-            Sync.AddVector3ArrayListener(Channel, OnVector3ArrayMessage);
-            Sync.AddQuaternionArrayListener(Channel, OnQuaternionArrayMessage);
-            Sync.AddColorArrayListener(Channel, OnColorArrayMessage);
+            Sync.Receive(Channel, OnBoolArrayMessage);
+            Sync.Receive(Channel, OnIntArrayMessage);
+            Sync.Receive(Channel, OnFloatArrayMessage);
+            Sync.Receive(Channel, OnStringArrayMessage);
+            Sync.Receive(Channel, OnVector2ArrayMessage);
+            Sync.Receive(Channel, OnVector3ArrayMessage);
+            Sync.Receive(Channel, OnQuaternionArrayMessage);
+            Sync.Receive(Channel, OnColorArrayMessage);
+
+            Sync.Receive(Channel, (Action<JToken>)OnJsonMessage);
         }
 
         private void OnDisable()
         {
-            Sync.RemoveBoolListener(Channel, OnBoolMessage);
-            Sync.RemoveIntListener(Channel, OnIntMessage);
-            Sync.RemoveFloatListener(Channel, OnFloatMessage);
-            Sync.RemoveStringListener(Channel, OnStringMessage);
-            Sync.RemoveVector2Listener(Channel, OnVector2Message);
-            Sync.RemoveVector3Listener(Channel, OnVector3Message);
-            Sync.RemoveQuaternionListener(Channel, OnQuaternionMessage);
-            Sync.RemoveColorListener(Channel, OnColorMessage);
+            Sync.Unregister(Channel, OnBoolMessage);
+            Sync.Unregister(Channel, OnIntMessage);
+            Sync.Unregister(Channel, (Action<float>)OnFloatMessage);
+            Sync.Unregister(Channel, OnStringMessage);
+            Sync.Unregister(Channel, (Action<Vector2>)OnVector2Message);
+            Sync.Unregister(Channel, (Action<Vector3>)OnVector3Message);
+            Sync.Unregister(Channel, OnQuaternionMessage);
+            Sync.Unregister(Channel, OnColorMessage);
 
-            Sync.RemoveBoolArrayListener(Channel, OnBoolArrayMessage);
-            Sync.RemoveIntArrayListener(Channel, OnIntArrayMessage);
-            Sync.RemoveFloatArrayListener(Channel, OnFloatArrayMessage);
-            Sync.RemoveStringArrayListener(Channel, OnStringArrayMessage);
-            Sync.RemoveVector2ArrayListener(Channel, OnVector2ArrayMessage);
-            Sync.RemoveVector3ArrayListener(Channel, OnVector3ArrayMessage);
-            Sync.RemoveQuaternionArrayListener(Channel, OnQuaternionArrayMessage);
-            Sync.RemoveColorArrayListener(Channel, OnColorArrayMessage);
+            Sync.Unregister(Channel, OnBoolArrayMessage);
+            Sync.Unregister(Channel, OnIntArrayMessage);
+            Sync.Unregister(Channel, OnFloatArrayMessage);
+            Sync.Unregister(Channel, OnStringArrayMessage);
+            Sync.Unregister(Channel, OnVector2ArrayMessage);
+            Sync.Unregister(Channel, OnVector3ArrayMessage);
+            Sync.Unregister(Channel, OnQuaternionArrayMessage);
+            Sync.Unregister(Channel, OnColorArrayMessage);
+
+            Sync.Unregister(Channel, (Action<JToken>)OnJsonMessage);
         }
 
 
@@ -95,6 +101,12 @@ namespace HCIKonstanz.Colibri.Samples
                 Sync.Send(Channel, SyncedVector3Array);
                 Sync.Send(Channel, SyncedQuaternionArray);
                 Sync.Send(Channel, SyncedColorArray);
+
+                Sync.Send("myJson", new JObject
+                {
+                    { "attribute1", "example" },
+                    { "attribute2", 5 }
+                });
             }
         }
 
@@ -195,6 +207,11 @@ namespace HCIKonstanz.Colibri.Samples
         {
             Debug.Log($"Received message with value '{val}'");
             SyncedColorArray = val;
+        }
+
+        private void OnJsonMessage(JToken jToken)
+        {
+            Debug.Log($"Received JSON object: {jToken}");
         }
     }
 }

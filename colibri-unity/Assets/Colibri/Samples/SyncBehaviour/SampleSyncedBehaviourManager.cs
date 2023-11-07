@@ -2,7 +2,7 @@
 
 namespace HCIKonstanz.Colibri.Samples
 {
-    public class SampleSyncedBehaviourManager : SyncedBehaviourManager<SampleSyncedBehaviour>
+    public class SampleSyncedBehaviourManager : SyncBehaviourManager<SampleSyncedBehaviour>
     {
     }
 }
