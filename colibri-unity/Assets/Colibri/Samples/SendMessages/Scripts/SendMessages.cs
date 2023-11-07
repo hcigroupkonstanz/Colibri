@@ -7,6 +7,9 @@ namespace HCIKonstanz.Colibri.Samples
     {
         public static readonly string Channel = "SendTestMessages";
 
+        // See Update Method
+        public bool SendProperties;
+
         public bool SyncedBool;
         public int SyncedInt;
         public float SyncedFloat;
@@ -24,7 +27,6 @@ namespace HCIKonstanz.Colibri.Samples
         public Vector3[] SyncedVector3Array;
         public Quaternion[] SyncedQuaternionArray;
         public Color[] SyncedColorArray;
-
 
         private void OnEnable()
         {
@@ -66,6 +68,34 @@ namespace HCIKonstanz.Colibri.Samples
             Sync.RemoveVector3ArrayListener(Channel, OnVector3ArrayMessage);
             Sync.RemoveQuaternionArrayListener(Channel, OnQuaternionArrayMessage);
             Sync.RemoveColorArrayListener(Channel, OnColorArrayMessage);
+        }
+
+
+
+        private void Update()
+        {
+            if (SendProperties)
+            {
+                SendProperties = false;
+
+                Sync.Send(Channel, SyncedBool);
+                Sync.Send(Channel, SyncedInt);
+                Sync.Send(Channel, SyncedFloat);
+                Sync.Send(Channel, SyncedString);
+                Sync.Send(Channel, SyncedVector2);
+                Sync.Send(Channel, SyncedVector3);
+                Sync.Send(Channel, SyncedQuaternion);
+                Sync.Send(Channel, SyncedColor);
+
+                Sync.Send(Channel, SyncedBoolArray);
+                Sync.Send(Channel, SyncedIntArray);
+                Sync.Send(Channel, SyncedFloatArray);
+                Sync.Send(Channel, SyncedStringArray);
+                Sync.Send(Channel, SyncedVector2Array);
+                Sync.Send(Channel, SyncedVector3Array);
+                Sync.Send(Channel, SyncedQuaternionArray);
+                Sync.Send(Channel, SyncedColorArray);
+            }
         }
 
 
