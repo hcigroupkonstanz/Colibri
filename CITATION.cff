@@ -1,0 +1,76 @@
+cff-version: 1.2.0
+title: "Colibri: A toolkit for rapid prototyping of networking across realities"
+message: Please cite this software using these metadata.
+type: software
+authors:
+  - given-names: Sebastian
+    family-names: Hubenschmid
+    email: Sebastian.Hubenschmid@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0002-8704-8503'
+  - given-names: Daniel Immanuel
+    family-names: Fink
+    email: Daniel.Immanuel.Fink@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0003-4281-972X'
+  - given-names: Johannes
+    family-names: Zagermann
+    email: Johannes.Zagermann@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0002-6757-9753'
+  - given-names: Jonathan
+    family-names: Wieland
+    email: Jonathan.Wieland@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0003-2555-6868'
+  - given-names: Harald
+    family-names: Reiterer
+    email: Harald.Reiterer@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0001-8528-8928'
+  - given-names: Tiare
+    family-names: Feuchtner
+    email: Tiare.Feuchtner@uni-konstanz.de
+    orcid: 'https://orcid.org/0000-0002-9922-5538'
+    affiliation: 'HCI Group, University of Konstanz & Aarhus University'
+preferred-citation:
+  type: conference-paper
+  authors:
+  - given-names: Sebastian
+    family-names: Hubenschmid
+    email: Sebastian.Hubenschmid@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0002-8704-8503'
+  - given-names: Daniel Immanuel
+    family-names: Fink
+    email: Daniel.Immanuel.Fink@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0003-4281-972X'
+  - given-names: Johannes
+    family-names: Zagermann
+    email: Johannes.Zagermann@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0002-6757-9753'
+  - given-names: Jonathan
+    family-names: Wieland
+    email: Jonathan.Wieland@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0003-2555-6868'
+  - given-names: Harald
+    family-names: Reiterer
+    email: Harald.Reiterer@uni-konstanz.de
+    affiliation: 'HCI Group, University of Konstanz'
+    orcid: 'https://orcid.org/0000-0001-8528-8928'
+  - given-names: Tiare
+    family-names: Feuchtner
+    email: Tiare.Feuchtner@uni-konstanz.de
+    orcid: 'https://orcid.org/0000-0002-9922-5538'
+    affiliation: 'HCI Group, University of Konstanz & Aarhus University'
+  doi: "10.1109/ISMAR-Adjunct60411.2023.00010 "
+  title: "Colibri: A toolkit for rapid prototyping of networking across realities"
+  year: 2023
+  booktitle: "2023 IEEE International Symposium on Mixed and Augmented Reality Adjunct (ISMAR-Adjunct)"
+  location: "Sydney, Australia"
+  series: "ISMAR'23 Adjunct"
+  numpages: 4
+repository-code: 'https://github.com/hcigroupkonstanz/Colibri'
