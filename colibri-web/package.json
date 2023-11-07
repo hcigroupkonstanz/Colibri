@@ -1,9 +1,12 @@
 {
-  "name": "colibri-web",
-  "version": "0.1.0",
+  "name": "colibri",
+  "version": "1.0.0",
   "description": "Communication Library for Research Prototyping - Allows object synchronization, networking, and voice chat with little to no code required",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "scripts": {
+    "build": "tsup",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "HCI Group, University of Konstanz",
@@ -11,10 +14,12 @@
   "dependencies": {
     "lodash": "^4.17.21",
     "rxjs": "^7.8.1",
-    "socket.io": "^4.7.1",
+    "socket.io-client": "^4.7.1",
     "typescript": "^5.1.6"
   },
   "devDependencies": {
-    "@types/lodash": "^4.14.195"
+    "@swc/core": "^1.3.96",
+    "@types/lodash": "^4.14.195",
+    "tsup": "^7.2.0"
   }
 }
