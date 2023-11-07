@@ -13,7 +13,7 @@ Clients
 
 Server
 
-- [Node](colibri-server/)
+- [NodeJS](colibri-server/)
 
 - [Docker](https://hub.docker.com/r/hcikn/colibri)
 
@@ -25,7 +25,7 @@ Colibri focuses on three key areas:
 
 - **Low Barrier:** Setup and Development is as simple as possible, with little to no configuration/code required.
 - **Multi-Platform:** Colibri (currently) supports synchronization between Unity and Web
-- **Lab Conditions:  ** XR Research prototypes often benefit from ideal lab conditions, allowing Colibri to focus on low latency and high throughput (at the cost of potential bandwidth savings and some performance).
+- **Lab Conditions:** XR Research prototypes often benefit from ideal lab conditions, allowing Colibri to focus on low latency and high throughput (at the cost of potential bandwidth savings and some performance).
 
 Please see the folders for more specific information: [Unity](colibri-unity/) - [Web (JS/TS)](unity-web/) - [Server](colibri-server/)
 
@@ -41,29 +41,29 @@ For questions or feedback, please contact [Sebastian Hubenschmid](https://hci.un
 
 
 
-### Examples
+## Examples
 
 The following research projects were built using (early versions of) Colibri.
 
-#### [ReLive](/hcigroupkonstanz/ReLive)
+### [ReLive](https://github.com/hcigroupkonstanz/ReLive)
 
 [![ReLive Youtube Video](http://img.youtube.com/vi/BaNZ02QkZ_k/0.jpg)](http://www.youtube.com/watch?v=BaNZ02QkZ_k "ReLive")
 
 
 
-#### [STREAM](/hcigroupkonstanz/ReLive)
+### [STREAM](https://github.com/hcigroupkonstanz/ReLive)
 
 [![STREAM](http://img.youtube.com/vi/5tEgNzuehuM/0.jpg)](http://www.youtube.com/watch?v=5tEgNzuehuM "STREAM")
 
 
 
-### [Re-Locations](/hcigroupkonstanz/Re-locations)
+### [Re-Locations](https://github.com/hcigroupkonstanz/Re-locations)
 
 [![Re-Locations](http://img.youtube.com/vi/_D0_B4Rux1U/0.jpg)](http://www.youtube.com/watch?v=_D0_B4Rux1U "Re-Locations")
 
 
 
-#### [ARound the Smartphone](/hcigroupkonstanz/ARound-the-Smartphone)
+### [ARound the Smartphone](https://github.com/hcigroupkonstanz/ARound-the-Smartphone)
 
 [![ARound the Smartphone](http://img.youtube.com/vi/p6cHwLxHWJg/0.jpg)](http://www.youtube.com/watch?v=p6cHwLxHWJg "ARound the Smartphone")
 
