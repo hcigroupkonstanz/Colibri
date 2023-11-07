@@ -23,6 +23,7 @@ namespace HCIKonstanz.Colibri.Networking
         const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
         const int SOCKET_TIMEOUT_MS = 500;
         const int RECONNECT_DELAY_MS = 5 * 1000;
+        const int VERSION = 1;
 
         private static Socket _socket;
         private static AsyncCallback _receiveCallback = new AsyncCallback(ReceiveData);
@@ -170,7 +171,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                     socket.Connect(ip, UNITY_SERVER_PORT);
                     socket.BeginReceive(_receiveBuffer, _receiveBufferOffset, _receiveBuffer.Length - _receiveBufferOffset, SocketFlags.None, _receiveCallback, null);
-                    await SendCommandNow("colibri", "set_app", new JObject { { "name", app } });
+                    await SendHandshake(VERSION, app);
                     Debug.Log("Connection to web server established");
                     Status = ConnectionStatus.Connected;
                     LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -382,6 +383,34 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
 
+        private async Task<bool> SendHandshake(int version, string app)
+        {
+            if (_socket != null)
+            {
+                try
+                {
+                    SocketAsyncEventArgs socketAsyncData = new SocketAsyncEventArgs();
+                    var encoding = new UTF8Encoding();
+                    var buffer = encoding.GetBytes($"\0\0\0h\0{version}::{app}\0");
+
+                    socketAsyncData.SetBuffer(buffer, 0, buffer.Length);
+                    _socket.SendAsync(socketAsyncData);
+                    var signal = new SemaphoreSlim(0, 1);
+
+                    socketAsyncData.Completed += (sender, e) => signal.Release();
+
+                    await signal.WaitAsync();
+                    return true;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError(e);
+                }
+            }
+
+            return false;
+        }
+
 
         private async Task<bool> SendDataAsync(byte[] data)
         {
@@ -415,8 +444,9 @@ namespace HCIKonstanz.Colibri.Networking
             return false;
         }
 
-        private async Task<bool> SendCommandNow(string channel, string command, JToken payload)
+        public async Task<bool> SendCommandAsync(string channel, string command, JToken payload)
         {
+            await Connected;
             var builder = new FlatBufferBuilder(512);
 
             try
@@ -441,12 +471,6 @@ namespace HCIKonstanz.Colibri.Networking
             }
 
             return await SendDataAsync(builder.SizedByteArray());
-        }
-
-        public async Task<bool> SendCommandAsync(string channel, string command, JToken payload)
-        {
-            await Connected;
-            return await SendCommandNow(channel, command, payload);
         }
 
         public void SendCommand(string channel, string command, JToken payload)

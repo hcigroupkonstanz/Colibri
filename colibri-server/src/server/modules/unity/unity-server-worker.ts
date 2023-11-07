@@ -15,6 +15,7 @@ interface TcpClient {
     leftOverBuffer: Buffer;
     address: string;
     app: string;
+    version: number;
 }
 
 export class UnityServerWorker extends WorkerService {
@@ -112,7 +113,8 @@ export class UnityServerWorker extends WorkerService {
             socket,
             leftOverBuffer: Buffer.alloc(0),
             address: socket.remoteAddress || 'UNDEFINED',
-            app: ''
+            app: '',
+            version: 0
         };
         this.waitingClients.push(tcpClient);
 
@@ -144,34 +146,65 @@ export class UnityServerWorker extends WorkerService {
             }
 
             const headerEnd = buffer.indexOf('\0', headerStart + 4);
-            const packetLengthBuffer = buffer.subarray(headerStart + 3, headerEnd);
-            // FIXME: we don't want to deal with big/little endian, so we just use utf8 encoding for packet length
-            const packetLength = Number(packetLengthBuffer.toString('utf8'));
-            const packetEnd = headerEnd + 1 + packetLength;
-            
-            if (packetEnd > buffer.length) {
+
+            if (headerEnd < 0) {
                 // incomplete packet, store leftovers
                 client.leftOverBuffer = buffer;
                 break;
             }
 
-            const packet = buffer.subarray(headerEnd + 1, );
-            const packetBuffer = new flatbuffers.ByteBuffer(packet);
-            const message = Message.getRootAsMessage(packetBuffer);
+            const packetLengthBuffer = buffer.subarray(headerStart + 3, headerEnd);
+            // FIXME: we don't want to deal with big/little endian, so we just use utf8 encoding for packet length
+            //        also the header might contain more than just the packet length, so we need to parse it
+            const header = packetLengthBuffer.toString('utf8');
+            let packetLength: number;
 
-            try {
-                msgs.push({
-                    channel: message.channel() || '',
-                    command: message.command() || '',
-                    payload: JSON.parse(message.payload() || '{}'),
-                    origin: { id: client.id, app: client.app }
-                });
-            } catch (err) {
-                console.log(err);
+            if (header === 'h') {
+                // handshake
+                const packetEnd = buffer.indexOf('\0', headerEnd + 1);
+
+                if (packetEnd < 0) {
+                    // incomplete packet, store leftovers
+                    client.leftOverBuffer = buffer;
+                    break;
+                }
+
+                packetLength = packetEnd - headerEnd;
+                const packet = buffer.subarray(headerEnd + 1).toString();
+                const version = packet.substring(0, packet.indexOf('::'));
+                const app = packet.substring(packet.indexOf('::') + '::'.length);
+
+                this.assignApp(client, app, Number(version));
+            } else {
+                // Packet with payload (normal message)
+                packetLength = Number(header);
+                const packetEnd = headerEnd + 1 + packetLength;
+                
+                if (packetEnd > buffer.length) {
+                    // incomplete packet, store leftovers
+                    client.leftOverBuffer = buffer;
+                    break;
+                }
+
+                const packet = buffer.subarray(headerEnd + 1, packetEnd);
+                const packetBuffer = new flatbuffers.ByteBuffer(packet);
+                const message = Message.getRootAsMessage(packetBuffer);
+
+                try {
+                    msgs.push({
+                        channel: message.channel() || '',
+                        command: message.command() || '',
+                        payload: JSON.parse(message.payload() || '{}'),
+                        origin: { id: client.id, app: client.app }
+                    });
+                } catch (err) {
+                    console.log(err);
+                }
             }
 
             // if there are multiple packets in the buffer, begin anew
             buffer = buffer.subarray(headerEnd + 1 + packetLength);
+
         }
 
         // clear leftover buffers once we're finished
@@ -181,9 +214,7 @@ export class UnityServerWorker extends WorkerService {
 
         // pass on actual messages
         for (const msg of msgs) {
-            if (msg.command === 'set_app') {
-                this.assignApp(client, (msg.payload as { name: string }).name as string);
-            } else if (client.app) {
+            if (client.app) {
                 this.postMessage('clientMessage$', msg as unknown as { [key: string]: unknown });
             } else {
                 this.logError(`Ignoring message (${msg.channel} / ${msg.command}) from client ${client.id} without app`);
@@ -191,9 +222,10 @@ export class UnityServerWorker extends WorkerService {
         }
     }
 
-    private assignApp(client: TcpClient, app: string): void {
-        this.logDebug(`Setting app of unity client "${client.id}" to "${app}"`);
+    private assignApp(client: TcpClient, app: string, version: number): void {
+        this.logDebug(`Setting app of unity client "${client.id}" (v${version}) to "${app}"`);
         client.app = app;
+        client.version = version;
         _.pull(this.waitingClients, client);
         this.clients.push(client);
         this.postMessage('clientConnected$', { id: client.id, app });
