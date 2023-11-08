@@ -1,8 +1,6 @@
 import { Subject } from 'rxjs';
 import * as io from 'socket.io-client';
 
-const APP_NAME = 'SAMPLE';
-
 export interface Message {
     channel: string,
     command: string,
@@ -13,26 +11,36 @@ const messageSubject = new Subject<Message>();
 export const Messages = messageSubject.asObservable();
 
 const location = window.location.hostname;
-const socket = io.connect(location + ':9011', { query: { app: APP_NAME } });
+let socket: io.Socket;
 
-socket.onAny((channel, msg) => {
-    // if (msg.command === 'rpcRequest') {
-    //     const result = CallRpc(msg.channel, msg.payload['parameters']);
-    //     socket.emit(msg.channel, {
-    //         group: APP_NAME,
-    //         command: 'rpcAnswer',
-    //         payload: {
-    //             result,
-    //             rpcId: msg.payload['rpcId']
-    //         }
-    //     });
-    // }
-    messageSubject.next({
-        channel,
-        command: msg.command,
-        payload: msg.payload
+
+const init = (app: string, server?: string) => {
+    server ??= location;
+    socket = io.connect(location + ':9011', { query: { app } });
+
+    socket.onAny((channel, msg) => {
+        // if (msg.command === 'rpcRequest') {
+        //     const result = CallRpc(msg.channel, msg.payload['parameters']);
+        //     socket.emit(msg.channel, {
+        //         group: APP_NAME,
+        //         command: 'rpcAnswer',
+        //         payload: {
+        //             result,
+        //             rpcId: msg.payload['rpcId']
+        //         }
+        //     });
+        // }
+        messageSubject.next({
+            channel,
+            command: msg.command,
+            payload: msg.payload
+        });
     });
-});
+};
+
+export const Colibri = {
+    init
+};
 
 
 ///////////////////////////
