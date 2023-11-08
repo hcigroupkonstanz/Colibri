@@ -2,6 +2,7 @@
   "name": "colibri",
   "version": "1.0.0",
   "description": "Communication Library for Research Prototyping - Allows object synchronization, networking, and voice chat with little to no code required",
+  "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
