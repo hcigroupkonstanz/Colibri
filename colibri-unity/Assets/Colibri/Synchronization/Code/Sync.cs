@@ -96,7 +96,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     Invoke(channel, _colorArrayListeners, data.Select(x => x.ToColor()).ToArray());
                     break;
 
-                case "broadcast::JSON":
+                case "broadcast::json":
                     Invoke(channel, _jsonListeners, data);
                     break;
 
@@ -160,7 +160,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         public static void Send(string channel, Vector3[] data) => Connection().SendCommand(channel, "broadcast::vector3[]", new JArray(data.Select(x => x.ToJson())));
         public static void Send(string channel, Quaternion[] data) => Connection().SendCommand(channel, "broadcast::quaternion[]", new JArray(data.Select(x => x.ToJson())));
         public static void Send(string channel, Color[] data) => Connection().SendCommand(channel, "broadcast::color[]", new JArray(data.Select(x => x.ToJson())));
-        public static void Send(string channel, JToken data) => Connection().SendCommand(channel, "broadcast::JSON", data);
+        public static void Send(string channel, JToken data) => Connection().SendCommand(channel, "broadcast::json", data);
 
         public static void SendModelUpdate(string channel, JObject data) => Connection().SendCommand(channel, "model::update", data);
         public static void SendModelDelete(string channel, string id) => Connection().SendCommand(channel, "model::delete", new JObject { { "id", id } });
