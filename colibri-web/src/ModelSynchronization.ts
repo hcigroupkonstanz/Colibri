@@ -81,5 +81,4 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
     return [ models.asObservable(), registerModel ];
 };
-export { SyncModel };
 
