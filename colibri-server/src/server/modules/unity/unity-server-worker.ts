@@ -26,7 +26,7 @@ export class UnityServerWorker extends WorkerService {
     // properly connected clients
     private readonly clients: TcpClient[] = [];
 
-    private heartbeatInterval!: NodeJS.Timer;
+    private heartbeatInterval!: NodeJS.Timeout;
     private idCounter = 0;
 
     public constructor() {
