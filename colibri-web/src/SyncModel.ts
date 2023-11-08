@@ -1,4 +1,3 @@
-import _ from 'lodash';
 import { Subject, bufferTime, filter, map, share } from 'rxjs';
 
 export abstract class SyncModel<T> {
@@ -14,12 +13,16 @@ export abstract class SyncModel<T> {
     public readonly modelChanges = new Subject<string>();
     public readonly modelChanges$ = this.modelChanges.pipe(
         bufferTime(1),
-        map(changes => _.uniq(changes)),
+        map(changes => changes.filter(this.uniq)),
         filter(changes => changes.length > 0),
         share());
 
     public constructor(id: string) {
         this.id = id;
+    }
+
+    private uniq(value: string, index: number, array: string[]) {
+        return array.indexOf(value) === index;
     }
 
     protected onModelChanges(prop: string): void {
