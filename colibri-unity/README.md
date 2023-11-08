@@ -53,7 +53,7 @@ To setup, add the `[RemoteLogger]` prefab to your scene (or the `RemoteLogging` 
 ### Sending Data between Clients
 
 Colibri supports simple data transmission via pub/sub communication. Data can be published from anywhere in
-the executed code, as illustrated with the following simple example of sending an integer value (myInt) on a "click" channel:
+the executed code, as illustrated with the following simple example of sending a float value (myFloat) on a "click" channel:
 
 ```c#
 float myNumber = 5;
@@ -64,14 +64,14 @@ The sent data can then be received anywhere within Unity by registering a listen
 
 ```c#
 Sync.Receive("click", (float myFloat) => {
-    // Will be called whenever an integer on "click" channel is received
+    // Will be called whenever a float on "click" channel is received
 });
 ```
 
 The listener can be deregistered via:
 
 ```c#
-Sync.Unregister(MyMethod);
+Sync.Unregister("click", MyMethod);
 ```
 
 The following built-in types are available for sync: `bool, int, float, string, Vector2, Vector3, Quaternion, Color` and arrays thereof. For arbitrary data, you can use JSON (via Newtonsoft.JSON): 
@@ -89,9 +89,7 @@ Sync.Receive("myJson", (JToken obj) => { /* ... */ });
 Limitations:
 
 - You have to register the listener *before* sending out data
-
 - Type and channel *must* match between Listener and Sender
-
 - Remember to unregister your listener where necessary!
 - Due to overloading, some methods may have to be cast explicitly: `Sync.Receive("...", (Action<JToken>)OnJsonMessage);`
 
@@ -148,9 +146,7 @@ else
 ```
 
 Limitations:
-
 - Data fetching happens manually (data won’t be automatically updated!)
-
 - If you want to synchronize custom classes, use the built-in `[Serializable]` attribute on your class
 
 
@@ -189,7 +185,6 @@ public class MyClassManager : SyncBehaviourManager<MyClass>
 The manager should be added to your scene (e.g., on an empty GameObject), and the manager requires a Prefab with the model script for synchronizing different objects. 
 
 Limitations:
-
 - Only one client can update each attribute of the object simultaneously
 - Scene will be reset once all clients disconnect
 
