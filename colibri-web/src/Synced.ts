@@ -7,7 +7,7 @@ import { SyncModel } from './SyncModel';
  */
 export const Synced = <T>(syncedName: string = ''): PropertyDecorator => {
 
-    return function (target: any, key: string | symbol, descriptor?: PropertyDescriptor): void {
+    return function (target: unknown, key: string | symbol, descriptor?: PropertyDescriptor): void {
         if (!syncedName)
             syncedName = key.toString();
         syncedName = syncedName.toLowerCase();
