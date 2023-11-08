@@ -18,9 +18,15 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "experimentalDecorators": true,
+    "paths": {
+      "@hcikn/colibri": [
+        "./src/"
+      ]
+    }
   },
   "include": [
-    "src"
+    "src",
+    "samples"
   ]
 }
