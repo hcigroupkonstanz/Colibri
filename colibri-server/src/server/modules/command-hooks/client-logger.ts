@@ -1,15 +1,15 @@
 import { filter } from 'rxjs/operators';
 import { Service } from '../core';
-import { UnityServerProxy } from './unity-server-proxy';
+import { ConnectionPool } from './connection-pool';
 
-export class UnityClientLogger extends Service {
-    public get serviceName(): string { return 'UnityClientLogger'; }
+export class ClientLogger extends Service {
+    public get serviceName(): string { return 'ClientLogger'; }
     public get groupName(): string { return 'unity'; }
 
-    public constructor(unityServer: UnityServerProxy) {
+    public constructor(pool: ConnectionPool) {
         super();
 
-        unityServer.messages$
+        pool.messages$
             .pipe(filter(m => m.channel === 'log'))
             .subscribe(m => {
                 const id = m.origin?.id || 'UNKNOWN';

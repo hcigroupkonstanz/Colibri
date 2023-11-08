@@ -39,7 +39,7 @@ const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer);
 /**
  *    Plumbing
  */
-const unityLog = new colibri.UnityClientLogger(unityServer);
+const clientLogger = new colibri.ClientLogger(connectionPool);
 const webLog = new colibri.WebLog(socketioServer);
 const modelsync = new colibri.ModelSynchronization(connectionPool, dataStore);
 const broadcaster = new colibri.Broadcaster(connectionPool);
