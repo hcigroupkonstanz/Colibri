@@ -8,12 +8,12 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Unity Port
-EXPOSE 8001
 # Webserver
-EXPOSE 8002
+EXPOSE 9011
+# Unity Port
+EXPOSE 9012
 # Voice
-EXPOSE 8003
+EXPOSE 9013
 
 CMD [ "npm", "start" ]
 

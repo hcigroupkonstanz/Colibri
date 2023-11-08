@@ -8,6 +8,6 @@ services:
     volumes:
         - ./data/:/srv/colibri/data
     ports:
-      - 8001:8001 # web interface / web sockets
-      - 8002:8002 # unity
-      - "8003:8003/udp" # voice
+      - 9011:9011 # web interface / web sockets
+      - 9012:9012 # unity
+      - "9013:9013/udp" # voice
