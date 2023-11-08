@@ -11,6 +11,15 @@
   },
   "author": "HCI Group, University of Konstanz",
   "license": "MIT",
+  "homepage": "https://github.com/hcigroupkonstanz/colibri",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hcigroupkonstanz/colibri.git"
+  },
+  "files": [
+    "/dist",
+    "README.md"
+  ],
   "dependencies": {
     "lodash": "^4.17.21",
     "rxjs": "^7.8.1",
