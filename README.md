@@ -27,7 +27,7 @@ Colibri focuses on three key areas:
 - **Multi-Platform:** Colibri (currently) supports synchronization between Unity and Web
 - **Lab Conditions:** XR Research prototypes often benefit from ideal lab conditions, allowing Colibri to focus on low latency and high throughput (at the cost of potential bandwidth savings and some performance).
 
-Please see the folders for more specific information: [Unity](colibri-unity/) - [Web (JS/TS)](unity-web/) - [Server](colibri-server/)
+Please see the folders for more specific information: [Unity](colibri-unity/) - [Web (JS/TS)](colibri-web/) - [Server](colibri-server/)
 
 
 
