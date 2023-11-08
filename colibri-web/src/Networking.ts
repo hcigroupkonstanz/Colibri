@@ -10,13 +10,18 @@ export interface Message {
 const messageSubject = new Subject<Message>();
 export const Messages = messageSubject.asObservable();
 
-const location = window.location.hostname;
+const location = window?.location.hostname || '';
 let socket: io.Socket;
 
 
 const init = (app: string, server?: string) => {
     server ??= location;
-    socket = io.connect(location + ':9011', { query: { app } });
+
+    if (!server.startsWith('http')) {
+        server = 'http://' + server;
+    }
+
+    socket = io.connect(server + ':9011', { query: { app } });
 
     socket.onAny((channel, msg) => {
         // if (msg.command === 'rpcRequest') {
