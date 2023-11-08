@@ -54,6 +54,10 @@ export const RegisterChannel = (channel: string, handler: (payload: Message) => 
     socket.on(channel, handler);
 };
 
+export const UnregisterChannel = (channel: string, handler: (payload: Message) => void) => {
+    socket.off(channel, handler);
+};
+
 export const RegisterOnce = (channel: string, handler: (payload: Message) => void) => {
     socket.once(channel, handler);
 };
