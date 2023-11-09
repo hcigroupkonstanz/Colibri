@@ -1,5 +1,5 @@
 {
-  "name": "colibri",
+  "name": "@hcikn/colibri",
   "version": "1.0.0",
   "description": "Communication Library for Research Prototyping - Allows object synchronization, networking, and voice chat with little to no code required",
   "type": "module",
@@ -8,7 +8,8 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "lint": "eslint \"**/*.{js,ts}\""
+    "lint": "eslint \"**/*.{js,ts}\"",
+    "publish": "npm run build && npm publish --access public"
   },
   "author": "HCI Group, University of Konstanz",
   "license": "MIT",
@@ -18,8 +19,7 @@
     "url": "https://github.com/hcigroupkonstanz/colibri.git"
   },
   "files": [
-    "/dist",
-    "README.md"
+    "/dist"
   ],
   "dependencies": {
     "rxjs": "^7.8.1",
