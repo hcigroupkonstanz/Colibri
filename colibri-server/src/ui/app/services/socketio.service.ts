@@ -29,7 +29,7 @@ export class SocketIOService {
             this.listeners[channel] = msgStream;
 
             this.socket.on(channel, (msg: any) => {
-                msgStream.next(msg.payload);
+                msgStream.next(JSON.parse(msg.payload));
                 this.triggerAngularChanges();
             });
         }

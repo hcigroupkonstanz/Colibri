@@ -39,23 +39,27 @@ export class ModelSynchronization extends Service {
         }
 
         const app = msg.origin.app;
-        const payload = msg.payload as { id?: string };
+        try {
+            const payload = JSON.parse(msg.payload || '{}') as { id?: string };
 
-        if (typeof(payload?.id) === 'string') {
-            const model = this.store.getModel(app, msg.channel, payload.id) || { id: payload.id };
-            this.connectionPool.emit({
-                channel: msg.channel,
-                command: 'model::update',
-                payload: model
-            }, msg.origin);
-        } else {
-            for (const model of this.store.getAll(app, msg.channel)) {
+            if (typeof(payload?.id) === 'string') {
+                const model = this.store.getModel(app, msg.channel, payload.id) || { id: payload.id };
                 this.connectionPool.emit({
                     channel: msg.channel,
                     command: 'model::update',
-                    payload: model
+                    payload: JSON.stringify(model)
                 }, msg.origin);
+            } else {
+                for (const model of this.store.getAll(app, msg.channel)) {
+                    this.connectionPool.emit({
+                        channel: msg.channel,
+                        command: 'model::update',
+                        payload: JSON.stringify(model)
+                    }, msg.origin);
+                }
             }
+        } catch (error) {
+            this.logError(`Failed to send initial state to client ${msg.origin.id}: ${error}`);
         }
     }
 
@@ -86,7 +90,11 @@ export class ModelSynchronization extends Service {
             return;
         }
 
-        this.store.removeModel(msg.origin.app, msg.channel, msg.payload as string);
-        this.connectionPool.broadcast(msg);
+        if (msg.payload) {
+            this.store.removeModel(msg.origin.app, msg.channel, msg.payload);
+            this.connectionPool.broadcast(msg);
+        } else {
+            this.logWarning('Received delete message without payload');
+        }
     }
 }

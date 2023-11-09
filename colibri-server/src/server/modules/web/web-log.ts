@@ -36,7 +36,7 @@ export class WebLog extends Service {
                         this.socketio.broadcast({
                             channel: 'log',
                             command: 'message',
-                            payload: msg
+                            payload: JSON.stringify(msg)
                         }, [ socketClient ]);
                     }
                 } else {
@@ -63,7 +63,7 @@ export class WebLog extends Service {
             this.socketio.broadcast({
                 channel: 'log',
                 command: 'message',
-                payload: webMsg
+                payload: JSON.stringify(webMsg)
             }, clients);
         });
     }

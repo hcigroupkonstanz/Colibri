@@ -269,17 +269,24 @@ namespace HCIKonstanz.Colibri.Networking
 
                         try
                         {
+                            JToken payload;
+                            if (message.Payload.StartsWith("{") || message.Payload.StartsWith("["))
+                                payload = JToken.Parse(message.Payload);
+                            else
+                                payload = new JValue(message.Payload);
+
                             // messages have to be handled in main update() thread, to avoid possible threading issues in handlers
                             _queuedCommands.Enqueue(new InPacket
                             {
                                 channel = message.Channel,
                                 command = message.Command,
-                                payload = JToken.Parse(message.Payload)
+                                payload = payload
                             });
                         }
                         catch (Exception e)
                         {
                             Debug.LogError(e.Message);
+                            Debug.LogError(message.Payload);
                         }
 
                         processingOffset += _expectedPacketSize;

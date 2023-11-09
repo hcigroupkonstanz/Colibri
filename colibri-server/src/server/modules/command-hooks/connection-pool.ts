@@ -5,7 +5,7 @@ export interface NetworkMessage {
     origin?: NetworkClient;
     channel: string;
     command: string;
-    payload?: unknown;
+    payload?: string;
 }
 
 export interface NetworkClient {

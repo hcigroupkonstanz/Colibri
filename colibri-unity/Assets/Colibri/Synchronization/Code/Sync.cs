@@ -144,10 +144,10 @@ namespace HCIKonstanz.Colibri.Synchronization
         /*
          *  Sending data
          */
-        public static void Send(string channel, bool data) => Connection().SendCommand(channel, "broadcast::bool", data);
-        public static void Send(string channel, int data) => Connection().SendCommand(channel, "broadcast::int", data);
-        public static void Send(string channel, float data) => Connection().SendCommand(channel, "broadcast::float", data);
-        public static void Send(string channel, string data) => Connection().SendCommand(channel, "broadcast::string", data);
+        public static void Send(string channel, bool data) => Connection().SendCommand(channel, "broadcast::bool", data.ToJson());
+        public static void Send(string channel, int data) => Connection().SendCommand(channel, "broadcast::int", data.ToJson());
+        public static void Send(string channel, float data) => Connection().SendCommand(channel, "broadcast::float", data.ToJson());
+        public static void Send(string channel, string data) => Connection().SendCommand(channel, "broadcast::string", data.ToJson());
         public static void Send(string channel, Vector2 data) => Connection().SendCommand(channel, "broadcast::vector2", data.ToJson());
         public static void Send(string channel, Vector3 data) => Connection().SendCommand(channel, "broadcast::vector3", data.ToJson());
         public static void Send(string channel, Quaternion data) => Connection().SendCommand(channel, "broadcast::quaternion", data.ToJson());

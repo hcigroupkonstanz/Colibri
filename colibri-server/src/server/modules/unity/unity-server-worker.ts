@@ -80,7 +80,7 @@ export class UnityServerWorker extends WorkerService {
         const command = builder.createString(msg.command);
         // TODO: replace this with dictionary to avoid JSON serialization
         //       see: https://flatbuffers.dev/flatbuffers_guide_use_c-sharp.html#autotoc_md93
-        const payload = builder.createString(JSON.stringify(msg.payload));
+        const payload = builder.createString(msg.payload);
 
         Message.startMessage(builder);
         Message.addChannel(builder, channel);
@@ -189,21 +189,12 @@ export class UnityServerWorker extends WorkerService {
                 const packet = buffer.subarray(headerEnd + 1, packetEnd);
                 const packetBuffer = new flatbuffers.ByteBuffer(packet);
                 const message = Message.getRootAsMessage(packetBuffer);
-                let payload = message.payload() || '';
-                try {
-                    if (payload.startsWith('{') || payload.startsWith('[')) {
-                        payload = JSON.parse(payload);
-                    }
-                } catch {
-                    this.logError('Unable to parse payload as JSON', false);
-                    this.logDebug(payload);
-                }
 
                 try {
                     msgs.push({
                         channel: message.channel() || '',
                         command: message.command() || '',
-                        payload,
+                        payload: message.payload() || '',
                         origin: { id: client.id, app: client.app }
                     });
                 } catch (err) {
@@ -265,35 +256,6 @@ export class UnityServerWorker extends WorkerService {
         for (const client of this.waitingClients) {
             client.socket.write('\0\0\0h\0');
         }
-    }
-
-
-
-
-    // adapted from http://stackoverflow.com/a/18729931
-    private toUTF8Array(str: string): number[] {
-        const utf8: number[] = [];
-
-        for (let i = 0; i < str.length; i++) {
-            let charcode = str.charCodeAt(i);
-            if (charcode < 0x80) { utf8.push(charcode); } else if (charcode < 0x800) {
-                // tslint:disable-next-line:no-bitwise
-                utf8.push(0xc0 | (charcode >> 6), 0x80 | (charcode & 0x3f));
-            } else if (charcode < 0xd800 || charcode >= 0xe000) {
-                // tslint:disable-next-line:no-bitwise
-                utf8.push(0xe0 | (charcode >> 12), 0x80 | ((charcode >> 6) & 0x3f), 0x80 | (charcode & 0x3f));
-            } else {
-                i++;
-                // UTF-16 encodes 0x10000-0x10FFFF by
-                // subtracting 0x10000 and splitting the
-                // 20 bits of 0x0-0xFFFFF into two halves
-                // tslint:disable-next-line:no-bitwise
-                charcode = 0x10000 + (((charcode & 0x3ff) << 10) | (str.charCodeAt(i) & 0x3ff));
-                // tslint:disable-next-line:no-bitwise
-                utf8.push(0xf0 | (charcode >> 18), 0x80 | ((charcode >> 12) & 0x3f), 0x80 | ((charcode >> 6) & 0x3f), 0x80 | (charcode & 0x3f));
-            }
-        }
-        return utf8;
     }
 }
 
