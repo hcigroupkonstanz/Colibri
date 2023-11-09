@@ -10,7 +10,10 @@ export interface Message {
 const messageSubject = new Subject<Message>();
 export const Messages = messageSubject.asObservable();
 
-const location = window?.location.hostname || '';
+let location = '';
+if (typeof window !== 'undefined') {
+    location = window.location.hostname || '';
+}
 let socket: io.Socket;
 
 

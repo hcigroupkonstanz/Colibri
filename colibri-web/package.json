@@ -9,7 +9,10 @@
   "scripts": {
     "build": "tsup",
     "lint": "eslint \"**/*.{js,ts}\"",
-    "publish": "npm run build && npm publish --access public"
+    "publish": "npm run build && npm publish --access public",
+    "samples/broadcast": "tsx samples/broadcast.ts",
+    "samples/model-sync": "tsx samples/model-sync.ts",
+    "samples/remote-logging": "tsx samples/remote-logging.ts"
   },
   "author": "HCI Group, University of Konstanz",
   "license": "MIT",
@@ -32,6 +35,7 @@
     "@typescript-eslint/eslint-plugin": "^6.10.0",
     "@typescript-eslint/parser": "^6.10.0",
     "eslint": "^8.53.0",
-    "tsup": "^7.2.0"
+    "tsup": "^7.2.0",
+    "tsx": "^4.0.0"
   }
 }
