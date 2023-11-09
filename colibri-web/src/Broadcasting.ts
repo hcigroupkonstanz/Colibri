@@ -107,7 +107,7 @@ const receiveJson = (channel: string, callback: (val: { [key: string]: unknown }
 };
 
 
-const unregister = (channel: string, callback: (val: unknown) => void) => {
+const unregister = (channel: string, callback: (val: any) => void) => {
     UnregisterChannel(channel, callback);
 };
 
