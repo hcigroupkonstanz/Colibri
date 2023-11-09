@@ -175,7 +175,11 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static void AddListener<T>(string channel, Dictionary<string, List<Action<T>>> listeners, Action<T> listener)
         {
             if (!listeners.ContainsKey(channel))
+            {
                 listeners.Add(channel, new List<Action<T>>());
+                // ensure that networkconnection prefab is added to the scene
+                Connection();
+            }
             listeners[channel].Add(listener);
         }
 
@@ -193,7 +197,6 @@ namespace HCIKonstanz.Colibri.Synchronization
         public static void Receive(string channel, Action<bool> listener) => AddListener(channel, _boolListeners, listener);
         public static void Unregister(string channel, Action<bool> listener) => RemoveListener(channel, _boolListeners, listener);
 
-        // TODO: Some methods have types due to ambiguity?? (e.g., float and int)
         public static void Receive(string channel, Action<int> listener) => AddListener(channel, _intListeners, listener);
         public static void Unregister(string channel, Action<int> listener) => RemoveListener(channel, _intListeners, listener);
 
