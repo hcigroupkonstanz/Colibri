@@ -1,6 +1,6 @@
 # Ignore Colibri's own config for development
 Assets/Resources/ColibriConfig*
-
+Assets/Resources.meta
 
 # This .gitignore file should be placed at the root of your Unity project directory
 #
