@@ -28,7 +28,7 @@ import { RemoteLogger } from '@hcikn/colibri';
 RemoteLogger.init();
 ```
 
-See also [the remote-logging sample.](samples/remote-logging/sample.ts)
+See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run sample/remote-logging`).
 
 ### Sending Data between Clients
 
@@ -58,7 +58,7 @@ Sync.sendJson('myChannel', { foo: 'bar' });
 Sync.receiveJson('myChannel', (json) => { /* ... */ });
 ```
 
-See also [the broadcast sample](samples/broadcast/sample.ts).
+See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run sample/broadcast`).
 
 Limitations:
 - You have to register the listener *before* sending out data
@@ -111,7 +111,7 @@ const mySample = new SampleClass('myId'); // mySample is not synchronized across
 registerExampleClass(mySample); // mySample is sent out to all other clients and will be synchronized
 ```
 
-See also [the model-sync sample](samples/model-sync/sample.ts).
+See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run sample/model-sync`).
 
 ## Samples
 See [Sample folder](samples/) for more examples on how to use the Colibri web client.

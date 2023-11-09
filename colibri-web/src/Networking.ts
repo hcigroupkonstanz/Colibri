@@ -24,7 +24,13 @@ const init = (app: string, server?: string) => {
         server = 'http://' + server;
     }
 
-    socket = io.connect(server + ':9011', { query: { app } });
+    server +=  ':9011';
+
+    socket = io.connect(server, { query: { app } });
+    console.debug(`Connecting to ${server}`);
+    socket.on('connect', () => {
+        console.debug(`Connected to colibri server on ${server}`);
+    });
 
     socket.onAny((channel, msg) => {
         // if (msg.command === 'rpcRequest') {
