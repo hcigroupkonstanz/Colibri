@@ -434,6 +434,7 @@ namespace HCIKonstanz.Colibri.Networking
                     socketAsyncData.Completed += (sender, e) => signal.Release();
 
                     await signal.WaitAsync();
+                    return true;
                 }
                 catch (Exception e)
                 {
