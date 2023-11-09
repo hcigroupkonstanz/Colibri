@@ -274,7 +274,7 @@ namespace HCIKonstanz.Colibri.Networking
                             {
                                 channel = message.Channel,
                                 command = message.Command,
-                                payload = JObject.Parse(message.Payload)
+                                payload = JToken.Parse(message.Payload)
                             });
                         }
                         catch (Exception e)

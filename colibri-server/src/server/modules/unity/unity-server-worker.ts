@@ -189,16 +189,28 @@ export class UnityServerWorker extends WorkerService {
                 const packet = buffer.subarray(headerEnd + 1, packetEnd);
                 const packetBuffer = new flatbuffers.ByteBuffer(packet);
                 const message = Message.getRootAsMessage(packetBuffer);
+                let payload = message.payload() || '';
+                try {
+                    if (payload.startsWith('{') || payload.startsWith('[')) {
+                        payload = JSON.parse(payload);
+                    }
+                } catch {
+                    this.logError('Unable to parse payload as JSON', false);
+                    this.logDebug(payload);
+                }
 
                 try {
                     msgs.push({
                         channel: message.channel() || '',
                         command: message.command() || '',
-                        payload: JSON.parse(message.payload() || '{}'),
+                        payload,
                         origin: { id: client.id, app: client.app }
                     });
                 } catch (err) {
-                    console.log(err);
+                    if (err instanceof Error)
+                        this.logError(err.stack || '');
+                    else
+                        console.error(err);
                 }
             }
 
