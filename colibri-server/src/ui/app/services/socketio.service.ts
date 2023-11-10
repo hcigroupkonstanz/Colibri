@@ -13,7 +13,7 @@ export class SocketIOService {
     private triggerAngularChanges: () => void;
 
     constructor(private zone: NgZone) {
-        this.socket = io.connect('', { query: { app: 'colibri' } });
+        this.socket = io.connect('', { query: { app: 'colibri', version: '1' } });
         // eslint-disable-next-line no-empty-function
         this.triggerAngularChanges = _.throttle(() => this.zone.run(() => {}), 100);
 

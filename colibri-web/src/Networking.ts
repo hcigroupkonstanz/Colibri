@@ -26,7 +26,7 @@ const init = (app: string, server?: string) => {
 
     server +=  ':9011';
 
-    socket = io.connect(server, { query: { app } });
+    socket = io.connect(server, { query: { app, version: '1' } });
     console.debug(`Connecting to ${server}`);
     socket.on('connect', () => {
         console.debug(`Connected to colibri server on ${server}`);

@@ -8,6 +8,7 @@ import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks';
 
 interface SocketIoClient extends NetworkClient {
     socket: io.Socket;
+    version: string;
 }
 
 export class SocketIOServer extends Service implements NetworkServer {
@@ -76,6 +77,7 @@ export class SocketIOServer extends Service implements NetworkServer {
         const client: SocketIoClient = {
             id: socket.id,
             app: socket.handshake.query.app as string,
+            version: socket.handshake.query.version as string,
             socket
         };
 
@@ -84,7 +86,8 @@ export class SocketIOServer extends Service implements NetworkServer {
             socket.disconnect();
             return;
         } else {
-            this.logInfo(`New websocket client (${client.id}) connected for '${client.app}' from ${socket.handshake.address}`);
+            this.logDebug(`New client (${client.id}) connected from ${socket.handshake.address}, waiting for app name`);
+            this.logDebug(`Setting app of colibri client "${client.id}" (v${client.version}) to "${client.app}"`);
         }
 
         this.clients.push(client);
