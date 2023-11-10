@@ -4,7 +4,7 @@ import { ConnectionPool } from './connection-pool';
 
 export class ClientLogger extends Service {
     public get serviceName(): string { return 'ClientLogger'; }
-    public get groupName(): string { return 'unity'; }
+    public get groupName(): string { return 'hook'; }
 
     public constructor(pool: ConnectionPool) {
         super();

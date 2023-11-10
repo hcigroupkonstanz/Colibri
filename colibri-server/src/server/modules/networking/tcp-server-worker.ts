@@ -7,7 +7,7 @@ import { Message } from './message';
 import { NetworkMessage } from 'modules/command-hooks';
 import { v4 as uuidv4 } from 'uuid';
 
-export const UNITY_SERVER_WORKER = __filename;
+export const TCP_SERVER_WORKER = __filename;
 
 interface TcpClient {
     id: string;
@@ -18,7 +18,7 @@ interface TcpClient {
     version: number;
 }
 
-export class UnityServerWorker extends WorkerService {
+export class TCPServerWorker extends WorkerService {
     private server!: net.Server;
 
     // waiting for client to specify app name
@@ -59,7 +59,7 @@ export class UnityServerWorker extends WorkerService {
         this.server = net.createServer((socket) => this.handleConnection(socket));
         this.server.listen(port);
 
-        this.logInfo(`Starting Unity server on *:${port}`);
+        this.logInfo(`Starting Colibri TCP server on *:${port}`);
         this.heartbeatInterval = setInterval(() => this.handleHeartbeat(), 100);
     }
 
@@ -105,7 +105,7 @@ export class UnityServerWorker extends WorkerService {
 
     private handleConnection(socket: net.Socket): void {
         const id = uuidv4();
-        this.logDebug(`New unity client (${id}) connected from ${socket.remoteAddress}, waiting for app name`);
+        this.logDebug(`New client (${id}) connected from ${socket.remoteAddress}, waiting for app name`);
         socket.setNoDelay(true);
 
         const tcpClient: TcpClient = {
@@ -228,7 +228,7 @@ export class UnityServerWorker extends WorkerService {
     }
 
     private assignApp(client: TcpClient, app: string, version: number): void {
-        this.logDebug(`Setting app of unity client "${client.id}" (v${version}) to "${app}"`);
+        this.logDebug(`Setting app of colibri client "${client.id}" (v${version}) to "${app}"`);
         client.app = app;
         client.version = version;
         _.pull(this.waitingClients, client);
@@ -243,7 +243,7 @@ export class UnityServerWorker extends WorkerService {
     }
 
     private handleSocketDisconnect(client: TcpClient): void {
-        this.logDebug(`Unity client ${client.address} disconnected`);
+        this.logDebug(`Colibri client ${client.address} disconnected`);
         _.pull(this.clients, client);
         _.pull(this.waitingClients, client);
         this.postMessage('clientDisconnected$', { id: client.id });
@@ -264,5 +264,5 @@ export class UnityServerWorker extends WorkerService {
 
 if (!threads.isMainThread) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const server = new UnityServerWorker();
+    const server = new TCPServerWorker();
 }

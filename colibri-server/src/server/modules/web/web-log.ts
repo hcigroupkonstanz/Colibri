@@ -1,5 +1,5 @@
 import { Service } from '../core';
-import { SocketIOServer } from './socket-io-server';
+import { SocketIOServer } from '../networking/socket-io-server';
 import { filter, merge } from 'rxjs';
 import * as _ from 'lodash';
 

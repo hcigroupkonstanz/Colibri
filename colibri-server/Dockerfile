@@ -10,7 +10,7 @@ RUN npm run build
 
 # Webserver
 EXPOSE 9011
-# Unity Port
+# TCP (Unity) Port
 EXPOSE 9012
 # Voice
 EXPOSE 9013

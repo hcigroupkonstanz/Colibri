@@ -9,5 +9,5 @@ services:
         - ./data/:/srv/colibri/data
     ports:
       - 9011:9011 # web interface / web sockets
-      - 9012:9012 # unity
+      - 9012:9012 # tcp (unity)
       - "9013:9013/udp" # voice

@@ -1,10 +1,10 @@
 import * as _ from 'lodash';
-import { UNITY_SERVER_WORKER } from './unity-server-worker';
+import { TCP_SERVER_WORKER } from './tcp-server-worker';
 import { WorkerServiceProxy } from '../core';
 import { Observable, Subject } from 'rxjs';
 import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks';
 
-export class UnityServerProxy extends WorkerServiceProxy implements NetworkServer {
+export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer {
     public serviceName = 'UnityServer';
     public groupName = 'unity';
 
@@ -24,7 +24,7 @@ export class UnityServerProxy extends WorkerServiceProxy implements NetworkServe
 
     public constructor() {
         super();
-        this.initWorker(UNITY_SERVER_WORKER);
+        this.initWorker(TCP_SERVER_WORKER);
 
         this.workerMessages$.subscribe(msg => {
             switch (msg.channel) {

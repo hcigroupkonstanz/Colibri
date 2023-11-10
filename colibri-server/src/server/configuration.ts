@@ -1,5 +1,5 @@
 export const Config = {
-    UNITY_PORT: 9012,
+    TCP_PORT: 9012,
     VOICE_PORT: 9013,
 
     WEBSERVER_PORT: 9011,

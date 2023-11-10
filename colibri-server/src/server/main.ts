@@ -26,9 +26,9 @@ const dataStore = new colibri.DataStore();
 const webServer = new colibri.WebServer(Config.WEBSERVER_PORT, Config.WEBSERVER_ROOT);
 const voiceServer = new colibri.VoiceServer(Config.DATA_ROOT);
 
-const unityServer = new colibri.UnityServerProxy();
+const tcpServer = new colibri.TCPServerProxy();
 const socketioServer = new colibri.SocketIOServer();
-const connectionPool = new colibri.ConnectionPool(unityServer, socketioServer);
+const connectionPool = new colibri.ConnectionPool(tcpServer, socketioServer);
 
 
 /**
@@ -55,7 +55,7 @@ const startup = async () => {
 
     const httpServer = webServer.start();
     socketioServer.start(httpServer);
-    unityServer.start(Config.UNITY_PORT);
+    tcpServer.start(Config.TCP_PORT);
     voiceServer.start(Config.VOICE_PORT);
 };
 
