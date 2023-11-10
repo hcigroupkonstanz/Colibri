@@ -2,13 +2,39 @@
 
 Communication Library for rapid prototyping in Unity
 
-## Requirements
+## Setup
+### [Docker](https://hub.docker.com/r/hcikn/colibri) _(recommended)_
 
-NodeJS 12+
+Use the following `docker-compose.yml` and run `docker-compose up -D`:
+```yaml
+version: '3.4'
+services:
+  colibri:
+    image: hcikn/colibri
+    restart: unless-stopped
+    container_name: colibri
+    tty: true
+    volumes:
+        - ./data/:/srv/colibri/data
+    ports:
+      - 9011:9011 # web interface / web sockets
+      - 9012:9012 # tcp (unity)
+      - "9013:9013/udp" # voice
+```
 
-## Commands
 
-* `npm run watch`: Run development server (port `4200` for webinterface), auto-compile and reload on file changes
+### Node
+Requirements: NodeJS 12+
+
+Clone this repository, build with `npm run build`, then start with `npm start`.
+
+## Features
+
+A web interface is available on `http://<your-server-ip>:9011` to view the log output of connected clients.
+
+## Development
+
+* `npm run watch`: Run development server, auto-compile and reload on file changes
 * `npm run build`: Compilation
 * `npm run debug`: Compilation in watch mode (for debugging with Visual Studio Code)
-* `npm start`: Start server (port `8001` for webinterface) -- make sure to compile first.
+* `npm start`: Start server -- make sure to compile first.
