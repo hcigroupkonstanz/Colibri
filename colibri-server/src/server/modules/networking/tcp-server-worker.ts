@@ -8,6 +8,7 @@ import { NetworkMessage } from 'modules/command-hooks';
 import { v4 as uuidv4 } from 'uuid';
 
 export const TCP_SERVER_WORKER = __filename;
+const maxBufferSize = 1024 * 1024 * 5;
 
 interface TcpClient {
     id: string;
@@ -138,15 +139,14 @@ export class TCPServerWorker extends WorkerService {
         const msgs: NetworkMessage[] = [];
 
         while (buffer.length > 0) {
-            const headerStart = buffer.indexOf('\0\0\0');
-
-            if (headerStart === -1) {
+            if (buffer.subarray(0, 3).toString() !== '\0\0\0') {
                 // invalid packet?!
                 this.logError(`Invalid packet received from client ${client.id}, discarding buffer`);
                 client.leftOverBuffer = Buffer.alloc(0);
                 break;
             }
 
+            const headerStart = 0;
             const headerEnd = buffer.indexOf(0, headerStart + 4);
 
             if (headerEnd < 0) {
@@ -215,12 +215,17 @@ export class TCPServerWorker extends WorkerService {
 
             // if there are multiple packets in the buffer, begin anew
             buffer = buffer.subarray(headerEnd + 1 + packetLength);
-
         }
 
         // clear leftover buffers once we're finished
         if (buffer.length === 0) {
             client.leftOverBuffer = Buffer.alloc(0);
+        }
+
+        // try to somewhat mitigate spamming clients
+        if (client.leftOverBuffer.length > maxBufferSize) {
+            this.logWarning(`Client ${client.id} exceeds max buffer size (${maxBufferSize} bytes), discarding buffer and terminating connection`);
+            client.socket.end();
         }
 
         // pass on actual messages
