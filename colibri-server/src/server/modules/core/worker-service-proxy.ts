@@ -85,19 +85,19 @@ export abstract class WorkerServiceProxy extends Service {
     private handleLogMessage(log: WorkerLogMessage): void {
         switch (log.level) {
             case LogLevel.Debug:
-                this.logDebug(log.msg);
+                this.logDebug(log.msg, log.metadata);
                 break;
 
             case LogLevel.Info:
-                this.logInfo(log.msg);
+                this.logInfo(log.msg, log.metadata);
                 break;
 
             case LogLevel.Warn:
-                this.logWarning(log.msg);
+                this.logWarning(log.msg, log.metadata);
                 break;
 
             case LogLevel.Error:
-                this.logError(log.msg, false);
+                this.logError(log.msg, false, log.metadata);
                 break;
 
             default:

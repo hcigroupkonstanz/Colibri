@@ -1,28 +1,28 @@
 import { Observable, Subject } from 'rxjs';
-import { LogMessage, LogLevel } from './log-message';
+import { LogMessage, LogLevel, Metadata } from './log-message';
 
 export abstract class Service {
     public static readonly Current: Service[] = [];
 
     protected outputStream$: Subject<LogMessage> = new Subject<LogMessage>();
 
-    protected logDebug(msg: string): void {
-        this.outputMsg(LogLevel.Debug, msg);
+    protected logDebug(msg: string, metadata: Metadata = {}): void {
+        this.outputMsg(LogLevel.Debug, msg, metadata);
     }
 
-    protected logInfo(msg: string): void {
-        this.outputMsg(LogLevel.Info, msg);
+    protected logInfo(msg: string, metadata: Metadata = {}): void {
+        this.outputMsg(LogLevel.Info, msg, metadata);
     }
 
-    protected logWarning(msg: string): void {
-        this.outputMsg(LogLevel.Warn, msg);
+    protected logWarning(msg: string, metadata: Metadata = {}): void {
+        this.outputMsg(LogLevel.Warn, msg, metadata);
     }
 
-    protected logError(msg: string, printStacktrace: boolean = true): void {
+    protected logError(msg: string, printStacktrace: boolean = true, metadata: Metadata = {}): void {
         if (printStacktrace) {
             msg += '\n' + new Error().stack;
         }
-        this.outputMsg(LogLevel.Error, msg);
+        this.outputMsg(LogLevel.Error, msg, metadata);
     }
 
     public get output$(): Observable<LogMessage> {
@@ -39,13 +39,14 @@ export abstract class Service {
     // eslint-disable-next-line no-empty-function
     public async init() { }
 
-    private outputMsg(lvl: LogLevel, msg: string): void {
+    private outputMsg(lvl: LogLevel, msg: string, metadata: Metadata): void {
         this.outputStream$.next({
             origin: this.serviceName,
             group: this.groupName,
             level: lvl,
             message: msg,
-            created: new Date()
+            created: new Date(),
+            metadata
         });
     }
 }

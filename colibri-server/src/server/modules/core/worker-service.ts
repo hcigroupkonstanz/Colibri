@@ -1,46 +1,47 @@
 import { WorkerMessage } from './worker-message';
-import { LogLevel } from './log-message';
+import { LogLevel, Metadata } from './log-message';
 import * as threads from 'worker_threads';
 import { Subject } from 'rxjs';
 
 export interface WorkerLogMessage {
     level: LogLevel;
     msg: string;
+    metadata: Metadata;
 }
 
 export abstract class WorkerService {
     private readonly parentMessages = new Subject<WorkerMessage>();
     protected readonly parentMessages$ = this.parentMessages.asObservable();
 
-    protected logDebug(msg: string): void {
+    protected logDebug(msg: string, metadata: Metadata = {}): void {
         this.postMessage('log', {
             level: LogLevel.Debug,
-            msg: msg
+            msg, metadata
         });
     }
 
-    protected logInfo(msg: string): void {
+    protected logInfo(msg: string, metadata: Metadata = {}): void {
         this.postMessage('log', {
             level: LogLevel.Info,
-            msg: msg
+            msg, metadata
         });
     }
 
-    protected logWarning(msg: string): void {
+    protected logWarning(msg: string, metadata: Metadata = {}): void {
         this.postMessage('log', {
             level: LogLevel.Warn,
-            msg: msg
+            msg, metadata
         });
     }
 
-    protected logError(msg: string, printStacktrace: boolean = true): void {
+    protected logError(msg: string, printStacktrace: boolean = true, metadata: Metadata = {}): void {
         if (printStacktrace) {
             msg += '\n' + new Error().stack;
         }
 
         this.postMessage('log', {
             level: LogLevel.Error,
-            msg: msg
+            msg, metadata
         });
     }
 
