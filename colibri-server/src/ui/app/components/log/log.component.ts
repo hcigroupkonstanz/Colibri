@@ -11,6 +11,8 @@ export class LogComponent implements OnInit, AfterViewChecked {
     @ViewChild('scrollContainer', { static: true }) private scrollContainer!: ElementRef;
     manualScroll = false;
 
+    private appFilter: string | null = null;
+
     constructor(public log: LogService) {
     }
 
@@ -50,5 +52,17 @@ export class LogComponent implements OnInit, AfterViewChecked {
     scrollAutomatically(): void {
         this.manualScroll = false;
         this.scrollToBottom();
+    }
+
+    onFilterChange(filter: string | null): void {
+        this.appFilter = filter;
+    }
+
+    getMessages(): GroupedLogMessage[] {
+        if (this.appFilter) {
+            return this.log.messages.filter(m => m.metadata && m.metadata.clientApp === this.appFilter);
+        }
+
+        return this.log.messages;
     }
 }

@@ -88,7 +88,11 @@ export class SocketIOServer extends Service implements NetworkServer {
             return;
         } else if (client.app !== 'colibri') { // ignore colibri web interface clients
             this.logDebug(`New client (${client.id}) connected from ${socket.handshake.address}, waiting for app name`);
-            this.logDebug(`Setting app of colibri client '${client.name}' (${client.id}, v${client.version}) to "${client.app}"`);
+            this.logDebug(`Setting app of new colibri client '${client.name}' (${client.id}, v${client.version}) to "${client.app}"`, {
+                clientApp: client.app,
+                clientName: client.name,
+                clientId: client.id
+            });
         }
 
         this.clients.push(client);
@@ -121,7 +125,11 @@ export class SocketIOServer extends Service implements NetworkServer {
 
         for (const rc of removedClients) {
             if (rc.app !== 'colibri') { // ignore colibri web interface clients
-                this.logDebug(`Colibri client '${rc.name}' (${rc.id}) disconnected`);
+                this.logDebug(`Colibri client '${rc.name}' (${rc.id}) disconnected`, {
+                    clientApp: rc.app,
+                    clientName: rc.name,
+                    clientId: rc.id
+                });
             }
             this.clientDisconnectedStream.next(rc);
         }

@@ -239,10 +239,14 @@ export class TCPServerWorker extends WorkerService {
     }
 
     private assignApp(client: TcpClient, app: string, name: string, version: number): void {
-        this.logDebug(`Setting app of colibri client '${name}' (${client.id}, v${version}) to "${app}"`);
         client.app = app;
         client.name = name;
         client.version = version;
+        this.logDebug(`Setting app of new colibri client '${name}' (${client.id}, v${version}) to "${app}"`, {
+            clientApp: client.app,
+            clientName: client.name,
+            clientId: client.id
+        });
         _.pull(this.waitingClients, client);
         this.clients.push(client);
         this.postMessage('clientConnected$', { id: client.id, app });
@@ -259,7 +263,11 @@ export class TCPServerWorker extends WorkerService {
     }
 
     private handleSocketDisconnect(client: TcpClient): void {
-        this.logDebug(`Colibri client ${client.address} disconnected`);
+        this.logDebug(`Colibri client ${client.address} disconnected`, {
+            clientApp: client.app,
+            clientName: client.name,
+            clientId: client.id
+        });
         _.pull(this.clients, client);
         _.pull(this.waitingClients, client);
         this.postMessage('clientDisconnected$', { id: client.id });

@@ -4,12 +4,33 @@
     height: 100%;
     position: relative;
     background: $nord0;
+
+    display: grid;
+    grid-template-columns: auto;
+    grid-template-rows: [header] 60px [log] 1fr;
 }
 
-.log {
+#header {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    grid-column: 0;
+    grid-row: header;
+    background: $nord1;
+
+    > * { 
+        width: 100%;
+        height: 100%;
+    }
+}
+
+#log {
     height: 100%;
     overflow-y: hidden;
     position: relative;
+
+    grid-column: 0;
+    grid-row: log;
 }
 
 .btn-autoscroll {

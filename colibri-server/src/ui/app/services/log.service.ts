@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { SocketIOService } from './socketio.service';
+import { Subject } from 'rxjs';
 
 export interface GroupedLogMessage {
     id: number;
@@ -11,13 +12,15 @@ export interface GroupedLogMessage {
     group: string;
     created: number;
     createdDate: Date;
+    metadata: { [key: string]: string | number | boolean };
 }
 
 @Injectable({
     providedIn: 'root'
 })
 export class LogService {
-    public messages: GroupedLogMessage[] = [];
+    public readonly messages: GroupedLogMessage[] = [];
+    public readonly messages$ = new Subject<GroupedLogMessage>();
 
     constructor(socketio: SocketIOService) {
         let idCounter = 0;
@@ -44,6 +47,7 @@ export class LogService {
                     m.count = 1;
                     m.createdDate = new Date(m.created);
                     this.messages.push(m);
+                    this.messages$.next(m);
                     idCounter++;
                 }
             });

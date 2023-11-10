@@ -1,4 +1,4 @@
-import { Service } from '../core';
+import { Metadata, Service } from '../core';
 import { SocketIOServer } from '../networking/socket-io-server';
 import { filter, merge } from 'rxjs';
 import * as _ from 'lodash';
@@ -11,6 +11,7 @@ interface WebMessage {
     message: string;
     group: string;
     created: number;
+    metadata: Metadata;
 }
 
 export class WebLog extends Service {
@@ -55,7 +56,8 @@ export class WebLog extends Service {
                 level: log.level,
                 group: log.group,
                 message: log.message,
-                created: log.created.getTime()
+                created: log.created.getTime(),
+                metadata: log.metadata
             };
             this.logMessages.push(webMsg);
 

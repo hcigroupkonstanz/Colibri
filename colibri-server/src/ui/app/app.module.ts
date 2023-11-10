@@ -7,18 +7,21 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { FormsModule } from '@angular/forms';
 
 import { AppComponent } from './app.component';
 import { LogComponent } from './components/log/log.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { LogMessageComponent } from './components/log-message/log-message.component';
+import { FilterBarComponent } from './components/filter-bar/filter-bar.component';
 
 @NgModule({
   declarations: [
     AppComponent,
     LogComponent,
     LogMessageComponent,
+    FilterBarComponent,
   ],
   imports: [
     BrowserModule,
@@ -31,7 +34,8 @@ import { LogMessageComponent } from './components/log-message/log-message.compon
     MatExpansionModule,
     MatButtonModule,
     MatIconModule,
-    MatInputModule
+    MatInputModule,
+    MatSelectModule
   ],
   providers: [],
   bootstrap: [AppComponent]
