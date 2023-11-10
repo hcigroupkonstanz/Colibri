@@ -147,7 +147,7 @@ export class TCPServerWorker extends WorkerService {
                 break;
             }
 
-            const headerEnd = buffer.indexOf('\0', headerStart + 4);
+            const headerEnd = buffer.indexOf(0, headerStart + 4);
 
             if (headerEnd < 0) {
                 // incomplete packet, store leftovers
@@ -163,7 +163,7 @@ export class TCPServerWorker extends WorkerService {
 
             if (header === 'h') {
                 // handshake
-                const packetEnd = buffer.indexOf('\0', headerEnd + 1);
+                const packetEnd = buffer.indexOf(0, headerEnd + 1);
 
                 if (packetEnd < 0) {
                     // incomplete packet, store leftovers
@@ -172,7 +172,7 @@ export class TCPServerWorker extends WorkerService {
                 }
 
                 packetLength = packetEnd - headerEnd;
-                const packet = buffer.toString().replace(/\0/g, '');
+                const packet = buffer.subarray(headerEnd, packetEnd).toString().replace(/\0/g, '');
                 try {
                     const [ version, app, name ] = packet.split('::');
                     this.assignApp(client, app, name, Number(version));
