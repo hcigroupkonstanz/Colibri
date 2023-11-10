@@ -17,12 +17,17 @@ import { rl, colibriAddress } from './common';
         console.log('String value received on myChannel', value);
     });
 
+    Sync.receiveJson('myChannel', (value) => {
+        console.log('JSON value received on myChannel', value);
+    });
+
     // Example for unregistering a listener
     const listener = (value: boolean) => {
         // Do something with the value
     };
     Sync.receiveBool('myChannel', listener);
     Sync.unregister('myChannel', listener);
+
 
     const sendNumber = () => {
         return new Promise((res) => {
@@ -31,8 +36,23 @@ import { rl, colibriAddress } from './common';
                     rl.close();
                     process.exit();
                 } else {
-                    console.log(`Sending value "${answer}" to server`);
-                    Sync.sendString('myChannel', answer);
+                    // Try to guess the type
+                    if (answer === 'true' || answer === 'false') {
+                        Sync.sendBool('myChannel', JSON.parse(answer));
+                        console.log(`Sending boolean value "${answer}" to server`);
+                    } else if (!isNaN(Number(answer))) {
+                        Sync.sendNumber('myChannel', Number(answer));
+                            console.log(`Sending number value "${answer}" to server`);
+                    } else {
+                        try {
+                            Sync.sendJson('myChannel', JSON.parse(answer));
+                            console.log(`Sending JSON value "${answer}" to server`);
+                        } catch (_) {
+                            Sync.sendString('myChannel', answer);
+                            console.log(`Sending string value "${answer}" to server`);
+                        }
+                    }
+
                     res(0);
                 }
             });
