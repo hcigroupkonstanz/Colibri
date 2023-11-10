@@ -172,7 +172,9 @@ export class UnityServerWorker extends WorkerService {
                 packetLength = packetEnd - headerEnd;
                 const packet = buffer.subarray(headerEnd + 1).toString();
                 const version = packet.substring(0, packet.indexOf('::'));
-                const app = packet.substring(packet.indexOf('::') + '::'.length);
+                let app = packet.substring(packet.indexOf('::') + '::'.length);
+                // remove trailing \0
+                app = app.substring(0, app.length - 1);
 
                 this.assignApp(client, app, Number(version));
             } else {

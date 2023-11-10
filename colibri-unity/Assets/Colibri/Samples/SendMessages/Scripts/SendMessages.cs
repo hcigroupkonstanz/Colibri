@@ -7,7 +7,7 @@ namespace HCIKonstanz.Colibri.Samples
 {
     public class SendMessages : MonoBehaviour
     {
-        public static readonly string Channel = "SendTestMessages";
+        public static readonly string Channel = "myChannel";
 
         // See Update Method
         public bool SendProperties;
