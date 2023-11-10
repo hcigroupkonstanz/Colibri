@@ -34,7 +34,7 @@ export class LogComponent implements OnInit, AfterViewChecked {
         }
     }
 
-    getId(entry: GroupedLogMessage): number {
+    getId(index: number, entry: GroupedLogMessage): number {
         return entry.id;
     }
 
