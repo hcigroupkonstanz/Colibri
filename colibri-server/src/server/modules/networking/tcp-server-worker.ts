@@ -16,6 +16,7 @@ interface TcpClient {
     address: string;
     app: string;
     version: number;
+    name: string;
 }
 
 export class TCPServerWorker extends WorkerService {
@@ -114,6 +115,7 @@ export class TCPServerWorker extends WorkerService {
             leftOverBuffer: Buffer.alloc(0),
             address: socket.remoteAddress || 'UNDEFINED',
             app: '',
+            name: '',
             version: 0
         };
         this.waitingClients.push(tcpClient);
@@ -170,13 +172,17 @@ export class TCPServerWorker extends WorkerService {
                 }
 
                 packetLength = packetEnd - headerEnd;
-                const packet = buffer.subarray(headerEnd + 1).toString();
-                const version = packet.substring(0, packet.indexOf('::'));
-                let app = packet.substring(packet.indexOf('::') + '::'.length);
-                // remove trailing \0
-                app = app.substring(0, app.length - 1);
-
-                this.assignApp(client, app, Number(version));
+                const packet = buffer.toString().replace(/\0/g, '');
+                try {
+                    const [ version, app, name ] = packet.split('::');
+                    this.assignApp(client, app, name, Number(version));
+                } catch (err) {
+                    this.logError(`Invalid handshake packet received from client ${client.id}`);
+                    if (err instanceof Error)
+                        this.logError(err.stack || '');
+                    else
+                        console.error(err);
+                }
             } else {
                 // Packet with payload (normal message)
                 packetLength = Number(header);
@@ -197,7 +203,7 @@ export class TCPServerWorker extends WorkerService {
                         channel: message.channel() || '',
                         command: message.command() || '',
                         payload: message.payload() || '',
-                        origin: { id: client.id, app: client.app }
+                        origin: { id: client.id, app: client.app, name: client.name }
                     });
                 } catch (err) {
                     if (err instanceof Error)
@@ -227,9 +233,10 @@ export class TCPServerWorker extends WorkerService {
         }
     }
 
-    private assignApp(client: TcpClient, app: string, version: number): void {
-        this.logDebug(`Setting app of colibri client "${client.id}" (v${version}) to "${app}"`);
+    private assignApp(client: TcpClient, app: string, name: string, version: number): void {
+        this.logDebug(`Setting app of colibri client '${name}' (${client.id}, v${version}) to "${app}"`);
         client.app = app;
+        client.name = name;
         client.version = version;
         _.pull(this.waitingClients, client);
         this.clients.push(client);

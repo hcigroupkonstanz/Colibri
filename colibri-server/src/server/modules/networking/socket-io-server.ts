@@ -78,6 +78,7 @@ export class SocketIOServer extends Service implements NetworkServer {
             id: socket.id,
             app: socket.handshake.query.app as string,
             version: socket.handshake.query.version as string,
+            name: socket.handshake.address as string,
             socket
         };
 
@@ -85,9 +86,9 @@ export class SocketIOServer extends Service implements NetworkServer {
             this.logError('Websocket connection has no app specified; aborting connection');
             socket.disconnect();
             return;
-        } else {
+        } else if (client.app !== 'colibri') { // ignore colibri web interface clients
             this.logDebug(`New client (${client.id}) connected from ${socket.handshake.address}, waiting for app name`);
-            this.logDebug(`Setting app of colibri client "${client.id}" (v${client.version}) to "${client.app}"`);
+            this.logDebug(`Setting app of colibri client '${client.name}' (${client.id}, v${client.version}) to "${client.app}"`);
         }
 
         this.clients.push(client);
@@ -119,6 +120,9 @@ export class SocketIOServer extends Service implements NetworkServer {
         this.clientStream.next(this.clients);
 
         for (const rc of removedClients) {
+            if (rc.app !== 'colibri') { // ignore colibri web interface clients
+                this.logDebug(`Colibri client '${rc.name}' (${rc.id}) disconnected`);
+            }
             this.clientDisconnectedStream.next(rc);
         }
     }

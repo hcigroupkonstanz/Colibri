@@ -11,6 +11,7 @@ export interface NetworkMessage {
 export interface NetworkClient {
     id: string;
     app: string;
+    name: string;
 }
 
 export abstract class NetworkServer {

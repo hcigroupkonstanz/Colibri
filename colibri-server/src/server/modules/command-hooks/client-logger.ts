@@ -10,25 +10,25 @@ export class ClientLogger extends Service {
         super();
 
         pool.messages$
-            .pipe(filter(m => m.channel === 'log'))
+            .pipe(filter(m => m.channel === 'log' && m.command !== 'requestLog'))
             .subscribe(m => {
-                const id = m.origin?.id || 'UNKNOWN';
+                const name = m.origin?.name || 'UNKNOWN';
                 switch (m.command) {
                     case 'info':
-                        this.logInfo(`[${id}] ${m.payload}`);
+                        this.logInfo(`[${name}] ${m.payload}`);
                         break;
 
                     case 'warning':
-                        this.logWarning(`[${id}] ${m.payload}`);
+                        this.logWarning(`[${name}] ${m.payload}`);
                         break;
 
                     case 'error':
-                        this.logError(`[${id}] ${m.payload}`, false);
+                        this.logError(`[${name}] ${m.payload}`, false);
                         break;
 
                     case 'debug':
                     default:
-                        this.logDebug(`[${id}] ${m.payload}`);
+                        this.logDebug(`[${name}] ${m.payload}`);
                         break;
                 }
             });

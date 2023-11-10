@@ -29,7 +29,7 @@ export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer 
         this.workerMessages$.subscribe(msg => {
             switch (msg.channel) {
                 case 'clientConnected$':
-                    this.onClientConnected(msg.content.id as string, msg.content.app as string);
+                    this.onClientConnected(msg.content.id as string, msg.content.app as string, msg.content.name as string);
                     break;
 
                 case 'clientDisconnected$':
@@ -64,8 +64,8 @@ export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer 
     }
 
 
-    private onClientConnected(id: string, app: string): void {
-        const client: NetworkClient = { id, app };
+    private onClientConnected(id: string, app: string, name: string): void {
+        const client: NetworkClient = { id, app, name };
 
         this.clients.push(client);
 

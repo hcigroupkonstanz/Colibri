@@ -153,6 +153,8 @@ namespace HCIKonstanz.Colibri.Networking
             var ip = ColibriConfig.Load().ServerAddress;
             var app = ColibriConfig.Load().AppName;
             var socket = _socket;
+            // Can only be called from main thread
+            var hostname = SystemInfo.deviceName;
 
 
             Task.Run(async () =>
@@ -171,7 +173,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                     socket.Connect(ip, UNITY_SERVER_PORT);
                     socket.BeginReceive(_receiveBuffer, _receiveBufferOffset, _receiveBuffer.Length - _receiveBufferOffset, SocketFlags.None, _receiveCallback, null);
-                    await SendHandshake(VERSION, app);
+                    await SendHandshake(VERSION, app, hostname);
                     Debug.Log("Connection to web server established");
                     Status = ConnectionStatus.Connected;
                     LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
@@ -390,7 +392,7 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
 
-        private async Task<bool> SendHandshake(int version, string app)
+        private async Task<bool> SendHandshake(int version, string app, string hostname)
         {
             if (_socket != null)
             {
@@ -398,7 +400,7 @@ namespace HCIKonstanz.Colibri.Networking
                 {
                     SocketAsyncEventArgs socketAsyncData = new SocketAsyncEventArgs();
                     var encoding = new UTF8Encoding();
-                    var buffer = encoding.GetBytes($"\0\0\0h\0{version}::{app}\0");
+                    var buffer = encoding.GetBytes($"\0\0\0h\0{version}::{app}::{hostname}\0");
 
                     socketAsyncData.SetBuffer(buffer, 0, buffer.Length);
                     _socket.SendAsync(socketAsyncData);
