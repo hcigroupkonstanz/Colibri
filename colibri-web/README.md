@@ -10,7 +10,7 @@
 Initialize Colibri once with:
 ```ts
 import { Colibri } from '@hcikn/colibri';
-Colibri.initialize('app_name', 'server_address');
+Colibri.init('app_name', 'server_address');
 ```
 
 For server setup, refer to [colibri-server](../colibri-server/).
@@ -19,9 +19,9 @@ For server setup, refer to [colibri-server](../colibri-server/).
 
 ### Web Interface for Logging
 
-Colibri provides a _web logger_ with web interface to send diagnostic data (currently: console logs) to the server. This may be useful for devices (e.g., VR devices, smartphones) where access to the console is not easily available.
+Colibri provides a _web logger_ with web interface to send diagnostic data (currently: console logs) to the server. This may be useful for devices (e.g., VR devices, smartphones) where access to the console is not easily available.
 
-To setup, import the `RemoteLogger` and call its `init()` method. Any subsequent `console` calls should now also appear on your colibri server's web interface, which can be accessed via `http://<your-server-ip>:9011`.
+To setup, import the `RemoteLogger` and call its `init()` method. Any subsequent `console` calls should now also appear on your colibri server's web interface, which can be accessed via `http://<your-server-ip>:9011`.
 
 ```ts
 import { RemoteLogger } from '@hcikn/colibri';
