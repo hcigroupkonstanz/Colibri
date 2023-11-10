@@ -53,64 +53,89 @@ const sendJson = (channel: string, val: { [key: string]: unknown }) => {
 };
 
 
+type genericCallback = (val: any) => void;
+const listeners: { [channel: string]: { [ command: string ]: genericCallback[] } } = { };
+
+const registerListener = <T>(channel: string, type: string, callback: (val: T) => void) => {
+    if (listeners[channel] === undefined) {
+        listeners[channel] = { };
+        RegisterChannel(channel, (msg) => {
+            if (msg.command in listeners[channel]) {
+                listeners[channel][msg.command].forEach(cb => cb(msg.payload as T));
+            }
+        });
+    }
+
+    if (listeners[channel][type] === undefined) {
+        listeners[channel][type] = [];
+    }
+
+    listeners[channel][type].push(callback);
+};
 
 const receiveBool = (channel: string, callback: (val: boolean) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as boolean));
+    registerListener<boolean>(channel, 'broadcast::bool', callback);
 };
 
 const receiveBoolArray = (channel: string, callback: (val: boolean[]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as boolean[]));
+    registerListener<boolean[]>(channel, 'broadcast::bool[]', callback);
 };
 
 const receiveNumber = (channel: string, callback: (val: number) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as number));
+    registerListener<number>(channel, 'broadcast::float', callback);
 };
 
 const receiveNumberArray = (channel: string, callback: (val: number[]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as number[]));
+    registerListener<number[]>(channel, 'broadcast::float[]', callback);
 };
 
 const receiveString = (channel: string, callback: (val: string) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as string));
+    registerListener<string>(channel, 'broadcast::string', callback);
 };
 
 const receiveStringArray = (channel: string, callback: (val: string[]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as string[]));
+    registerListener<string[]>(channel, 'broadcast::string[]', callback);
 };
 
 const receiveVector3 = (channel: string, callback: (val: [number, number, number]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as [number, number, number]));
+    registerListener<[number, number, number]>(channel, 'broadcast::vector3', callback);
 };
 
 const receiveVector3Array = (channel: string, callback: (val: [number, number, number][]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as [number, number, number][]));
+    registerListener<[number, number, number][]>(channel, 'broadcast::vector3[]', callback);
 };
 
 const receiveQuaternion = (channel: string, callback: (val: [number, number, number, number]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as [number, number, number, number]));
+    registerListener<[number, number, number, number]>(channel, 'broadcast::quaternion', callback);
 };
 
 const receiveQuaternionArray = (channel: string, callback: (val: [number, number, number, number][]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as [number, number, number, number][]));
+    registerListener<[number, number, number, number][]>(channel, 'broadcast::quaternion[]', callback);
 };
 
-const receiveColor = (channel: string, callback: (val: [number, number, number, number]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as [number, number, number, number]));
+const receiveColor = (channel: string, callback: (val: string) => void) => {
+    registerListener<string>(channel, 'broadcast::color', callback);
 };
 
-const receiveColorArray = (channel: string, callback: (val: [number, number, number, number][]) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as [number, number, number, number][]));
+const receiveColorArray = (channel: string, callback: (val: string[]) => void) => {
+    registerListener<string[]>(channel, 'broadcast::color[]', callback);
 };
 
 const receiveJson = (channel: string, callback: (val: { [key: string]: unknown }) => void) => {
-    RegisterChannel(channel, (msg) => callback(msg.payload as { [key: string]: unknown }));
+    registerListener<any>(channel, 'broadcast::json', callback);
 };
 
 
-const unregister = (channel: string, callback: (val: any) => void) => {
-    UnregisterChannel(channel, callback);
-};
+const unregister = (channel: string, callback: genericCallback) => {
+    for (const command in listeners[channel]) {
+        const index = listeners[channel][command].indexOf(callback);
+        if (index >= 0) {
+            listeners[channel][command].splice(index, 1);
+        }
+    }
 
+    // TODO: we should ideally unsubscribe from the channel if there are no more listeners
+};
 
 export const Sync = {
     sendBool, sendBoolArray,
@@ -131,7 +156,7 @@ export const Sync = {
 
     unregister,
 
-    // for clearer compatibility with Unity Colibri
+    // for better compatibility with Unity Colibri
     sendFloat: sendNumber,
     sendInt: sendNumber,
     sendFloatArray: sendNumberArray,

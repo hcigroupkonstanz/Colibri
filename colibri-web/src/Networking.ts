@@ -88,11 +88,11 @@ export const RegisterOnce = (channel: string, handler: (payload: Message) => voi
 //////////////////
 /// RPC
 //////////////////
-type rpcMethod = (payload: unknown) => unknown;
-const rpcMethods: {[method: string]: rpcMethod } = {};
-export const RegisterRpc = (method: string, fn: rpcMethod): void => {
-    rpcMethods[method] = fn;
-};
+// type rpcMethod = (payload: unknown) => unknown;
+// const rpcMethods: {[method: string]: rpcMethod } = {};
+// export const RegisterRpc = (method: string, fn: rpcMethod): void => {
+//     rpcMethods[method] = fn;
+// };
 
 // export const SendRpc = async (method: string, payload: any): Promise<any> => {
 //     // TODO
