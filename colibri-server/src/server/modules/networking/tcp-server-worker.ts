@@ -238,7 +238,11 @@ export class TCPServerWorker extends WorkerService {
 
 
     private handleSocketError(client: TcpClient, error: Error): void {
-        this.logError(error.message);
+        // ignore ECONNRESET errors, as they are caused by the client disconnecting
+        if (error.message.indexOf('ECONNRESET') === -1) {
+            this.logError(error.message);
+        }
+
         this.handleSocketDisconnect(client);
     }
 
