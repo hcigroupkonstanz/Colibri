@@ -14,7 +14,8 @@
     "debug": "concurrently -k -p \"[{name}]\" -n \"Angular,Node\" -c \"green.bold,blue.bold\" \"npm run gui-watch\" \"npm run server-watch-ts\"",
     "build": "npm run gui-build && npm run server-build",
     "start": "npm run server-start",
-    "watch": "concurrently -k -p \"[{name}]\" -n \"Angular,Server-Compile,Server-Node\" -c \"green.bold,blue.bold,yellow.bold\" \"npm run gui-watch\" \"npm run server-watch-ts\" \"npm run server-watch-node\""
+    "watch": "concurrently -k -p \"[{name}]\" -n \"Angular,Server-Compile,Server-Node\" -c \"green.bold,blue.bold,yellow.bold\" \"npm run gui-watch\" \"npm run server-watch-ts\" \"npm run server-watch-node\"",
+    "publish": "cross-var \"docker build . -t hcikn/colibri:$npm_package_version && docker push hcikn/colibri:$npm_package_version && docker tag hcikn/colibri:$npm_package_version hcikn/colibri:latest && docker push hcikn/colibri:latest\""
   },
   "private": true,
   "dependencies": {
@@ -62,6 +63,7 @@
     "@typescript-eslint/eslint-plugin": "^5.59.8",
     "@typescript-eslint/parser": "^5.59.8",
     "concurrently": "^8.0.1",
+    "cross-var": "^1.1.0",
     "eslint": "^8.41.0",
     "nodemon": "^2.0.22",
     "typescript": "5.0.4"

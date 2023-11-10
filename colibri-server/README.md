@@ -5,7 +5,7 @@ Communication Library for rapid prototyping in Unity
 ## Setup
 ### [Docker](https://hub.docker.com/r/hcikn/colibri) _(recommended)_
 
-Use the following `docker-compose.yml` and run `docker-compose up -D`:
+Use the following `docker-compose.yml` and run `docker-compose up -d`:
 ```yaml
 version: '3.4'
 services:
