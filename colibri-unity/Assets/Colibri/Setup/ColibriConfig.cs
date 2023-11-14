@@ -14,7 +14,7 @@ namespace HCIKonstanz.Colibri.Setup
             return _instance;
         }
 
-        public string ServerAddress = "colibri.hci.uni.kn";
+        public string ServerAddress = "colibri.hci.uni-konstanz.de";
         public string AppName = "";
     }
 }

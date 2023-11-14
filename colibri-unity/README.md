@@ -26,7 +26,7 @@ Upon installation, a configuration window should show up:
 
 <img src="img/config.png" width=400/>
 
-- Enter the URL of your (shared) [server](../colibri-server). A public test server can be found at `colibri.hci.uni.kn` (beware of network latency!)
+- Enter the URL of your (shared) [server](../colibri-server). A public test server can be found at `colibri.hci.uni-konstanz.de` (beware of network latency!)
 - Choose a unique *app name*. Though a server supports multiple clients, data is only synchronized between clients with identical *app names*!
 - All changes are saved to `Resources/ColibriConfig` - adjust this file in case you want to adjust something
 
