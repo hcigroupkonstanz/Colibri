@@ -16,7 +16,7 @@ namespace HCIKonstanz.Colibri.Setup
         private ColibriConfig Config;
 
         [DidReloadScripts]
-        static void Test()
+        static void OnReload()
         {
             Init();
         }
@@ -49,6 +49,7 @@ namespace HCIKonstanz.Colibri.Setup
         }
 
 
+        [MenuItem("Window/Colibri Configuration")]
         private static void ShowConfigurationWindow()
         {
             // There should be only one configurator window open as a "pop-up". If already open, then just force focus on our instance
