@@ -54,7 +54,7 @@ const startup = async () => {
     }
 
     const httpServer = webServer.start();
-    socketioServer.start(httpServer, Config.BASE_URL);
+    socketioServer.start(httpServer);
     tcpServer.start(Config.TCP_PORT);
     voiceServer.start(Config.VOICE_PORT);
 };
