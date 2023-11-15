@@ -15,7 +15,7 @@ export class WebServer extends Service {
     private server!: http.Server;
     private isRunning = false;
 
-    public constructor(private webPort: number, private webRoot: string) {
+    public constructor(private webPort: number, private webRoot: string, private baseUrl: string) {
         super();
 
         console.log(`Web server listening on 0.0.0.0:${this.webPort}`);
@@ -31,12 +31,12 @@ export class WebServer extends Service {
         this.app.use(cors());
 
         // set up default routes
-        this.app.use(express.static(path.join(this.webRoot)));
+        this.app.use(this.baseUrl, express.static(path.join(this.webRoot)));
     }
 
     public start(): http.Server {
         // add default route for 404s last
-        this.app.use((req, res) => {
+        this.app.use(this.baseUrl, (req, res) => {
             res.sendFile(path.join(this.webRoot, 'index.html'));
             this.logWarning(`Unmatched route: ${req.path}`);
         });

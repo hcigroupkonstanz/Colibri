@@ -4,6 +4,7 @@ export const Config = {
 
     WEBSERVER_PORT: 9011,
     WEBSERVER_ROOT: __dirname + '/../ui/',
+    BASE_URL: process.env.BASE_URL || '',
 
     DATA_ROOT: __dirname + '/../../data/',
 };
