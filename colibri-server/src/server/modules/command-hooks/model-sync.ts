@@ -69,14 +69,18 @@ export class ModelSynchronization extends Service {
             return;
         }
 
-        const payload = msg.payload as { id?: string };
-        if (typeof(payload?.id) !== 'string') {
-            this.logError('Cannot update model without "id" attribute');
-            return;
-        }
+        try {
+            const payload = JSON.parse(msg.payload || '{}') as { id?: string };
+            if (typeof(payload?.id) !== 'string') {
+                this.logError('Cannot update model without "id" attribute');
+                return;
+            }
 
-        this.store.updateModel(msg.origin.app, msg.channel, payload as SyncModel);
-        this.connectionPool.broadcast(msg);
+            this.store.updateModel(msg.origin.app, msg.channel, payload as SyncModel);
+            this.connectionPool.broadcast(msg);
+        } catch (error) {
+            this.logError(`Failed to update model: ${error}`, false);
+        }
     }
 
     public onModelDelete(msg: NetworkMessage): void {
@@ -85,16 +89,17 @@ export class ModelSynchronization extends Service {
             return;
         }
 
-        if (typeof(msg.payload) === 'string') {
-            this.logError('Invalid delete message!');
-            return;
-        }
+        try {
+            const payload = JSON.parse(msg.payload || '{}');
 
-        if (msg.payload) {
-            this.store.removeModel(msg.origin.app, msg.channel, msg.payload);
-            this.connectionPool.broadcast(msg);
-        } else {
-            this.logWarning('Received delete message without payload');
+            if (payload) {
+                this.store.removeModel(msg.origin.app, msg.channel, payload.id);
+                this.connectionPool.broadcast(msg);
+            } else {
+                this.logWarning('Received delete message without payload');
+            }
+        } catch (error) {
+            this.logError(`Failed to delete model: ${error}`, false);
         }
     }
 }
