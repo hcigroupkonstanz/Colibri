@@ -12,6 +12,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         public T Template;
 
         private readonly List<T> _existingObjects = new List<T>();
+        private bool _isCreatingObject;
 
         private void Start()
         {
@@ -26,6 +27,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             SyncBehaviour<T>.ModelCreated()
                 .TakeUntilDisable(this)
                 .Where(m => m is T)
+                .Where(_ => !_isCreatingObject)
                 .Where(m => !_existingObjects.Any(e => e.Id == m.Id))
                 .Subscribe(m =>
                 {
@@ -50,11 +52,20 @@ namespace HCIKonstanz.Colibri.Synchronization
             var id = data["id"].Value<string>();
             if (!_existingObjects.Any(t => t.Id == id))
             {
+                _isCreatingObject = true;
+                var prevEnabled = Template.enabled;
+                var prevId = Template.Id;
+
                 Template.enabled = false;
+                Template.Id = id;
                 var go = Instantiate(Template);
-                go.Id = id;
+                go.OnModelUpdate(data);
                 _existingObjects.Add(go);
                 go.enabled = true;
+
+                Template.enabled = prevEnabled;
+                Template.Id = prevId;
+                _isCreatingObject = false;
             }
         }
 

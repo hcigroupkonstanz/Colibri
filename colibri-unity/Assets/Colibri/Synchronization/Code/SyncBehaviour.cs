@@ -108,7 +108,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return action;
         }
 
-        public string Id = Guid.NewGuid().ToString();
+        public string Id;
         private string Channel;
 
         private readonly Dictionary<string, bool> _hasReceivedUpdate = new Dictionary<string, bool>();
@@ -122,14 +122,13 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         protected virtual void Awake()
         {
-            _modelCreateSubject.OnNext(this);
-            Channel = typeof(T).Name.ToLower();
-        }
-
-
-        protected virtual void OnEnable()
-        {
             Initialize();
+            Channel = typeof(T).Name.ToLower();
+
+            var isPrefab = gameObject.scene == null;
+            if (!isPrefab && String.IsNullOrEmpty(Id))
+                Id = Guid.NewGuid().ToString();
+
 
             foreach (var attribute in _syncedAttributes)
             {
@@ -144,6 +143,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id);
             Sync.AddModelDeleteListener(Channel, OnModelDelete);
+
+            _modelCreateSubject.OnNext(this);
         }
 
         protected virtual void OnDisable()
@@ -167,7 +168,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             Sync.SendModelDelete(Channel, Id);
         }
 
-        private void OnModelUpdate(JObject data)
+        public void OnModelUpdate(JObject data)
         {
             var id = data["id"].Value<string>();
             if (id == Id)
