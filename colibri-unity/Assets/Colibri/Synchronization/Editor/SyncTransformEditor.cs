@@ -28,7 +28,10 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (synctransform)
             {
                 if (GUILayout.Button("Generate ID"))
+                {
                     synctransform.Id = Guid.NewGuid().ToString();
+                    EditorUtility.SetDirty(synctransform);
+                }
             }
         }
     }
