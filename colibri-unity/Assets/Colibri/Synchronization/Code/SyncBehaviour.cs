@@ -119,6 +119,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         private bool _hasReceivedDestroyCommand;
         private bool _hasReceivedFirstUpdate;
 
+        private UniTaskCompletionSource<bool> _isReady = new UniTaskCompletionSource<bool>();
+
 
         protected virtual void Awake()
         {
@@ -166,6 +168,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
 
             Sync.SendModelDelete(Channel, Id);
+            _isReady.TrySetCanceled();
         }
 
         public void OnModelUpdate(JObject data)
@@ -180,11 +183,15 @@ namespace HCIKonstanz.Colibri.Synchronization
                     if (prop.Key != "id")
                         UpdateAttribute(prop.Key, prop.Value);
                 }
+
+                _isReady.TrySetResult(true);
             }
         }
 
-        public void TriggerSync()
+        public async void TriggerSync()
         {
+            await _isReady.Task;
+
             foreach (var attribute in _syncedAttributes)
                 AddUpdate(attribute.Key, attribute.Value.Getter(this as T));
         }
