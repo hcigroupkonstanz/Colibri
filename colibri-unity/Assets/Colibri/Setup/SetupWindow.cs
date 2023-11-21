@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
@@ -143,3 +144,4 @@ namespace HCIKonstanz.Colibri.Setup
         }
     }
 }
+#endif
