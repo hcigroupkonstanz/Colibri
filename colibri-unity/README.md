@@ -28,9 +28,8 @@ Upon installation, a configuration window should show up:
 
 - Enter the URL of your (shared) [server](../colibri-server). A public test server can be found at `colibri.hci.uni-konstanz.de` (beware of network latency!)
 - Choose a unique *app name*. Though a server supports multiple clients, data is only synchronized between clients with identical *app names*!
-- All changes are saved to `Resources/ColibriConfig` - adjust this file in case you want to adjust something
-
-
+- To adjust the Colibri Configuration you can reopen the window in Unity under "Window" -> "Colibri Configuration" 
+- All changes are saved to `Resources/ColibriConfig`
 
 ## Samples
 
@@ -101,17 +100,16 @@ For synchronizing the location of an object, Colibri provides a `SyncTransform` 
 
 Information about the object's state is stored on the server. When a new client connects, the location is automatically updated to its current state.
 
+`SyncTransform` also supports physics. `PhysicsAuthority` defines which client is currently controlling the physics. Only one client can control the physics of an object at a time. If the `PhysicsAuthority` is set to `true` on one client it is automatically set to `false` on all other clients. If the `PhysicsAuthority` is checked by default, the first client receives the physics authority. The `isKinematic` field of the attached `Rigidbody` will be overwritten by the `isKinematic` field of the `SyncTransform`. Therefore, if you want to change this field, always (additionally) set the `isKinematic` field of the `SyncTransform`.
+
 For dynamically created objects, add the `[SyncTransformManager]` prefab to the scene and add the prefab of the objects you'll instantiate to the `Template` attribute. When a client instantiates a script with `SyncTransform`, the Manager will automatically create an object using this prefab and synchronize its position.
 
 <img src="img/synctransformmanager.png" width=400/>
-
-
 
 Limitations:
 
 - Only one client can update the each attribute of the object simultaneously
 - Scene will be reset once all clients disconnect
-- When syncing predefined objects in the scene, make sure that the `AutoInitialize` box is checked.
 
 
 
@@ -184,6 +182,8 @@ public class MyClassManager : SyncBehaviourManager<MyClass>
 
 The manager should be added to your scene (e.g., on an empty GameObject), and the manager requires a Prefab with the model script for synchronizing different objects. 
 
+By the way: `SyncTransform` is also a `SyncBehaviour`.
+
 Limitations:
 - Only one client can update each attribute of the object simultaneously
 - Scene will be reset once all clients disconnect
@@ -191,6 +191,8 @@ Limitations:
 
 
 ### Voice Transmission
+
+Work in progress
 
 See `Samples/VoiceTransmission` 
 
