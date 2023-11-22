@@ -27,7 +27,7 @@ export class LogService {
         socketio
             .listen('log')
             .subscribe((m: GroupedLogMessage) => {
-                while (this.messages.length > 1000) {
+                while (this.messages.length > 10000) {
                     this.messages.shift();
                 }
 
