@@ -1,4 +1,4 @@
-import { RegisterChannel, SendMessage, UnregisterChannel } from './Networking';
+import { RegisterChannel, SendMessage } from './Networking';
 
 const sendBool = (channel: string, val: boolean) => {
     SendMessage(channel, 'broadcast::bool', val);
@@ -53,6 +53,7 @@ const sendJson = (channel: string, val: { [key: string]: unknown }) => {
 };
 
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type genericCallback = (val: any) => void;
 const listeners: { [channel: string]: { [ command: string ]: genericCallback[] } } = { };
 
@@ -122,6 +123,7 @@ const receiveColorArray = (channel: string, callback: (val: string[]) => void) =
 };
 
 const receiveJson = (channel: string, callback: (val: { [key: string]: unknown }) => void) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     registerListener<any>(channel, 'broadcast::json', callback);
 };
 
