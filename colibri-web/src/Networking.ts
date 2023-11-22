@@ -14,7 +14,10 @@ let location = '';
 if (typeof window !== 'undefined') {
     location = window.location.hostname || '';
 }
-let socket: io.Socket;
+
+const socket = io.connect({
+    autoConnect: false
+});
 
 
 const init = (app: string, server?: string) => {
@@ -26,8 +29,13 @@ const init = (app: string, server?: string) => {
 
     server +=  ':9011';
 
-    socket = io.connect(server, { query: { app, version: '1' } });
-    console.debug(`Connecting to ${server}`);
+    // FIXME: terrible workaround because socket.io marked uri as readonly
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (socket.io as any).uri = server;
+    socket.io.opts.query = { app, version: '1' };
+    socket.connect();
+
+    console.debug(`Connecting to colibri server on ${server}`);
     socket.on('connect', () => {
         console.debug(`Connected to colibri server on ${server}`);
     });
