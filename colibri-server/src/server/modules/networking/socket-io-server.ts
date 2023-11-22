@@ -111,7 +111,8 @@ export class SocketIOServer extends Service implements NetworkServer {
                 origin: client,
                 channel: channel,
                 command: content.command,
-                payload: content.payload
+                // FIXME: terrible workaround because other clients (unity/tcp) send payload as string
+                payload: JSON.stringify(content.payload)
             };
             this.messageStream.next(msg);
             next();
