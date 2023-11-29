@@ -12,23 +12,35 @@ const init = () => {
             return obj.message + '\n' + obj.stack;
         }
 
-        return JSON.stringify(obj);
+        const cache: unknown[] = [];
+        const str = JSON.stringify(obj, (_, value: unknown) => {
+            if (typeof value === 'object' && value !== null) {
+                if (cache.indexOf(value) !== -1) {
+                    // Circular reference found, discard key
+                    return;
+                }
+                // Store value in our collection
+                cache.push(value);
+            }
+            return value;
+        }, 2);
+        return str;
     };
 
     // intercept calls from console
-    console.debug = function(...args) {
+    console.debug = function (...args) {
         consoleDebug.apply(this, Array.prototype.slice.call(args));
         SendMessage('log', 'debug', [...args].map(stringify).join().trim());
     };
-    console.log = function(...args) {
+    console.log = function (...args) {
         consoleLog.apply(this, Array.prototype.slice.call(args));
         SendMessage('log', 'info', [...args].map(stringify).join().trim());
     };
-    console.warn = function(...args) {
+    console.warn = function (...args) {
         consoleWarn.apply(this, Array.prototype.slice.call(args));
         SendMessage('log', 'warning', [...args].map(stringify).join().trim());
     };
-    console.error = function(...args) {
+    console.error = function (...args) {
         consoleError.apply(this, Array.prototype.slice.call(args));
         SendMessage('log', 'error', [...args].map(stringify).join().trim());
     };

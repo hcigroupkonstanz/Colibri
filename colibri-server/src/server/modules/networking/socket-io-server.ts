@@ -65,10 +65,17 @@ export class SocketIOServer extends Service implements NetworkServer {
 
 
     public broadcast(msg: NetworkMessage, clients: ReadonlyArray<SocketIoClient>): void {
+        // FIXME: terrible workaround because other clients send payload as string
+        let payload = msg.payload;
+        try {
+            if (msg.payload)
+                payload = JSON.parse(msg.payload);
+        } catch (e) { /* ignore */ }
+
         for (const client of clients) {
             client.socket.emit(msg.channel, {
                 command: msg.command,
-                payload: msg.payload
+                payload
             });
         }
     }
@@ -104,7 +111,8 @@ export class SocketIOServer extends Service implements NetworkServer {
                 origin: client,
                 channel: channel,
                 command: content.command,
-                payload: content.payload
+                // FIXME: terrible workaround because other clients (unity/tcp) send payload as string
+                payload: JSON.stringify(content.payload)
             };
             this.messageStream.next(msg);
             next();

@@ -18,7 +18,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const name = registration.name || registration.type.name.toLowerCase();
 
     // initial data fetch
-    SendMessage(`${name}`, 'model::request');
+    SendMessage(name, 'model::request');
 
     // Register for updates
     console.log(`Registering model '${name}'`);
