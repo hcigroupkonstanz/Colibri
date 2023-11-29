@@ -1,6 +1,6 @@
 {
   "name": "colibri-server",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "main": "dist/server/main.js",
   "author": "HCI Group, University of Konstanz",
   "scripts": {
