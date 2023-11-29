@@ -13,12 +13,19 @@ namespace HCIKonstanz.Colibri.Store
             var url = $"http://{ColibriConfig.Load().ServerAddress}:9011/api/store/{ColibriConfig.Load().AppName}/{objectName}";
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
-                request.method = UnityWebRequest.kHttpVerbGET;
-                request.SetRequestHeader("Accept", "application/json");
-                await request.SendWebRequest();
-                if (!request.isNetworkError && request.responseCode == 200)
+                try
                 {
-                    return JsonUtility.FromJson<T>(request.downloadHandler.text);
+                    request.method = UnityWebRequest.kHttpVerbGET;
+                    request.SetRequestHeader("Accept", "application/json");
+                    await request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success && request.responseCode == 200)
+                    {
+                        return JsonUtility.FromJson<T>(request.downloadHandler.text);
+                    }
+                }
+                catch (UnityWebRequestException exception)
+                {
+                    Debug.LogError($"Unable to get \"{objectName}\": {exception.Message}");
                 }
             }
             return default;
@@ -30,13 +37,20 @@ namespace HCIKonstanz.Colibri.Store
             var url = $"http://{ColibriConfig.Load().ServerAddress}:9011/api/store/{ColibriConfig.Load().AppName}/{objectName}";
             using (UnityWebRequest request = UnityWebRequest.Put(url, jsonData))
             {
-                request.method = UnityWebRequest.kHttpVerbPUT;
-                request.SetRequestHeader("Content-Type", "application/json");
-                request.SetRequestHeader("Accept", "application/json");
-                await request.SendWebRequest();
-                if (!request.isNetworkError && (request.responseCode == 200 || request.responseCode == 201))
+                try
                 {
-                    return true;
+                    request.method = UnityWebRequest.kHttpVerbPUT;
+                    request.SetRequestHeader("Content-Type", "application/json");
+                    request.SetRequestHeader("Accept", "application/json");
+                    await request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success && (request.responseCode == 200 || request.responseCode == 201))
+                    {
+                        return true;
+                    }
+                }
+                catch (UnityWebRequestException exception)
+                {
+                    Debug.LogError($"Unable to put \"{objectName}\": {exception.Message}");
                 }
             }
             return false;
@@ -47,12 +61,19 @@ namespace HCIKonstanz.Colibri.Store
             var url = $"http://{ColibriConfig.Load().ServerAddress}:9011/api/store/{ColibriConfig.Load().AppName}/{objectName}";
             using (UnityWebRequest request = UnityWebRequest.Delete(url))
             {
-                request.method = UnityWebRequest.kHttpVerbDELETE;
-                request.SetRequestHeader("Content-Type", "application/json");
-                await request.SendWebRequest();
-                if (!request.isNetworkError && request.responseCode == 200)
+                try
                 {
-                    return true;
+                    request.method = UnityWebRequest.kHttpVerbDELETE;
+                    request.SetRequestHeader("Content-Type", "application/json");
+                    await request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success && request.responseCode == 200)
+                    {
+                        return true;
+                    }
+                }
+                catch (UnityWebRequestException exception)
+                {
+                    Debug.LogError($"Unable to delete \"{objectName}\": {exception.Message}");
                 }
             }
             return false;
