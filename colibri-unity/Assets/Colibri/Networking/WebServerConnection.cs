@@ -4,6 +4,7 @@ using HCIKonstanz.Colibri.Core;
 using HCIKonstanz.Colibri.Setup;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -41,6 +42,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         private Task _connectionTask;
         private static long LastHeartbeatTime;
+        private readonly List<byte[]> _msgQueue = new List<byte[]>();
 
         private BehaviorSubject<bool> _isConnected = new BehaviorSubject<bool>(false);
         public IObservable<bool> Connected => _isConnected.Where(x => x).First();
@@ -177,6 +179,16 @@ namespace HCIKonstanz.Colibri.Networking
                     Debug.Log("Connection to web server established");
                     Status = ConnectionStatus.Connected;
                     LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+                    while (_msgQueue.Count > 0)
+                    {
+                        var isSent = await SendDataAsync(_msgQueue[0]);
+                        if (isSent)
+                            _msgQueue.RemoveAt(0);
+                        else
+                            // something went wrong, abort and retry later!
+                            break;
+                    }
                 }
                 catch (SocketException ex)
                 {
@@ -440,10 +452,16 @@ namespace HCIKonstanz.Colibri.Networking
                     _socket.SendAsync(socketAsyncData);
                     var signal = new SemaphoreSlim(0, 1);
 
-                    socketAsyncData.Completed += (sender, e) => signal.Release();
+                    var success = false;
+                    // TODO: could be more efficient! (i.e., don't rebuild a lambda every time this is called)
+                    socketAsyncData.Completed += (sender, e) =>
+                    {
+                        success = e.SocketError == SocketError.Success;
+                        signal.Release();
+                    };
 
                     await signal.WaitAsync();
-                    return true;
+                    return success;
                 }
                 catch (Exception e)
                 {
@@ -480,7 +498,16 @@ namespace HCIKonstanz.Colibri.Networking
                 Debug.LogError(e);
             }
 
-            return await SendDataAsync(builder.SizedByteArray());
+            var rawMsg = builder.SizedByteArray();
+            var result = await SendDataAsync(rawMsg);
+
+            // message sent successfully
+            if (result)
+                return true;
+
+            // something went wrong - queue message for later
+            _msgQueue.Add(rawMsg);
+            return false;
         }
 
         public void SendCommand(string channel, string command, JToken payload)

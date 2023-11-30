@@ -95,12 +95,20 @@ export class TCPServerWorker extends WorkerService {
         // FIXME: we don't want to deal with big/little endian, so we just use utf8 encoding for packet length
         const packetHeader = new TextEncoder().encode(`\0\0\0${msgBytes.length.toString()}\0`);
 
+        // TODO:  could probably be more efficient!
+        const mergedPacket = new Uint8Array(packetHeader.length + msgBytes.length);
+        mergedPacket.set(packetHeader);
+        mergedPacket.set(msgBytes, packetHeader.length);
+
         for (const client of clients) {
             // message format:
             // \0\0\0(PacketHeader)\0(ActualMessage)
             const tcpClient = client;
-            tcpClient.socket.write(packetHeader);
-            tcpClient.socket.write(msgBytes);
+            tcpClient.socket.write(mergedPacket, (err) => {
+                if (err) {
+                    this.logWarning(`Failed to send message to client ${client.id}: ${err.message} `);
+                }
+            });
         }
 
     }
