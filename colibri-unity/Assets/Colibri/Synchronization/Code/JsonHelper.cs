@@ -77,7 +77,15 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (obj is Color[] ca)
                 return new JArray(ca.Select(x => x.ToJson()));
 
-            return new JValue("UNKNOWN TYPE");
+            try
+            {
+                return new JValue(obj);
+            }
+            catch
+            {
+                Debug.LogWarning("Cannot synchronize unknown type");
+                return new JValue("UNKNOWN TYPE");
+            }
         }
     }
 }
