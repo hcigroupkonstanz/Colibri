@@ -4,9 +4,20 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Program",
-            "program": "${workspaceFolder}\\dist\\server\\main.js",
-            "runtimeArgs": []
+            "name": "Debug Server",
+            "program": "${workspaceFolder}/dist/server/main.js",
+            "preLaunchTask": "npm: server-build",
+            "runtimeArgs": [
+                "--inspect=9229",
+                
+                // debugging heap space
+                "--max_old_space_size=60",
+                "--optimize_for_size"
+
+            ],
+            "outFiles": [
+                "${workspaceFolder}/dist/**/*.js"
+            ]
         }
     ]
 }
