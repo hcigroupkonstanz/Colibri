@@ -194,6 +194,13 @@ export class TCPServerWorker extends WorkerService {
             } else {
                 // Packet with payload (normal message)
                 packetLength = Number(header);
+                if (!Number.isFinite(packetLength)) {
+                    this.logError(`Invalid header received from client ${client.id}, discarding buffer`);
+                    this.logDebug(`Header: ${header}`);
+                    client.leftOverBuffer = Buffer.alloc(0);
+                    break;
+                }
+
                 const packetEnd = headerEnd + 1 + packetLength;
                 
                 if (packetEnd > buffer.length) {
