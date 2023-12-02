@@ -21,8 +21,7 @@ const onError = (err: Error | undefined) => {
 const client = new net.Socket();
 client.connect(port, address, () => {
     console.log('Connected, sending handshake');
-    const handshake = encoder.encode(`\0\0\0${version}::${app}::${hostname}\0`);
-    console.log(handshake);
+    const handshake = encoder.encode(`\0\0\0h\0${version}::${app}::${hostname}\0`);
     client.write(handshake, onError);
 
 

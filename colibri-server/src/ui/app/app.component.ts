@@ -11,16 +11,4 @@ export class AppComponent {
 
     public constructor(private socketio: SocketIOService) {
     }
-
-    loadMenu() {
-        this.socketio.execute('scene menu');
-    }
-
-    loadDev() {
-        this.socketio.execute('scene development');
-    }
-
-    loadRelease() {
-        this.socketio.execute('scene release');
-    }
 }

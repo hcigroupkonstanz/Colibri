@@ -6,7 +6,7 @@
             "request": "launch",
             "name": "Debug Server",
             "program": "${workspaceFolder}/dist/server/main.js",
-            "preLaunchTask": "npm: server-build",
+            "preLaunchTask": "npm: server:build",
             "runtimeArgs": [
                 "--inspect=9229",
                 
