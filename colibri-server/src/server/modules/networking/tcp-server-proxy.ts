@@ -65,7 +65,7 @@ export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer 
 
 
     private onClientConnected(id: string, app: string, name: string): void {
-        const client: NetworkClient = { id, app, name };
+        const client: NetworkClient = { id, app, name, metadata: {} };
 
         this.clients.push(client);
 

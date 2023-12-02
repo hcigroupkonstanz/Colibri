@@ -86,6 +86,7 @@ export class SocketIOServer extends Service implements NetworkServer {
             app: socket.handshake.query.app as string,
             version: socket.handshake.query.version as string,
             name: socket.handshake.address as string,
+            metadata: {},
             socket
         };
 

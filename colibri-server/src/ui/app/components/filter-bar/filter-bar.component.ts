@@ -1,5 +1,5 @@
 import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
-import { GroupedLogMessage, LogService } from '../../services';
+import { LogMessage, LogService } from '../../services';
 import { Subscription } from 'rxjs';
 import { MatSelectChange } from '@angular/material/select';
 
@@ -24,7 +24,7 @@ export class FilterBarComponent implements OnInit, OnDestroy {
         this.subscription = this.log.messages$.subscribe(m => this.updateAppNames(m));
     }
 
-    private updateAppNames(m: GroupedLogMessage): void {
+    private updateAppNames(m: LogMessage): void {
         if (m.metadata && m.metadata.clientApp) {
             const app = m.metadata.clientApp as string;
             if (!this.appNames.includes(app)) {

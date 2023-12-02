@@ -217,7 +217,7 @@ export class TCPServerWorker extends WorkerService {
                         channel: message.channel() || '',
                         command: message.command() || '',
                         payload: message.payload() || '',
-                        origin: { id: client.id, app: client.app, name: client.name }
+                        origin: { id: client.id, app: client.app, name: client.name, metadata: {} }
                     });
                 } catch (err) {
                     if (err instanceof Error)

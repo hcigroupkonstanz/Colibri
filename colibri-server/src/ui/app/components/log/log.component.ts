@@ -1,6 +1,6 @@
 import { Component, OnInit, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
 import PerfectScrollbar from 'perfect-scrollbar';
-import { GroupedLogMessage, LogService } from '../../services';
+import { LogMessage, LogService } from '../../services';
 
 @Component({
     selector: 'app-log',
@@ -36,7 +36,7 @@ export class LogComponent implements OnInit, AfterViewChecked {
         }
     }
 
-    getId(index: number, entry: GroupedLogMessage): number {
+    getId(index: number, entry: LogMessage): string {
         return entry.id;
     }
 
@@ -58,7 +58,7 @@ export class LogComponent implements OnInit, AfterViewChecked {
         this.appFilter = filter;
     }
 
-    getMessages(): GroupedLogMessage[] {
+    getMessages(): LogMessage[] {
         if (this.appFilter) {
             return this.log.messages.filter(m => m.metadata && m.metadata.clientApp === this.appFilter);
         }

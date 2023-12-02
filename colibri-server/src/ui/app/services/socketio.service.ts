@@ -15,11 +15,7 @@ export class SocketIOService {
     constructor(private zone: NgZone) {
         this.socket = io.connect('', { query: { app: 'colibri', version: '1' } });
         // eslint-disable-next-line no-empty-function
-        this.triggerAngularChanges = _.throttle(() => this.zone.run(() => {}), 100);
-
-        this.socket.emit('log', {
-            command: 'requestLog'
-        });
+        this.triggerAngularChanges = _.throttle(() => this.zone.run(() => {}), 50);
     }
 
 
@@ -37,12 +33,10 @@ export class SocketIOService {
         return this.listeners[channel].asObservable();
     }
 
-
-    public execute(input: string): void {
-        this.socket.send('command', input);
-    }
-
-    public evaluate(input: string): void {
-        this.socket.send('evaluate', input);
+    public emit(channel: string, command: string, payload?: unknown): void {
+        this.socket.emit(channel, {
+            command,
+            payload
+        });
     }
 }

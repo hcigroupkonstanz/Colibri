@@ -12,6 +12,7 @@ export interface NetworkClient {
     id: string;
     app: string;
     name: string;
+    metadata: Record<string, unknown>;
 }
 
 export abstract class NetworkServer {

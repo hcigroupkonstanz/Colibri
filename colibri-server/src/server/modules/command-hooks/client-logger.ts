@@ -10,7 +10,7 @@ export class ClientLogger extends Service {
         super();
 
         pool.messages$
-            .pipe(filter(m => m.channel === 'log' && m.command !== 'requestLog'))
+            .pipe(filter(m => m.channel === 'log'))
             .subscribe(m => {
                 const name = m.origin?.name || 'UNKNOWN';
                 const metadata = {

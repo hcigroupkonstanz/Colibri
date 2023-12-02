@@ -2,54 +2,55 @@ import { Injectable } from '@angular/core';
 import { SocketIOService } from './socketio.service';
 import { Subject } from 'rxjs';
 
-export interface GroupedLogMessage {
-    id: number;
-    count: number;
-
+export interface LogMessage {
+    id: string;
     origin: string;
     level: number;
     message: string;
     group: string;
     created: number;
-    createdDate: Date;
-    metadata: { [key: string]: string | number | boolean };
+    count: number;
+    metadata: Record<string, unknown>;
 }
 
 @Injectable({
     providedIn: 'root'
 })
 export class LogService {
-    public readonly messages: GroupedLogMessage[] = [];
-    public readonly messages$ = new Subject<GroupedLogMessage>();
+    public readonly messages: LogMessage[] = [];
+    public readonly messages$ = new Subject<LogMessage>();
+
+    // for quick lookup of messages by id
+    private readonly messageIds: { [id: string]: LogMessage } = {};
 
     constructor(socketio: SocketIOService) {
-        let idCounter = 0;
         socketio
-            .listen('log')
-            .subscribe((m: GroupedLogMessage) => {
+            .listen('colibri::log')
+            .subscribe((m: LogMessage) => {
                 while (this.messages.length > 10000) {
-                    this.messages.shift();
+                    const rm = this.messages.shift();
+                    if (rm)
+                        delete this.messageIds[rm.id];
                 }
 
-                let foundSimilarMsg = false;
-                // search last few messages for identical messages, group them together
-                for (let i = this.messages.length - 1; i >= 0 && i > this.messages.length - 5 && !foundSimilarMsg; i--) {
-                    if (this.messages[i].message === m.message) {
-                        foundSimilarMsg = true;
-                        this.messages[i].count += 1;
-                        this.messages[i].created = m.created;
-                        this.messages[i].createdDate = new Date(m.created);
-                    }
-                }
-
-                if (!foundSimilarMsg) {
-                    m.id = idCounter;
-                    m.count = 1;
-                    m.createdDate = new Date(m.created);
+                if (this.messageIds[m.id]) {
+                    // update existing message
+                    const existing = this.messageIds[m.id];
+                    existing.count = m.count;
+                    existing.created = m.created;
+                    // put it to the end of the list
+                    this.messages.splice(this.messages.indexOf(existing), 1);
+                    this.messages.push(existing);
+                    this.messages$.next(existing);
+                } else {
+                    // create new entry
                     this.messages.push(m);
                     this.messages$.next(m);
-                    idCounter++;
+                    this.messageIds[m.id] = m;
                 }
             });
+
+
+        socketio.emit('colibri::log', 'requestLog');
     }
 }

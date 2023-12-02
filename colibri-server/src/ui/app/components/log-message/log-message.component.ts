@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { GroupedLogMessage } from '../../services';
+import { LogMessage } from '../../services';
 
 @Component({
     selector: 'app-log-message',
@@ -8,7 +8,7 @@ import { GroupedLogMessage } from '../../services';
 })
 export class LogMessageComponent {
 
-    @Input() public log!: GroupedLogMessage;
+    @Input() public log!: LogMessage;
 
     constructor() { }
 }

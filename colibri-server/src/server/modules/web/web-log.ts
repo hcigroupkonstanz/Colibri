@@ -1,16 +1,20 @@
-import { Metadata, Service } from '../core';
+import { LogMessage, Metadata, Service } from '../core';
 import { SocketIOServer } from '../networking/socket-io-server';
 import { filter, merge } from 'rxjs';
-import * as _ from 'lodash';
+import { v4 as uuid } from 'uuid';
 
 const LOGGING_APP = 'colibri';
+const MAX_LOG_SIZE = 1000000;
+const LOOKUP_COUNT = 5; // how far back log messages are searched for identical messages
 
 interface WebMessage {
+    id: string;
     origin: string;
     level: number;
     message: string;
     group: string;
     created: number;
+    count: number;
     metadata: Metadata;
 }
 
@@ -28,6 +32,14 @@ export class WebLog extends Service {
         super.init();
 
         this.socketio.messages$
+            .pipe(filter(msg => msg.channel === 'colibri::log' && msg.command === 'filter'))
+            .subscribe(networkMsg => {
+                if (networkMsg.origin) {
+                    networkMsg.origin.metadata['log::filter'] = networkMsg.payload;
+                }
+            });
+
+        this.socketio.messages$
             .pipe(filter(msg => msg.origin !== undefined && msg.origin.app === LOGGING_APP && msg.command === 'requestLog'))
             .subscribe(networkMsg => {
                 const socketClient = this.socketio.currentClients.find(c => c === networkMsg.origin);
@@ -35,7 +47,7 @@ export class WebLog extends Service {
                 if (socketClient) {
                     for (const msg of this.logMessages) {
                         this.socketio.broadcast({
-                            channel: 'log',
+                            channel: 'colibri::log',
                             command: 'message',
                             payload: JSON.stringify(msg)
                         }, [ socketClient ]);
@@ -45,28 +57,49 @@ export class WebLog extends Service {
                 }
             });
 
-        const outputs = _.map(Service.Current, s => s.output$);
-        merge(...outputs).subscribe(log => {
-            while (this.logMessages.length > 1000) {
-                this.logMessages.shift();
-            }
+        merge(...Service.Current.map(s => s.output$)).subscribe(this.redirectLogMessage.bind(this));
+    }
 
-            const webMsg: WebMessage = {
+    private redirectLogMessage(log: LogMessage): void {
+        // remove old messages
+        while (this.logMessages.length > MAX_LOG_SIZE) {
+            this.logMessages.shift();
+        }
+
+        // search last few messages for identical messages, group them together
+        let webMsg: WebMessage | undefined = undefined;
+        for (let i = this.logMessages.length - 1; i >= 0 && i > this.logMessages.length - LOOKUP_COUNT && !webMsg; i--) {
+            const tmpMsg = this.logMessages[i];
+
+            if (tmpMsg.message === log.message && tmpMsg.group === log.group && tmpMsg.level === log.level) {
+                webMsg = this.logMessages[i];
+                webMsg.count += 1;
+                webMsg.created = log.created.getTime();
+            }
+        }
+
+        // if no similar message was found, add a new one
+        if (!webMsg) {
+            webMsg = {
+                id: uuid(),
                 origin: log.origin,
                 level: log.level,
                 group: log.group,
                 message: log.message,
                 created: log.created.getTime(),
+                count: 0,
                 metadata: log.metadata
             };
             this.logMessages.push(webMsg);
+        }
 
-            const clients = this.socketio.currentClients.filter(c => c.app === LOGGING_APP);
-            this.socketio.broadcast({
-                channel: 'log',
-                command: 'message',
-                payload: JSON.stringify(webMsg)
-            }, clients);
-        });
+        const clients = this.socketio.currentClients
+            .filter(c => c.app === LOGGING_APP)
+            .filter(c => c.metadata['log::filter'] === undefined || c.metadata['log::filter'] === log.group);
+        this.socketio.broadcast({
+            channel: 'colibri::log',
+            command: 'message',
+            payload: JSON.stringify(webMsg)
+        }, clients);
     }
 }
