@@ -29,7 +29,6 @@ export class TCPServerWorker extends WorkerService {
     private readonly clients: TcpClient[] = [];
 
     private heartbeatInterval!: NodeJS.Timeout;
-    private idCounter = 0;
 
     public constructor() {
         super(true);
@@ -149,7 +148,7 @@ export class TCPServerWorker extends WorkerService {
         while (buffer.length > 0) {
             if (buffer.subarray(0, 3).toString() !== '\0\0\0') {
                 // invalid packet?!
-                this.logError(`Invalid packet received from client ${client.id}, discarding buffer`);
+                this.logError(`Invalid packet received from client ${client.id}, discarding buffer`, false);
                 client.leftOverBuffer = Buffer.alloc(0);
                 break;
             }
@@ -185,9 +184,9 @@ export class TCPServerWorker extends WorkerService {
                     const [ version, app, name ] = packet.split('::');
                     this.assignApp(client, app, name, Number(version));
                 } catch (err) {
-                    this.logError(`Invalid handshake packet received from client ${client.id}`);
+                    this.logError(`Invalid handshake packet received from client ${client.id}`, false);
                     if (err instanceof Error)
-                        this.logError(err.stack || '');
+                        this.logError(err.stack || '', false);
                     else
                         console.error(err);
                 }
@@ -195,7 +194,7 @@ export class TCPServerWorker extends WorkerService {
                 // Packet with payload (normal message)
                 packetLength = Number(header);
                 if (!Number.isFinite(packetLength)) {
-                    this.logError(`Invalid header received from client ${client.id}, discarding buffer`);
+                    this.logError(`Invalid header received from client ${client.id}, discarding buffer`, false);
                     this.logDebug(`Header: ${header}`);
                     client.leftOverBuffer = Buffer.alloc(0);
                     break;
@@ -222,7 +221,7 @@ export class TCPServerWorker extends WorkerService {
                     });
                 } catch (err) {
                     if (err instanceof Error)
-                        this.logError(err.stack || '');
+                        this.logError(err.stack || '', false);
                     else
                         console.error(err);
                 }
@@ -248,7 +247,7 @@ export class TCPServerWorker extends WorkerService {
             if (client.app) {
                 this.postMessage('clientMessage$', msg as unknown as { [key: string]: unknown });
             } else {
-                this.logError(`Ignoring message (${msg.channel} / ${msg.command}) from client ${client.id} without app`);
+                this.logError(`Ignoring message (${msg.channel} / ${msg.command}) from client ${client.id} without app`, false);
             }
         }
     }
@@ -271,7 +270,7 @@ export class TCPServerWorker extends WorkerService {
     private handleSocketError(client: TcpClient, error: Error): void {
         // ignore ECONNRESET errors, as they are caused by the client disconnecting
         if (error.message.indexOf('ECONNRESET') === -1) {
-            this.logError(error.message);
+            this.logError(error.message, false);
         }
 
         this.handleSocketDisconnect(client);
