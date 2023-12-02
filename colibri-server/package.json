@@ -10,7 +10,7 @@
     "watch": "concurrently -k -p \"[{name}]\" -n \"Angular,Server-Compile,Server-Node\" -c \"green.bold,blue.bold,yellow.bold\" \"npm run gui:watch\" \"npm run server:watch:ts\" \"npm run server:watch:node\"",
     "publish": "cross-var \"docker build . -t hcikn/colibri:$npm_package_version && docker push hcikn/colibri:$npm_package_version && docker tag hcikn/colibri:$npm_package_version hcikn/colibri:latest && docker push hcikn/colibri:latest\"",
     "gui:build": "ng build --configuration production",
-    "gui:watch": "ng build --watch",
+    "gui:watch": "ng serve",
     "server:start": "node dist/server/main.js",
     "server:build": "tsc --p src/server",
     "server:watch:ts": "tsc --p src/server -w",

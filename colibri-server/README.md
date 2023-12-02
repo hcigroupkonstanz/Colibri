@@ -34,7 +34,6 @@ A web interface is available on `http://<your-server-ip>:9011` to view the log o
 
 ## Development
 
-* `npm run watch`: Run development server, auto-compile and reload on file changes
+* `npm run watch`: Run development server with auto-compile and reload on file changes
 * `npm run build`: Compilation
-* `npm run debug`: Compilation in watch mode (for debugging with Visual Studio Code)
 * `npm start`: Start server -- make sure to compile first.

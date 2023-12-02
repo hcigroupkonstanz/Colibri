@@ -17,7 +17,6 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
-            "baseHref": "./",
             "outputPath": "dist/ui",
             "index": "src/ui/index.html",
             "main": "src/ui/main.ts",
@@ -70,7 +69,8 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "server-app:build"
+            "browserTarget": "server-app:build",
+            "proxyConfig": "src/ui/proxy.config.json"
           },
           "configurations": {
             "production": {
