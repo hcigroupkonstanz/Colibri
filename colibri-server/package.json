@@ -15,7 +15,8 @@
     "build": "npm run gui-build && npm run server-build",
     "start": "npm run server-start",
     "watch": "concurrently -k -p \"[{name}]\" -n \"Angular,Server-Compile,Server-Node\" -c \"green.bold,blue.bold,yellow.bold\" \"npm run gui-watch\" \"npm run server-watch-ts\" \"npm run server-watch-node\"",
-    "publish": "cross-var \"docker build . -t hcikn/colibri:$npm_package_version && docker push hcikn/colibri:$npm_package_version && docker tag hcikn/colibri:$npm_package_version hcikn/colibri:latest && docker push hcikn/colibri:latest\""
+    "publish": "cross-var \"docker build . -t hcikn/colibri:$npm_package_version && docker push hcikn/colibri:$npm_package_version && docker tag hcikn/colibri:$npm_package_version hcikn/colibri:latest && docker push hcikn/colibri:latest\"",
+    "test:tcpclient": "tsx test/tcp-client-test.ts"
   },
   "private": true,
   "dependencies": {
@@ -66,6 +67,7 @@
     "cross-var": "^1.1.0",
     "eslint": "^8.41.0",
     "nodemon": "^2.0.22",
+    "tsx": "^4.6.2",
     "typescript": "5.0.4"
   }
 }
