@@ -31,10 +31,17 @@ export class FilterBarComponent implements OnInit, OnDestroy {
                 this.appNames.push(app);
             }
         }
+
+        const hash = location.hash.substring(1);
+        if (this.appNames.indexOf(hash) >= 0) {
+            this.selected = hash;
+            this.filterChanged.next(hash);
+        }
     }
 
     onFilterChanged(e: MatSelectChange): void {
         this.filterChanged.next(e.value);
+        location.hash = e.value ? e.value : undefined;
     }
 
     ngOnDestroy(): void {
