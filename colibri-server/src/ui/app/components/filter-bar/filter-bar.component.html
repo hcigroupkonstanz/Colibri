@@ -2,7 +2,7 @@
     <mat-form-field class="select">
         <mat-label>Filter by App</mat-label>
         <mat-select  [(value)]="selected" (selectionChange)="onFilterChanged($event)">
-            <mat-option [value]="null">
+            <mat-option [value]="''">
                 -- No Filter --
             </mat-option>
 

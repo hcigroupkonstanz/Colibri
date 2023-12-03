@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { SocketIOService } from './socketio.service';
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 
 export interface LogMessage {
     id: string;
@@ -19,9 +19,10 @@ export interface LogMessage {
 export class LogService {
     public readonly messages: LogMessage[] = [];
     public readonly messages$ = new Subject<LogMessage>();
+    public readonly filter$ = new BehaviorSubject<string>('');
 
     // for quick lookup of messages by id
-    private readonly messageIds: { [id: string]: LogMessage } = {};
+    private messageIds: { [id: string]: LogMessage } = {};
 
     constructor(socketio: SocketIOService) {
         socketio
@@ -51,6 +52,18 @@ export class LogService {
             });
 
 
-        socketio.emit('colibri::log', 'requestLog');
+        // retrieve current filter from URL hash
+        this.filter$.next(location.hash.substring(1));
+
+        this.filter$.subscribe(filter => {
+            console.log('requesting log messages for filter', filter);
+            socketio.emit('colibri::log', 'requestLog', { filter });
+            location.hash = filter;
+
+            // reload messages
+            while (this.messages.length > 0)
+                this.messages.shift();
+            this.messageIds = {};
+        });
     }
 }

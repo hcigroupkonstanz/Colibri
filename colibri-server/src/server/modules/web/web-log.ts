@@ -32,25 +32,30 @@ export class WebLog extends Service {
         super.init();
 
         this.socketio.messages$
-            .pipe(filter(msg => msg.channel === 'colibri::log' && msg.command === 'filter'))
-            .subscribe(networkMsg => {
-                if (networkMsg.origin) {
-                    networkMsg.origin.metadata['log::filter'] = networkMsg.payload;
-                }
-            });
-
-        this.socketio.messages$
-            .pipe(filter(msg => msg.origin !== undefined && msg.origin.app === LOGGING_APP && msg.command === 'requestLog'))
+            .pipe(filter(msg => msg.channel === 'colibri::log' && msg.command === 'requestLog'))
             .subscribe(networkMsg => {
                 const socketClient = this.socketio.currentClients.find(c => c === networkMsg.origin);
 
+                if (networkMsg.origin) {
+                    networkMsg.origin.metadata['log::filter'] = JSON.parse(networkMsg.payload || '{}')?.filter || '';
+                }
+
                 if (socketClient) {
-                    for (const msg of this.logMessages) {
+                    const filter = socketClient.metadata['log::filter'] || '';
+
+                    // client can't handle too many messages at once
+                    let counter = 0;
+                    const clientLimit = 10000;
+
+                    for (const msg of this.logMessages.filter(msg => !filter || msg.metadata.clientApp === filter)) {
                         this.socketio.broadcast({
                             channel: 'colibri::log',
                             command: 'message',
                             payload: JSON.stringify(msg)
                         }, [ socketClient ]);
+
+                        if (++counter > clientLimit)
+                            break;
                     }
                 } else {
                     this.logError('Unkown origin requested log messages');
@@ -65,7 +70,7 @@ export class WebLog extends Service {
         while (this.logMessages.length > MAX_LOG_SIZE) {
             this.logMessages.shift();
         }
-
+        
         // search last few messages for identical messages, group them together
         let webMsg: WebMessage | undefined = undefined;
         for (let i = this.logMessages.length - 1; i >= 0 && i > this.logMessages.length - LOOKUP_COUNT && !webMsg; i--) {
@@ -95,7 +100,7 @@ export class WebLog extends Service {
 
         const clients = this.socketio.currentClients
             .filter(c => c.app === LOGGING_APP)
-            .filter(c => c.metadata['log::filter'] === undefined || c.metadata['log::filter'] === log.group);
+            .filter(c => !c.metadata['log::filter'] || c.metadata['log::filter'] === log.metadata.clientApp);
         this.socketio.broadcast({
             channel: 'colibri::log',
             command: 'message',

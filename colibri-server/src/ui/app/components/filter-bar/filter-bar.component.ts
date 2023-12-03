@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { LogMessage, LogService } from '../../services';
 import { Subscription } from 'rxjs';
 import { MatSelectChange } from '@angular/material/select';
@@ -10,10 +10,7 @@ import { MatSelectChange } from '@angular/material/select';
 })
 export class FilterBarComponent implements OnInit, OnDestroy {
     appNames: string[] = [];
-    selected: string | null = null;
-
-    @Output()
-    filterChanged = new EventEmitter<string | null>();
+    selected = '';
 
     private subscription!: Subscription;
 
@@ -22,6 +19,7 @@ export class FilterBarComponent implements OnInit, OnDestroy {
     ngOnInit(): void {
         this.log.messages.forEach(m => this.updateAppNames(m));
         this.subscription = this.log.messages$.subscribe(m => this.updateAppNames(m));
+        this.log.filter$.subscribe(f => this.selected = f);
     }
 
     private updateAppNames(m: LogMessage): void {
@@ -31,17 +29,10 @@ export class FilterBarComponent implements OnInit, OnDestroy {
                 this.appNames.push(app);
             }
         }
-
-        const hash = location.hash.substring(1);
-        if (this.appNames.indexOf(hash) >= 0) {
-            this.selected = hash;
-            this.filterChanged.next(hash);
-        }
     }
 
     onFilterChanged(e: MatSelectChange): void {
-        this.filterChanged.next(e.value);
-        location.hash = e.value ? e.value : undefined;
+        this.log.filter$.next(e.value);
     }
 
     ngOnDestroy(): void {
