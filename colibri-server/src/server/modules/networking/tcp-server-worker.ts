@@ -147,16 +147,26 @@ export class TCPServerWorker extends WorkerService {
         let buffer = Buffer.concat([client.leftOverBuffer, data]);
         const msgs: NetworkMessage[] = [];
 
+        const PACKET_HEADER_START = '\0\0\0';
+
+
         while (buffer.length > 0) {
-            if (buffer.subarray(0, 3).toString() !== '\0\0\0') {
+            if (buffer.length <= PACKET_HEADER_START.length) {
+                // incomplete packet, store leftovers
+                client.leftOverBuffer = buffer;
+                break;
+            }
+
+            if (buffer.subarray(0, 3).toString() !== PACKET_HEADER_START) {
                 // invalid packet?!
                 this.logError(`Invalid packet received from client ${client.id}, discarding buffer`, false);
                 client.leftOverBuffer = Buffer.alloc(0);
+                this.dumpToFile(buffer);
                 break;
             }
 
             const headerStart = 0;
-            const headerEnd = buffer.indexOf(0, headerStart + 4);
+            const headerEnd = buffer.indexOf('\0', headerStart + 4);
 
             if (headerEnd < 0) {
                 // incomplete packet, store leftovers
@@ -172,7 +182,7 @@ export class TCPServerWorker extends WorkerService {
 
             if (header === 'h') {
                 // handshake
-                const packetEnd = buffer.indexOf(0, headerEnd + 1);
+                const packetEnd = buffer.indexOf('\0', headerEnd + 1);
 
                 if (packetEnd < 0) {
                     // incomplete packet, store leftovers
@@ -206,7 +216,7 @@ export class TCPServerWorker extends WorkerService {
 
                 const packetEnd = headerEnd + 1 + packetLength;
                 
-                if (packetEnd > buffer.length) {
+                if (packetEnd >= buffer.length) {
                     // incomplete packet, store leftovers
                     client.leftOverBuffer = buffer;
                     break;
