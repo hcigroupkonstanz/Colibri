@@ -239,6 +239,12 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void UpdateAttribute(string name, JToken value)
         {
+            if (!_syncedAttributes.ContainsKey(name))
+            {
+                Debug.LogWarning($"Unable to sync attribute {name}");
+                return;
+            }    
+
             var attribute = _syncedAttributes[name];
             var oldValue = attribute.Getter(this as T);
 

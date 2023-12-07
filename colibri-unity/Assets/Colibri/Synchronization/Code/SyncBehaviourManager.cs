@@ -11,6 +11,7 @@ namespace HCIKonstanz.Colibri.Synchronization
     {
         public T Template;
 
+        private static SyncBehaviourManager<T> _instance; // currently only used to check for duplicate scripts
         private readonly List<T> _existingObjects = new List<T>();
         private bool _isCreatingObject;
 
@@ -39,6 +40,14 @@ namespace HCIKonstanz.Colibri.Synchronization
                 .TakeUntilDisable(this)
                 .Where(m => m is T)
                 .Subscribe(m => _existingObjects.Remove(m as T));
+
+            // Help developers debug potential Colibri issues
+            if (!Template)
+                Debug.LogWarning($"No template provided for Colibri manager '{GetType().Name}', unable to instantiate new objects!");
+
+            if (_instance != null)
+                Debug.LogWarning($"Warning: Multiple instances of '{GetType().Name}' detected. Please only use one manager for each synced model!");
+            _instance = this;
         }
 
         private void OnDestroy()
@@ -50,7 +59,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private void OnModelUpdate(JObject data)
         {
             var id = data["id"].Value<string>();
-            if (!_existingObjects.Any(t => t.Id == id))
+            if (!_existingObjects.Any(t => t.Id == id) && Template)
             {
                 _isCreatingObject = true;
                 var prevEnabled = Template.enabled;
