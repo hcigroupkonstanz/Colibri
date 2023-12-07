@@ -35,7 +35,6 @@
     "express": "^4.18.2",
     "flatbuffers": "^23.5.26",
     "lodash": "^4.17.21",
-    "perfect-scrollbar": "^1.5.5",
     "rxjs": "~7.8.1",
     "socket.io": "^4.6.2",
     "socket.io-client": "^4.6.2",

@@ -1,5 +1,4 @@
 import { Component, OnInit, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
-import PerfectScrollbar from 'perfect-scrollbar';
 import { LogMessage, LogService } from '../../services';
 
 @Component({
@@ -16,8 +15,6 @@ export class LogComponent implements OnInit, AfterViewChecked {
 
     ngOnInit() {
         this.scrollContainer.nativeElement.addEventListener('wheel', (ev: WheelEvent) => this.onScroll(ev.deltaY));
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const ps = new PerfectScrollbar(this.scrollContainer.nativeElement);
     }
 
     ngAfterViewChecked(): void {
