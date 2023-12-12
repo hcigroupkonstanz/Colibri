@@ -1,7 +1,5 @@
 import * as net from 'net';
 import * as _ from 'lodash';
-import * as fs from 'fs';
-import * as path from 'path';
 import { WorkerService } from '../core';
 import * as threads from 'worker_threads';
 import * as flatbuffers from 'flatbuffers';
@@ -161,7 +159,6 @@ export class TCPServerWorker extends WorkerService {
                 // invalid packet?!
                 this.logError(`Invalid packet received from client ${client.id}, discarding buffer`, false);
                 client.leftOverBuffer = Buffer.alloc(0);
-                this.dumpToFile(buffer);
                 break;
             }
 
@@ -197,7 +194,6 @@ export class TCPServerWorker extends WorkerService {
                     this.assignApp(client, app, name, Number(version));
                 } catch (err) {
                     this.logError(`Invalid handshake packet received from client ${client.id}`, false);
-                    this.dumpToFile(buffer);
                     if (err instanceof Error)
                         this.logError(err.stack || '', false);
                     else
@@ -209,7 +205,6 @@ export class TCPServerWorker extends WorkerService {
                 if (!Number.isFinite(packetLength)) {
                     this.logError(`Invalid header received from client ${client.id}, discarding buffer`, false);
                     this.logDebug(`Header: ${header}`);
-                    this.dumpToFile(buffer);
                     client.leftOverBuffer = Buffer.alloc(0);
                     break;
                 }
@@ -310,23 +305,6 @@ export class TCPServerWorker extends WorkerService {
         for (const client of this.waitingClients) {
             client.socket.write('\0\0\0h\0');
         }
-    }
-
-    private dumpToFile(buffer: Buffer): void {
-        // create directory
-        fs.mkdir('dump', (err) => {
-            if (err && err.code !== 'EEXIST') {
-                this.logError(`Failed to create dump directory: ${err.message}`, false);
-            } else {
-                // dump to file
-                const fileName = path.join('dump', `${Date.now()}.bin`);
-                fs.writeFile(fileName, buffer, (err) => {
-                    if (err) {
-                        this.logError(`Failed to write buffer to file ${fileName}: ${err.message}`, false);
-                    }
-                });
-            }
-        });
     }
 }
 
