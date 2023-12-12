@@ -177,8 +177,8 @@ namespace HCIKonstanz.Colibri.Networking
                     socket.BeginReceive(_receiveBuffer, _receiveBufferOffset, _receiveBuffer.Length - _receiveBufferOffset, SocketFlags.None, _receiveCallback, null);
                     await SendHandshake(VERSION, app, hostname);
                     Debug.Log("Connection to web server established");
-                    Status = ConnectionStatus.Connected;
                     LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                    Status = ConnectionStatus.Connected;
 
                     while (_msgQueue.Count > 0)
                     {
@@ -244,6 +244,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                 var processingOffset = 0;
                 var bufferEnd = _receiveBufferOffset + numReceived;
+                LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
 
                 while (processingOffset < bufferEnd)
                 {
@@ -254,10 +255,7 @@ namespace HCIKonstanz.Colibri.Networking
                             var header = GetPacketHeader(processingOffset);
 
                             if (header.IsHeartbeat)
-                            {
-                                LastHeartbeatTime = DateTimeOffset.Now.ToUnixTimeMilliseconds();
                                 processingOffset += header.PacketSize;
-                            }
                             else
                             {
                                 processingOffset = header.PacketStartOffset;
@@ -268,9 +266,7 @@ namespace HCIKonstanz.Colibri.Networking
                         {
                             Debug.LogWarning("Invalid packet received, skipping ahead!");
                             while (processingOffset < bufferEnd && !HasPacketHeader(processingOffset))
-                            {
                                 processingOffset++;
-                            }
 
                         }
                     }
