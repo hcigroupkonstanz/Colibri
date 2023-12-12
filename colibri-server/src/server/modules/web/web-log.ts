@@ -44,19 +44,17 @@ export class WebLog extends Service {
                     const filter = socketClient.metadata['log::filter'] || '';
 
                     // client can't handle too many messages at once
-                    let counter = 0;
                     const clientLimit = 10000;
 
-                    for (const msg of this.logMessages.filter(msg => !filter || msg.metadata.clientApp === filter)) {
-                        this.socketio.broadcast({
+                    this.logMessages
+                        .filter(msg => !filter || msg.metadata.clientApp === filter)
+                        .slice(-clientLimit)
+                        .map(msg => ({
                             channel: 'colibri::log',
                             command: 'message',
                             payload: JSON.stringify(msg)
-                        }, [ socketClient ]);
-
-                        if (++counter > clientLimit)
-                            break;
-                    }
+                        }))
+                        .forEach(msg => this.socketio.broadcast(msg, [ socketClient ]));
                 } else {
                     this.logError('Unkown origin requested log messages');
                 }
