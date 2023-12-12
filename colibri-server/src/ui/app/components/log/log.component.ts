@@ -48,8 +48,4 @@ export class LogComponent implements OnInit, AfterViewChecked {
         this.manualScroll = false;
         this.scrollToBottom();
     }
-
-    getMessages(): LogMessage[] {
-        return this.log.messages;
-    }
 }

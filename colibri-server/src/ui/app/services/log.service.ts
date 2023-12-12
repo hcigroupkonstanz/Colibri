@@ -17,7 +17,7 @@ export interface LogMessage {
     providedIn: 'root'
 })
 export class LogService {
-    public readonly messages: LogMessage[] = [];
+    public messages: ReadonlyArray<LogMessage> = [];
     public readonly messages$ = new Subject<LogMessage>();
     public readonly filter$ = new BehaviorSubject<string>('');
 
@@ -29,9 +29,8 @@ export class LogService {
             .listen('colibri::log')
             .subscribe((m: LogMessage) => {
                 while (this.messages.length > 10000) {
-                    const rm = this.messages.shift();
-                    if (rm)
-                        delete this.messageIds[rm.id];
+                    delete this.messageIds[this.messages[0].id];
+                    this.messages = this.messages.slice(1);
                 }
 
                 if (this.messageIds[m.id]) {
@@ -39,13 +38,15 @@ export class LogService {
                     const existing = this.messageIds[m.id];
                     existing.count = m.count;
                     existing.created = m.created;
+
                     // put it to the end of the list
-                    this.messages.splice(this.messages.indexOf(existing), 1);
-                    this.messages.push(existing);
+                    const index = this.messages.indexOf(existing);
+                    this.messages = [ ...this.messages.slice(0, index), ...this.messages.slice(index + 1), existing];
+
                     this.messages$.next(existing);
                 } else {
                     // create new entry
-                    this.messages.push(m);
+                    this.messages = [ ...this.messages, m ];
                     this.messages$.next(m);
                     this.messageIds[m.id] = m;
                 }
@@ -56,13 +57,11 @@ export class LogService {
         this.filter$.next(location.hash.substring(1));
 
         this.filter$.subscribe(filter => {
-            console.log('requesting log messages for filter', filter);
             socketio.emit('colibri::log', 'requestLog', { filter });
             location.hash = filter;
 
             // reload messages
-            while (this.messages.length > 0)
-                this.messages.shift();
+            this.messages = [];
             this.messageIds = {};
         });
     }
