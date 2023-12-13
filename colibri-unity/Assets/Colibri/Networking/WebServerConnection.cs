@@ -2,6 +2,7 @@
 using Google.FlatBuffers;
 using HCIKonstanz.Colibri.Core;
 using HCIKonstanz.Colibri.Setup;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -480,7 +481,7 @@ namespace HCIKonstanz.Colibri.Networking
                 var fbCommand = builder.CreateString(command);
                 // TODO: replace this with dictionary to avoid JSON serialization
                 //       see: https://flatbuffers.dev/flatbuffers_guide_use_c-sharp.html#autotoc_md93
-                var fbPayload = builder.CreateString(payload?.ToString());
+                var fbPayload = builder.CreateString(payload?.ToString(Formatting.None));
 
                 Message.StartMessage(builder);
                 Message.AddChannel(builder, fbChannel);

@@ -138,7 +138,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     _hasReceivedUpdate.Add(attribute.Key, false);
 
                 this.ObserveEveryValueChanged(_ => attribute.Value.Getter(this as T))
-                    .TakeUntilDisable(this)
+                    .TakeUntilDestroy(this)
                     .Where(_ => _hasReceivedFirstUpdate)
                     .Subscribe(_ => AddUpdate(attribute.Key, attribute.Value.Getter(this as T)));
             }
@@ -149,13 +149,6 @@ namespace HCIKonstanz.Colibri.Synchronization
             _modelCreateSubject.OnNext(this);
         }
 
-        protected virtual void OnDisable()
-        {
-            Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
-            Sync.RemoveModelDeleteListener(Channel, OnModelDelete);
-            _hasReceivedUpdate.Clear();
-        }
-
         protected virtual void OnApplicationQuit()
         {
             _isQuitting = true;
@@ -163,6 +156,10 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         protected virtual void OnDestroy()
         {
+            Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
+            Sync.RemoveModelDeleteListener(Channel, OnModelDelete);
+            _hasReceivedUpdate.Clear();
+
             _modelDestroySubject.OnNext(this);
             if (_isQuitting || _hasReceivedDestroyCommand)
                 return;
@@ -286,7 +283,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 Debug.LogError($"Unable to update attribute {name}: Unsupported type {attribute.PropertyType}");
 
             var newValue = attribute.Getter(this as T);
-            _hasReceivedUpdate[name] = !newValue.Equals(oldValue);
+            if (newValue != null)
+                _hasReceivedUpdate[name] = !newValue.Equals(oldValue);
+            else
+                _hasReceivedUpdate[name] = newValue != oldValue;
         }
     }
 }

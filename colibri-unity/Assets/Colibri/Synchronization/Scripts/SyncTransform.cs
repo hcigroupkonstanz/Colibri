@@ -1,7 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using HCIKonstanz.Colibri.Synchronization;
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
