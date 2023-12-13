@@ -39,7 +39,6 @@ namespace HCIKonstanz.Colibri.Synchronization
                 {
                     _existingObjects.Add(m as T);
                     m.TriggerSync();
-                    m.SetReady();
                 });
 
             SyncBehaviour<T>.ModelDestroyed()

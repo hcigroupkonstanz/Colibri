@@ -211,7 +211,7 @@ export class TCPServerWorker extends WorkerService {
 
                 const packetEnd = headerEnd + 1 + packetLength;
                 
-                if (packetEnd >= buffer.length) {
+                if (packetEnd > buffer.length) {
                     // incomplete packet, store leftovers
                     client.leftOverBuffer = buffer;
                     break;

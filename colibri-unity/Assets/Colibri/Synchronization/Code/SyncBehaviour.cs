@@ -200,11 +200,6 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        public void SetReady()
-        {
-            _isReady.TrySetResult(true);
-        }
-
         public async void TriggerSync()
         {
             await _isReady.Task;
