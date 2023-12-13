@@ -109,7 +109,10 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         public string Id;
-        private string Channel;
+
+        public string ModelId = "";
+        private readonly string ChannelPrefix = typeof(T).Name.ToLower();
+        private string Channel { get => ChannelPrefix + (String.IsNullOrEmpty(ModelId) ? "" : $"_{ModelId}"); }
 
         private readonly Dictionary<string, bool> _hasReceivedUpdate = new Dictionary<string, bool>();
 
@@ -125,13 +128,11 @@ namespace HCIKonstanz.Colibri.Synchronization
         protected virtual void Awake()
         {
             Initialize();
-            Channel = typeof(T).Name.ToLower();
 
             var isPrefab = gameObject.scene == null;
             if (!isPrefab && String.IsNullOrEmpty(Id))
                 Id = Guid.NewGuid().ToString();
-
-
+            
             foreach (var attribute in _syncedAttributes)
             {
                 if (!_hasReceivedUpdate.ContainsKey(attribute.Key))
@@ -147,6 +148,20 @@ namespace HCIKonstanz.Colibri.Synchronization
             Sync.AddModelDeleteListener(Channel, OnModelDelete);
 
             _modelCreateSubject.OnNext(this);
+
+            // check if the scene contains a matching manager
+            var managers = FindObjectsOfType<SyncBehaviourManager<T>>();
+            var hasManager = FindObjectsOfType<SyncBehaviourManager<T>>()
+                .Where(m => m.Template?.ModelId == ModelId || (String.IsNullOrEmpty(m.Template?.ModelId) && String.IsNullOrEmpty(ModelId)))
+                .Any();
+
+            if (!hasManager)
+            {
+                if (String.IsNullOrEmpty(ModelId))
+                    Debug.LogWarning("No generic Colibri SyncManager found (without ModelId) - synchronization of newly created objects may be restricted");
+                else 
+                    Debug.LogWarning($"No Colibri SyncManager found (ModelID '{ModelId}') - synchronization of newly created objects may be restricted");
+            }
         }
 
         protected virtual void OnApplicationQuit()
@@ -183,6 +198,11 @@ namespace HCIKonstanz.Colibri.Synchronization
 
                 _isReady.TrySetResult(true);
             }
+        }
+
+        public void SetReady()
+        {
+            _isReady.TrySetResult(true);
         }
 
         public async void TriggerSync()

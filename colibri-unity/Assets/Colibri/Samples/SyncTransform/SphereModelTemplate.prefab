@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 6361972312385073351}
   - component: {fileID: -557085158990230267}
   m_Layer: 0
-  m_Name: ModelTemplate
+  m_Name: SphereModelTemplate
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -119,6 +119,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Id: 
+  ModelId: sphere
   SyncPosition: 1
   SyncRotation: 1
   SyncScale: 1

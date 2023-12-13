@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UniRx;
@@ -9,31 +10,36 @@ namespace HCIKonstanz.Colibri.Synchronization
     public abstract class SyncBehaviourManager<T> : MonoBehaviour
         where T : SyncBehaviour<T>
     {
+        private readonly string ChannelPrefix = typeof(T).Name.ToLower();
+        private string Channel { get => ChannelPrefix + (String.IsNullOrEmpty(Template?.ModelId) ? "" : $"_{Template.ModelId}"); }
+
         public T Template;
 
-        private static SyncBehaviourManager<T> _instance; // currently only used to check for duplicate scripts
         private readonly List<T> _existingObjects = new List<T>();
         private bool _isCreatingObject;
 
         private void Start()
         {
-            var Channel = typeof(T).Name.ToLower();
-            var existingBehaviours = FindObjectsOfType<T>();
+            var existingBehaviours = FindObjectsOfType<T>()
+                .Where(o => o.ModelId == Template?.ModelId);
             _existingObjects.AddRange(existingBehaviours);
 
             foreach (var existingBehaviour in existingBehaviours)
                 existingBehaviour.TriggerSync();
 
             Sync.AddModelUpdateListener(Channel, OnModelUpdate);
+
+            // Listen for newly instantiated objects and propagate initial state
             SyncBehaviour<T>.ModelCreated()
                 .TakeUntilDisable(this)
-                .Where(m => m is T)
+                .Where(m => m is T && m.ModelId == Template?.ModelId)
                 .Where(_ => !_isCreatingObject)
                 .Where(m => !_existingObjects.Any(e => e.Id == m.Id))
                 .Subscribe(m =>
                 {
                     _existingObjects.Add(m as T);
                     m.TriggerSync();
+                    m.SetReady();
                 });
 
             SyncBehaviour<T>.ModelDestroyed()
@@ -43,16 +49,17 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             // Help developers debug potential Colibri issues
             if (!Template)
-                Debug.LogWarning($"No template provided for Colibri manager '{GetType().Name}', unable to instantiate new objects!");
+                Debug.LogWarning($"No template provided for Colibri manager '{GetType().FullName}' { (String.IsNullOrEmpty(Template?.ModelId) ? "" : $"(ModelID: {Template?.ModelId})") }, unable to instantiate new objects!");
 
-            if (_instance != null)
-                Debug.LogWarning($"Warning: Multiple instances of '{GetType().Name}' detected. Please only use one manager for each synced model!");
-            _instance = this;
+            // Avoid potential ModelId overlaps
+            var hasConflict = FindObjectsOfType(GetType())
+                .Where(o => o != this)
+                .Any(o => (o as SyncBehaviourManager<T>)?.Template?.ModelId == Template?.ModelId);
+            if (hasConflict)
+                Debug.LogWarning($"Warning: Multiple instances of '{GetType().FullName}' detected with overlapping ModelID. Please only use one manager for each synced model or specify unique ModelID!");
         }
-
         private void OnDestroy()
         {
-            var Channel = typeof(T).Name;
             Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
         }
 

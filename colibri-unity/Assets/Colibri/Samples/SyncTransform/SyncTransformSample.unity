@@ -250,6 +250,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Id: 51694901-26fa-4c85-9671-d29fd383498a
+  ModelId: 
   SyncPosition: 0
   SyncRotation: 1
   SyncScale: 0
@@ -341,6 +342,90 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &704695167
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 3302658182534836790, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: Channel
+      value: synctransform_CUBE
+      objectReference: {fileID: 0}
+    - target: {fileID: 3302658182534836790, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: ModelId
+      value: cube
+      objectReference: {fileID: 0}
+    - target: {fileID: 3302658182534836790, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: Template
+      value: 
+      objectReference: {fileID: 9050739345413739037, guid: 92152ea4cb448e043b83a351dd34c163,
+        type: 3}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6831791179536983359, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6852849573881999189, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
+      propertyPath: m_Name
+      value: '[SyncTransformManager] (Cube)'
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 7c55c70c327f62a4baf393e716b5459f, type: 3}
 --- !u!1 &1205916108
 GameObject:
   m_ObjectHideFlags: 0
@@ -460,6 +545,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Id: fed32fd4-39a2-49cd-bc75-630260feeffe
+  ModelId: 
   SyncPosition: 0
   SyncRotation: 0
   SyncScale: 1
@@ -648,6 +734,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Id: 2b129dfa-3dc3-414b-9dd7-25c8500bc210
+  ModelId: 
   SyncPosition: 1
   SyncRotation: 0
   SyncScale: 0
@@ -778,6 +865,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Id: c72a4318-1774-472f-9ac1-88a3d787bd56
+  ModelId: 
   SyncPosition: 1
   SyncRotation: 1
   SyncScale: 1
@@ -879,6 +967,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 3302658182534836790, guid: 7c55c70c327f62a4baf393e716b5459f,
         type: 3}
+      propertyPath: ModelId
+      value: sphere
+      objectReference: {fileID: 0}
+    - target: {fileID: 3302658182534836790, guid: 7c55c70c327f62a4baf393e716b5459f,
+        type: 3}
       propertyPath: Template
       value: 
       objectReference: {fileID: -557085158990230267, guid: 79e1387a9b1c2b74097a4b5938efa148,
@@ -936,7 +1029,7 @@ PrefabInstance:
     - target: {fileID: 6852849573881999189, guid: 7c55c70c327f62a4baf393e716b5459f,
         type: 3}
       propertyPath: m_Name
-      value: '[SyncTransformManager]'
+      value: '[SyncTransformManager] (Sphere)'
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -954,3 +1047,4 @@ SceneRoots:
   - {fileID: 1205916112}
   - {fileID: 236563274}
   - {fileID: 5581848539259611980}
+  - {fileID: 704695167}
