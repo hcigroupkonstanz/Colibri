@@ -1,6 +1,4 @@
 @import '../../../sass/nord.scss';
-// $meta-width: 250px;
-$meta-width: 0px;
 
 .msg-container {
     border-radius: 0px;
@@ -14,6 +12,28 @@ $meta-width: 0px;
     }
 }
 
+.new-day-line {
+    width: 100%;
+    text-align: center;
+    color: $nord9;
+    margin: 10px 0px;
+    
+    display: grid;
+    grid-template-columns: [left] 1fr [center] auto [right] 1fr;
+
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    align-content: stretch;
+
+    .line {
+        width: calc(50% - 10rem);
+        height: 1px;
+        background: $nord3;
+    }
+}
+
 pre, code {
     margin: 0;
     font-family: 'Fira Mono', monospace;
@@ -22,7 +42,7 @@ pre, code {
 }
 
 .log-message {
-    width: calc(100% - #{$meta-width});
+    width: 100%;
     display: inline-block;
     word-break: break-all;
 }
@@ -40,23 +60,6 @@ pre, code {
 }
 .level-3 {
     color: $nord7;
-}
-
-.meta-info {
-    width: calc(#{$meta-width} - 10px);
-    display: inline-block;
-    text-align: right;
-    padding-right: 10px;
-    user-select: none;
-    color: $nord4;
-
-    > div {
-        display: flex;
-        flex-direction: row;
-        align-items: flex-end;
-        justify-content: flex-end;
-
-    }
 }
 
 .mat-chip {

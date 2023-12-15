@@ -48,4 +48,13 @@ export class LogComponent implements OnInit, AfterViewChecked {
         this.manualScroll = false;
         this.scrollToBottom();
     }
+
+    isNewDay(index: number): boolean {
+        if (index === 0) 
+            return true;
+
+        const currentDay = new Date(this.log.messages[index].created);
+        const previousDay = new Date(this.log.messages[index - 1].created);
+        return currentDay.getDate() !== previousDay.getDate();
+    }
 }

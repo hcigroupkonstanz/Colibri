@@ -7,8 +7,8 @@ import { LogMessage } from '../../services';
     styleUrls: ['./log-message.component.scss']
 })
 export class LogMessageComponent {
-
     @Input() public log!: LogMessage;
+    @Input() public isNewDay = false;
 
     constructor() { }
 }
