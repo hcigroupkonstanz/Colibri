@@ -9,15 +9,12 @@ Provides easy model synchronization and easy access to data for faster cross rea
 Clients
 
 - [Unity](colibri-unity/)
-- [Javascript](colibri-web/)
+- [JavaScript](colibri-web/)
 
 Server
 
 - [NodeJS](colibri-server/)
-
 - [Docker](https://hub.docker.com/r/hcikn/colibri)
-
-  
 
 ## Features
 

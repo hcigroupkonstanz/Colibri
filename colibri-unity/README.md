@@ -96,13 +96,13 @@ Limitations:
 
 ### SyncTransform
 
-For synchronizing the location of an object, Colibri provides a `SyncTransform` script. Simply attach the script to an object, and its position, rotation, and scale will be synchronized between all clients. See SyncTransform samples for more information.
+For synchronizing the location of an object, Colibri provides a `SyncTransform` script. Simply attach the script to an object, and its active state, position, rotation, and scale will be synchronized between all clients. Set `UseLocalTransform` to `true` to synchronize the local coordinates of the object. See SyncTransform samples for more information.
 
 Information about the object's state is stored on the server. When a new client connects, the location is automatically updated to its current state.
 
 `SyncTransform` also supports physics. `PhysicsAuthority` defines which client is currently controlling the physics. Only one client can control the physics of an object at a time. If the `PhysicsAuthority` is set to `true` on one client it is automatically set to `false` on all other clients. If the `PhysicsAuthority` is checked by default, the first client receives the physics authority. The `isKinematic` field of the attached `Rigidbody` will be overwritten by the `isKinematic` field of the `SyncTransform`. Therefore, if you want to change this field, always (additionally) set the `isKinematic` field of the `SyncTransform`.
 
-For dynamically created objects, add the `[SyncTransformManager]` prefab to the scene and add the prefab of the objects you'll instantiate to the `Template` attribute. When a client instantiates a script with `SyncTransform`, the Manager will automatically create an object using this prefab and synchronize its position.
+For dynamically created objects, add a `[SyncTransformManager]` prefab to the scene. Create a prefab of the the object you'll dynamically instantiate and add it to the `Template` attribute. Set the `ModelId` (of the `SyncTransform`) of the prefab to a custom value that identifies the prefab. When a client instantiates an object with `SyncTransform` and the same `ModelId`, the Manager will automatically create an object using this prefab and synchronize it.
 
 <img src="img/synctransformmanager.png" width=400/>
 
