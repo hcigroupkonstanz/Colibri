@@ -5,12 +5,20 @@ namespace HCIKonstanz.Colibri.Synchronization
     public abstract class GenericSyncTransform<T> : SyncBehaviour<T> where T : SyncBehaviour<T>
     {
         [Sync]
-        protected bool Active
+        public bool Active
         {
-            get => gameObject.activeSelf;
-            set => gameObject.SetActive(value);
+            get
+            {
+                if (SyncActive) return gameObject.activeSelf;
+                return true;
+            }
+            set
+            {
+                if (SyncActive) gameObject.SetActive(value);
+            }
         }
 
+        public bool SyncActive = true;
         [Sync]
         public Vector3 Position
         {
