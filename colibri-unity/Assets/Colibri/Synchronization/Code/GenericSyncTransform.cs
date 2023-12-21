@@ -19,17 +19,26 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         public bool SyncActive = true;
+
         [Sync]
         public Vector3 Position
         {
             get
             {
-                if (SyncPosition) return transform.position;
+                if (SyncPosition)
+                {
+                    if (UseLocalTransform) return transform.localPosition;
+                    return transform.position;
+                }
                 return Vector3.zero;
             }
             set
             {
-                if (SyncPosition) transform.position = value;
+                if (SyncPosition)
+                {
+                    if (UseLocalTransform) { transform.localPosition = value; }
+                    else { transform.position = value; }
+                }
             }
         }
 
@@ -40,12 +49,20 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             get
             {
-                if (SyncRotation) return transform.rotation;
+                if (SyncRotation)
+                {
+                    if (UseLocalTransform) return transform.localRotation;
+                    return transform.rotation;
+                }
                 return Quaternion.identity;
             }
             set
             {
-                if (SyncRotation) transform.rotation = value;
+                if (SyncRotation)
+                {
+                    if (UseLocalTransform) { transform.localRotation = value; }
+                    else { transform.rotation = value; }
+                }
             }
         }
 
@@ -66,6 +83,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         public bool SyncScale = true;
+
+        public bool UseLocalTransform = false;
 
 
         private string clientPhysicsId = System.Guid.NewGuid().ToString();
