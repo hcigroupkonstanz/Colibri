@@ -120,6 +120,7 @@ namespace HCIKonstanz.Colibri.Setup
             Config.ServerAddress = EditorGUILayout.TextField("Server Address: ", Config.ServerAddress);
             GUILayout.Space(16);
             GUILayout.Label("Optional Config (only modify if you know what you are doing!)", new GUIStyle(EditorStyles.helpBox));
+            Config.IsSSL = EditorGUILayout.Toggle("Server supports SSL/TLS?", Config.IsSSL);
             Config.WebServerPort = EditorGUILayout.IntField("Web server Port: ", Config.WebServerPort);
             Config.TcpServerPort = EditorGUILayout.IntField("TCP server Port: ", Config.TcpServerPort);
             Config.VoiceServerPort = EditorGUILayout.IntField("Voice server Port: ", Config.VoiceServerPort);

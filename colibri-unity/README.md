@@ -31,9 +31,13 @@ Upon installation, a configuration window should show up:
 
 #### Advanced Configuration
 
-> **Note:** Do not modify port numbers unless you know what you are doing!
+If your server is running a non-default configuration, the advanced configuration allows you modify server ports.
+Do not modify port numbers unless you know what you are doing!
 
-If your server is running a non-default configuration, the advanced configuration allows you modify server ports.  
+Additionally, when using the REST API, the `UnityWebRequest` does not allow Non-Https calls.
+All requests are sent by default using `https`. Disable the toggle and `http` will be used for all request.
+Make sure to allow Non-Https calls in the Project Settings!
+
 Default values:
 
 - Web: `9011`
