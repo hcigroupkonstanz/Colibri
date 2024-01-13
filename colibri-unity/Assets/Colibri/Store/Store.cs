@@ -10,7 +10,7 @@ namespace HCIKonstanz.Colibri.Store
     {
         public static async Task<T> Get<T>(string objectName)
         {
-            var url = $"http://{ColibriConfig.Load().ServerAddress}:9011/api/store/{ColibriConfig.Load().AppName}/{objectName}";
+            var url = $"http://{ColibriConfig.Load().ServerAddress}:{ColibriConfig.Load().WebServerPort}/api/store/{ColibriConfig.Load().AppName}/{objectName}";
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
                 try
@@ -34,7 +34,7 @@ namespace HCIKonstanz.Colibri.Store
         public static async Task<bool> Put(string objectName, object putObject)
         {
             string jsonData = JsonUtility.ToJson(putObject);
-            var url = $"http://{ColibriConfig.Load().ServerAddress}:9011/api/store/{ColibriConfig.Load().AppName}/{objectName}";
+            var url = $"http://{ColibriConfig.Load().ServerAddress}:{ColibriConfig.Load().WebServerPort}/api/store/{ColibriConfig.Load().AppName}/{objectName}";
             using (UnityWebRequest request = UnityWebRequest.Put(url, jsonData))
             {
                 try
@@ -58,7 +58,7 @@ namespace HCIKonstanz.Colibri.Store
 
         public static async Task<bool> Delete(string objectName)
         {
-            var url = $"http://{ColibriConfig.Load().ServerAddress}:9011/api/store/{ColibriConfig.Load().AppName}/{objectName}";
+            var url = $"http://{ColibriConfig.Load().ServerAddress}:{ColibriConfig.Load().WebServerPort}/api/store/{ColibriConfig.Load().AppName}/{objectName}";
             using (UnityWebRequest request = UnityWebRequest.Delete(url))
             {
                 try

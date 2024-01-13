@@ -20,7 +20,6 @@ namespace HCIKonstanz.Colibri.Networking
     [DefaultExecutionOrder(-100)]
     public class WebServerConnection : SingletonBehaviour<WebServerConnection>
     {
-        const int UNITY_SERVER_PORT = 9012;
         const int BUFFER_SIZE = 10 * 1024 * 1024;
         const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
         const int SOCKET_TIMEOUT_MS = 500;
@@ -174,7 +173,7 @@ namespace HCIKonstanz.Colibri.Networking
                     _receiveBufferOffset = 0;
                     _expectedPacketSize = -1;
 
-                    socket.Connect(ip, UNITY_SERVER_PORT);
+                    socket.Connect(ip, ColibriConfig.Load().TcpServerPort);
                     socket.BeginReceive(_receiveBuffer, _receiveBufferOffset, _receiveBuffer.Length - _receiveBufferOffset, SocketFlags.None, _receiveCallback, null);
                     await SendHandshake(VERSION, app, hostname);
                     Debug.Log("Connection to web server established");

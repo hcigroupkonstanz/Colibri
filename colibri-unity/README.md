@@ -18,36 +18,41 @@ Add the following Git URLs to the Unity Package Manager:
 
 Download the latest release from GitHub and import it to your Unity project.
 
-
-
 ### Configuration
 
 Upon installation, a configuration window should show up:
 
-<img src="img/config.png" width=400/>
+<img src="img/config.png" alt="Config Screen" width=400/>
 
 - Enter the URL of your (shared) [server](../colibri-server). A public test server can be found at `colibri.hci.uni-konstanz.de` (beware of network latency!)
 - Choose a unique *app name*. Though a server supports multiple clients, data is only synchronized between clients with identical *app names*!
 - To adjust the Colibri Configuration you can reopen the window in Unity under "Window" -> "Colibri Configuration" 
 - All changes are saved to `Resources/ColibriConfig`
 
+#### Advanced Configuration
+
+> **Note:** Do not modify port numbers unless you know what you are doing!
+
+If your server is running a non-default configuration, the advanced configuration allows you modify server ports.  
+Default values:
+
+- Web: `9011`
+- TCP: `9012`
+- Voice: `9013`
+
 ## Samples
 
 Samples can be found in the `Colibri/Samples` folder (when installed via UnityPackage) or imported through the Package Manager in the `Samples` tab (when installed via UPM).
-
-
 
 ## Documentation
 
 ### Web Interface for Logging
 
-<img src="img/weblogger.png" width=400/>
+<img src="img/weblogger.png" alt="WebLogger" width=400/>
 
 Colibri provides a *web logger* with web interface to send diagnostic data (currently: console logs) to the server. This may be useful for devices (e.g., VR devices, smartphones) where access to the console is not easily available.
 
 To setup, add the `[RemoteLogger]` prefab to your scene (or the `RemoteLogging` script to the scene). The Unity log output should be redirect to your server's webinterface, which can be accessed via `http://<your-server-ip>:9011`.
-
-
 
 ### Sending Data between Clients
 
@@ -104,14 +109,12 @@ Information about the object's state is stored on the server. When a new client 
 
 For dynamically created objects, add a `[SyncTransformManager]` prefab to the scene. Create a prefab of the the object you'll dynamically instantiate and add it to the `Template` attribute. Set the `ModelId` (of the `SyncTransform`) of the prefab to a custom value that identifies the prefab. When a client instantiates an object with `SyncTransform` and the same `ModelId`, the Manager will automatically create an object using this prefab and synchronize it.
 
-<img src="img/synctransformmanager.png" width=400/>
+<img src="img/synctransformmanager.png" alt="SyncTransformManager" width=400/>
 
 Limitations:
 
 - Only one client can update the each attribute of the object simultaneously
 - Scene will be reset once all clients disconnect
-
-
 
 ### Remote Store
 
@@ -144,10 +147,9 @@ else
 ```
 
 Limitations:
+
 - Data fetching happens manually (data won’t be automatically updated!)
 - If you want to synchronize custom classes, use the built-in `[Serializable]` attribute on your class
-
-
 
 ### SyncBehaviour
 
@@ -185,14 +187,12 @@ The manager should be added to your scene (e.g., on an empty GameObject), and th
 By the way: `SyncTransform` is also a `SyncBehaviour`.
 
 Limitations:
+
 - Only one client can update each attribute of the object simultaneously
 - Scene will be reset once all clients disconnect
-
-
 
 ### Voice Transmission
 
 Work in progress
 
-See `Samples/VoiceTransmission` 
-
+See `Samples/VoiceTransmission`

@@ -14,7 +14,10 @@ namespace HCIKonstanz.Colibri.Setup
             return _instance;
         }
 
-        public string ServerAddress = "colibri.hci.uni-konstanz.de";
         public string AppName = "";
+        public string ServerAddress = "colibri.hci.uni-konstanz.de";
+        public int WebServerPort = 9011;
+        public int TcpServerPort = 9012;
+        public int VoiceServerPort = 9013;
     }
 }
