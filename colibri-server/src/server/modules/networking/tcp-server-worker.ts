@@ -65,7 +65,7 @@ export class TCPServerWorker extends WorkerService {
         );
         this.server.listen(port, host);
 
-        this.logInfo(`Starting Colibri TCP server on *:${port}`);
+        this.logInfo(`Starting Colibri TCP server on ${host}:${port}`);
         this.heartbeatInterval = setInterval(() => this.handleHeartbeat(), 100);
     }
 
