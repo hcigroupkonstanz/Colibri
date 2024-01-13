@@ -28,6 +28,7 @@ console.log('ENV: %o', process.env);
  *    Servers
  */
 const webServer = new colibri.WebServer(
+    Config.WEBSERVER_HOST,
     Config.WEBSERVER_PORT,
     Config.WEBSERVER_ROOT,
     Config.BASE_URL
@@ -62,8 +63,8 @@ const startup = async () => {
 
     const httpServer = webServer.start();
     socketioServer.start(httpServer);
-    tcpServer.start(Config.TCP_PORT);
-    voiceServer.start(Config.VOICE_PORT);
+    tcpServer.start(Config.TCP_PORT, Config.TCP_HOST);
+    voiceServer.start(Config.VOICE_PORT, Config.VOICE_HOST);
 };
 
 startup();

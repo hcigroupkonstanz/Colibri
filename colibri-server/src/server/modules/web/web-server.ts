@@ -7,18 +7,26 @@ import * as cors from 'cors';
 import { Service } from '../core';
 
 export class WebServer extends Service {
-
-    public get serviceName(): string { return 'WebServer'; }
-    public get groupName(): string { return 'web'; }
+    public get serviceName(): string {
+        return 'WebServer';
+    }
+    public get groupName(): string {
+        return 'web';
+    }
 
     private app: express.Application;
     private server!: http.Server;
     private isRunning = false;
 
-    public constructor(private webPort: number, private webRoot: string, private baseUrl: string) {
+    public constructor(
+        private hostname: string,
+        private webPort: number,
+        private webRoot: string,
+        private baseUrl: string
+    ) {
         super();
 
-        console.log(`Web server listening on 0.0.0.0:${this.webPort}`);
+        console.log(`Web server listening on ${this.hostname}:${this.webPort}`);
 
         this.app = express();
         this.app.set('port', this.webPort);
@@ -46,8 +54,10 @@ export class WebServer extends Service {
 
         // start server
         this.server = http.createServer(this.app);
-        this.server.listen(this.webPort, () => {
-            this.logInfo(`Web server listening on 0.0.0.0:${this.webPort}`);
+        this.server.listen(this.webPort, this.hostname, () => {
+            this.logInfo(
+                `Web server listening on ${this.hostname}:${this.webPort}`
+            );
         });
 
         return this.server;
@@ -60,7 +70,10 @@ export class WebServer extends Service {
         }
     }
 
-    public addRoute(url: string, requestHandler: express.RequestHandler | express.Router): void {
+    public addRoute(
+        url: string,
+        requestHandler: express.RequestHandler | express.Router
+    ): void {
         if (this.isRunning) {
             this.logError(`Could not add route ${url}: Server already running`);
         } else {
@@ -68,8 +81,13 @@ export class WebServer extends Service {
         }
     }
 
-    public addApi(url: string, requestHandler: express.RequestHandler | express.Router): void {
-        this.addRoute(path.join('/api/', url).replace(/\\/g, '/'), requestHandler);
+    public addApi(
+        url: string,
+        requestHandler: express.RequestHandler | express.Router
+    ): void {
+        this.addRoute(
+            path.join('/api/', url).replace(/\\/g, '/'),
+            requestHandler
+        );
     }
-
 }

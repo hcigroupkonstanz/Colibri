@@ -33,10 +33,13 @@ export class TCPServerWorker extends WorkerService {
     public constructor() {
         super(true);
 
-        this.parentMessages$.subscribe(msg => {
+        this.parentMessages$.subscribe((msg) => {
             switch (msg.channel) {
                 case 'm:start':
-                    this.start(msg.content.port as number);
+                    this.start(
+                        msg.content.port as number,
+                        msg.content.host as string
+                    );
                     break;
 
                 case 'm:stop':
@@ -46,7 +49,7 @@ export class TCPServerWorker extends WorkerService {
                 case 'm:broadcast': {
                     const ids = msg.content.clients as string[];
                     const clients = ids
-                        .map(id => this.clients.find(c => c.id === id))
+                        .map((id) => this.clients.find((c) => c.id === id))
                         .filter((c): c is TcpClient => !!c);
 
                     this.broadcast(msg.content.msg as NetworkMessage, clients);
@@ -56,9 +59,11 @@ export class TCPServerWorker extends WorkerService {
         });
     }
 
-    public start(port: number): void {
-        this.server = net.createServer((socket) => this.handleConnection(socket));
-        this.server.listen(port);
+    public start(port: number, host: string): void {
+        this.server = net.createServer((socket) =>
+            this.handleConnection(socket)
+        );
+        this.server.listen(port, host);
 
         this.logInfo(`Starting Colibri TCP server on *:${port}`);
         this.heartbeatInterval = setInterval(() => this.handleHeartbeat(), 100);
@@ -69,9 +74,10 @@ export class TCPServerWorker extends WorkerService {
         clearInterval(this.heartbeatInterval);
     }
 
-
-
-    public broadcast(msg: NetworkMessage, clients: ReadonlyArray<TcpClient>): void {
+    public broadcast(
+        msg: NetworkMessage,
+        clients: ReadonlyArray<TcpClient>
+    ): void {
         if (clients.length === 0) {
             return;
         }
@@ -92,10 +98,14 @@ export class TCPServerWorker extends WorkerService {
 
         const msgBytes = builder.asUint8Array();
         // FIXME: we don't want to deal with big/little endian, so we just use utf8 encoding for packet length
-        const packetHeader = new TextEncoder().encode(`\0\0\0${msgBytes.length.toString()}\0`);
+        const packetHeader = new TextEncoder().encode(
+            `\0\0\0${msgBytes.length.toString()}\0`
+        );
 
         // TODO:  could probably be more efficient!
-        const mergedPacket = new Uint8Array(packetHeader.length + msgBytes.length);
+        const mergedPacket = new Uint8Array(
+            packetHeader.length + msgBytes.length
+        );
         mergedPacket.set(packetHeader);
         mergedPacket.set(msgBytes, packetHeader.length);
 
@@ -105,16 +115,19 @@ export class TCPServerWorker extends WorkerService {
             const tcpClient = client;
             tcpClient.socket.write(mergedPacket, (err) => {
                 if (err) {
-                    this.logWarning(`Failed to send message to client ${client.id}: ${err.message} `);
+                    this.logWarning(
+                        `Failed to send message to client ${client.id}: ${err.message} `
+                    );
                 }
             });
         }
-
     }
 
     private handleConnection(socket: net.Socket): void {
         const id = uuidv4();
-        this.logDebug(`New client (${id}) connected from ${socket.remoteAddress}, waiting for app name`);
+        this.logDebug(
+            `New client (${id}) connected from ${socket.remoteAddress}, waiting for app name`
+        );
         socket.setNoDelay(true);
 
         const tcpClient: TcpClient = {
@@ -124,7 +137,7 @@ export class TCPServerWorker extends WorkerService {
             address: socket.remoteAddress || 'UNDEFINED',
             app: '',
             name: '',
-            version: 0
+            version: 0,
         };
         this.waitingClients.push(tcpClient);
 
@@ -147,7 +160,6 @@ export class TCPServerWorker extends WorkerService {
 
         const PACKET_HEADER_START = '\0\0\0';
 
-
         while (buffer.length > 0) {
             if (buffer.length <= PACKET_HEADER_START.length) {
                 // incomplete packet, store leftovers
@@ -157,7 +169,10 @@ export class TCPServerWorker extends WorkerService {
 
             if (buffer.subarray(0, 3).toString() !== PACKET_HEADER_START) {
                 // invalid packet?!
-                this.logError(`Invalid packet received from client ${client.id}, discarding buffer`, false);
+                this.logError(
+                    `Invalid packet received from client ${client.id}, discarding buffer`,
+                    false
+                );
                 client.leftOverBuffer = Buffer.alloc(0);
                 break;
             }
@@ -171,7 +186,10 @@ export class TCPServerWorker extends WorkerService {
                 break;
             }
 
-            const packetLengthBuffer = buffer.subarray(headerStart + 3, headerEnd);
+            const packetLengthBuffer = buffer.subarray(
+                headerStart + 3,
+                headerEnd
+            );
             // FIXME: we don't want to deal with big/little endian, so we just use utf8 encoding for packet length
             //        also the header might contain more than just the packet length, so we need to parse it
             const header = packetLengthBuffer.toString('utf8');
@@ -188,29 +206,37 @@ export class TCPServerWorker extends WorkerService {
                 }
 
                 packetLength = packetEnd - headerEnd;
-                const packet = buffer.subarray(headerEnd, packetEnd).toString().replace(/\0/g, '');
+                const packet = buffer
+                    .subarray(headerEnd, packetEnd)
+                    .toString()
+                    .replace(/\0/g, '');
                 try {
-                    const [ version, app, name ] = packet.split('::');
+                    const [version, app, name] = packet.split('::');
                     this.assignApp(client, app, name, Number(version));
                 } catch (err) {
-                    this.logError(`Invalid handshake packet received from client ${client.id}`, false);
+                    this.logError(
+                        `Invalid handshake packet received from client ${client.id}`,
+                        false
+                    );
                     if (err instanceof Error)
                         this.logError(err.stack || '', false);
-                    else
-                        console.error(err);
+                    else console.error(err);
                 }
             } else {
                 // Packet with payload (normal message)
                 packetLength = Number(header);
                 if (!Number.isFinite(packetLength)) {
-                    this.logError(`Invalid header received from client ${client.id}, discarding buffer`, false);
+                    this.logError(
+                        `Invalid header received from client ${client.id}, discarding buffer`,
+                        false
+                    );
                     this.logDebug(`Header: ${header}`);
                     client.leftOverBuffer = Buffer.alloc(0);
                     break;
                 }
 
                 const packetEnd = headerEnd + 1 + packetLength;
-                
+
                 if (packetEnd > buffer.length) {
                     // incomplete packet, store leftovers
                     client.leftOverBuffer = buffer;
@@ -226,13 +252,17 @@ export class TCPServerWorker extends WorkerService {
                         channel: message.channel() || '',
                         command: message.command() || '',
                         payload: message.payload() || '',
-                        origin: { id: client.id, app: client.app, name: client.name, metadata: {} }
+                        origin: {
+                            id: client.id,
+                            app: client.app,
+                            name: client.name,
+                            metadata: {},
+                        },
                     });
                 } catch (err) {
                     if (err instanceof Error)
                         this.logError(err.stack || '', false);
-                    else
-                        console.error(err);
+                    else console.error(err);
                 }
             }
 
@@ -247,34 +277,49 @@ export class TCPServerWorker extends WorkerService {
 
         // try to somewhat mitigate spamming clients
         if (client.leftOverBuffer.length > maxBufferSize) {
-            this.logWarning(`Client ${client.id} exceeds max buffer size (${maxBufferSize} bytes), discarding buffer and terminating connection`);
+            this.logWarning(
+                `Client ${client.id} exceeds max buffer size (${maxBufferSize} bytes), discarding buffer and terminating connection`
+            );
             client.socket.end();
         }
 
         // pass on actual messages
         for (const msg of msgs) {
             if (client.app) {
-                this.postMessage('clientMessage$', msg as unknown as { [key: string]: unknown });
+                this.postMessage(
+                    'clientMessage$',
+                    msg as unknown as { [key: string]: unknown }
+                );
             } else {
-                this.logError(`Ignoring message (${msg.channel} / ${msg.command}) from client ${client.id} without app`, false);
+                this.logError(
+                    `Ignoring message (${msg.channel} / ${msg.command}) from client ${client.id} without app`,
+                    false
+                );
             }
         }
     }
 
-    private assignApp(client: TcpClient, app: string, name: string, version: number): void {
+    private assignApp(
+        client: TcpClient,
+        app: string,
+        name: string,
+        version: number
+    ): void {
         client.app = app;
         client.name = name;
         client.version = version;
-        this.logDebug(`Setting app of new colibri client '${name}' (${client.id}, v${version}) to "${app}"`, {
-            clientApp: client.app,
-            clientName: client.name,
-            clientId: client.id
-        });
+        this.logDebug(
+            `Setting app of new colibri client '${name}' (${client.id}, v${version}) to "${app}"`,
+            {
+                clientApp: client.app,
+                clientName: client.name,
+                clientId: client.id,
+            }
+        );
         _.pull(this.waitingClients, client);
         this.clients.push(client);
         this.postMessage('clientConnected$', { id: client.id, app });
     }
-
 
     private handleSocketError(client: TcpClient, error: Error): void {
         // ignore ECONNRESET errors, as they are caused by the client disconnecting
@@ -289,13 +334,12 @@ export class TCPServerWorker extends WorkerService {
         this.logDebug(`Colibri client ${client.address} disconnected`, {
             clientApp: client.app,
             clientName: client.name,
-            clientId: client.id
+            clientId: client.id,
         });
         _.pull(this.clients, client);
         _.pull(this.waitingClients, client);
         this.postMessage('clientDisconnected$', { id: client.id });
     }
-
 
     private handleHeartbeat() {
         for (const client of this.clients) {
@@ -307,7 +351,6 @@ export class TCPServerWorker extends WorkerService {
         }
     }
 }
-
 
 if (!threads.isMainThread) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
