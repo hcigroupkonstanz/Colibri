@@ -2,6 +2,9 @@
 # debugging files
 /dump
 
+# env files
+.env
+
 # npm
 package-lock.json
 
