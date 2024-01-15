@@ -3,7 +3,6 @@
 import * as _ from 'lodash';
 import * as colibri from './modules';
 import { Config } from './configuration';
-import { debug } from 'console';
 
 // Better TypeScript error messages
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -19,10 +18,6 @@ Error.stackTraceLimit = Infinity;
 // Print console errors in GUI
 // const redirectConsole = new colibri.RedirectConsole();
 const dataStore = new colibri.DataStore();
-
-//region debug
-console.log('ENV: %o', process.env);
-//endregion
 
 /**
  *    Servers
