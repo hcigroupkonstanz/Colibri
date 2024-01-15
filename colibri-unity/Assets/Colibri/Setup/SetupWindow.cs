@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -117,6 +118,12 @@ namespace HCIKonstanz.Colibri.Setup
             GUILayout.Label("Please choose a unique application name. Each client *must* have the same app name!", new GUIStyle(EditorStyles.helpBox));
             Config.AppName = EditorGUILayout.TextField("App Name: ", Config.AppName);
             Config.ServerAddress = EditorGUILayout.TextField("Server Address: ", Config.ServerAddress);
+            GUILayout.Space(16);
+            GUILayout.Label("Optional Config (only modify if you know what you are doing!)", new GUIStyle(EditorStyles.helpBox));
+            Config.IsSSL = EditorGUILayout.Toggle("Server supports SSL/TLS?", Config.IsSSL);
+            Config.WebServerPort = EditorGUILayout.IntField("Web server Port: ", Config.WebServerPort);
+            Config.TcpServerPort = EditorGUILayout.IntField("TCP server Port: ", Config.TcpServerPort);
+            Config.VoiceServerPort = EditorGUILayout.IntField("Voice server Port: ", Config.VoiceServerPort);
 
             var errors = new List<string>();
 
@@ -124,6 +131,14 @@ namespace HCIKonstanz.Colibri.Setup
                 errors.Add("App Name must not be empty!");
             if (Config.ServerAddress.Contains("://"))
                 errors.Add("Server address should not contain a protocol (only IP or domain name)");
+            if (Config.WebServerPort <= 0 || Config.WebServerPort > 65535)
+                errors.Add("Web server port invalid (must be a number between 1 - 65535, default 9011)");
+            if (Config.TcpServerPort <= 0 || Config.TcpServerPort > 65535)
+                errors.Add("TCP server port invalid (must be a number between 1 - 65535, default 9012)");
+            if (Config.VoiceServerPort <= 0 || Config.VoiceServerPort > 65535)
+                errors.Add("Voice server port invalid (must be a number between 1 - 65535, default 9013)");
+            if ((new int[] { Config.WebServerPort, Config.TcpServerPort, Config.VoiceServerPort }).Distinct().Count() != 3)
+                errors.Add("Two ports may not have the same value!");
 
             GUILayout.Space(15f);
 

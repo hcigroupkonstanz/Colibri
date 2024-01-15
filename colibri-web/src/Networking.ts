@@ -2,9 +2,9 @@ import { Subject } from 'rxjs';
 import * as io from 'socket.io-client';
 
 export interface Message {
-    channel: string,
-    command: string,
-    payload: unknown
+    channel: string;
+    command: string;
+    payload: unknown;
 }
 
 const messageSubject = new Subject<Message>();
@@ -16,18 +16,18 @@ if (typeof window !== 'undefined') {
 }
 
 const socket = io.connect({
-    autoConnect: false
+    autoConnect: false,
 });
 
-
-const init = (app: string, server?: string) => {
+const init = (app: string, server?: string, port?: number) => {
     server ??= location;
+    port ??= 9011;
 
     if (!server.startsWith('http')) {
         server = 'http://' + server;
     }
 
-    server +=  ':9011';
+    server += `:${port}`;
 
     // FIXME: terrible workaround because socket.io marked uri as readonly
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,43 +55,53 @@ const init = (app: string, server?: string) => {
         messageSubject.next({
             channel,
             command: msg.command,
-            payload: msg.payload
+            payload: msg.payload,
         });
     });
 };
 
 export const Colibri = {
-    init
+    init,
 };
-
 
 ///////////////////////////
 /// Default communication
 ///////////////////////////
-export const SendMessage = (channel: string, command: string, payload: unknown = {}) => {
+export const SendMessage = (
+    channel: string,
+    command: string,
+    payload: unknown = {}
+) => {
     socket.emit(channel, {
         command,
-        payload
+        payload,
     });
 };
-
 
 ///////////////////////////////////////////
 /// Handlers (e.g. model synchronization)
 ///////////////////////////////////////////
 
-export const RegisterChannel = (channel: string, handler: (payload: Message) => void) => {
+export const RegisterChannel = (
+    channel: string,
+    handler: (payload: Message) => void
+) => {
     socket.on(channel, handler);
 };
 
-export const UnregisterChannel = (channel: string, handler: (payload: Message) => void) => {
+export const UnregisterChannel = (
+    channel: string,
+    handler: (payload: Message) => void
+) => {
     socket.off(channel, handler);
 };
 
-export const RegisterOnce = (channel: string, handler: (payload: Message) => void) => {
+export const RegisterOnce = (
+    channel: string,
+    handler: (payload: Message) => void
+) => {
     socket.once(channel, handler);
 };
-
 
 //////////////////
 /// RPC
@@ -115,7 +125,6 @@ export const RegisterOnce = (channel: string, handler: (payload: Message) => voi
 //         return 'error';
 //     }
 // };
-
 
 // for debugging
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

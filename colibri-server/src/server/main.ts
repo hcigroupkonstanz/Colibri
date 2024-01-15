@@ -3,6 +3,7 @@
 import * as _ from 'lodash';
 import * as colibri from './modules';
 import { Config } from './configuration';
+import { debug } from 'console';
 
 // Better TypeScript error messages
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -19,17 +20,24 @@ Error.stackTraceLimit = Infinity;
 // const redirectConsole = new colibri.RedirectConsole();
 const dataStore = new colibri.DataStore();
 
+//region debug
+console.log('ENV: %o', process.env);
+//endregion
 
 /**
  *    Servers
  */
-const webServer = new colibri.WebServer(Config.WEBSERVER_PORT, Config.WEBSERVER_ROOT, Config.BASE_URL);
+const webServer = new colibri.WebServer(
+    Config.WEBSERVER_HOST,
+    Config.WEBSERVER_PORT,
+    Config.WEBSERVER_ROOT,
+    Config.BASE_URL
+);
 const voiceServer = new colibri.VoiceServer(Config.DATA_ROOT);
 
 const tcpServer = new colibri.TCPServerProxy();
 const socketioServer = new colibri.SocketIOServer();
 const connectionPool = new colibri.ConnectionPool(tcpServer, socketioServer);
-
 
 /**
  *    APIs
@@ -55,8 +63,8 @@ const startup = async () => {
 
     const httpServer = webServer.start();
     socketioServer.start(httpServer);
-    tcpServer.start(Config.TCP_PORT);
-    voiceServer.start(Config.VOICE_PORT);
+    tcpServer.start(Config.TCP_PORT, Config.TCP_HOST);
+    voiceServer.start(Config.VOICE_PORT, Config.VOICE_HOST);
 };
 
 startup();

@@ -31,7 +31,7 @@ export class VoiceServer extends Service {
         super();
     }
 
-    public start(voicePort: number,) {
+    public start(voicePort: number, hostname: string) {
         this.udpSocket = dgram.createSocket('udp4');
         this.udpSocket.on('listening', () => {
             const address = this.udpSocket.address() as AddressInfo;
@@ -107,7 +107,7 @@ export class VoiceServer extends Service {
         this.udpSocket.on('error', (exception) => {
             console.error(exception.message);
         });
-        this.udpSocket.bind(voicePort);
+        this.udpSocket.bind(voicePort, hostname);
 
         // Check if clients disconnected every second
         setInterval(this.checkClientsDisconnected, 1000, this);

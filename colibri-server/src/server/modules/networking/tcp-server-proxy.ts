@@ -4,7 +4,10 @@ import { WorkerServiceProxy } from '../core';
 import { Observable, Subject } from 'rxjs';
 import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks';
 
-export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer {
+export class TCPServerProxy
+    extends WorkerServiceProxy
+    implements NetworkServer
+{
     public serviceName = 'UnityServer';
     public groupName = 'unity';
 
@@ -15,21 +18,34 @@ export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer 
 
     private messageStream = new Subject<NetworkMessage>();
 
-    public get clients$(): Observable<NetworkClient[]> { return this.clientStream.asObservable(); }
-    public get currentClients(): ReadonlyArray<NetworkClient> { return this.clients; }
-    public get clientConnected$(): Observable<NetworkClient> { return this.clientAddedStream.asObservable(); }
-    public get clientDisconnected$(): Observable<NetworkClient> { return this.clientRemovedStream.asObservable(); }
-    public get messages$(): Observable<NetworkMessage> { return this.messageStream.asObservable(); }
-
+    public get clients$(): Observable<NetworkClient[]> {
+        return this.clientStream.asObservable();
+    }
+    public get currentClients(): ReadonlyArray<NetworkClient> {
+        return this.clients;
+    }
+    public get clientConnected$(): Observable<NetworkClient> {
+        return this.clientAddedStream.asObservable();
+    }
+    public get clientDisconnected$(): Observable<NetworkClient> {
+        return this.clientRemovedStream.asObservable();
+    }
+    public get messages$(): Observable<NetworkMessage> {
+        return this.messageStream.asObservable();
+    }
 
     public constructor() {
         super();
         this.initWorker(TCP_SERVER_WORKER);
 
-        this.workerMessages$.subscribe(msg => {
+        this.workerMessages$.subscribe((msg) => {
             switch (msg.channel) {
                 case 'clientConnected$':
-                    this.onClientConnected(msg.content.id as string, msg.content.app as string, msg.content.name as string);
+                    this.onClientConnected(
+                        msg.content.id as string,
+                        msg.content.app as string,
+                        msg.content.name as string
+                    );
                     break;
 
                 case 'clientDisconnected$':
@@ -37,14 +53,16 @@ export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer 
                     break;
 
                 case 'clientMessage$':
-                    this.onClientMessage(msg.content as unknown as NetworkMessage);
+                    this.onClientMessage(
+                        msg.content as unknown as NetworkMessage
+                    );
                     break;
             }
         });
     }
 
-    public start(port: number): void {
-        this.postMessage('m:start', { port: port, });
+    public start(port: number, host: string): void {
+        this.postMessage('m:start', { port: port, host: host });
         this.clientStream.next(this.clients);
     }
 
@@ -52,17 +70,19 @@ export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer 
         this.postMessage('m:stop');
     }
 
-    public broadcast(msg: NetworkMessage, clients: ReadonlyArray<NetworkClient> = this.clients): void {
+    public broadcast(
+        msg: NetworkMessage,
+        clients: ReadonlyArray<NetworkClient> = this.clients
+    ): void {
         this.postMessage('m:broadcast', {
             msg: {
                 channel: msg.channel,
                 command: msg.command,
-                payload: msg.payload
+                payload: msg.payload,
             },
-            clients: clients.map(c => c.id)
+            clients: clients.map((c) => c.id),
         });
     }
-
 
     private onClientConnected(id: string, app: string, name: string): void {
         const client: NetworkClient = { id, app, name, metadata: {} };
@@ -74,7 +94,7 @@ export class TCPServerProxy extends WorkerServiceProxy implements NetworkServer 
     }
 
     private onClientDisconnected(id: string): void {
-        const removedClients = _.remove(this.clients, c => c.id === id);
+        const removedClients = _.remove(this.clients, (c) => c.id === id);
         for (const client of removedClients) {
             this.clientRemovedStream.next(client);
         }

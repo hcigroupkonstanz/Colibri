@@ -8,9 +8,13 @@
 ## Configuration
 
 Initialize Colibri once with:
+
 ```ts
 import { Colibri } from '@hcikn/colibri';
 Colibri.init('app_name', 'server_address');
+
+// if using a custom port:
+Colibri.init('app_name', 'server_address', 9011);
 ```
 
 For server setup, refer to [colibri-server](../colibri-server/).
@@ -34,12 +38,14 @@ See also [the remote-logging sample](samples/remote-logging.ts) (run sample with
 
 Colibri supports simple data transmission via pub/sub communication. Data can be published from anywhere in  
 the executed code, as illustrated with the following simple example of sending a boolean value on a "click" channel:
+
 ```ts
 import { Sync } from '@hcikn/colibri';
 Sync.sendBool('myChannel', true);
 ```
 
 The sent data can then be received anywhere by registering a listener:
+
 ```ts
 Sync.receiveBool('myChannel', (value) => {
     // Will be called whenever a bool on "click" channel is received
@@ -47,11 +53,12 @@ Sync.receiveBool('myChannel', (value) => {
 ```
 
 The listener can be deregistered via:
+
 ```ts
 Sync.unregister('myChannel', MyMethod);
 ```
 
-The following built-in types are available for sync: `bool, int (as number), float (as number), string, Vector2, Vector3, Quaternion, Color` and arrays thereof. For arbitrary data, you can use JSON: 
+The following built-in types are available for sync: `bool, int (as number), float (as number), string, Vector2, Vector3, Quaternion, Color` and arrays thereof. For arbitrary data, you can use JSON:
 
 ```c#
 Sync.sendJson('myChannel', { foo: 'bar' });
@@ -61,14 +68,16 @@ Sync.receiveJson('myChannel', (json) => { /* ... */ });
 See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run sample/broadcast`).
 
 Limitations:
-- You have to register the listener *before* sending out data
-- Type and channel *must* match between Listener and Sender (`number` will be converted to float for Unity clients, i.e., use `float` listener on Unity clients for sending numbers!)
+
+- You have to register the listener _before_ sending out data
+- Type and channel _must_ match between Listener and Sender (`number` will be converted to float for Unity clients, i.e., use `float` listener on Unity clients for sending numbers!)
 - Remember to unregister your listener where necessary!
 
 ### SyncModel
+
 (Counterpart to [SyncBehaviour in Unity client](../colibri-unity#SyncBehaviour))
 
-For more complex scenarios, Colibri supports synchronization of data models (e.g., for use in model-view-controller architectures). For this, we need extend the *Model* with `SyncModel`:
+For more complex scenarios, Colibri supports synchronization of data models (e.g., for use in model-view-controller architectures). For this, we need extend the _Model_ with `SyncModel`:
 
 ```ts
 import { SyncModel, Synced } from '@hcikn/colibri';
@@ -88,6 +97,7 @@ export class SampleClass extends SyncModel<SampleClass> {
 ```
 
 and enable `experimentalDecorators` in the `tsconfig.json`:
+
 ```json
 {
   "compilerOptions": {
@@ -100,10 +110,12 @@ and enable `experimentalDecorators` in the `tsconfig.json`:
 Any property or field marked with `@Synced()` will be synchronized across all network clients. *Note: Synchronization of fields (e.g., `@Synced() private age = 0;` does not work on some frameworks such as React for some reason.*
 
 Lastly, we need to register the class with the Synchronization mechanism by calling `RegisterModelSync`:
+
 ```ts
 import { RegisterModelSync } from '@hcikn/colibri';
 const [ SampleClasses$, registerExampleClass ] = RegisterModelSync<SampleClass>({ type: SampleClass });
 ```
+
 The first return value (e.g., `SampleClasses$`) is a [BehaviorSubject](https://www.learnrxjs.io/learn-rxjs/subjects/behaviorsubject) that will be updated whenever a new instance of SampleClass is added, updated, or deleted. The second return value (e.g., `registerExampleClass`) can be used to sync new instantiations:
 
 ```ts
@@ -114,4 +126,5 @@ registerExampleClass(mySample); // mySample is sent out to all other clients and
 See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run sample/model-sync`).
 
 ## Samples
+
 See [Sample folder](samples/) for more examples on how to use the Colibri web client.
