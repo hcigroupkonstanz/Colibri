@@ -5,6 +5,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace HCIKonstanz.Colibri.Setup
 {
@@ -14,6 +15,7 @@ namespace HCIKonstanz.Colibri.Setup
         private static SetupWindow Instance;
         private static bool IsOpen => Instance != null;
         private static bool _waitingToLoad;
+        private static bool _portSettings = false;
 
         private ColibriConfig Config;
 
@@ -99,6 +101,7 @@ namespace HCIKonstanz.Colibri.Setup
             {
                 fontSize = 22,
                 fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
                 fixedWidth = 500
             });
 
@@ -114,16 +117,22 @@ namespace HCIKonstanz.Colibri.Setup
             GUILayout.Space(15f);
             EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
 
-
-            GUILayout.Label("Please choose a unique application name. Each client *must* have the same app name!", new GUIStyle(EditorStyles.helpBox));
+            EditorGUILayout.HelpBox("Please choose a unique application name. Each client *must* have the same app name!", MessageType.Info);
             Config.AppName = EditorGUILayout.TextField("App Name: ", Config.AppName);
             Config.ServerAddress = EditorGUILayout.TextField("Server Address: ", Config.ServerAddress);
             GUILayout.Space(16);
-            GUILayout.Label("Optional Config (only modify if you know what you are doing!)", new GUIStyle(EditorStyles.helpBox));
-            Config.IsSSL = EditorGUILayout.Toggle("Server supports SSL/TLS?", Config.IsSSL);
-            Config.WebServerPort = EditorGUILayout.IntField("Web server Port: ", Config.WebServerPort);
-            Config.TcpServerPort = EditorGUILayout.IntField("TCP server Port: ", Config.TcpServerPort);
-            Config.VoiceServerPort = EditorGUILayout.IntField("Voice server Port: ", Config.VoiceServerPort);
+            _portSettings = EditorGUILayout.Foldout(_portSettings, "Optional Config");
+            if (_portSettings)
+            {
+                var x = EditorGUILayout.BeginVertical();
+                x.position = new Vector2(5, 5);
+                EditorGUILayout.HelpBox("Only modify if you know what you are doing!", MessageType.Warning);
+                Config.IsSSL = EditorGUILayout.Toggle("Server supports SSL/TLS?", Config.IsSSL);
+                Config.WebServerPort = EditorGUILayout.IntField("Web server Port: ", Config.WebServerPort);
+                Config.TcpServerPort = EditorGUILayout.IntField("TCP server Port: ", Config.TcpServerPort);
+                Config.VoiceServerPort = EditorGUILayout.IntField("Voice server Port: ", Config.VoiceServerPort);
+                EditorGUILayout.EndVertical();
+            }
 
             var errors = new List<string>();
 
@@ -152,10 +161,7 @@ namespace HCIKonstanz.Colibri.Setup
             EditorGUI.EndDisabledGroup();
 
             foreach (var error in errors)
-                GUILayout.Label(error, new GUIStyle(EditorStyles.helpBox)
-                {
-                    fontStyle = FontStyle.Italic
-                });
+                EditorGUILayout.HelpBox(error, MessageType.Error);
         }
     }
 }
