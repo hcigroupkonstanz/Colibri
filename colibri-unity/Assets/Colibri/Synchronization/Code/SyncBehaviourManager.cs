@@ -21,7 +21,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private void Start()
         {
             var existingBehaviours = FindObjectsOfType<T>()
-                .Where(o => o.ModelId == Template?.ModelId);
+                .Where(o => o.ModelId == Template?.ModelId || (Template == null && String.IsNullOrEmpty(o.ModelId)));
             _existingObjects.AddRange(existingBehaviours);
 
             foreach (var existingBehaviour in existingBehaviours)
@@ -32,7 +32,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             // Listen for newly instantiated objects and propagate initial state
             SyncBehaviour<T>.ModelCreated()
                 .TakeUntilDisable(this)
-                .Where(m => m is T && m.ModelId == Template?.ModelId)
+                .Where(m => m is T && (m.ModelId == Template?.ModelId || (Template == null && String.IsNullOrEmpty(m.ModelId))))
                 .Where(_ => !_isCreatingObject)
                 .Where(m => !_existingObjects.Any(e => e.Id == m.Id))
                 .Subscribe(m =>
