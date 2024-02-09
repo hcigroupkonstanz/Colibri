@@ -177,3 +177,43 @@ export default class Colibri {
     }
     //#endregion
 }
+
+/////////////////////////////////////
+///     Wrapper Functions
+// (also for backward compatibility)
+/////////////////////////////////////
+
+/**
+ * @see {@link Colibri.sendMessage `Colibri.sendMessage()`}
+ */
+export const SendMessage = (
+    channel: string,
+    command: string,
+    payload: unknown = {}
+) => {
+    Colibri.getInstance()?.sendMessage(channel, command, payload);
+};
+
+/**
+ * @see {@link Colibri.registerChannel `Colibri.registerChannel()`}
+ */
+export const RegisterChannel = (
+    channel: string,
+    handler: (payload: Message) => void
+) => Colibri.getInstance()?.registerChannel(channel, handler);
+
+/**
+ * @see {@link Colibri.unregisterChannel `Colibri.unregisterChannel()`}
+ */
+export const UnregisterChannel = (
+    channel: string,
+    handler: (payload: Message) => void
+) => Colibri.getInstance()?.unregisterChannel(channel, handler);
+
+/**
+ * @see {@link Colibri.registerOnce `Colibri.registerOnce()`}
+ */
+export const RegisterOnce = (
+    channel: string,
+    handler: (payload: Message) => void
+) => Colibri.getInstance()?.registerOnce(channel, handler);
