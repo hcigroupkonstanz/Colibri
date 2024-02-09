@@ -11,10 +11,10 @@ Initialize Colibri once with:
 
 ```ts
 import { Colibri } from '@hcikn/colibri';
-Colibri.init('app_name', 'server_address');
+new Colibri('app_name', 'server_address');
 
 // if using a custom port:
-Colibri.init('app_name', 'server_address', 9011);
+new Colibri('app_name', 'server_address', 9011);
 ```
 
 For server setup, refer to [colibri-server](../colibri-server/).
@@ -29,7 +29,11 @@ To setup, import the `RemoteLogger` and call its `init()` method. Any subsequent
 
 ```ts
 import { RemoteLogger } from '@hcikn/colibri';
-RemoteLogger.init();
+const logger = new RemoteLogger();
+
+// en-/disable RemoteLogger
+logger.enable();
+logger.disable();
 ```
 
 See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run sample/remote-logging`).
@@ -124,6 +128,28 @@ registerExampleClass(mySample); // mySample is sent out to all other clients and
 ```
 
 See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run sample/model-sync`).
+
+### Remote Store
+
+Colibri offers persistent data storage on the server, so that data can be shared easily between connected clients. Each object is identified by it's individual `key`:
+
+```ts
+import { Colibri, GetRestApi, PutRestApi } from '@hcikn/colibri';
+
+const colibri = Colibri.getInstance();
+const key = 'sampleKey';
+const data = {...};
+
+// fetch data
+colibri.getRestObject(key); // or...
+GetRestApi(key);
+
+// update data
+colibri.setRestObject(key, data); // or...
+PutRestApi(key, data);
+```
+
+Each operation can be achieved by either directly interaction with the `Colibri` object or using the corresponding wrapper method.
 
 ## Samples
 

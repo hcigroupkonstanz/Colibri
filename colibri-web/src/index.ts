@@ -1,4 +1,5 @@
-export { Colibri } from './Networking';
+export * from './Colibri';
+export * from './ColibriError';
 
 export * from './Broadcasting';
 

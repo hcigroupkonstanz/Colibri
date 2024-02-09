@@ -1,5 +1,5 @@
 import { BehaviorSubject, Observable } from 'rxjs';
-import { Message, RegisterChannel, SendMessage } from './Networking';
+import { Message, RegisterChannel, SendMessage } from './Colibri';
 import { SyncModel } from './SyncModel';
 
 interface ModelSyncMsg<T extends SyncModel<T>> extends Message {
@@ -9,12 +9,14 @@ interface ModelSyncMsg<T extends SyncModel<T>> extends Message {
 
 interface ModelSyncRegistration<T> {
     name?: string;
-    type: { new(id: string): T };
+    type: { new (id: string): T };
 }
 
-type ModelSync<T> = [ Observable<T[]>, (model: T) => void ];
+type ModelSync<T> = [Observable<T[]>, (model: T) => void];
 
-export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyncRegistration<T>): ModelSync<T> => {
+export const RegisterModelSync = <T extends SyncModel<T>>(
+    registration: ModelSyncRegistration<T>
+): ModelSync<T> => {
     const name = registration.name || registration.type.name.toLowerCase();
 
     // initial data fetch
@@ -37,7 +39,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const models = new BehaviorSubject<T[]>([]);
 
     const onUpdate = (modelData: Partial<T>) => {
-        const model = models.value.find(m => m.id === modelData.id);
+        const model = models.value.find((m) => m.id === modelData.id);
         if (model) {
             // Update existing model
             model.update(modelData);
@@ -45,10 +47,14 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         } else if (modelData.id) {
             const newModel = new registration.type(modelData.id);
 
-            newModel.modelChanges$.subscribe(changes => {
+            newModel.modelChanges$.subscribe((changes) => {
                 // If we did the changes, we'll ignore it
                 if (!newModel.ignoreNextChange) {
-                    SendMessage(`${name}`, 'model::update', newModel.toJson(changes));
+                    SendMessage(
+                        `${name}`,
+                        'model::update',
+                        newModel.toJson(changes)
+                    );
                 }
                 newModel.ignoreNextChange = false;
                 models.next([...models.value]);
@@ -60,13 +66,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     };
 
     const onDelete = (id: string) => {
-        const model = models.value.find(m => m.id === id);
+        const model = models.value.find((m) => m.id === id);
         model?.delete();
-        models.next(models.value.filter(m => m.id !== id));
+        models.next(models.value.filter((m) => m.id !== id));
     };
 
     const registerModel = (model: T) => {
-        model.modelChanges$.subscribe(changes => {
+        model.modelChanges$.subscribe((changes) => {
             // If we did the changes, we'll ignore it
             if (!model.ignoreNextChange) {
                 SendMessage(`${name}`, 'model::update', model.toJson(changes));
@@ -79,6 +85,5 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         models.next([...models.value, model]);
     };
 
-    return [ models.asObservable(), registerModel ];
+    return [models.asObservable(), registerModel];
 };
-
