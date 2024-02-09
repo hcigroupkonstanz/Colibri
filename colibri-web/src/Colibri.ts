@@ -8,7 +8,7 @@ export interface Message {
     payload: unknown;
 }
 
-export default class Colibri {
+export class Colibri {
     private static instance: Colibri | null = null;
 
     private readonly socket: Socket;
