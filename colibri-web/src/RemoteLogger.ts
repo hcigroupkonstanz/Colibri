@@ -3,6 +3,7 @@ import { SendMessage } from './Colibri';
 export class RemoteLogger {
     private readonly consoleDebug = console.debug;
     private readonly consoleLog = console.log;
+    private readonly consoleInfo = console.info;
     private readonly consoleWarn = console.warn;
     private readonly consoleError = console.error;
 
@@ -10,25 +11,31 @@ export class RemoteLogger {
         // intercept calls from console
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.consoleDebug = (...args: any[]) => {
+        console.debug = (...args: any[]) => {
             this.consoleDebug(...args);
             this.sendMessage('debug', args);
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.consoleLog = (...args: any[]) => {
+        console.log = (...args: any[]) => {
             this.consoleLog(...args);
             this.sendMessage('info', args);
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.consoleWarn = (...args: any[]) => {
+        console.info = (...args: any[]) => {
+            this.consoleInfo(...args);
+            this.sendMessage('info', args);
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        console.warn = (...args: any[]) => {
             this.consoleWarn(...args);
             this.sendMessage('warn', args);
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.consoleError = (...args: any[]) => {
+        console.error = (...args: any[]) => {
             this.consoleError(...args);
             this.sendMessage('error', args);
         };
@@ -56,6 +63,8 @@ const stringify = (obj: unknown): string => {
     if (obj instanceof Error) {
         return obj.message + '\n' + obj.stack;
     }
+
+    if (typeof obj === 'string') return obj as string;
 
     const cache: unknown[] = [];
     const str = JSON.stringify(
