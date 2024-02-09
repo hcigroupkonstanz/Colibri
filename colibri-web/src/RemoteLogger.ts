@@ -7,6 +7,13 @@ export class RemoteLogger {
     private readonly consoleWarn = console.warn;
     private readonly consoleError = console.error;
 
+    /**
+     * @deprecated use new class constructor directly
+     */
+    public static init(enabled: boolean = true) {
+        return new RemoteLogger(enabled);
+    }
+
     public constructor(private enabled: boolean = true) {
         // intercept calls from console
 
