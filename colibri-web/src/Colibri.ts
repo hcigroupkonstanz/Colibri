@@ -138,7 +138,7 @@ export class Colibri {
     public getRestUri(key: string): string | null {
         key = key.trim();
         while (key.startsWith('/')) key = key.substring(1);
-        return key.length === 0 ? null : `${this.uriRestApi}/${key}`;
+        return key.length === 0 ? null : this.uriRestApi + key;
     }
     /**
      * Queries an object from the REST API identified by `key`.
@@ -179,7 +179,7 @@ export class Colibri {
             body: JSON.stringify(data),
         });
 
-        return response.status > 200 && response.status < 300;
+        return response.status >= 200 && response.status < 300;
     }
     //#endregion
 }
