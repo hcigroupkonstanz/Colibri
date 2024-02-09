@@ -12,7 +12,7 @@ export class Colibri {
     private static instance: Colibri | null = null;
 
     private readonly socket: Socket;
-    public readonly messageSubject = new Subject<Message>();
+    private readonly messageSubject = new Subject<Message>();
     public readonly messages = this.messageSubject.asObservable();
     public readonly uri: string;
     public readonly uriRestApi: string;
