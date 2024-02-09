@@ -191,6 +191,7 @@ export default class Colibri {
 
 /**
  * @see {@link Colibri.sendMessage `Colibri.sendMessage()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
 export const SendMessage = (
     channel: string,
@@ -200,6 +201,7 @@ export const SendMessage = (
 
 /**
  * @see {@link Colibri.registerChannel `Colibri.registerChannel()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
 export const RegisterChannel = (
     channel: string,
@@ -208,6 +210,7 @@ export const RegisterChannel = (
 
 /**
  * @see {@link Colibri.unregisterChannel `Colibri.unregisterChannel()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
 export const UnregisterChannel = (
     channel: string,
@@ -216,8 +219,23 @@ export const UnregisterChannel = (
 
 /**
  * @see {@link Colibri.registerOnce `Colibri.registerOnce()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
 export const RegisterOnce = (
     channel: string,
     handler: (payload: Message) => void
 ) => Colibri.getInstance()?.registerOnce(channel, handler);
+
+/**
+ * @see {@link Colibri.getRestObject `Colibri.getRestObject()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
+ */
+export const GetRestApi = (key: string) =>
+    Colibri.getInstance()?.getRestObject(key);
+
+/**
+ * @see {@link Colibri.setRestObject `Colibri.setRestObject()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
+ */
+export const PutRestApi = (key: string, data: unknown) =>
+    Colibri.getInstance()?.setRestObject(key, data);
