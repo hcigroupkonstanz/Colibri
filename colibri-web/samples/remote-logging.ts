@@ -14,7 +14,7 @@ import { colibriAddress, colibriPort } from './common';
     // visit the web interface at http://<YOUR_COLIBRI_SERVER>:9011 to see the logs
     // in this case: http://colibri.hci.uni-konstanz.de:9011
     console.log('Hello world!');
-    console.info('This is an information\ntet');
+    console.info('This is an information');
     console.debug('This is a debug message', { foo: 'bar' });
     console.warn('This is a warning');
     console.error('This is an error', new Error('Error message'));
