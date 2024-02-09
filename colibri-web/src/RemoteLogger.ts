@@ -1,4 +1,4 @@
-import { SendMessage } from './Networking';
+import { SendMessage } from './Colibri';
 
 const init = () => {
     // keep original console commands
@@ -13,17 +13,21 @@ const init = () => {
         }
 
         const cache: unknown[] = [];
-        const str = JSON.stringify(obj, (_, value: unknown) => {
-            if (typeof value === 'object' && value !== null) {
-                if (cache.indexOf(value) !== -1) {
-                    // Circular reference found, discard key
-                    return;
+        const str = JSON.stringify(
+            obj,
+            (_, value: unknown) => {
+                if (typeof value === 'object' && value !== null) {
+                    if (cache.indexOf(value) !== -1) {
+                        // Circular reference found, discard key
+                        return;
+                    }
+                    // Store value in our collection
+                    cache.push(value);
                 }
-                // Store value in our collection
-                cache.push(value);
-            }
-            return value;
-        }, 2);
+                return value;
+            },
+            2
+        );
         return str;
     };
 
@@ -46,7 +50,6 @@ const init = () => {
     };
 };
 
-
 export const RemoteLogger = {
-    init
+    init,
 };

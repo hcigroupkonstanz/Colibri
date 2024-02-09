@@ -65,9 +65,15 @@ export default class Colibri {
 
     /**
      * Returns the existing Colibri instance or null if there's none yet
+     * @param warnIfNotInitialized true => print Log message if Colibri has not been initialized yet
      * @returns
      */
-    public static getInstance(): Colibri | null {
+    public static getInstance(
+        warnIfNotInitialized: boolean = true
+    ): Colibri | null {
+        if (warnIfNotInitialized && !Colibri.instance) {
+            console.warn('Colibri not initialized yet! (Instance is null)');
+        }
         return Colibri.instance;
     }
 
@@ -190,9 +196,7 @@ export const SendMessage = (
     channel: string,
     command: string,
     payload: unknown = {}
-) => {
-    Colibri.getInstance()?.sendMessage(channel, command, payload);
-};
+) => Colibri.getInstance()?.sendMessage(channel, command, payload);
 
 /**
  * @see {@link Colibri.registerChannel `Colibri.registerChannel()`}
