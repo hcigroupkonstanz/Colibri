@@ -39,7 +39,7 @@ export class ClientListComponent implements AfterViewInit {
 
 
         let width = 900;
-        let height = 400;
+        let height = 1800;
         const barWidth = 30;
 
         const margin = { top: 20, right: 10, bottom: 20, left: 10 };
@@ -53,18 +53,11 @@ export class ClientListComponent implements AfterViewInit {
         // Generate five 100 count, normal distributions with random means
         const groupCounts: { [key: string]: number[] } = {};
         const globalCounts = [];
-        const meanGenerator = d3.randomUniform(10);
-        for (let i = 0; i < 7; i++) {
-            const randomMean = meanGenerator();
-            const generator = d3.randomNormal(randomMean);
-            const key = i.toString();
-            groupCounts[key] = [];
 
-            for (let j = 0; j < 100; j++) {
-                const entry = generator();
-                groupCounts[key].push(entry);
-                globalCounts.push(entry);
-            }
+        for (const client of clients) {
+            const key = client.id;
+            groupCounts[key] = client.latency;
+            globalCounts.push(...client.latency);
         }
 
         // Sort group counts so quantile methods work
@@ -78,17 +71,19 @@ export class ClientListComponent implements AfterViewInit {
             .domain(Object.keys(groupCounts));
 
         // Prepare the data for the box plots
-        const boxPlotData = [];
+        const boxPlotData: any[] = [];
         for (const [key, groupCount] of Object.entries(groupCounts)) {
 
             const record: any = {};
             const localMin = d3.min(groupCount);
             const localMax = d3.max(groupCount);
 
+            const stats = this.boxplotStats(groupCount);
+
             record['key'] = key;
             record['counts'] = groupCount;
             record['quartile'] = boxQuartiles(groupCount);
-            record['whiskers'] = [localMin, localMax];
+            record['whiskers'] = [ stats.whiskers[0].start, stats.whiskers[1].start ];
             record['color'] = colorScale(key);
 
             boxPlotData.push(record);
@@ -101,11 +96,10 @@ export class ClientListComponent implements AfterViewInit {
             .padding(0.5);
 
         // Compute a global y scale based on the global counts
-        const min = d3.min(globalCounts) || 0;
         const max = d3.max(globalCounts) || 1;
         const yScale = d3.scaleLinear()
-            .domain([min, max])
-            .range([0, height]);
+            .domain([0, max])
+            .range([margin.left, height]);
 
         // Setup the svg and group we will draw the box plot in
         const svg = d3.select(this.latencyChart.nativeElement).html('').append('svg')
@@ -148,6 +142,16 @@ export class ClientListComponent implements AfterViewInit {
             .attr('stroke', '#000')
             .attr('stroke-width', 1)
             .attr('fill', 'none');
+
+        const dots = g.selectAll('.dot')
+            .data(globalCounts)
+            .enter()
+            .append('circle')
+            .attr('r', 1)
+            .attr('cx', (d) => yScale(d))
+            .attr('cy', (d) => (xScale(boxPlotData[0].key) || 0) + Math.random() * 10 - 20)
+            .attr('fill', '#88C0D0');
+
 
         // Draw the boxes of the box plot, filled in white and on top of vertical lines
         const rects = g.selectAll('rect')
@@ -227,5 +231,34 @@ export class ClientListComponent implements AfterViewInit {
         const axisTop = d3.axisLeft(xScale);
         axisTopG.append('g')
             .call(axisTop);
+    }
+
+    // Adapted from https://github.com/akngs/d3-boxplot/blob/main/src/boxplot.js
+    private boxplotStats(values: number[]) {
+        const fiveNums = [0.0, 0.25, 0.5, 0.75, 1.0].map((d) => d3.quantile(values, d)) as number[];
+        const iqr = fiveNums[3] - fiveNums[1];
+        const step = iqr * 1.5;
+        const fences = [
+            { start: fiveNums[1] - step - step, end: fiveNums[1] - step },
+            { start: fiveNums[1] - step, end: fiveNums[1] },
+            { start: fiveNums[1], end: fiveNums[3] },
+            { start: fiveNums[3], end: fiveNums[3] + step },
+            { start: fiveNums[3] + step, end: fiveNums[3] + step + step },
+        ];
+        const boxes = [
+            { start: fiveNums[1], end: fiveNums[2] },
+            { start: fiveNums[2], end: fiveNums[3] },
+        ];
+        const whiskers = [
+            { start: d3.min(values.filter((d) => fences[1].start <= d)), end: fiveNums[1] },
+            { start: d3.max(values.filter((d) => fences[3].end >= d)), end: fiveNums[3] },
+        ];
+        const points = values.map((d, i) => ({
+            value: d,
+            datum: values[i],
+            outlier: d < fences[1].start || fences[3].end < d,
+            farout: d < fences[0].start || fences[4].end < d,
+        }));
+        return { fiveNums, iqr, step, fences, boxes, whiskers, points };
     }
 }

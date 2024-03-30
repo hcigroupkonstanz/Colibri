@@ -53,7 +53,11 @@ export class ConnectionPool extends Service {
 
     public broadcast(message: NetworkMessage, app = message.origin?.app): void {
         for (const connection of this.servers) {
-            const clients = connection.currentClients.filter(client => client.app === app && client.id !== message.origin?.id) || [];
+            let clients = connection.currentClients;
+            if (app) {
+                clients = clients.filter(client => client.app === app && client.id !== message.origin?.id);
+            }
+
             connection.broadcast(message, clients);
         }
     }

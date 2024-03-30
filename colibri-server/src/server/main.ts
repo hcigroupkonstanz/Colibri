@@ -46,6 +46,7 @@ const clientLogger = new colibri.ClientLogger(connectionPool);
 const webLog = new colibri.WebLog(socketioServer);
 const modelsync = new colibri.ModelSynchronization(connectionPool, dataStore);
 const broadcaster = new colibri.Broadcaster(connectionPool);
+const latency = new colibri.MeasureLatency(connectionPool, socketioServer);
 
 /**
  *    Startup

@@ -75,6 +75,18 @@ export class ClientService {
 
     constructor(socketio: SocketIOService) {
         socketio
+            .listen('colibri::latency')
+            .subscribe((m: { id: string, latency: number[] }[]) => {
+                this.clients$.next(m.map(c => ({
+                    ...c,
+                    name: 'TODO',
+                    app: 'TODO',
+                    version: 'TODO',
+                    ip: 'TODO'
+                })));
+            });
+
+        socketio
             .listen('colibri::clients')
             .subscribe((m: Partial<ColibriClient> | { id: string }) => {
                 const existingClient = this.clients.find(c => c.id === m.id);

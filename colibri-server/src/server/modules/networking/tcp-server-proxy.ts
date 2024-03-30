@@ -6,8 +6,7 @@ import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks';
 
 export class TCPServerProxy
     extends WorkerServiceProxy
-    implements NetworkServer
-{
+    implements NetworkServer {
     public serviceName = 'UnityServer';
     public groupName = 'unity';
 
@@ -52,11 +51,14 @@ export class TCPServerProxy
                     this.onClientDisconnected(msg.content.id as string);
                     break;
 
-                case 'clientMessage$':
-                    this.onClientMessage(
-                        msg.content as unknown as NetworkMessage
-                    );
+                case 'clientMessage$': {
+                    const networkMessage = msg.content as unknown as NetworkMessage;
+                    this.onClientMessage({
+                        ...networkMessage,
+                        origin: this.clients.find((c) => c.id === networkMessage.origin?.id),
+                    });
                     break;
+                }
             }
         });
     }

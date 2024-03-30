@@ -299,12 +299,7 @@ export class TCPServerWorker extends WorkerService {
         }
     }
 
-    private assignApp(
-        client: TcpClient,
-        app: string,
-        name: string,
-        version: number
-    ): void {
+    private assignApp(client: TcpClient, app: string, name: string, version: number): void {
         client.app = app;
         client.name = name;
         client.version = version;
@@ -342,13 +337,10 @@ export class TCPServerWorker extends WorkerService {
     }
 
     private handleHeartbeat() {
-        for (const client of this.clients) {
+        for (const client of [...this.clients, ...this.waitingClients]) {
             client.socket.write('\0\0\0h\0');
         }
 
-        for (const client of this.waitingClients) {
-            client.socket.write('\0\0\0h\0');
-        }
     }
 }
 

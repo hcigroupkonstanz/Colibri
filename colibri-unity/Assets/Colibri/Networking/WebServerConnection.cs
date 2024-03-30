@@ -1,6 +1,7 @@
 ﻿using Colibri.Networking;
 using Google.FlatBuffers;
 using HCIKonstanz.Colibri.Core;
+using HCIKonstanz.Colibri.Samples;
 using HCIKonstanz.Colibri.Setup;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -292,6 +293,11 @@ namespace HCIKonstanz.Colibri.Networking
                                 command = message.Command,
                                 payload = payload
                             });
+
+
+                            // return latency messages immediately
+                            if (message.Channel == "colibri" && message.Command == "latency")
+                                _ = Instance.SendCommandAsync("colibri", "latency", payload);
                         }
                         catch (Exception e)
                         {
