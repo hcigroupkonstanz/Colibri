@@ -26,7 +26,7 @@ services:
 
 ### Node
 
-Requirements: NodeJS 12+
+Requirements: NodeJS 20+
 
 Clone this repository, build with `npm run build`, then start with `npm start`.
 
