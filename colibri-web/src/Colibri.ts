@@ -20,8 +20,7 @@ export class Colibri {
     public constructor(
         public readonly app: string,
         public readonly server: string = window?.location?.hostname ?? '',
-        public readonly port: number = 9011,
-        public readonly version: string = '1'
+        public readonly port: number = 9011
     ) {
         if (server.trim().length <= 0) {
             throw new ColibriError('Server Address missing or empty!');
@@ -44,7 +43,7 @@ export class Colibri {
         else Colibri.instance = this;
 
         this.socket = connect(this.uri, {
-            query: { app, version: version },
+            query: { app, version: '1' },
         });
         this.socket.on('connect', this.onSocketConnect.bind(this));
         this.socket.onAny(this.onSocketAny.bind(this));
