@@ -75,10 +75,11 @@
             .active-indicator {
                 position: absolute;
                 bottom: 0;
-                left: 0;
                 height: 4px;
                 width: $tab-width;
                 background-color: $nord9;
+
+                transition: left 0.3s;
             }
         }
     }

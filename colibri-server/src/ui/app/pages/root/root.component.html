@@ -5,9 +5,9 @@
     </div>
 
     <div class="tabs">
-        <a routerLink="/log" routerLinkActive="active">Log</a>
+        <a *ngFor="let tab of tabs" [routerLink]="tab.path" routerLinkActive="active">{{ tab.label }}</a>
 
-        <div class="active-indicator"></div>
+        <div class="active-indicator" [style]="{ 'left': getIndicatorPosition() }"></div>
     </div>
 
     <div class="selector">
