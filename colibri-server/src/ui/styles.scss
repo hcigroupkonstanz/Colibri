@@ -19,8 +19,7 @@ body {
 /** Nicer scroll bars **/
 ::-webkit-scrollbar-track
 {
-	-webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
-	background-color: $nord1;
+	background-color: $nord0;
 }
 
 ::-webkit-scrollbar
@@ -32,6 +31,7 @@ body {
 ::-webkit-scrollbar-thumb
 {
 	background-color: $nord4;
+    border-radius: 10px;
 }
 
 

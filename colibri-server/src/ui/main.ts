@@ -17,6 +17,7 @@ import { BrowserModule, bootstrapApplication } from '@angular/platform-browser';
 import { RootComponent } from './app/pages/root/root.component';
 import { Routes, provideRouter } from '@angular/router';
 import { LogComponent } from './app/pages/log/log.component';
+import { StatisticsComponent } from './app/pages/statistics/statistics.component';
 
 if (environment.production) {
   enableProdMode();
@@ -24,6 +25,7 @@ if (environment.production) {
 
 const routes: Routes = [
   { path: 'log', component: LogComponent },
+  { path: 'statistics', component: StatisticsComponent },
   { path: '**', redirectTo: '/log' },
 ];
 

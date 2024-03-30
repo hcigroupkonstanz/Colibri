@@ -14,6 +14,7 @@ import { CommonModule } from '@angular/common';
 export class RootComponent {
     tabs = [
         { label: 'Log', path: '/log' },
+        { label: 'Statistics', path: '/statistics' },
     ];
 
     getIndicatorPosition() {
