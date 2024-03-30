@@ -22,7 +22,7 @@ export class LogComponent implements OnInit, AfterViewChecked {
     }
 
     ngOnInit() {
-        this.scrollContainer.nativeElement.addEventListener('wheel', (ev: WheelEvent) => this.onScroll(ev.deltaY));
+        this.scrollContainer.nativeElement.addEventListener('wheel', (ev: WheelEvent) => this.onScroll(ev.deltaY), { passive: true });
     }
 
     ngAfterViewChecked(): void {
