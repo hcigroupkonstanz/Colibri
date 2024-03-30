@@ -17,18 +17,6 @@ export class Colibri {
     public readonly uri: string;
     public readonly uriRestApi: string;
 
-    /**
-     * @deprecated use new class constructor directly
-     */
-    public static init(
-        app: string,
-        server: string = window?.location?.hostname ?? '',
-        port: number = 9011,
-        version: string = '1'
-    ) {
-        return new Colibri(app, server, port, version);
-    }
-
     public constructor(
         public readonly app: string,
         public readonly server: string = window?.location?.hostname ?? '',
