@@ -1,14 +1,15 @@
 import { Colibri, RemoteLogger } from '@hcikn/colibri';
 
-import { colibriAddress } from './common';
+import { colibriAddress, colibriPort } from './common';
 
 (async () => {
-    Colibri.init('myAppName', await colibriAddress());
+    new Colibri('myAppName', await colibriAddress(), await colibriPort());
 
-
-    console.log('The following prompts will be printed to the console, but also sent to the server');
+    console.log(
+        'The following prompts will be printed to the console, but also sent to the server:'
+    );
     // once we initialize the remote logger, everything logged via console will now be sent to the server (and to the console)
-    RemoteLogger.init();
+    new RemoteLogger(true);
 
     // visit the web interface at http://<YOUR_COLIBRI_SERVER>:9011 to see the logs
     // in this case: http://colibri.hci.uni-konstanz.de:9011

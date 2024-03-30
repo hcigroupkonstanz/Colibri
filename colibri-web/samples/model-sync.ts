@@ -1,6 +1,5 @@
 import { Colibri, RegisterModelSync, SyncModel, Synced } from '@hcikn/colibri';
-import { rl, colibriAddress } from './common';
-
+import { rl, colibriAddress, colibriPort } from './common';
 
 /**
  *  To use the @Synced() decorator, please add the following to the "compiler" field of your tsconfig.json:
@@ -8,8 +7,12 @@ import { rl, colibriAddress } from './common';
  */
 export class SampleClass extends SyncModel<SampleClass> {
     @Synced()
-    get name() { return this._name; }
-    set name(val: string) { this._name = val; }
+    get name() {
+        return this._name;
+    }
+    set name(val: string) {
+        this._name = val;
+    }
     private _name = '';
 
     /* Warning: for some reason syncing fields does not work with some frameworks (e.g., React)! */
@@ -21,25 +24,30 @@ export class SampleClass extends SyncModel<SampleClass> {
     public address = '';
 }
 
-
-
 (async () => {
-    Colibri.init('myAppName', await colibriAddress());
+    new Colibri('myAppName', await colibriAddress(), await colibriPort());
 
     /**
      *  This is the registration for the SampleClass.
      *  It returns an observable (BehaviorSubject) that contains all instances of SampleClass and a function to register new instances.
      */
-    const [ SampleClasses$, registerExampleClass ] = RegisterModelSync<SampleClass>({ type: SampleClass });
+    const [SampleClasses$, registerExampleClass] =
+        RegisterModelSync<SampleClass>({ type: SampleClass });
 
     // SampleClasses$ contains all synchronized instances.
     // Since 'RegisterModelSync' returns a BehaviorSubject, the method will be executed with the current value.
-    SampleClasses$.subscribe(classes => {
+    SampleClasses$.subscribe((classes) => {
         // will be called whenever a new instance is created, an existing one is updated, or one is deleted
         // please refer to RxJS documentation for more information: https://rxjs.dev/guide/overview
-        console.log('Current SampleClasses:', classes.map(c => ({ name: c.name, age: c.age, address: c.address })));
+        console.log(
+            'Current SampleClasses:',
+            classes.map((c) => ({
+                name: c.name,
+                age: c.age,
+                address: c.address,
+            }))
+        );
     });
-
 
     // When creating a new instance, we need to register it with the model synchronization
     const newClass = new SampleClass('use a real id here');
@@ -66,10 +74,15 @@ export class SampleClass extends SyncModel<SampleClass> {
         });
     };
 
-
     console.log(' ');
-    console.log('Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"');
-    console.log('or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" ');
+    console.log(
+        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"'
+    );
+    console.log(
+        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" '
+    );
+    console.log(' ');
+    console.log('Terminate by typing "exit"');
     console.log(' ');
 
     // eslint-disable-next-line no-constant-condition
