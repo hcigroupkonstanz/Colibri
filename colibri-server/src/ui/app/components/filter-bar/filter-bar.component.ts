@@ -1,12 +1,17 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { LogMessage, LogService } from '../../services';
 import { Subscription } from 'rxjs';
-import { MatSelectChange } from '@angular/material/select';
+import { MatSelectChange, MatSelect } from '@angular/material/select';
+import { NgFor } from '@angular/common';
+import { MatOption } from '@angular/material/core';
+import { MatFormField, MatLabel } from '@angular/material/form-field';
 
 @Component({
-  selector: 'app-filter-bar',
-  templateUrl: './filter-bar.component.html',
-  styleUrls: ['./filter-bar.component.scss']
+    selector: 'app-filter-bar',
+    templateUrl: './filter-bar.component.html',
+    styleUrls: ['./filter-bar.component.scss'],
+    standalone: true,
+    imports: [MatFormField, MatLabel, MatSelect, MatOption, NgFor]
 })
 export class FilterBarComponent implements OnInit, OnDestroy {
     appNames: string[] = [];

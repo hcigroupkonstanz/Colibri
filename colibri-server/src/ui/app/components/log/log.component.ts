@@ -1,10 +1,18 @@
 import { Component, OnInit, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
 import { LogMessage, LogService } from '../../services';
+import { MatIcon } from '@angular/material/icon';
+import { MatMiniFabButton } from '@angular/material/button';
+import { NgIf } from '@angular/common';
+import { LogMessageComponent } from '../log-message/log-message.component';
+import { CdkVirtualScrollableElement, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf } from '@angular/cdk/scrolling';
+import { FilterBarComponent } from '../filter-bar/filter-bar.component';
 
 @Component({
     selector: 'app-log',
     templateUrl: './log.component.html',
-    styleUrls: ['./log.component.scss']
+    styleUrls: ['./log.component.scss'],
+    standalone: true,
+    imports: [FilterBarComponent, CdkVirtualScrollableElement, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf, LogMessageComponent, NgIf, MatMiniFabButton, MatIcon]
 })
 export class LogComponent implements OnInit, AfterViewChecked {
     @ViewChild('scrollContainer', { static: true }) private scrollContainer!: ElementRef;
