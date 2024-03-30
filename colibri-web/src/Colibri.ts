@@ -31,8 +31,8 @@ export class Colibri {
         }
 
         this.uri = `${server}:${port}`;
-        if (!new RegExp('https?://', 'i').test(this.uri)) {
-            this.uri = `http://${this.uri}`;
+        if (!new RegExp('wss?://', 'i').test(this.uri)) {
+            this.uri = `ws://${this.uri}`;
         }
         this.uriRestApi = `${this.uri}/api/store/${app}/`;
 
@@ -44,6 +44,7 @@ export class Colibri {
 
         this.socket = connect(this.uri, {
             query: { app, version: '1' },
+            transports: ['websocket']
         });
         this.socket.on('connect', this.onSocketConnect.bind(this));
         this.socket.onAny(this.onSocketAny.bind(this));
