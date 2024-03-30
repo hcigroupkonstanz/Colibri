@@ -1,7 +1,7 @@
 import * as net from 'net';
 import { Config } from '../src/server/configuration';
 
-const address = 'localhost';
+const address = '127.0.0.1';
 const port = Config.TCP_PORT;
 const app = 'TEST';
 const version = 1;
