@@ -1,25 +1,93 @@
 @import '../../../sass/nord.scss';
 
-.container {
+:host {
+    position: relative;
+
     display: grid;
-    // grid-template-columns: [main] 1fr [sidebar] 350px;
-    grid-template-columns: [main] 1fr [sidebar] 0px;
-    grid-template-rows: 100%;
+    grid-template-rows: [header] 80px [main] 1fr;
 
-    width: 100%;
-    height: 100%;
+    $margin: 20px;
+    margin: $margin;
 
-    .main {
+    width: calc(100% - #{$margin * 2});
+    height: calc(100% - #{$margin * 2});
+
+    overflow: hidden;
+
+    .header {
         width: 100%;
         height: 100%;
-        background-color: $nord0;
-        grid-column: main;
+        grid-row: header;
+
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+
+        .logo {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            margin-right: 50px;
+
+            img {
+                height: 100%;
+                width: 100px;
+            }
+
+            h1 {
+                margin-left: 10px;
+                margin-right: 10px;
+            }
+        }
+
+        .tabs {
+            $tab-width: 100px;
+
+            position: relative;
+
+            width: 100%;
+            height: 100%;
+
+            display: flex;
+            flex-direction: row;
+            justify-content: flex-start;
+            align-items: center;
+
+            gap: 20px;
+
+            font-weight: bold;
+
+            a {
+                width: $tab-width;
+                text-align: center;
+            }
+
+            a.active {
+                color: $nord9;
+            }
+
+            a.active::content {
+                content: 'test';
+            }
+
+            .active-indicator {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                height: 4px;
+                width: $tab-width;
+                background-color: $nord9;
+            }
+        }
     }
 
-    .sidebar {
+    .content {
+        grid-row: main;
+        background-color: $nord0;
+
         height: 100%;
-        display: inline-block;
-        overflow: auto;
-        grid-column: sidebar;
+        width: 100%;
     }
 }

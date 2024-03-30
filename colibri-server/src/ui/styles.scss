@@ -1,4 +1,49 @@
 /* You can add global styles to this file, and also import other style files */
+@import 'sass/nord.scss';
 
-html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+html,
+body {
+    height: 100%;
+
+}
+body {
+    margin: 0;
+    font-family: Roboto, "Helvetica Neue", sans-serif;
+    background-color: $nord1;
+    color: white;
+
+    overflow: hidden;
+}
+
+
+/** Nicer scroll bars **/
+::-webkit-scrollbar-track
+{
+	-webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
+	background-color: $nord1;
+}
+
+::-webkit-scrollbar
+{
+	width: 10px;
+	background-color: $nord1;
+}
+
+::-webkit-scrollbar-thumb
+{
+	background-color: $nord4;
+}
+
+
+a {
+    color: $nord6;
+    text-decoration: none;
+
+    &:hover {
+        color: $nord8;
+    }
+}
+
+.no-select {
+    user-select: none;
+}

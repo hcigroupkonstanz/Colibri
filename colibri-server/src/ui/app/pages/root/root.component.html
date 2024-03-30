@@ -1,9 +1,20 @@
-<div class="container">
-    <app-log class="main"></app-log>
-
-    <div class="sidebar">
-        <!-- <button mat-flat-button color="primary" (click)="loadMenu()">Scene: Menu</button>
-        <button mat-flat-button color="primary" (click)="loadDev()">Scene: Dev</button>
-        <button mat-flat-button color="primary" (click)="loadRelease()">Scene: Release</button> -->
+<div class="header no-select">
+    <div class="logo">
+        <img src="assets/logo.webp">
+        <h1>Colibri</h1>
     </div>
+
+    <div class="tabs">
+        <a routerLink="/log" routerLinkActive="active">Log</a>
+
+        <div class="active-indicator"></div>
+    </div>
+
+    <div class="selector">
+        <app-filter-bar/>
+    </div>
+</div>
+
+<div class="content">
+    <router-outlet></router-outlet>
 </div>

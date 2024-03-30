@@ -1,0 +1,22 @@
+@import '../../../sass/nord.scss';
+
+:host {
+    height: 100%;
+    position: relative;
+    background: $nord0;
+}
+
+#log {
+    height: 100%;
+    overflow-y: auto;
+    position: relative;
+
+    grid-column: 0;
+    grid-row: log;
+}
+
+.btn-autoscroll {
+    position: absolute;
+    right: 30px;
+    bottom: 30px;
+}

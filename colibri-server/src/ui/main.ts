@@ -15,13 +15,22 @@ import { FormsModule } from '@angular/forms';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { BrowserModule, bootstrapApplication } from '@angular/platform-browser';
 import { RootComponent } from './app/pages/root/root.component';
+import { Routes, provideRouter } from '@angular/router';
+import { LogComponent } from './app/pages/log/log.component';
 
 if (environment.production) {
   enableProdMode();
 }
 
+const routes: Routes = [
+  { path: 'log', component: LogComponent },
+  { path: '**', redirectTo: '/log' },
+];
+
+
 bootstrapApplication(RootComponent, {
     providers: [
+    provideRouter(routes),
         importProvidersFrom(BrowserModule, FormsModule, MatCardModule, MatBadgeModule, MatChipsModule, MatExpansionModule, MatButtonModule, MatIconModule, MatInputModule, MatSelectModule, ScrollingModule),
         provideAnimations()
     ]

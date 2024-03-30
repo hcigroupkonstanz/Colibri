@@ -3,9 +3,9 @@ import { LogMessage, LogService } from '../../services';
 import { MatIcon } from '@angular/material/icon';
 import { MatMiniFabButton } from '@angular/material/button';
 import { NgIf } from '@angular/common';
-import { LogMessageComponent } from '../log-message/log-message.component';
+import { LogMessageComponent } from '../../components/log-message/log-message.component';
 import { CdkVirtualScrollableElement, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf } from '@angular/cdk/scrolling';
-import { FilterBarComponent } from '../filter-bar/filter-bar.component';
+import { FilterBarComponent } from '../../components/filter-bar/filter-bar.component';
 
 @Component({
     selector: 'app-log',
