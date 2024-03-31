@@ -13,8 +13,7 @@ export class MeasureLatency extends Service {
 
         // Send out latency message
         setInterval(() => {
-            const hrt = hrtime();
-            const now = hrt[0] * 1000000 + hrt[1] / 1000;
+            const now = hrtime.bigint();
             pool.broadcast({
                 channel: 'colibri',
                 command: 'latency',
@@ -27,21 +26,24 @@ export class MeasureLatency extends Service {
         pool.messages$
             .pipe(filter(m => m.channel === 'colibri' && m.command === 'latency'))
             .subscribe(m => {
-                const hrt = hrtime();
-                const now = hrt[0] * 1000000 + hrt[1] / 1000;
-                const latency = (now - JSON.parse(m.payload as string)) / 1000;
+                try {
+                    const now = hrtime.bigint();
+                    const latency = Number(now - BigInt(m.payload as string)) / 1000000;
 
-                if (m.origin) {
-                    if (m.origin.metadata['latency'] === undefined) {
-                        m.origin.metadata['latency'] = [];
+                    if (m.origin) {
+                        if (m.origin.metadata['latency'] === undefined) {
+                            m.origin.metadata['latency'] = [];
+                        }
+
+                        const latencies = m.origin.metadata['latency'] as number[];
+                        latencies.push(Number(latency));
+
+                        while (latencies.length > 100) {
+                            latencies.shift();
+                        }
                     }
-
-                    const latencies = m.origin.metadata['latency'] as number[];
-                    latencies.push(latency);
-
-                    while (latencies.length > 100) {
-                        latencies.shift();
-                    }
+                } catch (e) {
+                    this.logError('Error parsing latency message: ' + e);
                 }
             });
 
