@@ -1,13 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
-import { ClientListComponent } from '../../components/client-list/client-list.component';
+import { LatencyChartComponent } from '../../components/latency-chart/latency-chart.component';
 
 @Component({
     selector: 'app-statistics',
     standalone: true,
     imports: [
         CommonModule,
-        ClientListComponent
+        LatencyChartComponent
     ],
     templateUrl: './statistics.component.html',
     styleUrl: './statistics.component.scss',
