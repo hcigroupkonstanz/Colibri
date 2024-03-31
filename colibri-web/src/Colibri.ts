@@ -48,6 +48,13 @@ export class Colibri {
         });
         this.socket.on('connect', this.onSocketConnect.bind(this));
         this.socket.onAny(this.onSocketAny.bind(this));
+
+        // latency statistics
+        this.registerChannel('colibri', (msg) => {
+            if (msg.command === 'latency') {
+                SendMessage('colibri', 'latency', msg.payload);
+            }
+        });
     }
 
     private onSocketConnect() {
