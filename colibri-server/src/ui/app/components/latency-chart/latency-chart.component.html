@@ -1,1 +1,9 @@
 <div #latencyChart id="latency-chart"></div>
+
+<div *ngFor="let client of clients">
+    <div class="client">
+        <div class="client-name">Name: {{ client.name }}</div>
+        <div class="client-latency">Median latency: {{ getMedian(client.latency) }} ms</div>
+        <div class="client-latency">Stdev latency: {{ getStdDev(client.latency) }} ms</div>
+    </div>
+</div>

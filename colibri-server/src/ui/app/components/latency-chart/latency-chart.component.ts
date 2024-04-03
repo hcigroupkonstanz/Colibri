@@ -2,7 +2,7 @@ import { AfterViewInit, Component, ElementRef, ViewChild } from '@angular/core';
 import { ClientService, ColibriClient } from '../../services/client.service';
 import * as d3 from 'd3';
 import { CommonModule } from '@angular/common';
-import { BoxplotStats, boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
+import { boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
 
 @Component({
     selector: 'app-latency-chart',
@@ -14,6 +14,7 @@ import { BoxplotStats, boxplot, boxplotStats, boxplotSymbolDot } from './boxplot
 export class LatencyChartComponent implements AfterViewInit {
     @ViewChild('latencyChart')
     latencyChart!: ElementRef<HTMLDivElement>;
+    clients: ReadonlyArray<ColibriClient> = [];
 
     constructor(private clientService: ClientService) { }
 
@@ -23,7 +24,17 @@ export class LatencyChartComponent implements AfterViewInit {
         });
     }
 
+    getMedian(latencies: ReadonlyArray<number>): number {
+        return d3.median(latencies) || 0;
+    }
+
+    getStdDev(latencies: ReadonlyArray<number>): number {
+        return d3.deviation(latencies) || 0;
+    }
+
     private drawChart(clients: ReadonlyArray<ColibriClient>): void {
+        this.clients = clients;
+
         const barHeight = 30;
         const margin = { top: 50, right: 10, bottom: 20, left: 10 };
         const totalHeight = margin.top + margin.bottom + (clients.length + 1) * (barHeight + 10);

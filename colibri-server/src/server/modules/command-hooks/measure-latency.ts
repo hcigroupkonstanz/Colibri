@@ -28,7 +28,7 @@ export class MeasureLatency extends Service {
             .subscribe(m => {
                 try {
                     const now = hrtime.bigint();
-                    const latency = Number(now - BigInt(m.payload as string)) / 1000000;
+                    const latency = Number(now - BigInt(JSON.parse(m.payload as string))) / 1000000;
 
                     if (m.origin) {
                         if (m.origin.metadata['latency'] === undefined) {
