@@ -57,7 +57,7 @@ export class MeasureLatency extends Service {
                     latency: c.metadata['latency'] || [],
                 }))),
             }, frontendConnection.currentClients);
-        }, 100);
+        }, 1000);
     }
 }
 

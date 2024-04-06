@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild } from '@angular/core';
 import { ClientService, ColibriClient } from '../../services/client.service';
 import * as d3 from 'd3';
 import { CommonModule } from '@angular/common';
@@ -114,6 +114,14 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         // }
     }
 
+    @HostListener('window:resize')
+    onResize() {
+        const svg = d3.select(this.latencyChart.nativeElement).select('svg');
+        const totalWidth = this.latencyChart.nativeElement.clientWidth;
+        svg.attr('width', totalWidth);
+        this.animateChart();
+    }
+
     private updateChart(clients: ReadonlyArray<ColibriClient>): void {
         this.clients = clients;
 
@@ -147,15 +155,14 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                 .attr('color', (_, i) => colors[i % colors.length])
                 .attr('class', 'plot')
                 .call(boxplot(true, yScale, barWidth, barWidth, false, boxplotSymbolDot, 0.5, 0.5));
-
         }
 
         
         if (this.lineChartSvg) {
-            this.lineChartSvg
+            const path = this.lineChartSvg
                 .selectAll('path.line')
-                .data(clients.map(c => c.latency))
-                .enter()
+                .data(clients.map(c => c.latency));
+            path.enter()
                     .append('path')
                     .attr('class', 'line')
                     .attr('fill', 'none')
@@ -166,6 +173,8 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                         .x(d => this.lineX(d[0]))
                         .y(d => yScale(d[1]))
                     );
+            path.exit()
+                    .remove();
         }
 
         if (this.axisLeft) {
