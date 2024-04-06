@@ -218,47 +218,9 @@ export const boxplot = (
         return this;
     };
 
-    // boxplot.vertical = (..._) => (_.length ? ((vertical = _[0]), boxplot) : vertical)
-    // boxplot.scale = (..._) => (_.length ? ((scale = _[0]), boxplot) : scale)
-    // boxplot.showInnerDots = (..._) => (_.length ? ((showInnerDots = _[0]), boxplot) : showInnerDots)
-    // boxplot.bandwidth = (..._) => (_.length ? ((bandwidth = _[0]), boxplot) : bandwidth)
-    // boxplot.boxwidth = (..._) => (_.length ? ((boxwidth = _[0]), boxplot) : boxwidth)
-    // boxplot.symbol = (..._) => (_.length ? ((symbol = _[0]), boxplot) : symbol)
-    // boxplot.opacity = (..._) => (_.length ? ((opacity = _[0]), boxplot) : opacity)
-    // boxplot.jitter = (..._) => (_.length ? ((jitter = _[0]), boxplot) : jitter)
-    // boxplot.key = (..._) => (_.length ? ((key = _[0]), boxplot) : key)
-
     return boxplot;
 };
 
-// export function boxplotStats(data, valueof) {
-//     const values = valueof ? data.map(valueof) : data
-//     const fiveNums = [0.0, 0.25, 0.5, 0.75, 1.0].map((d) => quantile(values, d))
-//     const iqr = fiveNums[3] - fiveNums[1]
-//     const step = iqr * 1.5
-//     const fences = [
-//         { start: fiveNums[1] - step - step, end: fiveNums[1] - step },
-//         { start: fiveNums[1] - step, end: fiveNums[1] },
-//         { start: fiveNums[1], end: fiveNums[3] },
-//         { start: fiveNums[3], end: fiveNums[3] + step },
-//         { start: fiveNums[3] + step, end: fiveNums[3] + step + step },
-//     ]
-//     const boxes = [
-//         { start: fiveNums[1], end: fiveNums[2] },
-//         { start: fiveNums[2], end: fiveNums[3] },
-//     ]
-//     const whiskers = [
-//         { start: min(values.filter((d) => fences[1].start <= d)), end: fiveNums[1] },
-//         { start: max(values.filter((d) => fences[3].end >= d)), end: fiveNums[3] },
-//     ]
-//     const points = values.map((d, i) => ({
-//         value: d,
-//         datum: data[i],
-//         outlier: d < fences[1].start || fences[3].end < d,
-//         farout: d < fences[0].start || fences[4].end < d,
-//     }))
-//     return { fiveNums, iqr, step, fences, boxes, whiskers, points }
-// }
 
 export const boxplotSymbolDot = 'dot';
 export const boxplotSymbolTick = 'tick';

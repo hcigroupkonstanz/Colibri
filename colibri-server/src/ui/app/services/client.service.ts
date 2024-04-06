@@ -8,7 +8,7 @@ export interface ColibriClient {
     name: string;
     version: string;
     ip: string;
-    latency: number[]
+    latency: [number, number][]
 }
 
 @Injectable({
@@ -21,7 +21,7 @@ export class ClientService {
     constructor(socketio: SocketIOService) {
         socketio
             .listen('colibri::latency')
-            .subscribe((m: { id: string, latency: number[] }[]) => {
+            .subscribe((m: { id: string, latency: [number, number][] }[]) => {
                 this.clients$.next(m.map(c => ({
                     ...c,
                     name: 'TODO',

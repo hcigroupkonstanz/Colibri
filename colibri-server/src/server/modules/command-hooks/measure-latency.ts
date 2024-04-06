@@ -35,8 +35,8 @@ export class MeasureLatency extends Service {
                             m.origin.metadata['latency'] = [];
                         }
 
-                        const latencies = m.origin.metadata['latency'] as number[];
-                        latencies.push(Number(latency));
+                        const latencies = m.origin.metadata['latency'] as [number, number][];
+                        latencies.push([Date.now(), Number(latency)]);
 
                         while (latencies.length > 100) {
                             latencies.shift();
