@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
 import { ClientService, ColibriClient } from '../../services/client.service';
 import * as d3 from 'd3';
 import { CommonModule } from '@angular/common';
@@ -11,7 +11,7 @@ import { boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
     standalone: true,
     imports: [CommonModule]
 })
-export class LatencyChartComponent implements AfterViewInit {
+export class LatencyChartComponent implements AfterViewInit, OnDestroy {
     @ViewChild('latencyChart')
     latencyChart!: ElementRef<HTMLDivElement>;
     clients: ReadonlyArray<ColibriClient> = [];
@@ -21,15 +21,28 @@ export class LatencyChartComponent implements AfterViewInit {
     private axisLeft: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
     private axisBottom: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
 
+    private intervalTimer: number | null = null;
 
     constructor(private clientService: ClientService) { }
 
     ngAfterViewInit(): void {
         this.initChart();
 
+        let c: ReadonlyArray<ColibriClient> = [];
         this.clientService.clients$.subscribe(clients => {
-            this.drawChart(clients);
+            this.updateBoxPlot(clients);
+            c = clients;
         });
+
+        this.intervalTimer = window.setInterval(() => {
+            this.updateLineChart(c);
+        }, 20);
+    }
+
+    ngOnDestroy(): void {
+        if (this.intervalTimer !== null) {
+            window.clearInterval(this.intervalTimer);
+        }
     }
 
     getMedian(latencies: ReadonlyArray<[number, number]>): number {
@@ -59,7 +72,47 @@ export class LatencyChartComponent implements AfterViewInit {
 
     }
 
-    private drawChart(clients: ReadonlyArray<ColibriClient>): void {
+    private updateLineChart(clients: ReadonlyArray<ColibriClient>): void {
+
+        const totalHeight = 500;
+        const totalWidth = this.latencyChart.nativeElement.clientWidth;
+
+        const plotWidth = totalWidth - this.margin.left - this.margin.right;
+        const plotHeight = totalHeight - this.margin.top - this.margin.bottom;
+
+
+        const maxLatency = d3.max(clients.flatMap(c => c.latency.map(l => l[1]))) || 1;
+        const yScale = d3.scaleLinear()
+            .domain([Math.max(maxLatency, 10), 0])
+            .range([0, plotHeight]);
+
+        const now = Date.now();
+        // we ping every 100ms and store the last 1000 values (and query every 1s = 1000ms)
+
+        const lineXScale = d3.scaleTime()
+            .domain([ now - (100 * 1000) - 1000, now ])
+            .range([0, plotWidth]);
+
+
+        if (this.chartSvg) {
+            this.chartSvg
+                .selectAll('path.line')
+                .data(clients.map(c => c.latency))
+                .enter()
+                .append('path')
+                    .attr('class', 'line')
+                    .attr('fill', 'none')
+                    .attr('stroke', 'steelblue')
+                    .attr('stroke-width', 1.5)
+                .merge(this.chartSvg.selectAll('path.line'))
+                    .attr('d', d3.line()
+                        .x(d => lineXScale(d[0]))
+                        .y(d => yScale(d[1]))
+                    );
+                }
+    }
+
+    private updateBoxPlot(clients: ReadonlyArray<ColibriClient>): void {
         this.clients = clients;
 
         const totalHeight = 500;
@@ -78,13 +131,6 @@ export class LatencyChartComponent implements AfterViewInit {
             .rangeRound([0, plotWidth])
             .padding(0.5);
 
-        const lineXScale = d3.scaleLinear()
-            .domain([
-                d3.min(clients.flatMap(c => c.latency.map(l => l[0]))) || 0,
-                d3.max(clients.flatMap(c => c.latency.map(l => l[0]))) || 1
-            ])
-            .range([0, plotWidth]);
-
         const max = d3.max(clients.flatMap(c => c.latency.map(l => l[1]))) || 1;
         const yScale = d3.scaleLinear()
             .domain([Math.max(max, 10), 0])
@@ -99,26 +145,10 @@ export class LatencyChartComponent implements AfterViewInit {
                 .attr('color', (_, i) => colors[i % colors.length])
                 .attr('class', 'plot')
                 .call(boxplot(true, yScale, barWidth, barWidth, false, boxplotSymbolDot, 0.5, 0.5));
-
-            // line chart
-            this.chartSvg
-                .selectAll('path.line')
-                .data(clients.map(c => c.latency))
-                .enter()
-                .append('path')
-                    .attr('class', 'line')
-                    .attr('fill', 'none')
-                    .attr('stroke', 'steelblue')
-                    .attr('stroke-width', 1.5)
-                .merge(this.chartSvg.selectAll('path.line'))
-                    .attr('d', d3.line()
-                        .x(d => lineXScale(d[0]))
-                        .y(d => yScale(d[1]))
-                    );
         }
 
-        if (this.axisBottom) {
-            this.axisBottom.call(d3.axisTop(xScale));
-        }
+        // if (this.axisBottom) {
+        //     this.axisBottom.call(d3.axisTop(xScale));
+        // }
     }
 }

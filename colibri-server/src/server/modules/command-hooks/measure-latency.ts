@@ -38,7 +38,7 @@ export class MeasureLatency extends Service {
                         const latencies = m.origin.metadata['latency'] as [number, number][];
                         latencies.push([Date.now(), Number(latency)]);
 
-                        while (latencies.length > 100) {
+                        while (latencies.length > 1000) {
                             latencies.shift();
                         }
                     }
@@ -57,7 +57,7 @@ export class MeasureLatency extends Service {
                     latency: c.metadata['latency'],
                 }))),
             }, frontendConnection.currentClients);
-        }, 1000);
+        }, 100);
     }
 }
 
