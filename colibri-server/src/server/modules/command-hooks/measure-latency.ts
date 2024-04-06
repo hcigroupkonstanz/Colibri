@@ -54,7 +54,7 @@ export class MeasureLatency extends Service {
                 command: 'update',
                 payload: JSON.stringify(pool.currentClients.filter(c => c.app !== 'colibri').map(c => ({
                     id: c.id,
-                    latency: c.metadata['latency'],
+                    latency: c.metadata['latency'] || [],
                 }))),
             }, frontendConnection.currentClients);
         }, 100);

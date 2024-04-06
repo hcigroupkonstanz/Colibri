@@ -46,11 +46,11 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
     }
 
     getMedian(latencies: ReadonlyArray<[number, number]>): number {
-        return d3.median(latencies.map(l => l[1])) || 0;
+        return d3.median((latencies || []).map(l => l[1]) || []) || 0;
     }
 
     getStdDev(latencies: ReadonlyArray<[number, number]>): number {
-        return d3.deviation(latencies.map(l => l[1])) || 0;
+        return d3.deviation((latencies || []).map(l => l[1]) || []) || 0;
     }
 
     private initChart(): void {
@@ -80,8 +80,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         const plotWidth = totalWidth - this.margin.left - this.margin.right;
         const plotHeight = totalHeight - this.margin.top - this.margin.bottom;
 
-
-        const maxLatency = d3.max(clients.flatMap(c => c.latency.map(l => l[1]))) || 1;
+        const maxLatency = d3.max(clients.flatMap(c => (c.latency || []).map(l => l[1]))) || 1;
         const yScale = d3.scaleLinear()
             .domain([Math.max(maxLatency, 10), 0])
             .range([0, plotHeight]);
@@ -102,7 +101,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                 .append('path')
                     .attr('class', 'line')
                     .attr('fill', 'none')
-                    .attr('stroke', 'steelblue')
+                    .attr('stroke', (d, i) => d3.schemeCategory10[i % d3.schemeCategory10.length])
                     .attr('stroke-width', 1.5)
                 .merge(this.chartSvg.selectAll('path.line'))
                     .attr('d', d3.line()
@@ -123,7 +122,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         const plotWidth = totalWidth - this.margin.left - this.margin.right;
         const plotHeight = totalHeight - this.margin.top - this.margin.bottom;
 
-        const boxplotData =  clients.map(client => boxplotStats(client.latency.map(l => l[1])));
+        const boxplotData =  clients.map(client => boxplotStats((client.latency || []).map(l => l[1])));
         const colors = d3.schemeCategory10;
 
         const xScale = d3.scalePoint()
@@ -131,7 +130,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
             .rangeRound([0, plotWidth])
             .padding(0.5);
 
-        const max = d3.max(clients.flatMap(c => c.latency.map(l => l[1]))) || 1;
+        const max = d3.max(clients.flatMap(c => (c.latency || []).map(l => l[1]))) || 1;
         const yScale = d3.scaleLinear()
             .domain([Math.max(max, 10), 0])
             .range([0, plotHeight]);
