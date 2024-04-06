@@ -27,7 +27,8 @@
               "src/ui/assets"
             ],
             "styles": [
-              "./node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
+              "node_modules/primeng/resources/themes/lara-light-blue/theme.css",
+              "node_modules/primeng/resources/primeng.min.css",
               "src/ui/styles.scss"
             ],
             "scripts": [],
@@ -93,7 +94,8 @@
             "tsConfig": "src/ui/tsconfig.spec.json",
             "karmaConfig": "src/ui/karma.conf.js",
             "styles": [
-              "./node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
+              "node_modules/primeng/resources/themes/lara-light-blue/theme.css",
+              "node_modules/primeng/resources/primeng.min.css",
               "src/ui/styles.scss"
             ],
             "scripts": [],

@@ -1,14 +1,2 @@
-<div class="container">
-    <mat-form-field class="select">
-        <mat-label>Filter by App</mat-label>
-        <mat-select  [(value)]="selected" (selectionChange)="onFilterChanged($event)">
-            <mat-option [value]="''">
-                -- No Filter --
-            </mat-option>
-
-            <mat-option *ngFor="let appName of appNames" [value]="appName">
-                {{appName}}
-            </mat-option>
-        </mat-select>
-    </mat-form-field>
-</div>
+<p-dropdown [options]="appNames" optionLabel="name" optionValue="name" [(ngModel)]="selected" [showClear]="true"
+    placeholder="Filter by app..." class="select" (onChange)="onFilterChanged($event)"></p-dropdown>

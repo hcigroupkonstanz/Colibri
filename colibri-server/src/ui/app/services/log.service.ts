@@ -58,7 +58,7 @@ export class LogService {
 
         this.filter$.subscribe(filter => {
             socketio.emit('colibri::log', 'requestLog', { filter });
-            location.hash = filter;
+            location.hash = filter || '';
 
             // reload messages
             this.messages = [];

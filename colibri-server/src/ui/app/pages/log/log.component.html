@@ -9,6 +9,6 @@
 </div>
 
 
-<button mat-mini-fab (click)="scrollAutomatically()" *ngIf="manualScroll" class="btn-autoscroll">
-    <mat-icon>arrow_downward</mat-icon>
-</button>
+<p-button icon="pi pi-check" [rounded]="true" (click)="scrollAutomatically()" *ngIf="manualScroll" class="btn-autoscroll">
+    <span class="material-icons">arrow_downward</span>
+</p-button>
