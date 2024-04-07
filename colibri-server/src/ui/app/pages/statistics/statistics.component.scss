@@ -1,11 +1,14 @@
 :host {
     display: block;
-    height: 100%;
     overflow-x: hidden;
     overflow-y: auto;
+    margin: 20px;
 }
 
-.chart-container {
+.container {
+    border-radius: 10px;
+    padding: 20px;
+
     background: white;
     color: black;
 
