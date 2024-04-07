@@ -7,7 +7,6 @@ export interface ColibriClient {
     app: string;
     name: string;
     version: string;
-    ip: string;
     latency: [number, number][]
 }
 
@@ -21,32 +20,41 @@ export class ClientService {
     constructor(socketio: SocketIOService) {
         socketio
             .listen('colibri::latency')
-            .subscribe((m: { id: string, latency: [number, number][] }[]) => {
-                this.clients$.next(m.map(c => ({
-                    ...c,
-                    name: 'TODO',
-                    app: 'TODO',
-                    version: 'TODO',
-                    ip: 'TODO'
-                })));
+            .subscribe(msg => {
+                for (const clientId in msg.payload) {
+                    const client = this.clients.find(c => c.id === clientId);
+
+                    if (client) {
+                        client.latency = [
+                            ...client.latency,
+                            ...msg.payload[clientId]
+                        ].slice(-1000);
+                    }
+                }
+
+                this.clients$.next(this.clients);
             });
 
         socketio
             .listen('colibri::clients')
-            .subscribe((m: Partial<ColibriClient> | { id: string }) => {
-                const existingClient = this.clients.find(c => c.id === m.id);
-
-                if (existingClient) {
-                    // update existing client
-                } else {
-                    this.clients = [...this.clients, m as ColibriClient];
+            .subscribe(msg => {
+                if (msg.command === 'client::connected') {
+                    const client = {
+                        ...msg.payload,
+                        latency: []
+                    };
+                    this.clients = [...this.clients, client];
                     this.clients$.next(this.clients);
+                } else if (msg.command === 'client::disconnected') {
+                    this.clients = this.clients.filter(c => c.id !== msg.payload.id);
+                    this.clients$.next(this.clients);
+                } else {
+                    console.error('unknown client command', msg);
                 }
             });
 
-
         // retrieve initial clients
-        socketio.emit('colibri::clients', 'requestClients', {});
+        socketio.emit('colibri::clients', 'client::request', {});
     }
 
 }

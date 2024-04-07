@@ -22,6 +22,9 @@ export class MeasureLatency extends Service {
         }, 100);
 
 
+        // batch latencies for frontend updates
+        let batchedLatencies: { [id: string]: [number, number][] } = {};
+
         // receive latency
         pool.messages$
             .pipe(filter(m => m.channel === 'colibri' && m.command === 'latency'))
@@ -36,7 +39,13 @@ export class MeasureLatency extends Service {
                         }
 
                         const latencies = m.origin.metadata['latency'] as [number, number][];
-                        latencies.push([Date.now(), Number(latency)]);
+                        const l: [number, number] = [Date.now(), Number(latency)];
+                        latencies.push(l);
+
+                        if (batchedLatencies[m.origin.id] === undefined) {
+                            batchedLatencies[m.origin.id] = [];
+                        }
+                        batchedLatencies[m.origin.id].push(l);
 
                         while (latencies.length > 1000) {
                             latencies.shift();
@@ -52,11 +61,9 @@ export class MeasureLatency extends Service {
             frontendConnection.broadcast({
                 channel: 'colibri::latency',
                 command: 'update',
-                payload: JSON.stringify(pool.currentClients.filter(c => c.app !== 'colibri').map(c => ({
-                    id: c.id,
-                    latency: c.metadata['latency'] || [],
-                }))),
+                payload: JSON.stringify(batchedLatencies),
             }, frontendConnection.currentClients);
+            batchedLatencies = {};
         }, 1000);
     }
 }

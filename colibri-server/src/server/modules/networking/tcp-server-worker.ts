@@ -16,7 +16,7 @@ interface TcpClient {
     leftOverBuffer: Buffer;
     address: string;
     app: string;
-    version: number;
+    version: string;
     name: string;
 }
 
@@ -137,7 +137,7 @@ export class TCPServerWorker extends WorkerService {
             address: socket.remoteAddress || 'UNDEFINED',
             app: '',
             name: '',
-            version: 0,
+            version: '0',
         };
         this.waitingClients.push(tcpClient);
 
@@ -212,7 +212,7 @@ export class TCPServerWorker extends WorkerService {
                     .replace(/\0/g, '');
                 try {
                     const [version, app, name] = packet.split('::');
-                    this.assignApp(client, app, name, Number(version));
+                    this.assignApp(client, app, name, version);
                 } catch (err) {
                     this.logError(
                         `Invalid handshake packet received from client ${client.id}`,
@@ -256,6 +256,7 @@ export class TCPServerWorker extends WorkerService {
                             id: client.id,
                             app: client.app,
                             name: client.name,
+                            version: client.version,
                             metadata: {},
                         },
                     });
@@ -299,7 +300,7 @@ export class TCPServerWorker extends WorkerService {
         }
     }
 
-    private assignApp(client: TcpClient, app: string, name: string, version: number): void {
+    private assignApp(client: TcpClient, app: string, name: string, version: string): void {
         client.app = app;
         client.name = name;
         client.version = version;
@@ -313,7 +314,7 @@ export class TCPServerWorker extends WorkerService {
         );
         _.pull(this.waitingClients, client);
         this.clients.push(client);
-        this.postMessage('clientConnected$', { id: client.id, app });
+        this.postMessage('clientConnected$', { id: client.id, app, name, version });
     }
 
     private handleSocketError(client: TcpClient, error: Error): void {

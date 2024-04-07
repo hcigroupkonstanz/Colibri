@@ -27,7 +27,9 @@ export class LogService {
     constructor(socketio: SocketIOService) {
         socketio
             .listen('colibri::log')
-            .subscribe((m: LogMessage) => {
+            .subscribe((msg) => {
+                const m = msg.payload as LogMessage;
+
                 while (this.messages.length > 10000) {
                     delete this.messageIds[this.messages[0].id];
                     this.messages = this.messages.slice(1);

@@ -40,11 +40,13 @@ export class TCPServerProxy
         this.workerMessages$.subscribe((msg) => {
             switch (msg.channel) {
                 case 'clientConnected$':
-                    this.onClientConnected(
-                        msg.content.id as string,
-                        msg.content.app as string,
-                        msg.content.name as string
-                    );
+                    this.onClientConnected({
+                        id: msg.content.id as string,
+                        app: msg.content.app as string,
+                        name: msg.content.name as string,
+                        version: msg.content.version as string,
+                        metadata: {},
+                    });
                     break;
 
                 case 'clientDisconnected$':
@@ -86,9 +88,7 @@ export class TCPServerProxy
         });
     }
 
-    private onClientConnected(id: string, app: string, name: string): void {
-        const client: NetworkClient = { id, app, name, metadata: {} };
-
+    private onClientConnected(client: NetworkClient): void {
         this.clients.push(client);
 
         this.clientAddedStream.next(client);
