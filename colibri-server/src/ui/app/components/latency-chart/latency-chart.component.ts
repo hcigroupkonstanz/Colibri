@@ -1,8 +1,9 @@
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, ViewChild } from '@angular/core';
 import { ClientService, ColibriClient } from '../../services/client.service';
 import * as d3 from 'd3';
 import { CommonModule } from '@angular/common';
 import { boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
+import { UntilDestroy, untilDestroyed } from '@ngneat/until-destroy';
 
 const margin = { top: 20, right: 10, bottom: 50, left: 50 };
 // we ping every 100ms and store the last 1000 values (and query every 1s = 1000ms)
@@ -29,8 +30,10 @@ const colors = [
     templateUrl: './latency-chart.component.html',
     styleUrls: ['./latency-chart.component.scss'],
     standalone: true,
-    imports: [CommonModule]
+    imports: [CommonModule],
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
+@UntilDestroy()
 export class LatencyChartComponent implements AfterViewInit, OnDestroy {
     @ViewChild('latencyChart')
     latencyChart!: ElementRef<HTMLDivElement>;
@@ -46,20 +49,24 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
 
     private lineX: d3.ScaleTime<number, number, never> = d3.scaleTime();
 
-    constructor(private clientService: ClientService) { }
+    constructor(private clientService: ClientService, private changeRef: ChangeDetectorRef) { }
 
     ngAfterViewInit(): void {
         this.initChart();
 
-        this.clientService.clients$.subscribe(clients => {
-            this.clients = clients;
-            this.updateChart();
-        });
+        this.clientService.clients$
+            .pipe(untilDestroyed(this))
+            .subscribe(clients => {
+                this.clients = clients;
+                this.updateChart();
+                this.changeRef.markForCheck();
+            });
 
         this.intervalTimer = window.setInterval(() => {
             this.animateChart();
             this.updateChart();
         }, 1000);
+
         this.animateChart();
     }
 
@@ -162,7 +169,10 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         const boxplotPadding = 5;
         const boxplotWidth = this.clients.length * (barWidth + boxplotPadding);
 
-        const boxplotData =  this.clients.map(client => boxplotStats((client.latency || []).map(l => l[1])));
+        const boxplotData =  this.clients
+            .filter(c => c.latency.length > 0)
+            .map(client => boxplotStats((client.latency)
+                .map(l => l[1])));
 
         const xScale = d3.scalePoint()
             .domain(this.clients.map(client => client.id))
@@ -190,7 +200,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         if (this.lineChartSvg) {
             const path = this.lineChartSvg
                 .selectAll('path.line')
-                .data(this.clients.map(c => c.latency));
+                .data(this.clients.map(c => c.latency).filter(l => l.length > 0));
             path.enter()
                     .append('path')
                     .attr('class', 'line')
