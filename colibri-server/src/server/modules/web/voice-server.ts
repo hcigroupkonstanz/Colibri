@@ -2,7 +2,7 @@ import { Service } from '../core';
 import * as dgram from 'dgram';
 import { AddressInfo } from 'net';
 import { WaveFile } from 'wavefile';
-import { writeFileSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync } from 'fs';
 
 interface VoiceClient {
     ip: string;
@@ -131,8 +131,10 @@ export class VoiceServer extends Service {
                     wav.fromScratch(context.channels, context.samplingRate, '32f', value.recordingData); // 32f means 32 bit floating data ranging from -1 to 1
 
                     // Save wave file
-                    const dateString = value.recordingStartDate.toISOString().replace(':', '_');
-                    writeFileSync(`${this.voiceRecordingPath} rec_${dateString}_ID_${value.userId}.wav`, wav.toBuffer());
+                    const dateString = value.recordingStartDate.toISOString().replace(/:/g, '_');
+                    if (!existsSync(context.voiceRecordingPath)) mkdirSync(context.voiceRecordingPath);
+                    writeFileSync(`${context.voiceRecordingPath}/rec_${dateString}_ID_${value.userId}.wav`, wav.toBuffer());
+                    context.logDebug(`Voice recording saved to rec_${dateString}_ID_${value.userId}.wav`);
                 }
 
                 // Delete client
