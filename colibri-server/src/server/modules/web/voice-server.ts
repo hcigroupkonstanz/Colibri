@@ -42,6 +42,10 @@ export class VoiceServer extends Service {
             }
         });
         this.udpSocket.on('message', (message, remote) => {
+            if (message.length < 2) {
+                this.logError(`Invalid voice packet received from client ${remote.address}:${remote.port}`, false);
+                return;
+            }
             const now = new Date();
             const nowMillis = now.getTime();
 
