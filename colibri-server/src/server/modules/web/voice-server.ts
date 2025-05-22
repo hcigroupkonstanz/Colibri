@@ -99,7 +99,10 @@ export class VoiceServer extends Service {
                 if (recordedDateTimeDifference > voiceClient.frameSizeMillis / 2) {
                     const countSkippedFrames: number = Math.floor((recordedDateTimeDifference + (voiceClient.frameSizeMillis / 2)) / voiceClient.frameSizeMillis);
                     const silentSoundSamples: number[] = Array(voiceClient.frameSize * countSkippedFrames).fill(0.0);
-                    Array.prototype.push.apply(voiceClient.recordingData, silentSoundSamples); // around 945x faster than .concat
+                    // Array.prototype.push.apply(voiceClient.recordingData, silentSoundSamples); // around 945x faster than .concat
+                    silentSoundSamples.forEach((sample) => {
+                        voiceClient.recordingData.push(sample);
+                    });
                 }
                 for (let i = 2; i <= message.length - 4; i += 4) {
                     voiceClient.recordingData.push(message.readFloatLE(i)); // .net (Unity) decodes default in little-endian order
