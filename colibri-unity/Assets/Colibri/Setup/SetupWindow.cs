@@ -131,6 +131,7 @@ namespace HCIKonstanz.Colibri.Setup
                 Config.WebServerPort = EditorGUILayout.IntField("Web server Port: ", Config.WebServerPort);
                 Config.TcpServerPort = EditorGUILayout.IntField("TCP server Port: ", Config.TcpServerPort);
                 Config.VoiceServerPort = EditorGUILayout.IntField("Voice server Port: ", Config.VoiceServerPort);
+                Config.VoiceServerSamplingRate = EditorGUILayout.IntField("Voice Sampling Rate: ", Config.VoiceServerSamplingRate);
                 EditorGUILayout.EndVertical();
             }
 
@@ -148,6 +149,8 @@ namespace HCIKonstanz.Colibri.Setup
                 errors.Add("Voice server port invalid (must be a number between 1 - 65535, default 9013)");
             if ((new int[] { Config.WebServerPort, Config.TcpServerPort, Config.VoiceServerPort }).Distinct().Count() != 3)
                 errors.Add("Two ports may not have the same value!");
+            if (Config.VoiceServerSamplingRate < 16000 || Config.VoiceServerSamplingRate > 48000)
+                errors.Add("Voice server sampling rate invalid (must be a number between 16000 - 48000, default 48000)");
 
             GUILayout.Space(15f);
 

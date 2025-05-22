@@ -20,6 +20,7 @@ namespace HCIKonstanz.Colibri.Setup
         public int TcpServerPort = 9012;
         public int VoiceServerPort = 9013;
         public bool IsSSL = false;
+        public int VoiceServerSamplingRate = 48000;
 
         /// <summary>
         /// Generates a URL for the WebRequest
