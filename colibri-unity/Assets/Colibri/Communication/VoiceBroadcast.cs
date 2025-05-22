@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 using HCIKonstanz.Colibri.Networking;
+using UnityEngine.Android;
+using HCIKonstanz.Colibri.Setup;
 
 namespace HCIKonstanz.Colibri.Communication
 {
@@ -12,7 +14,7 @@ namespace HCIKonstanz.Colibri.Communication
         public int MicrophoneBufferLengthSeconds = 10;
 
         [Header("Broadcasting Settings")]
-        public int FrameSizeInMilliseconds = 20;
+        public int FrameSizeMilliseconds = 20;
 
         [Header("Debug")]
         public bool Debugging = false;
@@ -22,15 +24,16 @@ namespace HCIKonstanz.Colibri.Communication
         private static readonly string DEBUG_HEADER = "[VoiceBroadcast] ";
 
         // Microphone recording
+        private int serverSamplingRate = 48000;
         private AudioClip recordingAudioClip;
         private List<float> recordingBuffer;
         private int lastRecordingSamplePosition = 0;
         private bool isInitialized = false;
         private bool startAfterInitialized = false;
         private short startId = -1;
-        private float lastConvertedSample = 1f;
         private int microphoneSamplingRate;
         private bool broadcast = false;
+        private Resampler resampler;
 
         // Networking
         private VoiceServerConnection voiceServerConnection;
@@ -38,6 +41,42 @@ namespace HCIKonstanz.Colibri.Communication
         private short localUserId;
 
         void Start()
+        {
+#if UNITY_ANDROID
+            if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
+            {
+                PermissionCallbacks microphonePermissionCallbacks = new PermissionCallbacks();
+                microphonePermissionCallbacks.PermissionGranted += OnMicrophonePermissionGranted;
+                microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
+                microphonePermissionCallbacks.PermissionRequestDismissed += OnMicrophonePermissionDenied;
+                Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
+                return;
+            }
+#endif
+            serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
+            InitBroadcast();
+        }
+
+        void Update()
+        {
+            if (isInitialized && broadcast)
+            {
+                AddSamplesToRecordingBuffer();
+                SendSamples();
+            }
+        }
+
+        private void OnMicrophonePermissionGranted(string permissionName)
+        {
+            InitBroadcast();
+        }
+
+        private void OnMicrophonePermissionDenied(string permissionName)
+        {
+            Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: Microphone permission NOT granted");
+        }
+
+        private void InitBroadcast()
         {
             // Get all available recording devices and select recording device
             string[] recordingDevices = Microphone.devices;
@@ -60,29 +99,21 @@ namespace HCIKonstanz.Colibri.Communication
             int maxSupportedSamplingRate;
             Microphone.GetDeviceCaps(recordingDevices[MicrophoneID], out minSupportedSamplingRate, out maxSupportedSamplingRate);
             if (Debugging) Debug.Log(DEBUG_HEADER + "Sampling rates supported: " + minSupportedSamplingRate + " - " + maxSupportedSamplingRate);
-            if (maxSupportedSamplingRate >= 48000 && minSupportedSamplingRate <= 48000)
-            {
-                microphoneSamplingRate = 48000;
-            }
-            else if (maxSupportedSamplingRate >= 16000 && minSupportedSamplingRate <= 16000)
-            {
-                microphoneSamplingRate = 16000;
-            }
-            else
-            {
-                microphoneSamplingRate = maxSupportedSamplingRate;
-            }
-            if (Debugging) Debug.Log(DEBUG_HEADER + "Use sampling rate: " + microphoneSamplingRate);
 
-            // Calculate sample count from milliseconds
-            packageSizeSamples = (microphoneSamplingRate / 1000) * FrameSizeInMilliseconds;
-            if (Debugging) Debug.Log(DEBUG_HEADER + "Frame size: " + FrameSizeInMilliseconds + " ms, " + packageSizeSamples + " samples");
+            // Decide on sampling rate
+            microphoneSamplingRate = maxSupportedSamplingRate;
+            if (maxSupportedSamplingRate >= serverSamplingRate && minSupportedSamplingRate <= serverSamplingRate) microphoneSamplingRate = serverSamplingRate;
+            if (Debugging) Debug.Log(DEBUG_HEADER + "Use sampling rate: " + microphoneSamplingRate);
+            if (microphoneSamplingRate != serverSamplingRate) resampler = new Resampler(microphoneSamplingRate, serverSamplingRate);
+
+            // Calculate package size based on requested frame size (milliseconds)
+            packageSizeSamples = (microphoneSamplingRate / 1000) * FrameSizeMilliseconds;
+            if (Debugging) Debug.Log(DEBUG_HEADER + "Frame size: " + FrameSizeMilliseconds + " ms, " + packageSizeSamples + " samples");
 
             // Init server connection
             voiceServerConnection = VoiceServerConnection.Instance;
 
             isInitialized = true;
-
             Debug.Log(DEBUG_HEADER + "Ready for Voice Broadcast");
 
             if (startAfterInitialized)
@@ -91,36 +122,24 @@ namespace HCIKonstanz.Colibri.Communication
             }
         }
 
-        void Update()
-        {
-            if (isInitialized && broadcast)
-            {
-                AddSamplesToRecordingBuffer();
-                SendSamples();
-            }
-        }
-
         public void StartBroadcast(short id)
         {
             if (isInitialized)
             {
-                if (microphoneSamplingRate == 48000 || microphoneSamplingRate == 16000)
-                {
-                    localUserId = id;
+                localUserId = id;
 
-                    // Start recording using selected recording device
-                    Debug.Log(DEBUG_HEADER + "Start voice broadcasting");
-                    recordingAudioClip = Microphone.Start(Microphone.devices[MicrophoneID], true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
-                    if (Debugging) Debug.Log(DEBUG_HEADER + "Channel count: " + recordingAudioClip.channels);
-                    lastRecordingSamplePosition = Microphone.GetPosition(null);
+                // Start recording using selected recording device
+                Debug.Log(DEBUG_HEADER + "Start voice broadcasting");
+#if UNITY_ANDROID
+                recordingAudioClip = Microphone.Start(null, true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
+#else
+                recordingAudioClip = Microphone.Start(Microphone.devices[MicrophoneID], true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
+#endif
+                if (Debugging) Debug.Log(DEBUG_HEADER + "Channel count: " + recordingAudioClip.channels);
+                lastRecordingSamplePosition = Microphone.GetPosition(null);
 
-                    recordingBuffer = new List<float>();
-                    broadcast = true;
-                }
-                else
-                {
-                    Debug.LogError(DEBUG_HEADER + "Sampling rate " + microphoneSamplingRate + "Hz currently not supported. A resampling method from " + microphoneSamplingRate + "Hz to 48000Hz must be implemented.");
-                }
+                recordingBuffer = new List<float>();
+                broadcast = true;
             }
             else
             {
@@ -134,7 +153,11 @@ namespace HCIKonstanz.Colibri.Communication
             if (broadcast)
             {
                 broadcast = false;
+#if UNITY_ANDROID
+                Microphone.End(null);
+#else
                 Microphone.End(Microphone.devices[MicrophoneID]);
+#endif
             }
         }
 
@@ -143,7 +166,11 @@ namespace HCIKonstanz.Colibri.Communication
             int differenceSinceLastAdd = 0;
 
             // Get sample count since last adding
+#if UNITY_ANDROID
             int currentSamplePosition = Microphone.GetPosition(null);
+#else
+            int currentSamplePosition = Microphone.GetPosition(Microphone.devices[MicrophoneID]);
+#endif
             if (currentSamplePosition > lastRecordingSamplePosition)
             {
                 differenceSinceLastAdd = currentSamplePosition - lastRecordingSamplePosition;
@@ -174,52 +201,19 @@ namespace HCIKonstanz.Colibri.Communication
             {
                 float[] samples = recordingBuffer.GetRange(0, packageSizeSamples).ToArray();
 
-                // The data must be in the format 48000Hz Mono
-                if (microphoneSamplingRate == 16000)
+                // The data is expected to be in the voice server sampling rate in mono
+                if (microphoneSamplingRate != serverSamplingRate)
                 {
-                    samples = Convert16kHZMonoTo48kHzMono(samples);
+                    samples = resampler.ResampleStream(samples);
                 }
 
                 // Send voice data to server
-                byte[] bytes = ToByteArray(samples);
+                byte[] bytes = SamplingUtility.ToBytes(samples);
                 voiceServerConnection.SendByteData(localUserId, bytes);
 
                 // Remove samples from recording buffer
                 recordingBuffer.RemoveRange(0, packageSizeSamples);
             }
-        }
-
-        private float[] Convert16kHZMonoTo48kHzMono(float[] samples)
-        {
-            float[] kHz48Samples = new float[samples.Length * 3];
-            // Interpolating first samples using last sample
-            kHz48Samples[0] = Mathf.Lerp(lastConvertedSample, samples[0], 0.33f);
-            kHz48Samples[1] = Mathf.Lerp(lastConvertedSample, samples[0], 0.66f);
-            kHz48Samples[2] = samples[0];
-            // Interpolating all other samples
-            for (int i = 1; i < samples.Length - 1; i++)
-            {
-                int kHz48SamplePosition = i * 3;
-                kHz48Samples[kHz48SamplePosition] = Mathf.Lerp(samples[i], samples[i + 1], 0.33f);
-                kHz48Samples[kHz48SamplePosition + 1] = Mathf.Lerp(samples[i], samples[i + 1], 0.66f);
-                kHz48Samples[kHz48SamplePosition + 2] = samples[i + 1];
-            }
-            lastConvertedSample = samples[samples.Length - 1];
-            return kHz48Samples;
-        }
-
-        private byte[] ToByteArray(float[] floatArray)
-        {
-            int len = floatArray.Length * 4;
-            byte[] byteArray = new byte[len];
-            int pos = 0;
-            foreach (float f in floatArray)
-            {
-                byte[] data = System.BitConverter.GetBytes(f);
-                System.Array.Copy(data, 0, byteArray, pos, 4);
-                pos += 4;
-            }
-            return byteArray;
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using HCIKonstanz.Colibri.Networking;
+using HCIKonstanz.Colibri.Setup;
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Communication
@@ -10,19 +11,20 @@ namespace HCIKonstanz.Colibri.Communication
     {
         // Debug
         public bool Debugging = false;
-
-        
         private static readonly string DEBUG_HEADER = "[VoiceReceiver] ";
         private float timer = 0.0f;
 
         // Playback audio
+        private int serverSamplingRate = 48000;
+        private int packageSizeSamples = 960;
         private AudioSource playbackAudioSource;
         private List<float> playbackBuffer;
         private VoiceServerConnection voiceServerConnection;
         private short remoteUserId;
         private bool playback = false;
+        private Resampler resampler;
 
-        void Awake()
+        private void Awake()
         {
             voiceServerConnection = VoiceServerConnection.Instance;
             playbackAudioSource = GetComponent<AudioSource>();
@@ -33,7 +35,7 @@ namespace HCIKonstanz.Colibri.Communication
             playbackAudioSource.loop = true;
         }
 
-        void Start()
+        private void Start()
         {
             // Debug
             if (Debugging)
@@ -42,9 +44,11 @@ namespace HCIKonstanz.Colibri.Communication
                 Debug.Log(DEBUG_HEADER + "Output channel mode: " + AudioSettings.speakerMode);
                 Debug.Log(DEBUG_HEADER + "Spatialize: " + playbackAudioSource.spatialize);
             }
+            serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
+            resampler = new Resampler(serverSamplingRate, AudioSettings.outputSampleRate);
         }
 
-        void Update()
+        private void Update()
         {
             // Debug: Check if data in playback buffer is constant
             if (Debugging && playback)
@@ -59,7 +63,7 @@ namespace HCIKonstanz.Colibri.Communication
         }
 
         // Use the MonoBehaviour.OnAudioFilterRead callback to playback voice data as fast as possible
-        void OnAudioFilterRead(float[] data, int channels)
+        private void OnAudioFilterRead(float[] data, int channels)
         {
             if (playback)
             {
@@ -79,8 +83,6 @@ namespace HCIKonstanz.Colibri.Communication
 
         public void StartPlayback(short id)
         {
-            // playbackBuffer = new List<float>();
-            // remoteUserId = transform.parent.GetComponent<RemoteUserInfo>().UserId;
             remoteUserId = id;
             voiceServerConnection.AddBytesListener(remoteUserId, OnSamplesDataReceived);
             playbackAudioSource.Play();
@@ -97,46 +99,18 @@ namespace HCIKonstanz.Colibri.Communication
             voiceServerConnection.RemoveBytesListener(remoteUserId, OnSamplesDataReceived);
         }
 
-        private void OnSamplesReceived(float[] samples)
-        {
-            // Convert mono samples to stereo
-            float[] stereoSamples = ConvertToStereo(samples);
-            // Add samples to playback buffer
-            playbackBuffer.AddRange(stereoSamples);
-        }
-
-        public void OnSamplesDataReceived(byte[] samplesData)
+        private void OnSamplesDataReceived(byte[] samplesData)
         {
             // Convert bytes to float samples
-            float[] samples = ToFloatArray(samplesData);
+            float[] samples = SamplingUtility.ToSamples(samplesData);
+            // Debug.Log(DEBUG_HEADER + samples.Length + " samples received");
+            packageSizeSamples = samples.Length;
+            // Convert to output sample rate if necessary
+            if (AudioSettings.outputSampleRate != serverSamplingRate) samples = resampler.ResampleStream(samples);
             // Convert mono samples to stereo
-            float[] stereoSamples = ConvertToStereo(samples);
+            samples = SamplingUtility.ToStereo(samples);
             // Add samples to playback buffer
-            playbackBuffer.AddRange(stereoSamples); // Sometimes ArgumentOutOfRangeException
-        }
-
-        private float[] ConvertToStereo(float[] samples)
-        {
-            float[] stereoSamples = new float[samples.Length * 2];
-            int stereoIndex = 0;
-            for (int i = 0; i < samples.Length; i++)
-            {
-                stereoSamples[stereoIndex] = samples[i];
-                stereoSamples[stereoIndex + 1] = samples[i];
-                stereoIndex += 2;
-            }
-            return stereoSamples;
-        }
-
-        private float[] ToFloatArray(byte[] byteArray)
-        {
-            int len = byteArray.Length / 4;
-            float[] floatArray = new float[len];
-            for (int i = 0; i < byteArray.Length; i += 4)
-            {
-                floatArray[i / 4] = System.BitConverter.ToSingle(byteArray, i);
-            }
-            return floatArray;
+            playbackBuffer.AddRange(samples); // Sometimes ArgumentOutOfRangeException
         }
     }
 }
