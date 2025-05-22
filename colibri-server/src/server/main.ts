@@ -28,7 +28,7 @@ const webServer = new colibri.WebServer(
     Config.WEBSERVER_ROOT,
     Config.BASE_URL
 );
-const voiceServer = new colibri.VoiceServer(Config.DATA_ROOT);
+const voiceServer = new colibri.VoiceServer(Config.VOICE_SAMPLING_RATE, Config.DATA_ROOT);
 
 const tcpServer = new colibri.TCPServerProxy();
 const socketioServer = new colibri.SocketIOServer();

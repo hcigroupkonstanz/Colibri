@@ -23,11 +23,9 @@ export class VoiceServer extends Service {
     private udpSocket!: dgram.Socket;
     private clients: Map<string, VoiceClient> = new Map<string, VoiceClient>();
     private disconnectTimeoutMillis = 2000;
-    private samplingRate = 48000; // Default Unity sampling rate
-    private channels = 1; // Microphone data is normally mono
     private recordingVoiceData = false;
 
-    public constructor(private voiceRecordingPath: string) {
+    public constructor(private samplingRate: number, private voiceRecordingPath: string) {
         super();
     }
 
@@ -37,9 +35,8 @@ export class VoiceServer extends Service {
             const address = this.udpSocket.address() as AddressInfo;
             console.log(`Voice server listening on ${address.address}:${address.port}`);
             this.logInfo(`Voice server listening on ${address.address}:${address.port}`);
-            if (this.recordingVoiceData) {
-                this.logWarning('Warning: Voice recording is enabled');
-            }
+            this.logInfo(`Voice server Sampling Rate: ${this.samplingRate} Hz`);
+            if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
         });
         this.udpSocket.on('message', (message, remote) => {
             if (message.length < 2) {
@@ -70,6 +67,7 @@ export class VoiceServer extends Service {
                 };
                 this.clients.set(remote.address, voiceClient);
                 this.logDebug(`New voice client connected from ${remote.address}:${remote.port} ID: ${userId}`);
+                if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
             } else {
                 voiceClient = this.clients.get(remote.address);
             }
@@ -128,7 +126,7 @@ export class VoiceServer extends Service {
 
                     // Create wave file from recording data
                     const wav = new WaveFile();
-                    wav.fromScratch(context.channels, context.samplingRate, '32f', value.recordingData); // 32f means 32 bit floating data ranging from -1 to 1
+                    wav.fromScratch(1, context.samplingRate, '32f', value.recordingData); // 32f means 32 bit floating data ranging from -1 to 1
 
                     // Save wave file
                     const dateString = value.recordingStartDate.toISOString().replace(/:/g, '_');
@@ -139,7 +137,7 @@ export class VoiceServer extends Service {
 
                 // Delete client
                 context.clients.delete(key);
-                context.logDebug(`Voice client ${value.ip} disconnected ID: ${value.userId}`);
+                context.logDebug(`Voice client ${value.ip}:${value.port} disconnected ID: ${value.userId}`);
             }
         });
     }

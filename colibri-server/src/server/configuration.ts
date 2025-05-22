@@ -10,6 +10,7 @@ export const Config = {
 
     VOICE_HOST: process.env.VOICE_HOST || '0.0.0.0',
     VOICE_PORT: Number(process.env.VOICE_PORT || 9013),
+    VOICE_SAMPLING_RATE: Number(process.env.VOICE_SAMPLING_RATE || 48000),
 
     WEBSERVER_HOST: process.env.WEBSERVER_HOST || '0.0.0.0',
     WEBSERVER_PORT: Number(process.env.WEBSERVER_PORT || 9011),
