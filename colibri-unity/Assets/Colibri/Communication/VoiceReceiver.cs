@@ -9,6 +9,9 @@ namespace HCIKonstanz.Colibri.Communication
     [RequireComponent(typeof(AudioSource))]
     public class VoiceReceiver : MonoBehaviour
     {
+        public bool FastForwardPlayback = true;
+        public int FastForwardLatencyMilliseconds = 100;
+
         // Debug
         public bool Debugging = false;
         private static readonly string DEBUG_HEADER = "[VoiceReceiver] ";
@@ -23,6 +26,7 @@ namespace HCIKonstanz.Colibri.Communication
         private short remoteUserId;
         private bool playback = false;
         private Resampler resampler;
+        private int fastForwardSamplesThreshold;
 
         private void Awake()
         {
@@ -46,6 +50,8 @@ namespace HCIKonstanz.Colibri.Communication
             }
             serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
             resampler = new Resampler(serverSamplingRate, AudioSettings.outputSampleRate);
+            fastForwardSamplesThreshold = serverSamplingRate / 1000 * FastForwardLatencyMilliseconds;
+
         }
 
         private void Update()
@@ -67,6 +73,8 @@ namespace HCIKonstanz.Colibri.Communication
         {
             if (playback)
             {
+                // Fast forward to latest samples to reduce latency
+                if (FastForwardPlayback) FastForwardPlaybackBuffer();
                 // Check if the playback buffer has enough data to fill up the data array or otherwise use only the available data
                 int dataBufferSize = Mathf.Min(data.Length, playbackBuffer.Count);
                 // Get the data from the playback buffer, override the data array with it and remove it from the buffer
@@ -111,6 +119,13 @@ namespace HCIKonstanz.Colibri.Communication
             samples = SamplingUtility.ToStereo(samples);
             // Add samples to playback buffer
             playbackBuffer.AddRange(samples); // Sometimes ArgumentOutOfRangeException
+        }
+
+        private void FastForwardPlaybackBuffer()
+        {
+            if (playbackBuffer.Count < fastForwardSamplesThreshold) return;
+            playbackBuffer.RemoveRange(0, playbackBuffer.Count - packageSizeSamples);
+            if (Debugging) Debug.Log(DEBUG_HEADER + "Fast forward latency reached. Empty playback buffer.");
         }
     }
 }
