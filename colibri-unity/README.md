@@ -201,7 +201,7 @@ Work in progress
 
 See `Samples/VoiceTransmission`
 
-# License
+## License
 
 Copyright (c) HCI Group University Konstanz. All rights reserved.
 
