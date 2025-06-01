@@ -4,6 +4,7 @@ using UnityEngine;
 using HCIKonstanz.Colibri.Networking;
 using UnityEngine.Android;
 using HCIKonstanz.Colibri.Setup;
+using System;
 
 namespace HCIKonstanz.Colibri.Communication
 {
@@ -15,6 +16,7 @@ namespace HCIKonstanz.Colibri.Communication
 
         [Header("Broadcasting Settings")]
         public int FrameSizeMilliseconds = 20;
+        public bool UseOpusCodec = false;
 
         [Header("Debug")]
         public bool Debugging = false;
@@ -40,7 +42,12 @@ namespace HCIKonstanz.Colibri.Communication
         private int packageSizeSamples;
         private short localUserId;
 
-        void Start()
+        // Opus codec
+        private OpusEncoder opusEncoder;
+        // private IntPtr opusEncoder;
+        // private IntPtr opusDecoder;
+
+        private void Start()
         {
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
@@ -55,15 +62,33 @@ namespace HCIKonstanz.Colibri.Communication
 #endif
             serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
             InitBroadcast();
+
+            if (UseOpusCodec)
+            {
+                opusEncoder = new OpusEncoder(serverSamplingRate, 1, OpusApplication.VOIP);
+            }
+            // Opus test
+            // int errorEncoder;
+            // opusEncoder = Opus.opus_encoder_create(48000, 1, OpusApplication.VOIP, out errorEncoder);
+            // Debug.Log("Create opus encoder: " + (OpusError)errorEncoder);
+
+            // int errorDecoder;
+            // opusDecoder = Opus.opus_decoder_create(48000, 1, out errorDecoder);
+            // Debug.Log("Create opus decoder: " + (OpusError)errorDecoder);
         }
 
-        void Update()
+        private void Update()
         {
             if (isInitialized && broadcast)
             {
                 AddSamplesToRecordingBuffer();
                 SendSamples();
             }
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (UseOpusCodec) opusEncoder.Destroy();
         }
 
         private void OnMicrophonePermissionGranted(string permissionName)
@@ -177,7 +202,7 @@ namespace HCIKonstanz.Colibri.Communication
             }
             else if (currentSamplePosition < lastRecordingSamplePosition)
             {
-                differenceSinceLastAdd = (recordingAudioClip.samples - lastRecordingSamplePosition) + currentSamplePosition;
+                differenceSinceLastAdd = recordingAudioClip.samples - lastRecordingSamplePosition + currentSamplePosition;
             }
             else
             {
@@ -191,7 +216,6 @@ namespace HCIKonstanz.Colibri.Communication
             // Add samples to recording buffer
             recordingBuffer.AddRange(data);
             lastRecordingSamplePosition = currentSamplePosition;
-
         }
 
         private void SendSamples()
@@ -207,9 +231,17 @@ namespace HCIKonstanz.Colibri.Communication
                     samples = resampler.ResampleStream(samples);
                 }
 
+                // Convert to 16 bit short bytes
+                byte[] sendBytes = SamplingUtility.ConvertFloatToShortBytes(samples);
+
+                if (UseOpusCodec)
+                {
+                    sendBytes = opusEncoder.Encode(sendBytes, samples.Length);
+                    if (sendBytes == null) continue;
+                }
+
                 // Send voice data to server
-                byte[] bytes = SamplingUtility.ToBytes(samples);
-                voiceServerConnection.SendByteData(localUserId, bytes);
+                voiceServerConnection.SendByteData(localUserId, sendBytes);
 
                 // Remove samples from recording buffer
                 recordingBuffer.RemoveRange(0, packageSizeSamples);

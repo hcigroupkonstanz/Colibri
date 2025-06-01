@@ -11,6 +11,8 @@ namespace HCIKonstanz.Colibri.Communication
     {
         public bool FastForwardPlayback = true;
         public int FastForwardLatencyMilliseconds = 100;
+        public bool UseOpusCodec = false;
+        public int FrameSizeMilliseconds = 20;
 
         // Debug
         public bool Debugging = false;
@@ -27,6 +29,7 @@ namespace HCIKonstanz.Colibri.Communication
         private bool playback = false;
         private Resampler resampler;
         private int fastForwardSamplesThreshold;
+        private OpusDecoder opusDecoder;
 
         private void Awake()
         {
@@ -49,9 +52,14 @@ namespace HCIKonstanz.Colibri.Communication
                 Debug.Log(DEBUG_HEADER + "Spatialize: " + playbackAudioSource.spatialize);
             }
             serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
+            packageSizeSamples = (serverSamplingRate / 1000) * FrameSizeMilliseconds;
             resampler = new Resampler(serverSamplingRate, AudioSettings.outputSampleRate);
             fastForwardSamplesThreshold = serverSamplingRate / 1000 * FastForwardLatencyMilliseconds;
 
+            if (UseOpusCodec)
+            {
+                opusDecoder = new OpusDecoder(serverSamplingRate, 1);
+            }
         }
 
         private void Update()
@@ -66,6 +74,11 @@ namespace HCIKonstanz.Colibri.Communication
                     timer = 0f;
                 }
             }
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (UseOpusCodec) opusDecoder.Destroy();
         }
 
         // Use the MonoBehaviour.OnAudioFilterRead callback to playback voice data as fast as possible
@@ -109,14 +122,20 @@ namespace HCIKonstanz.Colibri.Communication
 
         private void OnSamplesDataReceived(byte[] samplesData)
         {
+            byte[] shortBytes = samplesData;
+
+            if (UseOpusCodec)
+            {
+                shortBytes = opusDecoder.Decode(samplesData, packageSizeSamples);
+            }
+
             // Convert bytes to float samples
-            float[] samples = SamplingUtility.ToSamples(samplesData);
+            float[] samples = SamplingUtility.ConvertShortBytesToFloat(shortBytes);
             // Debug.Log(DEBUG_HEADER + samples.Length + " samples received");
-            packageSizeSamples = samples.Length;
             // Convert to output sample rate if necessary
             if (AudioSettings.outputSampleRate != serverSamplingRate) samples = resampler.ResampleStream(samples);
             // Convert mono samples to stereo
-            samples = SamplingUtility.ToStereo(samples);
+            samples = SamplingUtility.ConvertToStereo(samples);
             // Add samples to playback buffer
             playbackBuffer.AddRange(samples); // Sometimes ArgumentOutOfRangeException
         }
