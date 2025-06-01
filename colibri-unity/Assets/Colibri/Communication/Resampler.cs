@@ -13,45 +13,33 @@ public class Resampler
     {
         this.sourceRate = sourceRate;
         this.targetRate = targetRate;
-        this.resampleRatio = (float)sourceRate / targetRate;
+        resampleRatio = (float)targetRate / sourceRate;
     }
 
     public float[] ResampleStream(float[] inputChunk)
     {
         int inputLength = inputChunk.Length;
+        int outputLength = Mathf.CeilToInt(inputLength * resampleRatio);
 
-        // Estimate output length conservatively (could be slightly too big)
-        int maxOutputLength = Mathf.CeilToInt((inputLength - sourcePos) / resampleRatio);
-        float[] output = new float[maxOutputLength];
+        float[] output = new float[outputLength];
 
-        int outputIndex = 0;
-
-        while (sourcePos < inputLength && outputIndex < maxOutputLength)
+        for (int i = 0; i < outputLength; i++)
         {
             int i0 = (int)Mathf.Floor(sourcePos);
             int i1 = Mathf.Min(i0 + 1, inputLength - 1);
 
-            float s0 = (i0 < 0) ? lastSample : inputChunk[i0];
+            float s0 = (i0 < 0) ? lastSample : inputChunk[Mathf.Clamp(i0, 0, inputLength - 1)];
             float s1 = inputChunk[i1];
             float t = sourcePos - i0;
 
             float interpolated = Mathf.Lerp(s0, s1, t);
-            output[outputIndex++] = interpolated;
+            output[i] = interpolated;
 
-            sourcePos += resampleRatio;
+            sourcePos += 1f / resampleRatio;
         }
 
-        // Save state for next chunk
         sourcePos -= inputLength;
         lastSample = inputChunk[inputLength - 1];
-
-        // If we overestimated size, trim array
-        if (outputIndex < output.Length)
-        {
-            float[] trimmed = new float[outputIndex];
-            System.Array.Copy(output, trimmed, outputIndex);
-            return trimmed;
-        }
 
         return output;
     }
