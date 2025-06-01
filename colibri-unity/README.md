@@ -200,3 +200,11 @@ Limitations:
 Work in progress
 
 See `Samples/VoiceTransmission`
+
+# License
+
+Copyright (c) HCI Group University Konstanz. All rights reserved.
+
+Licensed under the [MIT](../LICENSE) license.
+
+This repository includes third-party open source libraries as listed in [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.txt).
