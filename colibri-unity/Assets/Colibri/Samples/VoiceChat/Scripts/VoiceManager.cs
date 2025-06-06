@@ -53,7 +53,7 @@ public class VoiceManager : MonoBehaviour
             List<int> removeIds = new List<int>();
             foreach (int id in clientsLastHeartbeat.Keys)
             {
-                if (clientsLastHeartbeat[id] >= DisconnectUserAfterSeconds)
+                if (clientsLastHeartbeat[id] + DisconnectUserAfterSeconds < Time.time)
                 {
                     removeIds.Add(id);
                 }
