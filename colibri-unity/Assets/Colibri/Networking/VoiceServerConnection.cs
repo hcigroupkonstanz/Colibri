@@ -12,9 +12,7 @@ namespace HCIKonstanz.Colibri.Networking
 {
     public class VoiceServerConnection : SingletonBehaviour<VoiceServerConnection>
     {
-
-        private UdpClient udpSend;
-        private UdpClient udpReceive;
+        private UdpClient udpClient;
         private IPEndPoint sendIPEndPoint;
         private IPEndPoint receiveIPEndPoint;
         private IPEndPoint inEndPoint = new IPEndPoint(IPAddress.Any, 0);
@@ -34,10 +32,8 @@ namespace HCIKonstanz.Colibri.Networking
 
         private void OnDisable()
         {
-            if (udpReceive != null)
-                udpReceive.Dispose();
-            if (udpSend != null)
-                udpSend.Dispose();
+            if (udpClient != null)
+                udpClient.Dispose();
             udpThread.Abort();
         }
 
@@ -60,18 +56,13 @@ namespace HCIKonstanz.Colibri.Networking
                 sendIPEndPoint = new IPEndPoint(ip.AddressList[0], ColibriConfig.Load().VoiceServerPort);
                 receiveIPEndPoint = new IPEndPoint(IPAddress.Any, 9014);
 
-                udpReceive = new UdpClient();
-                udpReceive.ExclusiveAddressUse = false;
-                udpReceive.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                udpReceive.Client.Bind(receiveIPEndPoint);
+                udpClient = new UdpClient();
+                udpClient.ExclusiveAddressUse = false;
+                udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                udpClient.Client.Bind(receiveIPEndPoint);
                 udpThread = new Thread(new ThreadStart(Receive));
                 udpThread.Name = "Voice UDP Thread";
                 udpThread.Start();
-
-                udpSend = new UdpClient();
-                udpSend.ExclusiveAddressUse = false;
-                udpSend.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                udpSend.Client.Bind(receiveIPEndPoint);
 
                 isConnected = true;
             }
@@ -88,26 +79,25 @@ namespace HCIKonstanz.Colibri.Networking
             {
                 try
                 {
-                    byte[] bytes = udpReceive.Receive(ref inEndPoint);
+                    byte[] bytes = udpClient.Receive(ref inEndPoint);
+                    // Debug.Log(bytes.Length + " bytes recieved");
                     VoicePacket voicePacket = GetVoicePacket(bytes);
                     if (voicePacket.Id != 0)
                     {
                         queuedBytes.Enqueue(voicePacket);
                     }
-                    // Debug.Log(bytes.Length + " bytes recieved");
                 }
                 catch (Exception e)
                 {
                     Debug.Log(e.ToString());
                 }
-                // Thread.Sleep(20);
             }
         }
 
         public void SendByteData(short id, byte[] data)
         {
             byte[] bytes = AddIdBytes(id, data);
-            udpSend.Send(bytes, bytes.Length, sendIPEndPoint);
+            udpClient.Send(bytes, bytes.Length, sendIPEndPoint);
             // Debug.Log(data.Length + " bytes sended");
         }
 
