@@ -53,7 +53,7 @@ export class VoiceServer extends Service {
             let voiceClient: VoiceClient | undefined;
 
             // Add to clients if new client
-            if (!this.clients.has(remote.address)) {
+            if (!this.clients.has(`${remote.address}:${remote.port}`)) {
                 const frameSize = (message.length - 2) / 4;
                 voiceClient = {
                     ip: remote.address,
@@ -65,11 +65,11 @@ export class VoiceServer extends Service {
                     recordingStartDate: now,
                     recordingData: [],
                 };
-                this.clients.set(remote.address, voiceClient);
+                this.clients.set(`${remote.address}:${remote.port}`, voiceClient);
                 this.logDebug(`New voice client connected from ${remote.address}:${remote.port} ID: ${userId}`);
                 if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
             } else {
-                voiceClient = this.clients.get(remote.address);
+                voiceClient = this.clients.get(`${remote.address}:${remote.port}`);
             }
 
             if (!voiceClient) {
@@ -82,7 +82,7 @@ export class VoiceServer extends Service {
 
             // Send message to all other clients
             this.clients.forEach((value, key) => {
-                if (key !== remote.address) {
+                if (key !== `${remote.address}:${remote.port}`) {
                     this.udpSocket.send(message, 0, message.length, value.port, value.ip, (err) => {
                         if (err) {
                             throw err;
