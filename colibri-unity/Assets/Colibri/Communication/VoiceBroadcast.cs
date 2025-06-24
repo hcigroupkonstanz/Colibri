@@ -60,21 +60,7 @@ namespace HCIKonstanz.Colibri.Communication
                 return;
             }
 #endif
-            serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
             InitBroadcast();
-
-            if (UseOpusCodec)
-            {
-                opusEncoder = new OpusEncoder(serverSamplingRate, 1, OpusApplication.VOIP);
-            }
-            // Opus test
-            // int errorEncoder;
-            // opusEncoder = Opus.opus_encoder_create(48000, 1, OpusApplication.VOIP, out errorEncoder);
-            // Debug.Log("Create opus encoder: " + (OpusError)errorEncoder);
-
-            // int errorDecoder;
-            // opusDecoder = Opus.opus_decoder_create(48000, 1, out errorDecoder);
-            // Debug.Log("Create opus decoder: " + (OpusError)errorDecoder);
         }
 
         private void Update()
@@ -138,6 +124,12 @@ namespace HCIKonstanz.Colibri.Communication
 
             // Init server connection
             voiceServerConnection = VoiceServerConnection.Instance;
+
+            // Init opus
+            if (UseOpusCodec)
+            {
+                opusEncoder = new OpusEncoder(serverSamplingRate, 1, OpusApplication.VOIP);
+            }
 
             isInitialized = true;
             Debug.Log(DEBUG_HEADER + "Ready for Voice Broadcast");
