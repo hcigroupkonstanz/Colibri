@@ -5,12 +5,8 @@ public static class Opus
 {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
     const string DllName = "opus";
-    // #elif UNITY_STANDALONE_OSX || UNITY_EDITOR_OSX
-    //     const string DllName = "libopus.dylib";
 #elif UNITY_ANDROID
     const string DllName = "libopus";
-    // #elif UNITY_STANDALONE_LINUX
-    //     const string DllName = "libopus.so";
 #endif
 
     [DllImport(DllName)]

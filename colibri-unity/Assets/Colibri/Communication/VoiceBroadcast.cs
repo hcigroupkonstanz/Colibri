@@ -44,8 +44,6 @@ namespace HCIKonstanz.Colibri.Communication
 
         // Opus codec
         private OpusEncoder opusEncoder;
-        // private IntPtr opusEncoder;
-        // private IntPtr opusDecoder;
 
         private void Start()
         {

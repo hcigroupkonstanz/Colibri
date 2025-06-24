@@ -27,6 +27,7 @@ namespace HCIKonstanz.Colibri.Communication
         private VoiceServerConnection voiceServerConnection;
         private short remoteUserId;
         private bool playback = false;
+        // private bool isInitialized = false;
         private Resampler resampler;
         private int fastForwardSamplesThreshold = 4800;
         private OpusDecoder opusDecoder;
@@ -59,6 +60,7 @@ namespace HCIKonstanz.Colibri.Communication
             {
                 opusDecoder = new OpusDecoder(serverSamplingRate, 1);
             }
+            // isInitialized = true;
         }
 
         private void Update()
