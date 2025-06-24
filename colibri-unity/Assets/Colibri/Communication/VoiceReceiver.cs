@@ -21,14 +21,14 @@ namespace HCIKonstanz.Colibri.Communication
 
         // Playback audio
         private int serverSamplingRate = 48000;
-        private int packageSizeSamples = 960;
+        private int frameSize = 960;
         private AudioSource playbackAudioSource;
         private List<float> playbackBuffer;
         private VoiceServerConnection voiceServerConnection;
         private short remoteUserId;
         private bool playback = false;
         private Resampler resampler;
-        private int fastForwardSamplesThreshold;
+        private int fastForwardSamplesThreshold = 4800;
         private OpusDecoder opusDecoder;
 
         private void Awake()
@@ -52,7 +52,6 @@ namespace HCIKonstanz.Colibri.Communication
                 Debug.Log(DEBUG_HEADER + "Spatialize: " + playbackAudioSource.spatialize);
             }
             serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
-            packageSizeSamples = (serverSamplingRate / 1000) * FrameSizeMilliseconds;
             resampler = new Resampler(serverSamplingRate, AudioSettings.outputSampleRate);
             fastForwardSamplesThreshold = serverSamplingRate / 1000 * FastForwardLatencyMilliseconds;
 
@@ -105,7 +104,7 @@ namespace HCIKonstanz.Colibri.Communication
         public void StartPlayback(short id)
         {
             remoteUserId = id;
-            voiceServerConnection.AddBytesListener(remoteUserId, OnSamplesDataReceived);
+            voiceServerConnection.AddVoicePacketListener(remoteUserId, OnSamplesDataReceived);
             playbackAudioSource.Play();
             playback = true;
             playbackBuffer = new List<float>();
@@ -117,25 +116,30 @@ namespace HCIKonstanz.Colibri.Communication
             Debug.Log(DEBUG_HEADER + "Stop voice playback of ID: " + remoteUserId);
             playback = false;
             playbackAudioSource.Stop();
-            voiceServerConnection.RemoveBytesListener(remoteUserId, OnSamplesDataReceived);
+            voiceServerConnection.RemoveVoicePacketListener(remoteUserId, OnSamplesDataReceived);
         }
 
-        private void OnSamplesDataReceived(byte[] samplesData)
+        private void OnSamplesDataReceived(VoicePacket voicePacket)
         {
-            byte[] shortBytes = samplesData;
+            byte[] shortBytes = voicePacket.Data;
+            frameSize = voicePacket.FrameSize;
 
-            if (UseOpusCodec)
+            if (UseOpusCodec && voicePacket.Codec == Codec.OPUS)
             {
-                shortBytes = opusDecoder.Decode(samplesData, packageSizeSamples);
+                byte[] decodedBytes = opusDecoder.Decode(voicePacket.Data, voicePacket.FrameSize);
+                if (decodedBytes == null) return;
+                shortBytes = decodedBytes;
             }
 
             // Convert bytes to float samples
             float[] samples = SamplingUtility.ConvertShortBytesToFloat(shortBytes);
-            // Debug.Log(DEBUG_HEADER + samples.Length + " samples received");
+
             // Convert to output sample rate if necessary
             if (AudioSettings.outputSampleRate != serverSamplingRate) samples = resampler.ResampleStream(samples);
+
             // Convert mono samples to stereo
             samples = SamplingUtility.ConvertToStereo(samples);
+
             // Add samples to playback buffer
             playbackBuffer.AddRange(samples); // Sometimes ArgumentOutOfRangeException
         }
@@ -143,7 +147,8 @@ namespace HCIKonstanz.Colibri.Communication
         private void FastForwardPlaybackBuffer()
         {
             if (playbackBuffer.Count < fastForwardSamplesThreshold) return;
-            playbackBuffer.RemoveRange(0, playbackBuffer.Count - packageSizeSamples);
+            // Debug.Log(playbackBuffer.Count + " | " + fastForwardSamplesThreshold);
+            playbackBuffer.RemoveRange(0, playbackBuffer.Count - frameSize);
             if (Debugging) Debug.Log(DEBUG_HEADER + "Fast forward latency reached. Empty playback buffer.");
         }
     }

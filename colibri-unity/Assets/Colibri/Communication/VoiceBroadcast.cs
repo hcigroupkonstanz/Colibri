@@ -39,7 +39,7 @@ namespace HCIKonstanz.Colibri.Communication
 
         // Networking
         private VoiceServerConnection voiceServerConnection;
-        private int packageSizeSamples;
+        private int frameSize = 960;
         private short localUserId;
 
         // Opus codec
@@ -103,6 +103,7 @@ namespace HCIKonstanz.Colibri.Communication
 
         private void InitBroadcast()
         {
+            serverSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
             // Get all available recording devices and select recording device
             string[] recordingDevices = Microphone.devices;
             if (recordingDevices.Length == 0)
@@ -132,8 +133,8 @@ namespace HCIKonstanz.Colibri.Communication
             if (microphoneSamplingRate != serverSamplingRate) resampler = new Resampler(microphoneSamplingRate, serverSamplingRate);
 
             // Calculate package size based on requested frame size (milliseconds)
-            packageSizeSamples = (microphoneSamplingRate / 1000) * FrameSizeMilliseconds;
-            if (Debugging) Debug.Log(DEBUG_HEADER + "Frame size: " + FrameSizeMilliseconds + " ms, " + packageSizeSamples + " samples");
+            frameSize = (microphoneSamplingRate / 1000) * FrameSizeMilliseconds;
+            if (Debugging) Debug.Log(DEBUG_HEADER + "Frame size: " + FrameSizeMilliseconds + " ms, " + frameSize + " samples");
 
             // Init server connection
             voiceServerConnection = VoiceServerConnection.Instance;
@@ -221,9 +222,9 @@ namespace HCIKonstanz.Colibri.Communication
         private void SendSamples()
         {
             // Check if enough data is available to send a frame
-            while (recordingBuffer.Count > packageSizeSamples)
+            while (recordingBuffer.Count > frameSize)
             {
-                float[] samples = recordingBuffer.GetRange(0, packageSizeSamples).ToArray();
+                float[] samples = recordingBuffer.GetRange(0, frameSize).ToArray();
 
                 // The data is expected to be in the voice server sampling rate in mono
                 if (microphoneSamplingRate != serverSamplingRate)
@@ -234,17 +235,20 @@ namespace HCIKonstanz.Colibri.Communication
                 // Convert to 16 bit short bytes
                 byte[] sendBytes = SamplingUtility.ConvertFloatToShortBytes(samples);
 
+                Codec codec = Codec.PCM;
+
                 if (UseOpusCodec)
                 {
                     sendBytes = opusEncoder.Encode(sendBytes, samples.Length);
                     if (sendBytes == null) continue;
+                    codec = Codec.OPUS;
                 }
 
                 // Send voice data to server
-                voiceServerConnection.SendByteData(localUserId, sendBytes);
+                voiceServerConnection.SendByteData(localUserId, 0, (short)samples.Length, codec, sendBytes);
 
                 // Remove samples from recording buffer
-                recordingBuffer.RemoveRange(0, packageSizeSamples);
+                recordingBuffer.RemoveRange(0, frameSize);
             }
         }
     }

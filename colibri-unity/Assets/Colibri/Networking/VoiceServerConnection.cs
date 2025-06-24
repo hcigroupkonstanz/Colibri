@@ -18,8 +18,8 @@ namespace HCIKonstanz.Colibri.Networking
         private IPEndPoint inEndPoint = new IPEndPoint(IPAddress.Any, 0);
         private List<Byte> receivedBytes;
         private Thread udpThread;
-        private static LockFreeQueue<VoicePacket> queuedBytes = new LockFreeQueue<VoicePacket>();
-        private readonly Dictionary<int, List<Action<byte[]>>> bytesListeners = new Dictionary<int, List<Action<byte[]>>>();
+        private static LockFreeQueue<VoicePacket> queuedVoicePackets = new LockFreeQueue<VoicePacket>();
+        private readonly Dictionary<int, List<Action<VoicePacket>>> voicePacketListeners = new Dictionary<int, List<Action<VoicePacket>>>();
         private bool isConnected = false;
 
 
@@ -41,9 +41,9 @@ namespace HCIKonstanz.Colibri.Networking
         {
             if (isConnected)
             {
-                while (queuedBytes.Dequeue(out var packet))
+                while (queuedVoicePackets.Dequeue(out var packet))
                 {
-                    Invoke(packet.Id, packet.Data);
+                    Invoke(packet);
                 }
             }
         }
@@ -84,7 +84,7 @@ namespace HCIKonstanz.Colibri.Networking
                     VoicePacket voicePacket = GetVoicePacket(bytes);
                     if (voicePacket.Id != 0)
                     {
-                        queuedBytes.Enqueue(voicePacket);
+                        queuedVoicePackets.Enqueue(voicePacket);
                     }
                 }
                 catch (Exception e)
@@ -94,61 +94,63 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        public void SendByteData(short id, byte[] data)
+        public void SendByteData(short id, short sequence, short frameSize, Codec codec, byte[] data)
         {
-            byte[] bytes = AddIdBytes(id, data);
+            byte[] bytes = AddMetadataBytes(id, sequence, frameSize, codec, data);
             udpClient.Send(bytes, bytes.Length, sendIPEndPoint);
-            // Debug.Log(data.Length + " bytes sended");
         }
 
-        public void AddBytesListener(short id, Action<byte[]> listener)
+        public void AddVoicePacketListener(short id, Action<VoicePacket> listener)
         {
-            if (!bytesListeners.ContainsKey(id))
-                bytesListeners.Add(id, new List<Action<byte[]>>());
-            bytesListeners[id].Add(listener);
+            if (!voicePacketListeners.ContainsKey(id))
+                voicePacketListeners.Add(id, new List<Action<VoicePacket>>());
+            voicePacketListeners[id].Add(listener);
         }
 
-        public void RemoveBytesListener(short id, Action<byte[]> listener)
+        public void RemoveVoicePacketListener(short id, Action<VoicePacket> listener)
         {
-            if (bytesListeners.ContainsKey(id))
+            if (voicePacketListeners.ContainsKey(id))
         {
-            var list = bytesListeners[id];
+            var list = voicePacketListeners[id];
             list.Remove(listener);
             if (list.Count == 0)
-                bytesListeners.Remove(id);
+                voicePacketListeners.Remove(id);
         }
         }
 
-        private void Invoke(int id, byte[] data)
+        private void Invoke(VoicePacket voicePacket)
         {
-            if (bytesListeners.ContainsKey(id))
+            if (voicePacketListeners.ContainsKey(voicePacket.Id))
             {
-                foreach (var bytesListener in bytesListeners[id].ToArray())
-                    bytesListener.Invoke(data);
+                foreach (var voicePacketListener in voicePacketListeners[voicePacket.Id].ToArray())
+                    voicePacketListener.Invoke(voicePacket);
             }
         }
 
         private VoicePacket GetVoicePacket(byte[] data)
         {
-            short id = System.BitConverter.ToInt16(data, 0);
-            byte[] sampleData = new byte[data.Length - 2];
-            Array.Copy(data, 2, sampleData, 0, sampleData.Length);
-            return new VoicePacket() { Id = id, Data = sampleData };
+            short id = BitConverter.ToInt16(data, 0);
+            short sequence = BitConverter.ToInt16(data, 2);
+            short frameSize = BitConverter.ToInt16(data, 4);
+            Codec codec = (Codec)data[6];
+            byte[] sampleData = new byte[data.Length - 7];
+            Array.Copy(data, 7, sampleData, 0, sampleData.Length);
+            return new VoicePacket() { Id = id, Sequence = sequence, FrameSize = frameSize, Codec = codec, Data = sampleData };
         }
 
-        private byte[] AddIdBytes(short id, byte[] data)
+        private byte[] AddMetadataBytes(short id, short sequence, short frameSize, Codec codec, byte[] data)
         {
-            byte[] bytes = new byte[data.Length + 2];
-            byte[] idBytes = System.BitConverter.GetBytes(id);
+            byte[] bytes = new byte[data.Length + 7];
+            byte[] idBytes = BitConverter.GetBytes(id);
+            byte[] sequenceBytes = BitConverter.GetBytes(sequence);
+            byte[] frameSizeBytes = BitConverter.GetBytes(frameSize);
+            byte codecByte = (byte)codec;
             Array.Copy(idBytes, bytes, 2);
-            Array.Copy(data, 0, bytes, 2, data.Length);
+            Array.Copy(sequenceBytes, 0, bytes, 2, 2);
+            Array.Copy(frameSizeBytes, 0, bytes, 4, 2);
+            bytes[6] = codecByte;
+            Array.Copy(data, 0, bytes, 7, data.Length);
             return bytes;
-        }
-
-        private struct VoicePacket
-        {
-            public short Id;
-            public byte[] Data;
         }
     }
 }

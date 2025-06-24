@@ -8,11 +8,18 @@ interface VoiceClient {
     ip: string;
     port: number;
     userId: number;
+    lastSequence: number;
     lastHeartbeat: number;
     frameSize: number; // How many samples are sent at one time
     frameSizeMillis: number;
+    codec: Codec;
     recordingStartDate: Date;
     recordingData: number[];
+}
+
+enum Codec {
+    PCM,
+    OPUS
 }
 
 export class VoiceServer extends Service {
@@ -46,28 +53,33 @@ export class VoiceServer extends Service {
             const now = new Date();
             const nowMillis = now.getTime();
 
-            // First 2 bytes contains the user id
-            const userId = message.readIntLE(0, 2); // .net (Unity) decodes default in little-endian order
+            // Voice message with 7 bytes header: |userId(2)|sequence(2)|frameSize(2)|codec(1)|data|
+            const userId = message.readInt16LE(0); // .net (Unity) decodes default in little-endian order
+            const sequence = message.readInt16LE(2);
+            const frameSize = message.readInt16LE(4);
+            const codec: Codec = message.readInt8(6);
 
             // Current voice client
             let voiceClient: VoiceClient | undefined;
 
             // Add to clients if new client
             if (!this.clients.has(`${remote.address}:${remote.port}`)) {
-                const frameSize = (message.length - 2) / 4;
                 voiceClient = {
                     ip: remote.address,
                     port: remote.port,
                     userId: userId,
+                    lastSequence: sequence,
                     lastHeartbeat: nowMillis,
-                    frameSize, // First 2 bytes userId, every float needs 4 bytes
+                    frameSize,
                     frameSizeMillis: frameSize / this.samplingRate * 1000,
+                    codec,
                     recordingStartDate: now,
                     recordingData: [],
                 };
                 this.clients.set(`${remote.address}:${remote.port}`, voiceClient);
-                this.logDebug(`New voice client connected from ${remote.address}:${remote.port} ID: ${userId}`);
+                this.logDebug(`New voice client connected from ${remote.address}:${remote.port} ID: ${userId} Codec: ${codec === Codec.OPUS ? 'Opus' : 'PCM'}`);
                 if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
+                if (codec !== Codec.PCM) this.logWarning('Voice recording is only supported for PCM data');
             } else {
                 voiceClient = this.clients.get(`${remote.address}:${remote.port}`);
             }
@@ -77,7 +89,8 @@ export class VoiceServer extends Service {
                 return;
             }
 
-            // Update heartbeat time
+            // Update last heartbeat
+            voiceClient.lastSequence = sequence;
             voiceClient.lastHeartbeat = nowMillis;
 
             // Send message to all other clients
@@ -91,21 +104,9 @@ export class VoiceServer extends Service {
                 }
             });
 
-            if (this.recordingVoiceData) {
-                // Fill lost recording data with silent sound
-                const recordingTime = nowMillis - voiceClient.recordingStartDate.getTime();
-                const recordedDataTime = voiceClient.recordingData.length / (this.samplingRate / 1000);
-                const recordedDateTimeDifference = recordingTime - recordedDataTime;
-                if (recordedDateTimeDifference > voiceClient.frameSizeMillis / 2) {
-                    const countSkippedFrames: number = Math.floor((recordedDateTimeDifference + (voiceClient.frameSizeMillis / 2)) / voiceClient.frameSizeMillis);
-                    const silentSoundSamples: number[] = Array(voiceClient.frameSize * countSkippedFrames).fill(0.0);
-                    // Array.prototype.push.apply(voiceClient.recordingData, silentSoundSamples); // around 945x faster than .concat
-                    silentSoundSamples.forEach((sample) => {
-                        voiceClient.recordingData.push(sample);
-                    });
-                }
-                for (let i = 2; i <= message.length - 4; i += 4) {
-                    voiceClient.recordingData.push(message.readFloatLE(i)); // .net (Unity) decodes default in little-endian order
+            if (codec === Codec.PCM && this.recordingVoiceData) {
+                for (let i = 7; i <= message.length - 2; i += 2) {
+                    voiceClient.recordingData.push(message.readInt16LE(i));
                 }
             }
         });
