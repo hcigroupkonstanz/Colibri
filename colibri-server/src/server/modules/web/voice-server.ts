@@ -77,8 +77,10 @@ export class VoiceServer extends Service {
                 };
                 this.clients.set(`${remote.address}:${remote.port}`, voiceClient);
                 this.logDebug(`New voice client connected from ${remote.address}:${remote.port} ID: ${userId} Codec: ${codec === Codec.OPUS ? 'Opus' : 'PCM'}`);
-                if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
-                if (codec !== Codec.PCM) this.logWarning('Voice recording is only supported for PCM data');
+                if (this.recordingVoiceData) {
+                    this.logWarning('Warning: Voice recording is enabled');
+                    if (codec !== Codec.PCM) this.logWarning('Voice recording is only supported for PCM data');
+                }
             } else {
                 voiceClient = this.clients.get(`${remote.address}:${remote.port}`);
             }
