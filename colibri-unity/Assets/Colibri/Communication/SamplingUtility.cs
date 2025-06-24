@@ -36,7 +36,7 @@ public class SamplingUtility
         for (int i = 0; i < sampleCount; i++)
         {
             // Combine two bytes into a signed 16-bit sample (little endian)
-            short sample = (short)(shortBytes[i * 2] | (shortBytes[i * 2 + 1] << 8));
+            short sample = (short)((shortBytes[i * 2] & 0xFF) | (shortBytes[i * 2 + 1] << 8));
             floatBuffer[i] = sample / 32768f;
         }
 
