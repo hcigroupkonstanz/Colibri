@@ -30,9 +30,8 @@ export class VoiceServer extends Service {
     private udpSocket!: dgram.Socket;
     private clients: Map<string, VoiceClient> = new Map<string, VoiceClient>();
     private disconnectTimeoutMillis = 2000;
-    private recordingVoiceData = false;
 
-    public constructor(private samplingRate: number, private voiceRecordingPath: string) {
+    public constructor(private samplingRate: number, private voiceRecordingPath: string, private recordingVoiceData: boolean = false) {
         super();
     }
 
