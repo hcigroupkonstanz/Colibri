@@ -23,7 +23,12 @@ public class OpusDecoder
     public byte[] Decode(byte[] encodedBytes, int frameSize, bool fec = false)
     {
         byte[] decodedBytes = new byte[frameSize * 2];
-        Opus.opus_decode(pointer, encodedBytes, encodedBytes.Length, decodedBytes, frameSize, fec ? 1 : 0);
+        int decodedLength = Opus.opus_decode(pointer, encodedBytes, encodedBytes.Length, decodedBytes, frameSize, fec ? 1 : 0);
+        if (decodedLength < 0)
+        {
+            Debug.LogError("Opus decoding error occured: " + (OpusError)decodedLength + ". Length: " + encodedBytes.Length + " Frame size: " + frameSize);
+            return null;
+        }
         return decodedBytes;
     }
 
