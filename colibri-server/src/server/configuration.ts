@@ -24,6 +24,6 @@ export const Config = {
 
     DATA_ROOT: path.join(
         __dirname,
-        process.env.WEBSERVER_ROOT || '../../data/'
+        process.env.DATA_ROOT || '../../data/'
     ),
 };
