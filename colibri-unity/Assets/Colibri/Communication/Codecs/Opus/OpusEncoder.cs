@@ -32,7 +32,7 @@ public class OpusEncoder
             return null;
         }
         byte[] encodedBytes = new byte[encodedLength];
-        Buffer.BlockCopy(encodedBytes, 0, buffer, 0, encodedLength);
+        Buffer.BlockCopy(buffer, 0, encodedBytes, 0, encodedLength);
         return encodedBytes;
     }
 
