@@ -129,7 +129,7 @@ export class VoiceServer extends Service {
 
                     // Create wave file from recording data
                     const wav = new WaveFile();
-                    wav.fromScratch(1, context.samplingRate, '32f', value.recordingData); // 32f means 32 bit floating data ranging from -1 to 1
+                    wav.fromScratch(1, context.samplingRate, '16', value.recordingData);
 
                     // Save wave file
                     const dateString = value.recordingStartDate.toISOString().replace(/:/g, '_');
