@@ -13,6 +13,7 @@ namespace HCIKonstanz.Colibri.Communication
         public int FastForwardLatencyMilliseconds = 100;
         public bool UseOpusCodec = false;
         public int FrameSizeMilliseconds = 20;
+        public float Volume = 1f;
 
         // Debug
         public bool Debugging = false;
@@ -135,6 +136,9 @@ namespace HCIKonstanz.Colibri.Communication
 
             // Convert bytes to float samples
             float[] samples = SamplingUtility.ConvertShortBytesToFloat(shortBytes);
+
+            // Change volume if necessary
+            if (Volume != 1f) samples = SamplingUtility.ChangeVolume(samples, Volume);
 
             // Convert to output sample rate if necessary
             if (AudioSettings.outputSampleRate != serverSamplingRate) samples = resampler.ResampleStream(samples);

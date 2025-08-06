@@ -98,4 +98,13 @@ public class SamplingUtility
 
         return floatByteBuffer;
     }
+
+    public static float[] ChangeVolume(float[] samples, float gain)
+    {
+        for (int i = 0; i < samples.Length; i++)
+        {
+            samples[i] = Mathf.Clamp(samples[i] * gain, -1.0f, 1.0f);
+        }
+        return samples;
+    }
 }
