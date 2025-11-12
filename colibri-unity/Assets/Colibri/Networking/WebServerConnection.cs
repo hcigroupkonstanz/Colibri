@@ -486,8 +486,14 @@ namespace HCIKonstanz.Colibri.Networking
                 var fbCommand = builder.CreateString(command);
                 // TODO: replace this with dictionary to avoid JSON serialization
                 //       see: https://flatbuffers.dev/flatbuffers_guide_use_c-sharp.html#autotoc_md93
-                var fbPayload = builder.CreateString(payload?.ToString(Formatting.None));
-
+                string payloadString;
+                // Serialize strings as raw value to prevent quotation marks
+                if (payload.Type == JTokenType.String)
+                    payloadString = payload?.Value<string>();
+                else
+                    payloadString = payload?.ToString(Formatting.None);
+                var fbPayload = builder.CreateString(payloadString);
+                
                 Message.StartMessage(builder);
                 Message.AddChannel(builder, fbChannel);
                 Message.AddCommand(builder, fbCommand);
