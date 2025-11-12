@@ -488,7 +488,7 @@ namespace HCIKonstanz.Colibri.Networking
                 //       see: https://flatbuffers.dev/flatbuffers_guide_use_c-sharp.html#autotoc_md93
                 string payloadString;
                 // Serialize strings as raw value to prevent quotation marks
-                if (payload.Type == JTokenType.String)
+                if (payload?.Type == JTokenType.String)
                     payloadString = payload?.Value<string>();
                 else
                     payloadString = payload?.ToString(Formatting.None);
