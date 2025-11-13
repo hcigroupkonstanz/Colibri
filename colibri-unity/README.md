@@ -22,7 +22,7 @@ https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibr
 
 ### UnityPackage
 
-Download the latest release from GitHub and import it to your Unity project.
+Download the latest release of [UniTask](https://github.com/Cysharp/UniTask/releases), [UniRx](https://github.com/neuecc/UniRx/releases), and [Colibri](https://github.com/hcigroupkonstanz/Colibri/releases) from GitHub and import it to your Unity project.
 
 ## Configuration
 
