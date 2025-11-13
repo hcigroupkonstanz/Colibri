@@ -1,7 +1,5 @@
 # Colibri - Server
 
-Communication Library for rapid prototyping in Unity
-
 ## Setup
 
 ### [Docker](https://hub.docker.com/r/hcikn/colibri) _(recommended)_
@@ -9,10 +7,9 @@ Communication Library for rapid prototyping in Unity
 Use the following `docker-compose.yml` and run `docker-compose up -d`:
 
 ```yaml
-version: '3.4'
 services:
   colibri:
-    image: hcikn/colibri
+    build: .
     restart: unless-stopped
     container_name: colibri
     tty: true
@@ -32,10 +29,9 @@ Clone this repository, build with `npm run build`, then start with `npm start`.
 
 #### Configuration
 
-The web interface, socketIO server, and voice server and customizable.
+The web interface, socketIO server, and voice server are customizable.
 The main aspect here lies in changing default ports or hostnames to facilitate running the application behind a proxy.
-
-> **Note:** The Unity and Web version are still using the hard-coded Port numbers. Currently there is no way to change the default ports via a configuration file!
+Additionally, voice server settings such as the sampling rate and recording options can be adjusted.
 
 For reference, see the `.env.example` file:
 
@@ -45,6 +41,8 @@ TCP_PORT=9012
 
 VOICE_HOST='0.0.0.0'
 VOICE_PORT=9013
+VOICE_SAMPLING_RATE=48000
+VOICE_RECORDING=false
 
 WEBSERVER_HOST='0.0.0.0'
 WEBSERVER_PORT=9011
