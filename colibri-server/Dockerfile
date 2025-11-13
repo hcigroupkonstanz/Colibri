@@ -13,7 +13,7 @@ EXPOSE 9011
 # TCP (Unity) Port
 EXPOSE 9012
 # Voice
-EXPOSE 9013
+EXPOSE 9013/udp
 
 CMD [ "npm", "start" ]
 
