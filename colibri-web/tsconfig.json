@@ -17,7 +17,8 @@
         "experimentalDecorators": true,
         "paths": {
             "@hcikn/colibri": ["./src/"]
-        }
+        },
+        "types": ["node"]
     },
     "include": ["src", "samples"]
 }
