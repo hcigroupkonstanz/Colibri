@@ -1,6 +1,6 @@
+import { Subject } from 'rxjs';
 import { Socket, connect } from 'socket.io-client';
 import ColibriError from './ColibriError';
-import { Subject } from 'rxjs';
 
 export interface Message {
     channel: string;
@@ -20,7 +20,7 @@ export class Colibri {
     public constructor(
         public readonly app: string,
         public readonly server: string = window?.location?.hostname ?? '',
-        public readonly port: number = 9011
+        public readonly port: number = 9011,
     ) {
         if (server.trim().length <= 0) {
             throw new ColibriError('Server Address missing or empty!');
@@ -34,7 +34,8 @@ export class Colibri {
         if (!new RegExp('wss?://', 'i').test(this.uri)) {
             this.uri = `ws://${this.uri}`;
         }
-        this.uriRestApi = `${this.uri}/api/store/${app}/`;
+        // replace ws(s) with http(s) for the REST API
+        this.uriRestApi = `${this.uri.replace(/^ws/i, 'http')}/api/store/${app}/`;
 
         // there is already an instance running
         // do we actually need a second ?!
@@ -44,7 +45,7 @@ export class Colibri {
 
         this.socket = connect(this.uri, {
             query: { app, version: '1' },
-            transports: ['websocket']
+            transports: ['websocket'],
         });
         this.socket.on('connect', this.onSocketConnect.bind(this));
         this.socket.onAny(this.onSocketAny.bind(this));
@@ -76,7 +77,7 @@ export class Colibri {
      * @returns
      */
     public static getInstance(
-        warnIfNotInitialized: boolean = true
+        warnIfNotInitialized: boolean = true,
     ): Colibri | null {
         if (warnIfNotInitialized && !Colibri.instance) {
             console.warn('Colibri not initialized yet! (Instance is null)');
@@ -93,7 +94,7 @@ export class Colibri {
     public sendMessage(
         channel: string,
         command: string,
-        payload: unknown = {}
+        payload: unknown = {},
     ) {
         this.socket.emit(channel, {
             command,
@@ -109,7 +110,7 @@ export class Colibri {
      */
     public registerChannel(
         channel: string,
-        handler: (payload: Message) => void
+        handler: (payload: Message) => void,
     ) {
         this.socket.on(channel, handler);
     }
@@ -121,7 +122,7 @@ export class Colibri {
      */
     public unregisterChannel(
         channel: string,
-        handler: (payload: Message) => void
+        handler: (payload: Message) => void,
     ) {
         this.socket.off(channel, handler);
     }
@@ -178,6 +179,7 @@ export class Colibri {
         const uri = this.getRestUri(key);
         if (!uri) return false;
 
+        console.log('URI: %o', uri);
         const response = await fetch(uri, {
             method: 'PUT',
             headers: {
@@ -203,7 +205,7 @@ export class Colibri {
 export const SendMessage = (
     channel: string,
     command: string,
-    payload: unknown = {}
+    payload: unknown = {},
 ) => Colibri.getInstance()?.sendMessage(channel, command, payload);
 
 /**
@@ -212,7 +214,7 @@ export const SendMessage = (
  */
 export const RegisterChannel = (
     channel: string,
-    handler: (payload: Message) => void
+    handler: (payload: Message) => void,
 ) => Colibri.getInstance()?.registerChannel(channel, handler);
 
 /**
@@ -221,7 +223,7 @@ export const RegisterChannel = (
  */
 export const UnregisterChannel = (
     channel: string,
-    handler: (payload: Message) => void
+    handler: (payload: Message) => void,
 ) => Colibri.getInstance()?.unregisterChannel(channel, handler);
 
 /**
@@ -230,7 +232,7 @@ export const UnregisterChannel = (
  */
 export const RegisterOnce = (
     channel: string,
-    handler: (payload: Message) => void
+    handler: (payload: Message) => void,
 ) => Colibri.getInstance()?.registerOnce(channel, handler);
 
 /**
