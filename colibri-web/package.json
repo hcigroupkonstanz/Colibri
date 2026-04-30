@@ -1,43 +1,44 @@
 {
-  "name": "@hcikn/colibri",
-  "version": "1.3.1",
-  "description": "Communication Library for Research Prototyping - Allows object synchronization, networking, and voice chat with little to no code required",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "scripts": {
-    "build": "tsup",
-    "lint": "eslint \"**/*.{js,ts}\"",
-    "publish": "npm run build && npm publish --access public",
-    "samples/broadcast": "tsx samples/broadcast.ts",
-    "samples/model-sync": "tsx samples/model-sync.ts",
-    "samples/remote-logging": "tsx samples/remote-logging.ts"
-  },
-  "author": "HCI Group, University of Konstanz",
-  "license": "MIT",
-  "homepage": "https://github.com/hcigroupkonstanz/colibri",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/hcigroupkonstanz/colibri.git"
-  },
-  "files": [
-    "/dist"
-  ],
-  "dependencies": {
-    "rxjs": "^7.8.1",
-    "socket.io-client": "^4.7.1",
-    "ts-custom-error": "^3.3.1",
-    "typescript": "^5.1.6"
-  },
-  "devDependencies": {
-    "@swc/core": "^1.3.96",
-    "@types/lodash": "^4.14.195",
-    "@types/node": "^20.9.0",
-    "@typescript-eslint/eslint-plugin": "^6.10.0",
-    "@typescript-eslint/parser": "^6.10.0",
-    "eslint": "^8.53.0",
-    "tsup": "^7.2.0",
-    "tsx": "^4.0.0"
-  }
+    "name": "@hcikn/colibri",
+    "version": "1.3.1",
+    "description": "Communication Library for Research Prototyping - Allows object synchronization, networking, and voice chat with little to no code required",
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "scripts": {
+        "build": "tsup",
+        "lint": "eslint \"**/*.{js,ts}\"",
+        "publish": "npm run build && npm publish --access public",
+        "samples/broadcast": "tsx samples/broadcast.ts",
+        "samples/model-sync": "tsx samples/model-sync.ts",
+        "samples/remote-logging": "tsx samples/remote-logging.ts",
+        "samples/rest-api": "tsx samples/rest-api.ts"
+    },
+    "author": "HCI Group, University of Konstanz",
+    "license": "MIT",
+    "homepage": "https://github.com/hcigroupkonstanz/colibri",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/hcigroupkonstanz/colibri.git"
+    },
+    "files": [
+        "/dist"
+    ],
+    "dependencies": {
+        "rxjs": "^7.8.1",
+        "socket.io-client": "^4.7.1",
+        "ts-custom-error": "^3.3.1",
+        "typescript": "^5.1.6"
+    },
+    "devDependencies": {
+        "@swc/core": "^1.3.96",
+        "@types/lodash": "^4.14.195",
+        "@types/node": "^20.19.39",
+        "@typescript-eslint/eslint-plugin": "^6.10.0",
+        "@typescript-eslint/parser": "^6.10.0",
+        "eslint": "^8.53.0",
+        "tsup": "^7.2.0",
+        "tsx": "^4.0.0"
+    }
 }
