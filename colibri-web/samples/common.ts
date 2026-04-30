@@ -1,13 +1,13 @@
-import * as readline from 'readline';
+import * as readline from 'node:readline';
 
 console.log(
-    '=============================================================================='
+    '==============================================================================',
 );
 console.log(
-    'Please start a second instance of this application to see the sample in action'
+    'Please start a second instance of this application to see the sample in action',
 );
 console.log(
-    '=============================================================================='
+    '==============================================================================',
 );
 
 export const rl = readline.createInterface({
@@ -23,9 +23,9 @@ export const colibriAddress = async () => {
                 res(
                     answer.trim().length === 0
                         ? 'colibri.hci.uni-konstanz.de'
-                        : answer
+                        : answer,
                 );
-            }
+            },
         );
     });
 };
@@ -37,7 +37,7 @@ export const colibriPort = async () => {
             (answer) => {
                 const port = parseInt(answer);
                 res(port > 0 ? port : 9011);
-            }
+            },
         );
     });
 };
