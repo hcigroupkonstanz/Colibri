@@ -179,7 +179,6 @@ export class Colibri {
         const uri = this.getRestUri(key);
         if (!uri) return false;
 
-        console.log('URI: %o', uri);
         const response = await fetch(uri, {
             method: 'PUT',
             headers: {
