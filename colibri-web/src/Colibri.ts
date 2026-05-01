@@ -151,7 +151,7 @@ export class Colibri {
     /**
      * Queries an object from the REST API identified by `key`.
      * @param key REST API storage key
-     * @returns JSON object with data or null if object does not exist or any other error occurrs
+     * @returns JSON object with data or null if object does not exist or any other error occurs
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public async getRestObject(key: string): Promise<any | null> {
@@ -170,7 +170,7 @@ export class Colibri {
     }
 
     /**
-     * Sets or updatees an object in the REST API identified by `key`.
+     * Sets or updates an object in the REST API identified by `key`.
      * @param key REST API storage key
      * @param data JSON data to write
      * @returns true if data was written to REST API
