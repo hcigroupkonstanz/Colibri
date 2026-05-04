@@ -1,4 +1,4 @@
-@import '../../../sass/nord.scss';
+@use '../../../sass/nord' as *;
 
 .msg-container {
     border-radius: 0px;

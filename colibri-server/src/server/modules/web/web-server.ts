@@ -1,8 +1,8 @@
 import * as http from 'http';
 import * as path from 'path';
-import * as express from 'express';
-import * as bodyparser from 'body-parser';
-import * as cors from 'cors';
+import express from 'express';
+import bodyparser from 'body-parser';
+import cors from 'cors';
 
 import { Service } from '../core';
 

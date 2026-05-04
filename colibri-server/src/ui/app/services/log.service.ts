@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { SocketIOService } from './socketio.service';
 import { BehaviorSubject, Subject } from 'rxjs';
 
@@ -24,7 +24,9 @@ export class LogService {
     // for quick lookup of messages by id
     private messageIds: { [id: string]: LogMessage } = {};
 
-    constructor(socketio: SocketIOService) {
+    constructor() {
+        const socketio = inject(SocketIOService);
+
         socketio
             .listen('colibri::log')
             .subscribe((msg) => {

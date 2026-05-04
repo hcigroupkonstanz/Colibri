@@ -1,20 +1,22 @@
 <div class="header no-select">
-    <div class="logo">
-        <img src="assets/logo_small.webp">
-        <h1>Colibri</h1>
-    </div>
+  <div class="logo">
+    <img src="assets/logo_small.webp">
+    <h1>Colibri</h1>
+  </div>
 
-    <div class="tabs">
-        <a *ngFor="let tab of tabs" [routerLink]="tab.path" routerLinkActive="active">{{ tab.label }}</a>
+  <div class="tabs">
+    @for (tab of tabs; track tab) {
+      <a [routerLink]="tab.path" routerLinkActive="active">{{ tab.label }}</a>
+    }
 
-        <div class="active-indicator" [style]="{ 'left': getIndicatorPosition() }"></div>
-    </div>
+    <div class="active-indicator" [style]="{ 'left': getIndicatorPosition() }"></div>
+  </div>
 
-    <div class="selector">
-        <app-filter-bar/>
-    </div>
+  <div class="selector">
+    <app-filter-bar/>
+  </div>
 </div>
 
 <div class="content">
-    <router-outlet></router-outlet>
+  <router-outlet></router-outlet>
 </div>

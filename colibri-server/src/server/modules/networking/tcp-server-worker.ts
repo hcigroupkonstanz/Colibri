@@ -4,7 +4,7 @@ import { WorkerService } from '../core';
 import * as threads from 'worker_threads';
 import * as flatbuffers from 'flatbuffers';
 import { Message } from './message';
-import { NetworkMessage } from 'modules/command-hooks';
+import { NetworkMessage } from '../command-hooks';
 import { v4 as uuidv4 } from 'uuid';
 
 export const TCP_SERVER_WORKER = __filename;

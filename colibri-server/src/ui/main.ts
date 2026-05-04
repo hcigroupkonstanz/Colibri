@@ -1,5 +1,6 @@
-import { enableProdMode, importProvidersFrom } from '@angular/core';
-
+import { enableProdMode, importProvidersFrom, provideZoneChangeDetection } from '@angular/core';
+import { providePrimeNG } from 'primeng/config';
+import Lara from '@primeng/themes/lara';
 
 import { environment } from './environments/environment';
 import { FormsModule } from '@angular/forms';
@@ -23,9 +24,11 @@ const routes: Routes = [
 
 bootstrapApplication(RootComponent, {
     providers: [
-    provideRouter(routes),
+        provideZoneChangeDetection(),
+        provideRouter(routes),
         importProvidersFrom(BrowserModule, FormsModule),
-        provideAnimations()
+        provideAnimations(),
+        providePrimeNG({ theme: { preset: Lara } })
     ]
 })
   .catch(err => console.error(err));

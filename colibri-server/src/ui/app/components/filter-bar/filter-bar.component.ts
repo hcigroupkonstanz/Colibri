@@ -1,8 +1,7 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { LogMessage, LogService } from '../../services';
 import { Subscription } from 'rxjs';
-import { NgFor } from '@angular/common';
-import { DropdownChangeEvent, DropdownModule } from 'primeng/dropdown';
+import { SelectChangeEvent, SelectModule } from 'primeng/select';
 import { FormsModule } from '@angular/forms';
 
 interface ListElement {
@@ -11,18 +10,18 @@ interface ListElement {
 
 @Component({
     selector: 'app-filter-bar',
+    standalone: true,
     templateUrl: './filter-bar.component.html',
     styleUrls: ['./filter-bar.component.scss'],
-    standalone: true,
-    imports: [NgFor, DropdownModule, FormsModule]
+    imports: [SelectModule, FormsModule]
 })
 export class FilterBarComponent implements OnInit, OnDestroy {
+    private log = inject(LogService);
+
     appNames: ListElement[] = [];
     selected: ListElement | undefined = undefined;
 
     private subscription!: Subscription;
-
-    constructor(private log: LogService) { }
 
     ngOnInit(): void {
         this.log.messages.forEach(m => this.updateAppNames(m));
@@ -40,7 +39,7 @@ export class FilterBarComponent implements OnInit, OnDestroy {
         }
     }
 
-    onFilterChanged(e: DropdownChangeEvent): void {
+    onFilterChanged(e: SelectChangeEvent): void {
         this.log.filter$.next(e.value);
     }
 
