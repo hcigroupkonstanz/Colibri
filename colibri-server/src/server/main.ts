@@ -5,8 +5,7 @@ import * as colibri from './modules';
 import { Config } from './configuration';
 
 // Better TypeScript error messages
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-require('source-map-support').install();
+import 'source-map-support/register';
 
 /**
  * Debugging

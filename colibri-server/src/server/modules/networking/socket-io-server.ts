@@ -1,4 +1,4 @@
-import * as io from 'socket.io';
+import io from 'socket.io';
 import * as _ from 'lodash';
 import { Server as HttpServer } from 'http';
 import { Observable, Subject } from 'rxjs';
@@ -70,7 +70,7 @@ export class SocketIOServer extends Service implements NetworkServer {
         try {
             if (msg.payload)
                 payload = JSON.parse(msg.payload);
-        } catch (e) { /* ignore */ }
+        } catch { /* ignore */ }
 
         for (const client of clients) {
             client.socket.emit(msg.channel, {
