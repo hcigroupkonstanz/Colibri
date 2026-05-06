@@ -1,6 +1,6 @@
 import { enableProdMode, importProvidersFrom, provideZoneChangeDetection } from '@angular/core';
 import { providePrimeNG } from 'primeng/config';
-import Lara from '@primeng/themes/lara';
+import ColibriTheme from './theme';
 
 import { environment } from './environments/environment';
 import { FormsModule } from '@angular/forms';
@@ -28,7 +28,7 @@ bootstrapApplication(RootComponent, {
         provideRouter(routes),
         importProvidersFrom(BrowserModule, FormsModule),
         provideAnimations(),
-        providePrimeNG({ theme: { preset: Lara } })
+        providePrimeNG({ theme: { preset: ColibriTheme } })
     ]
 })
   .catch(err => console.error(err));
