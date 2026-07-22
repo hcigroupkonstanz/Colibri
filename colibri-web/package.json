@@ -20,7 +20,10 @@
         "samples/broadcast": "tsx samples/broadcast.ts",
         "samples/model-sync": "tsx samples/model-sync.ts",
         "samples/remote-logging": "tsx samples/remote-logging.ts",
-        "samples/rest-api": "tsx samples/rest-api.ts"
+        "samples/rest-api": "tsx samples/rest-api.ts",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage"
     },
     "author": "HCI Group, University of Konstanz",
     "license": "MIT",
@@ -43,9 +46,11 @@
         "@types/node": "^20.19.39",
         "@typescript-eslint/eslint-plugin": "^6.10.0",
         "@typescript-eslint/parser": "^6.10.0",
+        "@vitest/coverage-v8": "^3.2.4",
         "eslint": "^8.53.0",
         "tsup": "^7.2.0",
         "tsx": "^4.21.0",
-        "typescript": "^5.1.6"
+        "typescript": "^5.1.6",
+        "vitest": "^3.2.4"
     }
 }
