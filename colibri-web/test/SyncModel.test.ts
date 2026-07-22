@@ -171,4 +171,20 @@ describe('SyncModel', () => {
             expect(emissions).toEqual([]);
         });
     });
+
+    describe('onModelChanges', () => {
+        it('emits the given key on modelChanges when called directly', () => {
+            const user = new User('user-1');
+            const emissions: string[] = [];
+            user.modelChanges.subscribe((key) => emissions.push(key));
+
+            // Protected in TypeScript, but reachable from within a subclass or
+            // (as here) via a direct cast - this is the manual-emission escape
+            // hatch subclasses get alongside the @Synced-driven emissions.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (user as any).onModelChanges('manual');
+
+            expect(emissions).toEqual(['manual']);
+        });
+    });
 });

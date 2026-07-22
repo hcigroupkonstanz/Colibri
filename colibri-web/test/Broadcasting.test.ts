@@ -69,6 +69,31 @@ describe('Sync senders', () => {
 });
 
 describe('Sync receivers', () => {
+    it.each([
+        ['receiveBool', 'broadcast::bool', true],
+        ['receiveBoolArray', 'broadcast::bool[]', [true, false]],
+        ['receiveNumber', 'broadcast::float', 42],
+        ['receiveNumberArray', 'broadcast::float[]', [1, 2, 3]],
+        ['receiveString', 'broadcast::string', 'hi'],
+        ['receiveStringArray', 'broadcast::string[]', ['a', 'b']],
+        ['receiveVector3', 'broadcast::vector3', [1, 2, 3]],
+        ['receiveVector3Array', 'broadcast::vector3[]', [[1, 2, 3]]],
+        ['receiveQuaternion', 'broadcast::quaternion', [0, 0, 0, 1]],
+        ['receiveQuaternionArray', 'broadcast::quaternion[]', [[0, 0, 0, 1]]],
+        ['receiveColor', 'broadcast::color', '#ff0000'],
+        ['receiveColorArray', 'broadcast::color[]', ['#ff0000']],
+        ['receiveJson', 'broadcast::json', { a: 1 }],
+    ] as const)('%s dispatches inbound %s payloads to its callback', (method, command, payload) => {
+        const cb = vi.fn();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (Sync[method] as any)('ch', cb);
+
+        const handler = registerChannel.mock.calls[0][1];
+        handler({ channel: 'ch', command, payload });
+
+        expect(cb).toHaveBeenCalledWith(payload);
+    });
+
     it('registers exactly one channel listener no matter how many types are received on it', () => {
         Sync.receiveBool('ch', () => undefined);
         Sync.receiveNumber('ch', () => undefined);
