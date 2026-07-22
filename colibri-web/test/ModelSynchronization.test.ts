@@ -64,8 +64,8 @@ describe('ModelSynchronization', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     });
 
     afterEach(() => {

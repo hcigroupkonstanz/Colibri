@@ -14,10 +14,6 @@ interface AnimalData {
     legs: number;
 }
 
-interface DogData extends AnimalData {
-    breed: string;
-}
-
 class Animal extends SyncModel<AnimalData> {
     @Synced() accessor legs = 4;
 }
