@@ -88,30 +88,25 @@ import { SyncModel, Synced } from '@hcikn/colibri';
 
 export class SampleClass extends SyncModel<SampleClass> {
     @Synced()
-    get name() { return this._name; }
-    set name(val: string) { this._name = val; }
-    private _name = '';
+    accessor name = '';
 
     @Synced()
-    private age = 0;
+    accessor age = 0;
 
     @Synced('billingAddress')
-    private address = '';
+    accessor address = '';
 }
 ```
 
-and enable `experimentalDecorators` in the `tsconfig.json`:
+`@Synced()` requires TypeScript's standard decorators, the default since TypeScript 5.0 — make sure `experimentalDecorators` is **not** set (or is `false`) in your `tsconfig.json`, and declare every synced member with the `accessor` keyword.
 
-```json
-{
-  "compilerOptions": {
-    "experimentalDecorators": true
-  }
-}
+Any `accessor` member marked with `@Synced()` will be synchronized across all network clients.
 
-```
-
-Any property or field marked with `@Synced()` will be synchronized across all network clients. *Note: Synchronization of fields (e.g., `@Synced() private age = 0;` does not work on some frameworks such as React for some reason.*
+> **Migrating from 1.x:** `@Synced()` now requires standard TC39 decorators instead of legacy
+> (`experimentalDecorators`) ones. To migrate: remove `experimentalDecorators` from your
+> `tsconfig.json`, and turn every synced field/property into an `accessor` (e.g.
+> `@Synced() private age = 0;` → `@Synced() accessor age = 0;`). This also fixes field
+> synchronization in frameworks like React, which never worked correctly under the legacy decorator.
 
 Lastly, we need to register the class with the Synchronization mechanism by calling `RegisterModelSync`:
 
