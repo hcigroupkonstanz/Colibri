@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        "target": "es6",
+        "target": "es2022",
         "lib": ["dom", "dom.iterable", "esnext"],
         "allowJs": true,
         "skipLibCheck": true,
@@ -14,7 +14,6 @@
         "resolveJsonModule": true,
         "isolatedModules": true,
         "noEmit": true,
-        "experimentalDecorators": true,
         "paths": {
             "@hcikn/colibri": ["./src/"]
         },

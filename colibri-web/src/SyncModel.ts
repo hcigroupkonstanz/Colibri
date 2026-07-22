@@ -3,8 +3,9 @@ import { Subject, bufferTime, filter, map, share } from 'rxjs';
 export abstract class SyncModel<T> {
     public readonly id: string;
 
-    // TODO: move to ModelSynchronization or use a much better structure or something like that?
-    public ignoreNextChange = false;
+    // Set synchronously while a remote update is being applied, so decorated
+    // setters can suppress re-emitting the change they were just given.
+    public applyingRemoteUpdate = false;
 
     public readonly modelChanges = new Subject<string>();
     public readonly modelChanges$ = this.modelChanges.pipe(
@@ -31,12 +32,11 @@ export abstract class SyncModel<T> {
     }
 
     public registerSyncedProperty(name: string, prop: string | symbol): void {
-        // Decorators are applied to the class prototype when the class is defined.
-        // We define __syncedProperties on the prototype, ensuring it doesn't mutate parent classes.
+        // Called per-instance (via the accessor decorator's addInitializer), once
+        // for every @Synced member declared anywhere in the prototype chain.
         if (!Object.prototype.hasOwnProperty.call(this, '__syncedProperties')) {
             Object.defineProperty(this, '__syncedProperties', {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                value: { ...((this as any).__syncedProperties || {}) },
+                value: {},
                 enumerable: false,
                 writable: true,
                 configurable: true,
@@ -55,20 +55,24 @@ export abstract class SyncModel<T> {
     public update(updates: Partial<T>): void {
         const syncedProps = this.getSyncedProperties();
 
-        for (const key of Object.keys(updates)) {
-            if (key !== 'id') {
-                const localKey = syncedProps[key];
-                if (localKey) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (this as any)[localKey as keyof SyncModel<T>] =
-                        updates[key as keyof T];
-                    this.ignoreNextChange = true;
-                } else {
-                    console.warn(
-                        `Unknown property ${key} in ${this.constructor.name}`,
-                    );
+        this.applyingRemoteUpdate = true;
+        try {
+            for (const key of Object.keys(updates)) {
+                if (key !== 'id') {
+                    const localKey = syncedProps[key];
+                    if (localKey) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (this as any)[localKey as keyof SyncModel<T>] =
+                            updates[key as keyof T];
+                    } else {
+                        console.warn(
+                            `Unknown property ${key} in ${this.constructor.name}`,
+                        );
+                    }
                 }
             }
+        } finally {
+            this.applyingRemoteUpdate = false;
         }
     }
 

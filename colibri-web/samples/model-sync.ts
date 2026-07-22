@@ -2,26 +2,20 @@ import { Colibri, RegisterModelSync, SyncModel, Synced } from '@hcikn/colibri';
 import { colibriAddress, colibriPort, rl } from './common';
 
 /**
- *  To use the @Synced() decorator, please add the following to the "compiler" field of your tsconfig.json:
- *  "experimentalDecorators": true
+ *  To use the @Synced() decorator, TypeScript standard decorators must be enabled
+ *  (the default since TypeScript 5.0). Make sure "experimentalDecorators" is
+ *  *not* set in your tsconfig.json, and decorate `accessor` members:
  */
 export class SampleClass extends SyncModel<SampleClass> {
     @Synced()
-    get name() {
-        return this._name;
-    }
-    set name(val: string) {
-        this._name = val;
-    }
-    private _name = '';
+    accessor name = '';
 
-    /* Warning: for some reason syncing fields does not work with some frameworks (e.g., React)! */
     @Synced()
-    public age = 0;
+    accessor age = 0;
 
     // We can provide a custom name for the synced property
     @Synced('billingAddress')
-    public address = '';
+    accessor address = '';
 }
 
 (async () => {
