@@ -1,5 +1,5 @@
 import { Colibri, RegisterModelSync, SyncModel, Synced } from '@hcikn/colibri';
-import { rl, colibriAddress, colibriPort } from './common';
+import { colibriAddress, colibriPort, rl } from './common';
 
 /**
  *  To use the @Synced() decorator, please add the following to the "compiler" field of your tsconfig.json:
@@ -45,7 +45,7 @@ export class SampleClass extends SyncModel<SampleClass> {
                 name: c.name,
                 age: c.age,
                 address: c.address,
-            }))
+            })),
         );
     });
 
@@ -76,10 +76,10 @@ export class SampleClass extends SyncModel<SampleClass> {
 
     console.log(' ');
     console.log(
-        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"'
+        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"',
     );
     console.log(
-        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" '
+        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" ',
     );
     console.log(' ');
     console.log('Terminate by typing "exit"');

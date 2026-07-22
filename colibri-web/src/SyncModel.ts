@@ -3,19 +3,16 @@ import { Subject, bufferTime, filter, map, share } from 'rxjs';
 export abstract class SyncModel<T> {
     public readonly id: string;
 
-    // FIXME: this is set in 'registerSyncedProperty' but the decorator is called after the constructor
-    // FIXME: -> therefore only available via prototype!
-    private syncedProperties!: { [key: string]: (string | symbol) };
-
     // TODO: move to ModelSynchronization or use a much better structure or something like that?
     public ignoreNextChange = false;
 
     public readonly modelChanges = new Subject<string>();
     public readonly modelChanges$ = this.modelChanges.pipe(
         bufferTime(1),
-        map(changes => changes.filter(this.uniq)),
-        filter(changes => changes.length > 0),
-        share());
+        map((changes) => changes.filter(this.uniq)),
+        filter((changes) => changes.length > 0),
+        share(),
+    );
 
     public constructor(id: string) {
         this.id = id;
@@ -34,26 +31,42 @@ export abstract class SyncModel<T> {
     }
 
     public registerSyncedProperty(name: string, prop: string | symbol): void {
-        // workaround since decorators are called before constructors
-        if (!this.syncedProperties) {
-            this.syncedProperties = {};
+        // Decorators are applied to the class prototype when the class is defined.
+        // We define __syncedProperties on the prototype, ensuring it doesn't mutate parent classes.
+        if (!Object.prototype.hasOwnProperty.call(this, '__syncedProperties')) {
+            Object.defineProperty(this, '__syncedProperties', {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                value: { ...((this as any).__syncedProperties || {}) },
+                enumerable: false,
+                writable: true,
+                configurable: true,
+            });
         }
 
-        this.syncedProperties[name] = prop;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (this as any).__syncedProperties[name] = prop;
+    }
+
+    private getSyncedProperties(): { [key: string]: string | symbol } {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (this as any).__syncedProperties || {};
     }
 
     public update(updates: Partial<T>): void {
-        const syncedProps = Object.getPrototypeOf(this).syncedProperties;
+        const syncedProps = this.getSyncedProperties();
 
         for (const key of Object.keys(updates)) {
             if (key !== 'id') {
                 const localKey = syncedProps[key];
                 if (localKey) {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (this as any)[localKey as keyof SyncModel<T>] = updates[key as keyof T];
+                    (this as any)[localKey as keyof SyncModel<T>] =
+                        updates[key as keyof T];
                     this.ignoreNextChange = true;
                 } else {
-                    console.warn(`Unknown property ${key} in ${this.constructor.name}`);
+                    console.warn(
+                        `Unknown property ${key} in ${this.constructor.name}`,
+                    );
                 }
             }
         }
@@ -63,11 +76,13 @@ export abstract class SyncModel<T> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const json: any = { id: this.id };
 
-        // TODO: only changed properties
-        const syncedProps = Object.getPrototypeOf(this).syncedProperties;
+        const syncedProps = this.getSyncedProperties();
         for (const key of Object.keys(syncedProps)) {
             const localKey = syncedProps[key] as keyof SyncModel<T>;
-            if (attributes.length === 0 || attributes.includes(localKey)) {
+            if (
+                attributes.length === 0 ||
+                attributes.includes(localKey as string)
+            ) {
                 json[key] = this[localKey];
             }
         }
