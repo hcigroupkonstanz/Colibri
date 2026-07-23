@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+    type Mock,
+} from 'vitest';
 
 vi.mock('socket.io-client', () => ({
     connect: vi.fn(),
@@ -98,8 +106,14 @@ describe('Colibri constructor', () => {
 
     it('registers the connect handler and the colibri latency channel', () => {
         new Colibri('app', 'localhost', 9011);
-        expect(fakeSocket.on).toHaveBeenCalledWith('connect', expect.any(Function));
-        expect(fakeSocket.on).toHaveBeenCalledWith('colibri', expect.any(Function));
+        expect(fakeSocket.on).toHaveBeenCalledWith(
+            'connect',
+            expect.any(Function),
+        );
+        expect(fakeSocket.on).toHaveBeenCalledWith(
+            'colibri',
+            expect.any(Function),
+        );
         expect(fakeSocket.onAny).toHaveBeenCalledWith(expect.any(Function));
     });
 
@@ -119,7 +133,9 @@ describe('Colibri constructor', () => {
     });
 
     it('logs on socket connect', () => {
-        const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+        const debugSpy = vi
+            .spyOn(console, 'debug')
+            .mockImplementation(() => undefined);
         new Colibri('app', 'localhost', 9011);
         const [, connectHandler] = fakeSocket.on.mock.calls.find(
             ([channel]) => channel === 'connect',
@@ -156,21 +172,27 @@ describe('Colibri constructor', () => {
 
 describe('Colibri.getInstance', () => {
     it('warns and returns null when uninitialized', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const warnSpy = vi
+            .spyOn(console, 'warn')
+            .mockImplementation(() => undefined);
 
         expect(Colibri.getInstance()).toBeNull();
         expect(warnSpy).toHaveBeenCalled();
     });
 
     it('does not warn when warnIfNotInitialized is false', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const warnSpy = vi
+            .spyOn(console, 'warn')
+            .mockImplementation(() => undefined);
 
         expect(Colibri.getInstance(false)).toBeNull();
         expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it('returns the existing instance without warning', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const warnSpy = vi
+            .spyOn(console, 'warn')
+            .mockImplementation(() => undefined);
         const c = new Colibri('app', 'localhost', 9011);
 
         expect(Colibri.getInstance()).toBe(c);
@@ -264,7 +286,10 @@ describe('Colibri REST API', () => {
         const c = new Colibri('app', 'localhost', 9011);
         vi.stubGlobal(
             'fetch',
-            vi.fn().mockResolvedValue({ status: 404, json: () => Promise.resolve({}) }),
+            vi.fn().mockResolvedValue({
+                status: 404,
+                json: () => Promise.resolve({}),
+            }),
         );
 
         await expect(c.getRestObject('mykey')).resolves.toBeNull();
@@ -305,7 +330,9 @@ describe('Colibri REST API', () => {
 
 describe('wrapper functions', () => {
     it('return undefined when Colibri is not initialized', () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const warnSpy = vi
+            .spyOn(console, 'warn')
+            .mockImplementation(() => undefined);
 
         expect(SendMessage('ch', 'cmd')).toBeUndefined();
         expect(RegisterChannel('ch', () => undefined)).toBeUndefined();

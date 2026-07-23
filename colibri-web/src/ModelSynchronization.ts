@@ -15,7 +15,7 @@ interface ModelSyncRegistration<T> {
 type ModelSync<T> = [Observable<T[]>, (model: T) => void];
 
 export const RegisterModelSync = <T extends SyncModel<T>>(
-    registration: ModelSyncRegistration<T>
+    registration: ModelSyncRegistration<T>,
 ): ModelSync<T> => {
     const name = registration.name || registration.type.name.toLowerCase();
 
@@ -47,7 +47,11 @@ export const RegisterModelSync = <T extends SyncModel<T>>(
             const newModel = new registration.type(modelData.id);
 
             newModel.modelChanges$.subscribe((changes) => {
-                SendMessage(`${name}`, 'model::update', newModel.toJson(changes));
+                SendMessage(
+                    `${name}`,
+                    'model::update',
+                    newModel.toJson(changes),
+                );
                 models.next([...models.value]);
             });
 

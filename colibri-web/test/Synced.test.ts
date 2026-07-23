@@ -41,7 +41,6 @@ describe('Synced', () => {
             };
 
             expect(() =>
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 decorator(fakeTarget as any, fakeContext as any),
             ).toThrow('@Synced() must decorate an `accessor` member');
         });
@@ -101,9 +100,10 @@ describe('Synced', () => {
             const animal = new Animal('animal-1');
             const dog = new Dog('dog-1');
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((animal as any).__syncedProperties).toEqual({ legs: 'legs' });
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((animal as any).__syncedProperties).toEqual({
+                legs: 'legs',
+            });
+
             expect((dog as any).__syncedProperties).toEqual({
                 legs: 'legs',
                 breed: 'breed',

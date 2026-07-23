@@ -51,7 +51,7 @@ export class RemoteLogger {
     private sendMessage(
         level: 'error' | 'warn' | 'info' | 'debug',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        args: any[]
+        args: any[],
     ) {
         if (!this.enabled) return;
         SendMessage('log', level, [...args].map(stringify).join().trim());
@@ -87,7 +87,7 @@ const stringify = (obj: unknown): string => {
             }
             return value;
         },
-        2
+        2,
     );
     return str;
 };

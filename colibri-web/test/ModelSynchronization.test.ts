@@ -25,12 +25,12 @@ import { Synced } from '../src/Synced';
 // --- Test models -----------------------------------------------------------
 
 class Widget extends SyncModel<Widget> {
-    @Synced() accessor label: string = '';
-    @Synced() accessor count: number = 0;
+    @Synced() accessor label = '';
+    @Synced() accessor count = 0;
 }
 
 class Gadget extends SyncModel<Gadget> {
-    @Synced() accessor title: string = '';
+    @Synced() accessor title = '';
 }
 
 // --- Helpers ---------------------------------------------------------------
@@ -64,7 +64,9 @@ describe('ModelSynchronization', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        errorSpy = vi
+            .spyOn(console, 'error')
+            .mockImplementation(() => undefined);
         logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     });
 

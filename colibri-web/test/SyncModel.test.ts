@@ -44,7 +44,7 @@ describe('SyncModel', () => {
 
         it('maps wire-names to local keys (lowercased custom name)', () => {
             const user = new User('user-1');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             const synced = (user as any).__syncedProperties;
 
             expect(synced).toEqual({
@@ -56,9 +56,8 @@ describe('SyncModel', () => {
         it('is per-instance: separate instances have distinct maps', () => {
             const a = new User('a');
             const b = new User('b');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             expect((a as any).__syncedProperties).not.toBe(
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (b as any).__syncedProperties,
             );
         });
@@ -102,7 +101,10 @@ describe('SyncModel', () => {
         it('applies mapped props keyed by wire-name', () => {
             const user = new User('user-1');
 
-            user.update({ name: 'Bob', billingaddress: '456 Oak Ave' } as never);
+            user.update({
+                name: 'Bob',
+                billingaddress: '456 Oak Ave',
+            } as never);
 
             expect(user.name).toBe('Bob');
             expect(user.address).toBe('456 Oak Ave');
@@ -123,9 +125,7 @@ describe('SyncModel', () => {
                 .spyOn(console, 'warn')
                 .mockImplementation(() => undefined);
 
-            expect(() =>
-                user.update({ bogus: 'x' } as never),
-            ).not.toThrow();
+            expect(() => user.update({ bogus: 'x' } as never)).not.toThrow();
 
             expect(warnSpy).toHaveBeenCalledTimes(1);
             expect(warnSpy).toHaveBeenCalledWith(
@@ -181,7 +181,7 @@ describe('SyncModel', () => {
             // Protected in TypeScript, but reachable from within a subclass or
             // (as here) via a direct cast - this is the manual-emission escape
             // hatch subclasses get alongside the @Synced-driven emissions.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             (user as any).onModelChanges('manual');
 
             expect(emissions).toEqual(['manual']);

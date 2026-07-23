@@ -68,7 +68,9 @@ The following built-in types are available for sync: `bool, int (as number), flo
 
 ```ts
 Sync.sendJson('myChannel', { foo: 'bar' });
-Sync.receiveJson('myChannel', (json) => { /* ... */ });
+Sync.receiveJson('myChannel', (json) => {
+    /* ... */
+});
 ```
 
 See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run samples/broadcast`).
@@ -114,7 +116,7 @@ Lastly, we need to register the class with the Synchronization mechanism by call
 
 ```ts
 import { RegisterModelSync } from '@hcikn/colibri';
-const [ SampleClasses$, registerExampleClass ] = RegisterModelSync<SampleClass>({ type: SampleClass });
+const [SampleClasses$, registerExampleClass] = RegisterModelSync<SampleClass>({ type: SampleClass });
 ```
 
 The first return value (e.g., `SampleClasses$`) is a [BehaviorSubject](https://www.learnrxjs.io/learn-rxjs/subjects/behaviorsubject) that will be updated whenever a new instance of SampleClass is added, updated, or deleted. The second return value (e.g., `registerExampleClass`) can be used to sync new instantiations:

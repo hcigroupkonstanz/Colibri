@@ -5,7 +5,7 @@ import { rl, colibriAddress, colibriPort } from './common';
     new Colibri('myAppName', await colibriAddress(), await colibriPort());
 
     console.log(
-        'Registering listeners for boolean, number, and string channels'
+        'Registering listeners for boolean, number, and string channels',
     );
     Sync.receiveBool('myChannel', (value) => {
         console.log('Boolean value received on myChannel', value);
@@ -45,34 +45,33 @@ import { rl, colibriAddress, colibriPort } from './common';
                     else if (answer === 'true' || answer === 'false') {
                         Sync.sendBool('myChannel', JSON.parse(answer));
                         console.log(
-                            `Sending boolean value "${answer}" to server`
+                            `Sending boolean value "${answer}" to server`,
                         );
                     } else if (!isNaN(Number(answer))) {
                         Sync.sendNumber('myChannel', Number(answer));
                         console.log(
-                            `Sending number value "${answer}" to server`
+                            `Sending number value "${answer}" to server`,
                         );
                     } else {
                         try {
                             Sync.sendJson('myChannel', JSON.parse(answer));
                             console.log(
-                                `Sending JSON value "${answer}" to server`
+                                `Sending JSON value "${answer}" to server`,
                             );
-                        } catch (_) {
+                        } catch {
                             Sync.sendString('myChannel', answer);
                             console.log(
-                                `Sending string value "${answer}" to server`
+                                `Sending string value "${answer}" to server`,
                             );
                         }
                     }
 
                     res(0);
-                }
+                },
             );
         });
     };
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         await sendNumber();
     }

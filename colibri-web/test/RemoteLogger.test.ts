@@ -16,7 +16,6 @@ vi.mock('../src/Colibri', () => ({
 
 const sendMessage = SendMessage as unknown as Mock;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ConsoleMethod = 'debug' | 'log' | 'info' | 'warn' | 'error';
 let originalConsole: Record<ConsoleMethod, Console[ConsoleMethod]>;
 
@@ -50,11 +49,11 @@ describe('RemoteLogger console patching', () => {
         'console.%s still calls the original and forwards as level "%s"',
         (method, level) => {
             const original = vi.fn();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             (console as any)[method] = original;
 
             new RemoteLogger();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             (console as any)[method]('hello', 42);
 
             expect(original).toHaveBeenCalledWith('hello', 42);
@@ -117,7 +116,7 @@ describe('RemoteLogger message stringification', () => {
 
     it('does not throw on circular references', () => {
         new RemoteLogger();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const obj: any = { a: 1 };
         obj.self = obj;
 

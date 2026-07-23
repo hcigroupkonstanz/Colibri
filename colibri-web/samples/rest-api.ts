@@ -16,7 +16,7 @@ import { colibriAddress, colibriPort, rl } from './common';
 
     console.log(
         'The object is stored at: %o',
-        Colibri.getInstance()?.getRestUri(identifier)
+        Colibri.getInstance()?.getRestUri(identifier),
     );
     console.log(' ');
     console.log('Try to modify the age bytyping "sampleObject.age = 22"');
@@ -35,13 +35,13 @@ import { colibriAddress, colibriPort, rl } from './common';
                             console.log('Stored object updated successfully!');
                         } else {
                             console.error(
-                                'An error occurred while updating the stored object!'
+                                'An error occurred while updating the stored object!',
                             );
                         }
 
                         console.log(
                             'Stored Object: %o',
-                            await GetRestApi(identifier)
+                            await GetRestApi(identifier),
                         );
                     } catch (e) {
                         console.error(e);
@@ -52,7 +52,6 @@ import { colibriAddress, colibriPort, rl } from './common';
         });
     };
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         await sendNumber();
     }
