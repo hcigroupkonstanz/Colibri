@@ -23,7 +23,6 @@ export const RegisterModelSync = <T extends SyncModel<T>>(
     SendMessage(name, 'model::request');
 
     // Register for updates
-    console.log(`Registering model '${name}'`);
     RegisterChannel(`${name}`, (payload: Message) => {
         const msg = payload as ModelSyncMsg<T>;
         if (msg.command === 'model::update') {

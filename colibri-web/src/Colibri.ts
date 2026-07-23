@@ -38,7 +38,6 @@ export class Colibri {
         this.uriRestApi = `${this.uri.replace(/^ws/i, 'http')}/api/store/${app}/`;
 
         // there is already an instance running
-        // do we actually need a second ?!
         if (Colibri.instance)
             throw new ColibriError('A Colibri instance already exists!');
         else Colibri.instance = this;
