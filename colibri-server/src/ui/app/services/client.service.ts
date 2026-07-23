@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { SocketIOService } from './socketio.service';
 import { BehaviorSubject } from 'rxjs';
 
@@ -17,7 +17,9 @@ export class ClientService {
     public clients: ReadonlyArray<ColibriClient> = [];
     public readonly clients$ = new BehaviorSubject<ReadonlyArray<ColibriClient>>(this.clients);
 
-    constructor(socketio: SocketIOService) {
+    constructor() {
+        const socketio = inject(SocketIOService);
+
         socketio
             .listen('colibri::latency')
             .subscribe(msg => {

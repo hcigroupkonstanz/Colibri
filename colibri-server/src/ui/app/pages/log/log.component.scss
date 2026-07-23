@@ -1,4 +1,4 @@
-@import '../../../sass/nord.scss';
+@use '../../../sass/nord' as *;
 
 :host {
     height: 100%;
@@ -16,4 +16,10 @@
     position: absolute;
     right: 30px;
     bottom: 30px;
+
+    ::ng-deep .p-button {
+        width: 3rem;
+        height: 3rem;
+        padding: 0;
+    }
 }

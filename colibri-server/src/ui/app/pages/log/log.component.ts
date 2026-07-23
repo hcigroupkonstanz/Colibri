@@ -1,24 +1,21 @@
-import { Component, OnInit, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, ElementRef, ViewChild, AfterViewChecked, inject } from '@angular/core';
 import { LogMessage, LogService } from '../../services';
-import { NgIf } from '@angular/common';
+
 import { LogMessageComponent } from '../../components/log-message/log-message.component';
 import { CdkVirtualScrollableElement, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf } from '@angular/cdk/scrolling';
-import { FilterBarComponent } from '../../components/filter-bar/filter-bar.component';
 import { ButtonModule } from 'primeng/button';
 
 @Component({
     selector: 'app-log',
     templateUrl: './log.component.html',
     styleUrls: ['./log.component.scss'],
-    standalone: true,
-    imports: [FilterBarComponent, CdkVirtualScrollableElement, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf, LogMessageComponent, NgIf, ButtonModule ]
+    imports: [CdkVirtualScrollableElement, CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf, LogMessageComponent, ButtonModule]
 })
 export class LogComponent implements OnInit, AfterViewChecked {
+    log = inject(LogService);
+
     @ViewChild('scrollContainer', { static: true }) private scrollContainer!: ElementRef;
     manualScroll = false;
-
-    constructor(public log: LogService) {
-    }
 
     ngOnInit() {
         this.scrollContainer.nativeElement.addEventListener('wheel', (ev: WheelEvent) => this.onScroll(ev.deltaY), { passive: true });

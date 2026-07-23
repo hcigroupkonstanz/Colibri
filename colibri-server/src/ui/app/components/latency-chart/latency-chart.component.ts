@@ -1,9 +1,9 @@
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, HostListener, OnDestroy, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ClientService, ColibriClient } from '../../services/client.service';
 import * as d3 from 'd3';
 import { CommonModule } from '@angular/common';
 import { boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
-import { UntilDestroy, untilDestroyed } from '@ngneat/until-destroy';
 
 const margin = { top: 20, right: 10, bottom: 50, left: 50 };
 // we ping every 100ms and store the last 1000 values (and query every 1s = 1000ms)
@@ -29,12 +29,14 @@ const colors = [
     selector: 'app-latency-chart',
     templateUrl: './latency-chart.component.html',
     styleUrls: ['./latency-chart.component.scss'],
-    standalone: true,
     imports: [CommonModule],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
-@UntilDestroy()
 export class LatencyChartComponent implements AfterViewInit, OnDestroy {
+    private clientService = inject(ClientService);
+    private changeRef = inject(ChangeDetectorRef);
+
+    private readonly destroyRef = inject(DestroyRef);
     @ViewChild('latencyChart')
     latencyChart!: ElementRef<HTMLDivElement>;
     clients: ReadonlyArray<ColibriClient> = [];
@@ -49,13 +51,11 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
 
     private lineX: d3.ScaleTime<number, number, never> = d3.scaleTime();
 
-    constructor(private clientService: ClientService, private changeRef: ChangeDetectorRef) { }
-
     ngAfterViewInit(): void {
         this.initChart();
 
         this.clientService.clients$
-            .pipe(untilDestroyed(this))
+            .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe(clients => {
                 this.clients = clients;
                 this.updateChart();

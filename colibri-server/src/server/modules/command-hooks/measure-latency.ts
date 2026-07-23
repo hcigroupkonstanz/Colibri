@@ -2,7 +2,7 @@ import { filter } from 'rxjs/operators';
 import { Service } from '../core';
 import { ConnectionPool } from './connection-pool';
 import { hrtime } from 'process';
-import { SocketIOServer } from 'modules/networking';
+import { SocketIOServer } from '../networking';
 
 export class MeasureLatency extends Service {
     public get serviceName(): string { return 'MeasureLatency'; }

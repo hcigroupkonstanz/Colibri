@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Injectable, NgZone } from '@angular/core';
+import { Injectable, NgZone, inject } from '@angular/core';
 import { Subject, Observable } from 'rxjs';
 import * as _ from 'lodash';
 import * as io from 'socket.io-client';
@@ -8,11 +8,13 @@ import * as io from 'socket.io-client';
     providedIn: 'root'
 })
 export class SocketIOService {
+    private zone = inject(NgZone);
+
     private socket: io.Socket<any, any>;
     private listeners: { [name: string]: Subject<any> } = {};
     private triggerAngularChanges: () => void;
 
-    constructor(private zone: NgZone) {
+    constructor() {
         this.socket = io.connect('', { query: { app: 'colibri', version: '1' } });
         // eslint-disable-next-line no-empty-function
         this.triggerAngularChanges = _.throttle(() => this.zone.run(() => {}), 50);

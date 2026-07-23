@@ -1,4 +1,4 @@
-@import '../../../sass/nord.scss';
+@use '../../../sass/nord' as *;
 
 :host {
     position: relative;

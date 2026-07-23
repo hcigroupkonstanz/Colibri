@@ -1,8 +1,8 @@
-import path = require('path');
+import path from 'path';
+import dotenv from 'dotenv';
 
 // automatically load .env file
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-require('dotenv').config();
+dotenv.config();
 
 export const Config = {
     TCP_HOST: process.env.TCP_HOST || '0.0.0.0',
