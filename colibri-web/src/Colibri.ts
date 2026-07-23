@@ -1,6 +1,6 @@
 import { Subject } from 'rxjs';
 import { Socket, connect } from 'socket.io-client';
-import ColibriError from './ColibriError';
+import { ColibriError } from './ColibriError';
 
 export interface Message {
     channel: string;
