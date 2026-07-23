@@ -24,6 +24,7 @@ export class ClientLogger extends Service {
                         this.logInfo(`[${name}] ${m.payload}`, metadata);
                         break;
 
+                    case 'warn':
                     case 'warning':
                         this.logWarning(`[${name}] ${m.payload}`, metadata);
                         break;
