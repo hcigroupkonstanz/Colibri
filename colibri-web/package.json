@@ -34,7 +34,9 @@
         "samples/rest-api": "tsx samples/rest-api.ts",
         "test": "vitest run",
         "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage"
+        "test:coverage": "vitest run --coverage",
+        "test:e2e": "vitest run --config vitest.e2e.config.ts",
+        "test:e2e:watch": "vitest --config vitest.e2e.config.ts"
     },
     "author": "HCI Group, University of Konstanz",
     "license": "MIT",

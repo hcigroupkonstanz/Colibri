@@ -19,5 +19,5 @@
         },
         "types": ["node"]
     },
-    "include": ["src", "samples", "test"]
+    "include": ["src", "samples", "test", "e2e"]
 }
