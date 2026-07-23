@@ -43,7 +43,7 @@ export class Colibri {
         else Colibri.instance = this;
 
         this.socket = connect(this.uri, {
-            query: { app, version: '1' },
+            query: { app, version: '2' },
             transports: ['websocket'],
         });
         this.socket.on('connect', this.onSocketConnect.bind(this));

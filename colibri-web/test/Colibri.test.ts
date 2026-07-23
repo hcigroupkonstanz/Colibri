@@ -91,7 +91,7 @@ describe('Colibri constructor', () => {
     it('connects with the app/version query and websocket transport', () => {
         new Colibri('myapp', 'localhost', 9011);
         expect(connectMock).toHaveBeenCalledWith('ws://localhost:9011', {
-            query: { app: 'myapp', version: '1' },
+            query: { app: 'myapp', version: '2' },
             transports: ['websocket'],
         });
     });
