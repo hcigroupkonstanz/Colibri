@@ -8,14 +8,23 @@
     "types": "./dist/index.d.ts",
     "exports": {
         ".": {
-            "types": "./dist/index.d.ts",
-            "import": "./dist/index.js",
-            "require": "./dist/index.cjs"
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "types": "./dist/index.d.cts",
+                "default": "./dist/index.cjs"
+            }
         }
+    },
+    "engines": {
+        "node": ">=18"
     },
     "scripts": {
         "build": "tsup",
         "lint": "eslint \"**/*.{js,ts}\"",
+        "prepublishOnly": "npm run build",
         "publish": "npm run build && npm publish --access public",
         "samples/broadcast": "tsx samples/broadcast.ts",
         "samples/model-sync": "tsx samples/model-sync.ts",
@@ -35,8 +44,13 @@
     "files": [
         "/dist"
     ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "peerDependencies": {
+        "rxjs": "^7.8.1"
+    },
     "dependencies": {
-        "rxjs": "^7.8.1",
         "socket.io-client": "^4.7.1",
         "ts-custom-error": "^3.3.1"
     },
@@ -48,6 +62,7 @@
         "@typescript-eslint/parser": "^6.10.0",
         "@vitest/coverage-v8": "^3.2.4",
         "eslint": "^8.53.0",
+        "rxjs": "^7.8.1",
         "tsup": "^7.2.0",
         "tsx": "^4.21.0",
         "typescript": "^5.1.6",
