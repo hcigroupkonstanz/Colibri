@@ -1,5 +1,7 @@
 # Colibri - Web Client
 
+See [CHANGELOG.md](CHANGELOG.md) for release notes, including breaking changes when upgrading from 1.x.
+
 ## Installation
 
 - NPM: `npm install @hcikn/colibri`
@@ -25,7 +27,7 @@ For server setup, refer to [colibri-server](../colibri-server/).
 
 Colibri provides a _web logger_ with web interface to send diagnostic data (currently: console logs) to the server. This may be useful for devices (e.g., VR devices, smartphones) where access to the console is not easily available.
 
-To setup, import the `RemoteLogger` and call its `init()` method. Any subsequent `console` calls should now also appear on your colibri server's web interface, which can be accessed via `http://<your-server-ip>:9011`.
+To setup, import the `RemoteLogger` and construct a new instance. Any subsequent `console` calls should now also appear on your colibri server's web interface, which can be accessed via `http://<your-server-ip>:9011`.
 
 ```ts
 import { RemoteLogger } from '@hcikn/colibri';
@@ -36,7 +38,7 @@ logger.enable();
 logger.disable();
 ```
 
-See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run sample/remote-logging`).
+See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run samples/remote-logging`).
 
 ### Sending Data between Clients
 
@@ -64,12 +66,12 @@ Sync.unregister('myChannel', MyMethod);
 
 The following built-in types are available for sync: `bool, int (as number), float (as number), string, Vector2, Vector3, Quaternion, Color` and arrays thereof. For arbitrary data, you can use JSON:
 
-```c#
+```ts
 Sync.sendJson('myChannel', { foo: 'bar' });
 Sync.receiveJson('myChannel', (json) => { /* ... */ });
 ```
 
-See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run sample/broadcast`).
+See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run samples/broadcast`).
 
 Limitations:
 
@@ -122,7 +124,7 @@ const mySample = new SampleClass('myId'); // mySample is not synchronized across
 registerExampleClass(mySample); // mySample is sent out to all other clients and will be synchronized
 ```
 
-See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run sample/model-sync`).
+See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run samples/model-sync`).
 
 ### Remote Store
 
