@@ -36,10 +36,10 @@
     },
     "author": "HCI Group, University of Konstanz",
     "license": "MIT",
-    "homepage": "https://github.com/hcigroupkonstanz/colibri",
+    "homepage": "https://github.com/Calucon/Colibri",
     "repository": {
         "type": "git",
-        "url": "https://github.com/hcigroupkonstanz/colibri.git"
+        "url": "https://github.com/Calucon/Colibri.git"
     },
     "files": [
         "/dist"
