@@ -9,7 +9,7 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
-        // plain JS files (e.g. samples/remote-logging.js) run on Node, and unlike
+        // plain JS files (this config, docs/js-workaround/) run on Node, and unlike
         // the .ts files they are not covered by typescript-eslint's no-undef opt-out
         files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
         languageOptions: {

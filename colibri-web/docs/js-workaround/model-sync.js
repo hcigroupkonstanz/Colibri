@@ -1,18 +1,68 @@
-// Pure JavaScript (ESM) version of model-sync.ts.
+/**
+ *  JavaScript workaround for projects that are tied to plain JavaScript — please
+ *  read ./README.md first. Colibri targets TypeScript; a workaround is not a
+ *  feature and is not covered by the tests.
+ *
+ *  Self-contained equivalent of samples/model-sync.ts. Run from the colibri-web
+ *  folder with:  npm run build && node docs/js-workaround/model-sync.js
+ */
+import * as readline from 'node:readline';
+
 import { Colibri, RegisterModelSync, SyncModel } from '@hcikn/colibri';
 
-import { colibriAddress, colibriPort, rl } from './common.js';
+console.log(
+    '==============================================================================',
+);
+console.log(
+    'Please start a second instance of this application to see the sample in action',
+);
+console.log(
+    '==============================================================================',
+);
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+});
+
+const colibriAddress = async () => {
+    return new Promise((res) => {
+        rl.question(
+            'Please specify a colibri server address (default: colibri.hci.uni-konstanz.de) >> ',
+            (answer) => {
+                res(
+                    answer.trim().length === 0
+                        ? 'colibri.hci.uni-konstanz.de'
+                        : answer,
+                );
+            },
+        );
+    });
+};
+
+const colibriPort = async () => {
+    return new Promise((res) => {
+        rl.question(
+            'Please specify a colibri server port (default: 9011) >> ',
+            (answer) => {
+                const port = parseInt(answer);
+                res(port > 0 ? port : 9011);
+            },
+        );
+    });
+};
 
 /**
- *  The `@Synced()` decorator used by model-sync.ts relies on TypeScript's standard
- *  decorators, which plain Node cannot run. This helper is the decorator-free
- *  equivalent and does exactly what the decorator does:
+ *  The @Synced() decorator used by samples/model-sync.ts relies on TypeScript's
+ *  standard decorators, which plain Node cannot run. This helper is the
+ *  decorator-free equivalent and does exactly what the decorator does:
  *    - register the mapping "network name -> local property" (lowercasing the
  *      network name, just like @Synced() does),
  *    - emit the property name on `modelChanges` whenever it is assigned, unless a
  *      remote update is currently being applied (that would echo the change back).
  *
- *  Documented in the README under "SyncModel in plain JavaScript (without decorators)".
+ *  It relies on members of SyncModel that are public only because the decorator
+ *  needs them; they are not a supported API. See ./README.md.
  */
 const defineSynced = (model, prop, initialValue, syncedName = '') => {
     let value = initialValue;

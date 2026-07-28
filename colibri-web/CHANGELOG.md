@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@Synced() private age = 0;` → `@Synced() accessor age = 0;`). This also fixes field
   synchronization in frameworks like React, which never worked correctly under the legacy
   decorator.
+- **Breaking:** Colibri now targets TypeScript (5.0 or newer). `@Synced()` is a TypeScript
+  decorator, and the documentation, samples and tests all assume a TypeScript project; the
+  plain-JavaScript sample ports were removed again. Projects that are tied to plain
+  JavaScript can fall back on the workaround documented in the repository.
 - **Breaking:** the socket handshake `version` query bumped from `'1'` to `'2'` to mark the
   2.0 client line. This field is informational only on the server side and does not change
   wire compatibility with existing `colibri-server` deployments.
@@ -35,7 +39,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A full Vitest unit-test suite covering `Colibri`, `Broadcasting`, `RemoteLogger`,
   `SyncModel`, and `ModelSynchronization`.
-- Plain-JavaScript variants of every sample (`samples/*.js`, run with `npm run samples/<name>-js`),
-  plus documentation for using `SyncModel` without decorators — `@Synced()` is TypeScript-only,
-  so the README now describes the equivalent `registerSyncedProperty()` / `modelChanges` contract
-  for plain JavaScript.
