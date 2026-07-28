@@ -38,7 +38,7 @@ logger.enable();
 logger.disable();
 ```
 
-See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run samples/remote-logging`).
+See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run samples/remote-logging`, or `npm run samples/remote-logging-js` for the [JavaScript version](samples/remote-logging.js)).
 
 ### Sending Data between Clients
 
@@ -73,7 +73,7 @@ Sync.receiveJson('myChannel', (json) => {
 });
 ```
 
-See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run samples/broadcast`).
+See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run samples/broadcast`, or `npm run samples/broadcast-js` for the [JavaScript version](samples/broadcast.js)).
 
 Limitations:
 
@@ -126,7 +126,62 @@ const mySample = new SampleClass('myId'); // mySample is not synchronized across
 registerExampleClass(mySample); // mySample is sent out to all other clients and will be synchronized
 ```
 
-See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run samples/model-sync`).
+See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run samples/model-sync`, or `npm run samples/model-sync-js` for the [JavaScript version](samples/model-sync.js)).
+
+#### SyncModel in plain JavaScript (without decorators)
+
+`@Synced()` is a TypeScript decorator, so it is unavailable in plain JavaScript that runs without a build step (Node, a `<script type="module">` in the browser, …). `SyncModel` itself is plain runtime code, though, and the decorator only uses public API — so you can register synced properties by hand.
+
+A decorated accessor does exactly three things, and your replacement has to do all three:
+
+1. **Register the property**, once per instance, via `registerSyncedProperty(syncedName, propertyName)`. `syncedName` is the name on the wire and **must be lowercase** — `@Synced()` lowercases it for you, so `@Synced('billingAddress')` is transmitted as `billingaddress`. If the cases do not match, receiving clients log `Unknown property …` and drop the value.
+2. **Emit the change** by calling `modelChanges.next(propertyName)` from the setter. Note that this is the _local_ property name, not the synced name — `toJson()` resolves it back.
+3. **Stay silent while a remote update is applied**: skip the emission when `applyingRemoteUpdate` is `true`, otherwise every incoming update is echoed straight back to the network.
+
+The following helper packages that up, and can be dropped into any project:
+
+```js
+const defineSynced = (model, prop, initialValue, syncedName = '') => {
+    let value = initialValue;
+
+    model.registerSyncedProperty((syncedName || prop).toLowerCase(), prop);
+
+    Object.defineProperty(model, prop, {
+        enumerable: true,
+        configurable: true,
+        get: () => value,
+        set: (newValue) => {
+            value = newValue;
+
+            if (model.modelChanges && !model.applyingRemoteUpdate) {
+                model.modelChanges.next(prop);
+            }
+        },
+    });
+};
+```
+
+Call it in the constructor for every property you want to synchronize. This class is equivalent to the decorated `SampleClass` above and interoperable with it over the network:
+
+```js
+import { RegisterModelSync, SyncModel } from '@hcikn/colibri';
+
+export class SampleClass extends SyncModel {
+    constructor(id) {
+        super(id);
+
+        defineSynced(this, 'name', '');
+        defineSynced(this, 'age', 0);
+        // a custom name for the synced property, as in @Synced('billingAddress')
+        defineSynced(this, 'address', '', 'billingAddress');
+    }
+}
+
+// registration is identical, just without the type parameter
+const [SampleClasses$, registerExampleClass] = RegisterModelSync({ type: SampleClass });
+```
+
+Everything else — `RegisterModelSync`, the returned BehaviorSubject, `update()`, `toJson()`, `delete()` — behaves exactly as in the TypeScript version. See [samples/model-sync.js](samples/model-sync.js) for a runnable example.
 
 ### Remote Store
 
@@ -153,3 +208,16 @@ Each operation can be achieved by either directly interaction with the `Colibri`
 ## Samples
 
 See [Sample folder](samples/) for more examples on how to use the Colibri web client.
+
+Every sample exists twice: as TypeScript (`*.ts`, run with [tsx](https://tsx.is/) against the sources) and as plain JavaScript (`*.js`, ESM, run with `node` against the built package). Both variants share the same prompts via `common.ts` / `common.js` and behave identically.
+
+| Sample                                      | TypeScript                       | JavaScript                          |
+| ------------------------------------------- | -------------------------------- | ----------------------------------- |
+| [broadcast](samples/broadcast.ts)           | `npm run samples/broadcast`      | `npm run samples/broadcast-js`      |
+| [model-sync](samples/model-sync.ts)         | `npm run samples/model-sync`     | `npm run samples/model-sync-js`     |
+| [remote-logging](samples/remote-logging.ts) | `npm run samples/remote-logging` | `npm run samples/remote-logging-js` |
+| [rest-api](samples/rest-api.ts)             | `npm run samples/rest-api`       | `npm run samples/rest-api-js`       |
+
+The `-js` scripts run `npm run build` first, because plain Node resolves `@hcikn/colibri` through the package's own `exports` entry (i.e. `dist/`) rather than through the `tsconfig.json` path mapping that `tsx` uses.
+
+The only sample that is not a literal translation is `model-sync.js`: `@Synced()` requires TypeScript's standard decorators, which Node cannot execute directly, so the JavaScript version registers its synced properties manually (see [SyncModel in plain JavaScript](#syncmodel-in-plain-javascript-without-decorators) above).

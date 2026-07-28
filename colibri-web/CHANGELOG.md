@@ -35,3 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A full Vitest unit-test suite covering `Colibri`, `Broadcasting`, `RemoteLogger`,
   `SyncModel`, and `ModelSynchronization`.
+- Plain-JavaScript variants of every sample (`samples/*.js`, run with `npm run samples/<name>-js`),
+  plus documentation for using `SyncModel` without decorators — `@Synced()` is TypeScript-only,
+  so the README now describes the equivalent `registerSyncedProperty()` / `modelChanges` contract
+  for plain JavaScript.

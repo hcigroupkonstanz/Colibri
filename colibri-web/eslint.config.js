@@ -9,6 +9,17 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
+        // plain JS files (e.g. samples/remote-logging.js) run on Node, and unlike
+        // the .ts files they are not covered by typescript-eslint's no-undef opt-out
+        files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
+        languageOptions: {
+            globals: {
+                console: 'readonly',
+                process: 'readonly',
+            },
+        },
+    },
+    {
         rules: {
             'no-useless-constructor': 'off',
             'no-empty-function': ['warn', { allow: ['constructors'] }],
