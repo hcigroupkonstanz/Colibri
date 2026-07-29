@@ -48,13 +48,8 @@ describe('Synced', () => {
 
             expect(() =>
                 decorator(
-                    fakeTarget as unknown as ClassAccessorDecoratorTarget<
-                        SyncModel<unknown>,
-                        unknown
-                    >,
-                    fakeContext as unknown as ClassAccessorDecoratorContext<
-                        SyncModel<unknown>
-                    >
+                    fakeTarget as unknown as ClassAccessorDecoratorTarget<SyncModel<unknown>, unknown>,
+                    fakeContext as unknown as ClassAccessorDecoratorContext<SyncModel<unknown>>
                 )
             ).toThrow('@Synced() must decorate an `accessor` member');
         });
@@ -114,15 +109,11 @@ describe('Synced', () => {
             const animal = new Animal('animal-1');
             const dog = new Dog('dog-1');
 
-            expect(
-                (animal as unknown as SyncModelInternals).__syncedProperties
-            ).toEqual({
+            expect((animal as unknown as SyncModelInternals).__syncedProperties).toEqual({
                 legs: 'legs'
             });
 
-            expect(
-                (dog as unknown as SyncModelInternals).__syncedProperties
-            ).toEqual({
+            expect((dog as unknown as SyncModelInternals).__syncedProperties).toEqual({
                 legs: 'legs',
                 breed: 'breed'
             });

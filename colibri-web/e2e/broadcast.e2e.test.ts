@@ -17,11 +17,7 @@ describe('broadcast relay', () => {
             channel,
             command: 'broadcast::json'
         });
-        const senderEcho = nextMessage(
-            sender,
-            { channel, command: 'broadcast::json' },
-            500
-        ).then(
+        const senderEcho = nextMessage(sender, { channel, command: 'broadcast::json' }, 500).then(
             () => true,
             () => false
         );
@@ -39,11 +35,7 @@ describe('broadcast relay', () => {
         const sender = await createClient(uniqueApp('broadcast-other-a'));
         const receiver = await createClient(uniqueApp('broadcast-other-b'));
 
-        const receiverPromise = nextMessage(
-            receiver,
-            { channel, command: 'broadcast::json' },
-            500
-        ).then(
+        const receiverPromise = nextMessage(receiver, { channel, command: 'broadcast::json' }, 500).then(
             () => true,
             () => false
         );

@@ -26,13 +26,14 @@ void (async () => {
      *  It returns an observable (BehaviorSubject) that contains all
      *  instances of SampleClass and a function to register new instances.
      */
-    const [SampleClasses$, registerExampleClass]
-        = RegisterModelSync<SampleClass>({ type: SampleClass });
+    const [SampleClasses$, registerExampleClass] = RegisterModelSync<SampleClass>({
+        type: SampleClass
+    });
 
     // SampleClasses$ contains all synchronized instances.
     // Since 'RegisterModelSync' returns a BehaviorSubject,
     // the method will be executed with the current value.
-    SampleClasses$.subscribe((classes) => {
+    SampleClasses$.subscribe(classes => {
         // will be called whenever a new instance is created,
         // an existing one is updated, or one is deleted
         // please refer to RxJS documentation for more information: https://rxjs.dev/guide/overview
@@ -54,8 +55,8 @@ void (async () => {
     // newClass.delete();
 
     const sendNumber = () => {
-        return new Promise((resolve) => {
-            rl.question('> ', (answer) => {
+        return new Promise(resolve => {
+            rl.question('> ', answer => {
                 if (answer === 'exit') {
                     rl.close();
                     process.exit();
@@ -72,12 +73,8 @@ void (async () => {
     };
 
     console.log(' ');
-    console.log(
-        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"'
-    );
-    console.log(
-        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" '
-    );
+    console.log('Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"');
+    console.log('or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" ');
     console.log(' ');
     console.log('Terminate by typing "exit"');
     console.log(' ');

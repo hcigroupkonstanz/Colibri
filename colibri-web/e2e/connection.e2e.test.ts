@@ -9,11 +9,7 @@ describe('connecting to a real colibri-server', () => {
     it('completes the version-2 handshake and receives the latency heartbeat', async () => {
         const client = await createClient(uniqueApp('connection'));
 
-        const msg = await nextMessage(
-            client,
-            { channel: 'colibri', command: 'latency' },
-            3000
-        );
+        const msg = await nextMessage(client, { channel: 'colibri', command: 'latency' }, 3000);
 
         expect(msg.channel).toBe('colibri');
         expect(msg.command).toBe('latency');

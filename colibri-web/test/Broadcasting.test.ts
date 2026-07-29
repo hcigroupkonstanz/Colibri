@@ -10,12 +10,8 @@ type SyncSender = (channel: string, value: unknown) => void;
 type SyncReceiver = (channel: string, callback: (value: unknown) => void) => void;
 
 let Sync: (typeof import('../src/Broadcasting'))['Sync'];
-let sendMessage: Mock<
-    (channel: string, command: string, payload?: unknown) => void
->;
-let registerChannel: Mock<
-    (channel: string, handler: (payload: Message) => void) => void
->;
+let sendMessage: Mock<(channel: string, command: string, payload?: unknown) => void>;
+let registerChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
 
 beforeEach(async () => {
     // Broadcasting.ts keeps a module-level `listeners` registry that must not
@@ -48,49 +44,23 @@ describe('Sync senders', () => {
         ['sendColor', [1, 0, 0, 1], 'broadcast::color'],
         ['sendColorArray', [[1, 0, 0, 1]], 'broadcast::color[]'],
         ['sendJson', { a: 1 }, 'broadcast::json']
-    ] as const)(
-        '%s sends %s with the right command',
-        (method, value, command) => {
-            (Sync as unknown as Record<string, SyncSender>)[method](
-                'ch',
-                value
-            );
-            expect(sendMessage).toHaveBeenCalledWith('ch', command, value);
-        }
-    );
+    ] as const)('%s sends %s with the right command', (method, value, command) => {
+        (Sync as unknown as Record<string, SyncSender>)[method]('ch', value);
+        expect(sendMessage).toHaveBeenCalledWith('ch', command, value);
+    });
 
     it('sendFloat and sendInt alias to sendNumber (broadcast::float)', () => {
         Sync.sendFloat('ch', 1.5);
         Sync.sendInt('ch', 2);
-        expect(sendMessage).toHaveBeenNthCalledWith(
-            1,
-            'ch',
-            'broadcast::float',
-            1.5
-        );
-        expect(sendMessage).toHaveBeenNthCalledWith(
-            2,
-            'ch',
-            'broadcast::float',
-            2
-        );
+        expect(sendMessage).toHaveBeenNthCalledWith(1, 'ch', 'broadcast::float', 1.5);
+        expect(sendMessage).toHaveBeenNthCalledWith(2, 'ch', 'broadcast::float', 2);
     });
 
     it('sendFloatArray and sendIntArray alias to sendNumberArray (broadcast::float[])', () => {
         Sync.sendFloatArray('ch', [1.5, 2.5]);
         Sync.sendIntArray('ch', [1, 2]);
-        expect(sendMessage).toHaveBeenNthCalledWith(
-            1,
-            'ch',
-            'broadcast::float[]',
-            [1.5, 2.5]
-        );
-        expect(sendMessage).toHaveBeenNthCalledWith(
-            2,
-            'ch',
-            'broadcast::float[]',
-            [1, 2]
-        );
+        expect(sendMessage).toHaveBeenNthCalledWith(1, 'ch', 'broadcast::float[]', [1.5, 2.5]);
+        expect(sendMessage).toHaveBeenNthCalledWith(2, 'ch', 'broadcast::float[]', [1, 2]);
     });
 });
 
@@ -109,22 +79,16 @@ describe('Sync receivers', () => {
         ['receiveColor', 'broadcast::color', '#ff0000'],
         ['receiveColorArray', 'broadcast::color[]', ['#ff0000']],
         ['receiveJson', 'broadcast::json', { a: 1 }]
-    ] as const)(
-        '%s dispatches inbound %s payloads to its callback',
-        (method, command, payload) => {
-            const cb = vi.fn();
+    ] as const)('%s dispatches inbound %s payloads to its callback', (method, command, payload) => {
+        const cb = vi.fn();
 
-            (Sync as unknown as Record<string, SyncReceiver>)[method](
-                'ch',
-                cb
-            );
+        (Sync as unknown as Record<string, SyncReceiver>)[method]('ch', cb);
 
-            const handler = registerChannel.mock.calls[0][1];
-            handler({ channel: 'ch', command, payload });
+        const handler = registerChannel.mock.calls[0][1];
+        handler({ channel: 'ch', command, payload });
 
-            expect(cb).toHaveBeenCalledWith(payload);
-        }
-    );
+        expect(cb).toHaveBeenCalledWith(payload);
+    });
 
     it('registers exactly one channel listener no matter how many types are received on it', () => {
         Sync.receiveBool('ch', () => undefined);
@@ -132,10 +96,7 @@ describe('Sync receivers', () => {
         Sync.receiveString('ch', () => undefined);
 
         expect(registerChannel).toHaveBeenCalledTimes(1);
-        expect(registerChannel).toHaveBeenCalledWith(
-            'ch',
-            expect.any(Function)
-        );
+        expect(registerChannel).toHaveBeenCalledWith('ch', expect.any(Function));
     });
 
     it('dispatches inbound messages only to callbacks matching the command', () => {

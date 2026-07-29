@@ -1,12 +1,4 @@
-import {
-    afterEach,
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-    type Mock
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({
     connect: vi.fn()
@@ -37,10 +29,7 @@ function makeFakeSocket() {
     };
 }
 
-function getHandler(
-    mock: ReturnType<typeof makeFakeSocket>['on'],
-    event: string
-): SocketHandler {
+function getHandler(mock: ReturnType<typeof makeFakeSocket>['on'], event: string): SocketHandler {
     const call = mock.mock.calls.find(([e]) => e === event);
     if (!call) throw new Error(`no handler registered for "${event}"`);
     return call[1];
@@ -62,25 +51,16 @@ afterEach(() => {
 
 describe('Colibri constructor', () => {
     it('throws when the server address is empty', () => {
-        expect(() => new Colibri('app', '', 9011)).toThrow(
-            'Server Address missing or empty!'
-        );
+        expect(() => new Colibri('app', '', 9011)).toThrow('Server Address missing or empty!');
     });
 
     it('throws when the server address is whitespace only', () => {
-        expect(() => new Colibri('app', '   ', 9011)).toThrow(
-            'Server Address missing or empty!'
-        );
+        expect(() => new Colibri('app', '   ', 9011)).toThrow('Server Address missing or empty!');
     });
 
-    it.each([0, -1, 65536, 100000])(
-        'throws when the port %d is out of range',
-        (port) => {
-            expect(() => new Colibri('app', 'localhost', port)).toThrow(
-                'Port out of allowed range (0 - 65535)'
-            );
-        }
-    );
+    it.each([0, -1, 65536, 100000])('throws when the port %d is out of range', port => {
+        expect(() => new Colibri('app', 'localhost', port)).toThrow('Port out of allowed range (0 - 65535)');
+    });
 
     it('builds a ws:// uri when the server has no scheme', () => {
         const c = new Colibri('app', 'localhost', 9011);
@@ -117,14 +97,8 @@ describe('Colibri constructor', () => {
 
     it('registers the connect handler and the colibri latency channel', () => {
         new Colibri('app', 'localhost', 9011);
-        expect(fakeSocket.on).toHaveBeenCalledWith(
-            'connect',
-            expect.any(Function)
-        );
-        expect(fakeSocket.on).toHaveBeenCalledWith(
-            'colibri',
-            expect.any(Function)
-        );
+        expect(fakeSocket.on).toHaveBeenCalledWith('connect', expect.any(Function));
+        expect(fakeSocket.on).toHaveBeenCalledWith('colibri', expect.any(Function));
         expect(fakeSocket.onAny).toHaveBeenCalledWith(expect.any(Function));
     });
 
@@ -142,17 +116,13 @@ describe('Colibri constructor', () => {
     });
 
     it('logs on socket connect', () => {
-        const debugSpy = vi
-            .spyOn(console, 'debug')
-            .mockImplementation(() => undefined);
+        const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
         new Colibri('app', 'localhost', 9011);
         const connectHandler = getHandler(fakeSocket.on, 'connect');
 
         connectHandler();
 
-        expect(debugSpy).toHaveBeenCalledWith(
-            expect.stringContaining('Connected to colibri server')
-        );
+        expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Connected to colibri server'));
     });
 
     it('forwards inbound onAny messages through the messages observable', () => {
@@ -164,42 +134,32 @@ describe('Colibri constructor', () => {
 
         onAnyHandler('some-channel', { command: 'cmd', payload: { a: 1 } });
 
-        expect(received).toEqual([
-            { channel: 'some-channel', command: 'cmd', payload: { a: 1 } }
-        ]);
+        expect(received).toEqual([{ channel: 'some-channel', command: 'cmd', payload: { a: 1 } }]);
     });
 
     it('throws when a second instance is constructed', () => {
         new Colibri('app', 'localhost', 9011);
-        expect(() => new Colibri('app2', 'localhost', 9012)).toThrow(
-            'A Colibri instance already exists!'
-        );
+        expect(() => new Colibri('app2', 'localhost', 9012)).toThrow('A Colibri instance already exists!');
     });
 });
 
 describe('Colibri.getInstance', () => {
     it('warns and returns null when uninitialized', () => {
-        const warnSpy = vi
-            .spyOn(console, 'warn')
-            .mockImplementation(() => undefined);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
         expect(Colibri.getInstance()).toBeNull();
         expect(warnSpy).toHaveBeenCalled();
     });
 
     it('does not warn when warnIfNotInitialized is false', () => {
-        const warnSpy = vi
-            .spyOn(console, 'warn')
-            .mockImplementation(() => undefined);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
         expect(Colibri.getInstance(false)).toBeNull();
         expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it('returns the existing instance without warning', () => {
-        const warnSpy = vi
-            .spyOn(console, 'warn')
-            .mockImplementation(() => undefined);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const c = new Colibri('app', 'localhost', 9011);
 
         expect(Colibri.getInstance()).toBe(c);
@@ -242,16 +202,12 @@ describe('Colibri instance methods delegate to the socket', () => {
 describe('Colibri.getRestUri', () => {
     it('joins the REST base uri with the trimmed key', () => {
         const c = new Colibri('app', 'localhost', 9011);
-        expect(c.getRestUri('mykey')).toBe(
-            'http://localhost:9011/api/store/app/mykey'
-        );
+        expect(c.getRestUri('mykey')).toBe('http://localhost:9011/api/store/app/mykey');
     });
 
     it('trims leading slashes from the key', () => {
         const c = new Colibri('app', 'localhost', 9011);
-        expect(c.getRestUri('///nested/key')).toBe(
-            'http://localhost:9011/api/store/app/nested/key'
-        );
+        expect(c.getRestUri('///nested/key')).toBe('http://localhost:9011/api/store/app/nested/key');
     });
 
     it('returns null for an empty or whitespace-only key', () => {
@@ -280,13 +236,10 @@ describe('Colibri REST API', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         await expect(c.getRestObject('mykey')).resolves.toEqual({ a: 1 });
-        expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:9011/api/store/app/mykey',
-            {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
-            }
-        );
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:9011/api/store/app/mykey', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
     });
 
     it('getRestObject returns null on a >= 400 status', async () => {
@@ -317,14 +270,11 @@ describe('Colibri REST API', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         await expect(c.setRestObject('mykey', { a: 1 })).resolves.toBe(true);
-        expect(fetchMock).toHaveBeenCalledWith(
-            'http://localhost:9011/api/store/app/mykey',
-            {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ a: 1 })
-            }
-        );
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:9011/api/store/app/mykey', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ a: 1 })
+        });
     });
 
     it('setRestObject returns false on a non-2xx status', async () => {
@@ -337,9 +287,7 @@ describe('Colibri REST API', () => {
 
 describe('wrapper functions', () => {
     it('return undefined when Colibri is not initialized', () => {
-        const warnSpy = vi
-            .spyOn(console, 'warn')
-            .mockImplementation(() => undefined);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
         expect(SendMessage('ch', 'cmd')).toBeUndefined();
         expect(RegisterChannel('ch', () => undefined)).toBeUndefined();

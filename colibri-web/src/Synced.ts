@@ -5,9 +5,7 @@ import { SyncModel } from './SyncModel';
  *  It will cause the property to be synchronized with the server.
  *  Refer to https://github.com/tc39/proposal-decorators
  */
-export function Synced<This extends SyncModel<unknown>, V>(
-    syncedName: string = ''
-) {
+export function Synced<This extends SyncModel<unknown>, V>(syncedName: string = '') {
     return function (
         value: ClassAccessorDecoratorTarget<This, V>,
         context: ClassAccessorDecoratorContext<This, V>

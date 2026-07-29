@@ -14,17 +14,14 @@ void (async () => {
 
     await PutRestApi(identifier, sampleObject);
 
-    console.log(
-        'The object is stored at: %o',
-        Colibri.getInstance()?.getRestUri(identifier)
-    );
+    console.log('The object is stored at: %o', Colibri.getInstance()?.getRestUri(identifier));
     console.log(' ');
     console.log('Try to modify the age bytyping "sampleObject.age = 22"');
     console.log('Terminate by typing "exit"');
 
     const sendNumber = () => {
-        return new Promise((resolve) => {
-            rl.question('> ', (answer) => {
+        return new Promise(resolve => {
+            rl.question('> ', answer => {
                 if (answer === 'exit') {
                     rl.close();
                     process.exit();
@@ -33,19 +30,12 @@ void (async () => {
                         try {
                             eval(answer);
                             if (await PutRestApi(identifier, sampleObject)) {
-                                console.log(
-                                    'Stored object updated successfully!'
-                                );
+                                console.log('Stored object updated successfully!');
                             } else {
-                                console.error(
-                                    'An error occurred while updating the stored object!'
-                                );
+                                console.error('An error occurred while updating the stored object!');
                             }
 
-                            console.log(
-                                'Stored Object: %o',
-                                await GetRestApi(identifier)
-                            );
+                            console.log('Stored Object: %o', await GetRestApi(identifier));
                         } catch (e) {
                             console.error(e);
                         }

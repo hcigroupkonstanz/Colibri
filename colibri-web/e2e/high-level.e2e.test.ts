@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { firstValueFrom } from 'rxjs';
 import { filter, timeout } from 'rxjs/operators';
-import {
-    createSingletonWithPeer,
-    disconnectAll,
-    nextMessage,
-    uniqueApp
-} from './helpers';
+import { createSingletonWithPeer, disconnectAll, nextMessage, uniqueApp } from './helpers';
 import { Sync } from '../src/Broadcasting';
 import { RegisterModelSync } from '../src/ModelSynchronization';
 import { SyncModel } from '../src/SyncModel';
@@ -34,9 +29,7 @@ describe('Sync (Broadcasting) high-level API', () => {
     });
 
     it('Sync.sendFloat (Unity compatibility alias) is received as broadcast::float', async () => {
-        const { peer } = await createSingletonWithPeer(
-            uniqueApp('sync-app-float')
-        );
+        const { peer } = await createSingletonWithPeer(uniqueApp('sync-app-float'));
         const channel = uniqueApp('sync-channel-float');
 
         const peerPromise = nextMessage(peer, {
@@ -51,12 +44,10 @@ describe('Sync (Broadcasting) high-level API', () => {
     });
 
     it('Sync.receiveBool fires when the raw peer sends a matching broadcast', async () => {
-        const { peer } = await createSingletonWithPeer(
-            uniqueApp('sync-app-recv')
-        );
+        const { peer } = await createSingletonWithPeer(uniqueApp('sync-app-recv'));
         const channel = uniqueApp('sync-channel-recv');
 
-        const received = await new Promise<boolean>((resolve) => {
+        const received = await new Promise<boolean>(resolve => {
             Sync.receiveBool(channel, resolve);
             peer.sendMessage(channel, 'broadcast::bool', true);
         });
@@ -72,9 +63,7 @@ describe('RegisterModelSync high-level API', () => {
     }
 
     it('propagates a locally registered model to a raw peer', async () => {
-        const { peer } = await createSingletonWithPeer(
-            uniqueApp('modelsync-app')
-        );
+        const { peer } = await createSingletonWithPeer(uniqueApp('modelsync-app'));
         const channelName = 'testmodel';
 
         const [, registerModel] = RegisterModelSync<TestModel>({
@@ -96,9 +85,7 @@ describe('RegisterModelSync high-level API', () => {
     });
 
     it('adds a model to the observable array when a peer sends an inbound model::update', async () => {
-        const { peer } = await createSingletonWithPeer(
-            uniqueApp('modelsync-app-inbound')
-        );
+        const { peer } = await createSingletonWithPeer(uniqueApp('modelsync-app-inbound'));
         const channelName = 'testmodel';
 
         const [models$] = RegisterModelSync<TestModel>({ type: TestModel });
@@ -123,9 +110,7 @@ describe('RegisterModelSync high-level API', () => {
 
 describe('RemoteLogger high-level API', () => {
     it('forwards console.info without throwing or breaking the connection', async () => {
-        const { singleton } = await createSingletonWithPeer(
-            uniqueApp('logger-app')
-        );
+        const { singleton } = await createSingletonWithPeer(uniqueApp('logger-app'));
 
         const originalConsole = {
             debug: console.debug,
@@ -147,11 +132,7 @@ describe('RemoteLogger high-level API', () => {
             }).not.toThrow();
 
             await expect(
-                nextMessage(
-                    singleton,
-                    { channel: 'colibri', command: 'latency' },
-                    3000
-                )
+                nextMessage(singleton, { channel: 'colibri', command: 'latency' }, 3000)
             ).resolves.toBeDefined();
         } finally {
             console.debug = originalConsole.debug;

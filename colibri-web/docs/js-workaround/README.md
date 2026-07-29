@@ -43,13 +43,13 @@ const defineSynced = (model, prop, initialValue, syncedName = '') => {
         enumerable: true,
         configurable: true,
         get: () => value,
-        set: (newValue) => {
+        set: newValue => {
             value = newValue;
 
             if (model.modelChanges && !model.applyingRemoteUpdate) {
                 model.modelChanges.next(prop);
             }
-        },
+        }
     });
 };
 ```

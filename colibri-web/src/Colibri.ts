@@ -43,8 +43,7 @@ export class Colibri {
         this.uriRestApi = `${this.uri.replace(/^ws/i, 'http')}/api/store/${app}/`;
 
         // there is already an instance running
-        if (Colibri.instance)
-            throw new ColibriError('A Colibri instance already exists!');
+        if (Colibri.instance) throw new ColibriError('A Colibri instance already exists!');
         else Colibri.instance = this;
 
         this.socket = connect(this.uri, {
@@ -55,7 +54,7 @@ export class Colibri {
         this.socket.onAny(this.onSocketAny.bind(this));
 
         // latency statistics
-        this.registerChannel('colibri', (msg) => {
+        this.registerChannel('colibri', msg => {
             if (msg.command === 'latency') {
                 SendMessage('colibri', 'latency', msg.payload);
             }
@@ -76,9 +75,7 @@ export class Colibri {
      * @param warnIfNotInitialized true => print Log message if Colibri has not been initialized yet
      * @returns
      */
-    public static getInstance(
-        warnIfNotInitialized: boolean = true
-    ): Colibri | null {
+    public static getInstance(warnIfNotInitialized: boolean = true): Colibri | null {
         if (warnIfNotInitialized && !Colibri.instance) {
             console.warn('Colibri not initialized yet! (Instance is null)');
         }
@@ -91,11 +88,7 @@ export class Colibri {
      * @param command message command
      * @param payload message payload
      */
-    public sendMessage(
-        channel: string,
-        command: string,
-        payload: unknown = {}
-    ) {
+    public sendMessage(channel: string, command: string, payload: unknown = {}) {
         this.socket.emit(channel, {
             command,
             payload
@@ -108,10 +101,7 @@ export class Colibri {
      * @param channel message channel
      * @param handler handler to be executed when a message is received
      */
-    public registerChannel(
-        channel: string,
-        handler: (payload: Message) => void
-    ) {
+    public registerChannel(channel: string, handler: (payload: Message) => void) {
         this.socket.on(channel, handler);
     }
 
@@ -120,10 +110,7 @@ export class Colibri {
      * @param channel message channel
      * @param handler handler to be executed when a message is received
      */
-    public unregisterChannel(
-        channel: string,
-        handler: (payload: Message) => void
-    ) {
+    public unregisterChannel(channel: string, handler: (payload: Message) => void) {
         this.socket.off(channel, handler);
     }
 
@@ -202,49 +189,38 @@ export class Colibri {
  * @see {@link Colibri.sendMessage `Colibri.sendMessage()`}
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
-export const SendMessage = (
-    channel: string,
-    command: string,
-    payload: unknown = {}
-) => Colibri.getInstance()?.sendMessage(channel, command, payload);
+export const SendMessage = (channel: string, command: string, payload: unknown = {}) =>
+    Colibri.getInstance()?.sendMessage(channel, command, payload);
 
 /**
  * @see {@link Colibri.registerChannel `Colibri.registerChannel()`}
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
-export const RegisterChannel = (
-    channel: string,
-    handler: (payload: Message) => void
-) => Colibri.getInstance()?.registerChannel(channel, handler);
+export const RegisterChannel = (channel: string, handler: (payload: Message) => void) =>
+    Colibri.getInstance()?.registerChannel(channel, handler);
 
 /**
  * @see {@link Colibri.unregisterChannel `Colibri.unregisterChannel()`}
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
-export const UnregisterChannel = (
-    channel: string,
-    handler: (payload: Message) => void
-) => Colibri.getInstance()?.unregisterChannel(channel, handler);
+export const UnregisterChannel = (channel: string, handler: (payload: Message) => void) =>
+    Colibri.getInstance()?.unregisterChannel(channel, handler);
 
 /**
  * @see {@link Colibri.registerOnce `Colibri.registerOnce()`}
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
-export const RegisterOnce = (
-    channel: string,
-    handler: (payload: Message) => void
-) => Colibri.getInstance()?.registerOnce(channel, handler);
+export const RegisterOnce = (channel: string, handler: (payload: Message) => void) =>
+    Colibri.getInstance()?.registerOnce(channel, handler);
 
 /**
  * @see {@link Colibri.getRestObject `Colibri.getRestObject()`}
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
-export const GetRestApi = (key: string) =>
-    Colibri.getInstance()?.getRestObject(key);
+export const GetRestApi = (key: string) => Colibri.getInstance()?.getRestObject(key);
 
 /**
  * @see {@link Colibri.setRestObject `Colibri.setRestObject()`}
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
-export const PutRestApi = (key: string, data: unknown) =>
-    Colibri.getInstance()?.setRestObject(key, data);
+export const PutRestApi = (key: string, data: unknown) => Colibri.getInstance()?.setRestObject(key, data);

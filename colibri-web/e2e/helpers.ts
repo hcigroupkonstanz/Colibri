@@ -47,7 +47,7 @@ function closeSocket(client: Colibri): void {
 function waitForConnect(client: Colibri): Promise<void> {
     const socket = rawSocket(client);
     if (socket.connected) return Promise.resolve();
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
         socket.once('connect', resolve);
     });
 }
@@ -109,10 +109,7 @@ export function nextMessage(
     return firstValueFrom(
         client.messages.pipe(
             filter(
-                msg =>
-                    msg.channel === match.channel
-                    && (match.command === undefined
-                        || msg.command === match.command)
+                msg => msg.channel === match.channel && (match.command === undefined || msg.command === match.command)
             ),
             timeout(timeoutMs)
         )

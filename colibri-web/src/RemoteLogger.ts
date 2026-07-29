@@ -43,10 +43,7 @@ export class RemoteLogger {
         };
     }
 
-    private sendMessage(
-        level: 'error' | 'warn' | 'info' | 'debug',
-        args: unknown[]
-    ) {
+    private sendMessage(level: 'error' | 'warn' | 'info' | 'debug', args: unknown[]) {
         if (!this.enabled) return;
         SendMessage('log', level, [...args].map(stringify).join().trim());
     }

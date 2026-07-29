@@ -18,8 +18,6 @@ describe('REST store', () => {
     it('returns null for a key that was never set', async () => {
         const client = await createClient(uniqueApp('rest-app'));
 
-        await expect(
-            client.getRestObject(uniqueApp('missing-key'))
-        ).resolves.toBeNull();
+        await expect(client.getRestObject(uniqueApp('missing-key'))).resolves.toBeNull();
     });
 });

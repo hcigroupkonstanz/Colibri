@@ -37,10 +37,7 @@ describe('SyncModel', () => {
         it('creates a non-enumerable per-instance __syncedProperties map', () => {
             const user = new User('user-1');
 
-            const descriptor = Object.getOwnPropertyDescriptor(
-                user,
-                '__syncedProperties'
-            );
+            const descriptor = Object.getOwnPropertyDescriptor(user, '__syncedProperties');
             expect(descriptor).toBeDefined();
             expect(descriptor?.enumerable).toBe(false);
 
@@ -52,8 +49,7 @@ describe('SyncModel', () => {
         it('maps wire-names to local keys (lowercased custom name)', () => {
             const user = new User('user-1');
 
-            const synced = (user as unknown as SyncModelInternals)
-                .__syncedProperties;
+            const synced = (user as unknown as SyncModelInternals).__syncedProperties;
 
             expect(synced).toEqual({
                 name: 'name',
@@ -65,9 +61,7 @@ describe('SyncModel', () => {
             const a = new User('a');
             const b = new User('b');
 
-            expect(
-                (a as unknown as SyncModelInternals).__syncedProperties
-            ).not.toBe(
+            expect((a as unknown as SyncModelInternals).__syncedProperties).not.toBe(
                 (b as unknown as SyncModelInternals).__syncedProperties
             );
         });
@@ -131,18 +125,14 @@ describe('SyncModel', () => {
 
         it('console.warn on an unknown key instead of throwing', () => {
             const user = new User('user-1');
-            const warnSpy = vi
-                .spyOn(console, 'warn')
-                .mockImplementation(() => undefined);
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
             expect(() => {
                 user.update({ bogus: 'x' } as never);
             }).not.toThrow();
 
             expect(warnSpy).toHaveBeenCalledTimes(1);
-            expect(warnSpy).toHaveBeenCalledWith(
-                'Unknown property bogus in User'
-            );
+            expect(warnSpy).toHaveBeenCalledWith('Unknown property bogus in User');
         });
 
         it('suppresses modelChanges emissions while applying (finally resets flag)', () => {

@@ -13,14 +13,10 @@ const SERVER_DIR = path.resolve(__dirname, '../../colibri-server');
 const HOST = process.env.COLIBRI_E2E_SERVER ?? '127.0.0.1';
 const PORT = Number(process.env.COLIBRI_E2E_PORT ?? 9011);
 
-async function waitForPort(
-    host: string,
-    port: number,
-    timeoutMs: number
-): Promise<void> {
+async function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-        const ok = await new Promise<boolean>((resolve) => {
+        const ok = await new Promise<boolean>(resolve => {
             const socket = net.connect(port, host);
             socket.once('connect', () => {
                 socket.end();
@@ -32,19 +28,13 @@ async function waitForPort(
         });
         if (ok) return;
         if (Date.now() >= deadline) {
-            throw new Error(
-                `Timed out waiting for ${host}:${port} to accept connections`
-            );
+            throw new Error(`Timed out waiting for ${host}:${port} to accept connections`);
         }
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 }
 
-async function waitForSocketIoHandshake(
-    host: string,
-    port: number,
-    timeoutMs: number
-): Promise<void> {
+async function waitForSocketIoHandshake(host: string, port: number, timeoutMs: number): Promise<void> {
     await new Promise<void>((resolve, reject) => {
         const socket = connect(`ws://${host}:${port}`, {
             query: { app: 'e2e-globalsetup-probe', version: '2' },

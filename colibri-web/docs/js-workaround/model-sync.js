@@ -10,15 +10,9 @@ import * as readline from 'node:readline';
 
 import { Colibri, RegisterModelSync, SyncModel } from '@hcikn/colibri';
 
-console.log(
-    '=============================================================================='
-);
-console.log(
-    'Please start a second instance of this application to see the sample in action'
-);
-console.log(
-    '=============================================================================='
-);
+console.log('==============================================================================');
+console.log('Please start a second instance of this application to see the sample in action');
+console.log('==============================================================================');
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -26,29 +20,19 @@ const rl = readline.createInterface({
 });
 
 const colibriAddress = async () => {
-    return new Promise((resolve) => {
-        rl.question(
-            'Please specify a colibri server address (default: colibri.hci.uni-konstanz.de) >> ',
-            (answer) => {
-                resolve(
-                    answer.trim().length === 0
-                        ? 'colibri.hci.uni-konstanz.de'
-                        : answer
-                );
-            }
-        );
+    return new Promise(resolve => {
+        rl.question('Please specify a colibri server address (default: colibri.hci.uni-konstanz.de) >> ', answer => {
+            resolve(answer.trim().length === 0 ? 'colibri.hci.uni-konstanz.de' : answer);
+        });
     });
 };
 
 const colibriPort = async () => {
-    return new Promise((resolve) => {
-        rl.question(
-            'Please specify a colibri server port (default: 9011) >> ',
-            (answer) => {
-                const port = parseInt(answer);
-                resolve(port > 0 ? port : 9011);
-            }
-        );
+    return new Promise(resolve => {
+        rl.question('Please specify a colibri server port (default: 9011) >> ', answer => {
+            const port = parseInt(answer);
+            resolve(port > 0 ? port : 9011);
+        });
     });
 };
 
@@ -73,7 +57,7 @@ const defineSynced = (model, prop, initialValue, syncedName = '') => {
         enumerable: true,
         configurable: true,
         get: () => value,
-        set: (newValue) => {
+        set: newValue => {
             value = newValue;
 
             if (model.modelChanges && !model.applyingRemoteUpdate) {
@@ -109,7 +93,7 @@ export class SampleClass extends SyncModel {
     // SampleClasses$ contains all synchronized instances.
     // Since 'RegisterModelSync' returns a BehaviorSubject,
     // the method will be executed with the current value.
-    SampleClasses$.subscribe((classes) => {
+    SampleClasses$.subscribe(classes => {
         // will be called whenever a new instance is created,
         // an existing one is updated, or one is deleted
         // please refer to RxJS documentation for more information: https://rxjs.dev/guide/overview
@@ -131,8 +115,8 @@ export class SampleClass extends SyncModel {
     // newClass.delete();
 
     const sendNumber = () => {
-        return new Promise((resolve) => {
-            rl.question('> ', (answer) => {
+        return new Promise(resolve => {
+            rl.question('> ', answer => {
                 if (answer === 'exit') {
                     rl.close();
                     process.exit();
@@ -149,12 +133,8 @@ export class SampleClass extends SyncModel {
     };
 
     console.log(' ');
-    console.log(
-        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"'
-    );
-    console.log(
-        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" '
-    );
+    console.log('Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"');
+    console.log('or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" ');
     console.log(' ');
     console.log('Terminate by typing "exit"');
     console.log(' ');

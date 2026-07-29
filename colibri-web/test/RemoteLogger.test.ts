@@ -1,12 +1,4 @@
-import {
-    afterEach,
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-    type Mock
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { RemoteLogger } from '../src/RemoteLogger';
 import { SendMessage } from '../src/Colibri';
 
@@ -14,9 +6,7 @@ vi.mock('../src/Colibri', () => ({
     SendMessage: vi.fn()
 }));
 
-const sendMessage = SendMessage as unknown as Mock<
-    (channel: string, command: string, payload: string) => void
->;
+const sendMessage = SendMessage as unknown as Mock<(channel: string, command: string, payload: string) => void>;
 
 type ConsoleMethod = 'debug' | 'log' | 'info' | 'warn' | 'error';
 let originalConsole: Record<ConsoleMethod, Console[ConsoleMethod]>;
@@ -47,29 +37,19 @@ describe('RemoteLogger console patching', () => {
         ['info', 'info'],
         ['warn', 'warn'],
         ['error', 'error']
-    ] as const)(
-        'console.%s still calls the original and forwards as level "%s"',
-        (method, level) => {
-            const original = vi.fn();
-            const patchableConsole = console as unknown as Record<
-                ConsoleMethod,
-                (...args: unknown[]) => void
-            >;
+    ] as const)('console.%s still calls the original and forwards as level "%s"', (method, level) => {
+        const original = vi.fn();
+        const patchableConsole = console as unknown as Record<ConsoleMethod, (...args: unknown[]) => void>;
 
-            patchableConsole[method] = original;
+        patchableConsole[method] = original;
 
-            new RemoteLogger();
+        new RemoteLogger();
 
-            patchableConsole[method]('hello', 42);
+        patchableConsole[method]('hello', 42);
 
-            expect(original).toHaveBeenCalledWith('hello', 42);
-            expect(sendMessage).toHaveBeenCalledWith(
-                'log',
-                level,
-                expect.any(String)
-            );
-        }
-    );
+        expect(original).toHaveBeenCalledWith('hello', 42);
+        expect(sendMessage).toHaveBeenCalledWith('log', level, expect.any(String));
+    });
 });
 
 describe('RemoteLogger enable/disable', () => {

@@ -1,12 +1,4 @@
-import {
-    afterEach,
-    beforeEach,
-    describe,
-    expect,
-    it,
-    vi,
-    type Mock
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { Observable } from 'rxjs';
 
 // Mock the Colibri wire layer so the real socket.io implementation never runs.
@@ -35,9 +27,7 @@ class Gadget extends SyncModel<Gadget> {
 
 // --- Helpers ---------------------------------------------------------------
 
-const sendMessageMock = SendMessage as unknown as Mock<
-    (channel: string, command: string, payload?: unknown) => void
->;
+const sendMessageMock = SendMessage as unknown as Mock<(channel: string, command: string, payload?: unknown) => void>;
 const registerChannelMock = RegisterChannel as unknown as Mock<
     (channel: string, handler: (payload: Message) => void) => void
 >;
@@ -50,7 +40,7 @@ function capturedHandler(): (payload: Message) => void {
 /** Read the current value out of a BehaviorSubject-backed observable. */
 function latest<T>(obs: Observable<T[]>): T[] {
     let value: T[] = [];
-    const sub = obs.subscribe((v) => {
+    const sub = obs.subscribe(v => {
         value = v;
     });
     sub.unsubscribe();
@@ -68,9 +58,7 @@ describe('ModelSynchronization', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        errorSpy = vi
-            .spyOn(console, 'error')
-            .mockImplementation(() => undefined);
+        errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     });
 
@@ -85,10 +73,7 @@ describe('ModelSynchronization', () => {
             RegisterModelSync({ name: 'widget', type: Widget });
 
             // initial data fetch
-            expect(sendMessageMock).toHaveBeenCalledWith(
-                'widget',
-                'model::request'
-            );
+            expect(sendMessageMock).toHaveBeenCalledWith('widget', 'model::request');
 
             // registered exactly one channel, with the derived name
             expect(registerChannelMock).toHaveBeenCalledTimes(1);
@@ -101,20 +86,14 @@ describe('ModelSynchronization', () => {
         it('uses an explicit name verbatim', () => {
             RegisterModelSync({ name: 'CustomName', type: Widget });
 
-            expect(sendMessageMock).toHaveBeenCalledWith(
-                'CustomName',
-                'model::request'
-            );
+            expect(sendMessageMock).toHaveBeenCalledWith('CustomName', 'model::request');
             expect(registerChannelMock.mock.calls[0][0]).toBe('CustomName');
         });
 
         it('derives a lowercased class name when name is omitted', () => {
             RegisterModelSync({ type: Widget });
 
-            expect(sendMessageMock).toHaveBeenCalledWith(
-                'widget',
-                'model::request'
-            );
+            expect(sendMessageMock).toHaveBeenCalledWith('widget', 'model::request');
             expect(registerChannelMock.mock.calls[0][0]).toBe('widget');
 
             // A different class derives a different channel name.
@@ -303,12 +282,9 @@ describe('ModelSynchronization', () => {
                     command: 'model::bogus',
                     payload: { id: 'x' }
                 });
-            }
-            ).not.toThrow();
+            }).not.toThrow();
 
-            expect(errorSpy).toHaveBeenCalledWith(
-                expect.stringContaining('Unknown model command')
-            );
+            expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown model command'));
         });
     });
 });

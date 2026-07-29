@@ -4,7 +4,7 @@ export abstract class SyncModel<T> {
     // Populated per-instance by registerSyncedProperty() via Object.defineProperty
     // as a non-enumerable field, so it stays out of Object.keys()/JSON serialization;
     // `declare` documents the type without emitting a competing field initializer.
-    private declare __syncedProperties?: Record<string, string | symbol>;
+    declare private __syncedProperties?: Record<string, string | symbol>;
 
     public readonly id: string;
 
@@ -69,13 +69,9 @@ export abstract class SyncModel<T> {
                         // Reflection-based assignment: `localKey` names whichever
                         // decorated field this network key maps to, so its runtime
                         // type can't be tied to `updates[key]`'s at compile time.
-                        (this as unknown as Record<string | symbol, unknown>)[
-                            localKey
-                        ] = updates[key as keyof T];
+                        (this as unknown as Record<string | symbol, unknown>)[localKey] = updates[key as keyof T];
                     } else {
-                        console.warn(
-                            `Unknown property ${key} in ${this.constructor.name}`
-                        );
+                        console.warn(`Unknown property ${key} in ${this.constructor.name}`);
                     }
                 }
             }
@@ -90,10 +86,7 @@ export abstract class SyncModel<T> {
         const syncedProps = this.getSyncedProperties();
         for (const key of Object.keys(syncedProps)) {
             const localKey = syncedProps[key] as keyof SyncModel<T>;
-            if (
-                attributes.length === 0
-                || attributes.includes(localKey)
-            ) {
+            if (attributes.length === 0 || attributes.includes(localKey)) {
                 // localKey is always a decorated data field in practice, never a
                 // method, but keyof SyncModel<T> can't express that narrowing
                 // eslint-disable-next-line @typescript-eslint/unbound-method

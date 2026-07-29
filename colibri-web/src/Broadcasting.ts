@@ -32,17 +32,11 @@ const sendVector3Array = (channel: string, val: [number, number, number][]) => {
     SendMessage(channel, 'broadcast::vector3[]', val);
 };
 
-const sendQuaternion = (
-    channel: string,
-    val: [number, number, number, number]
-) => {
+const sendQuaternion = (channel: string, val: [number, number, number, number]) => {
     SendMessage(channel, 'broadcast::quaternion', val);
 };
 
-const sendQuaternionArray = (
-    channel: string,
-    val: [number, number, number, number][]
-) => {
+const sendQuaternionArray = (channel: string, val: [number, number, number, number][]) => {
     SendMessage(channel, 'broadcast::quaternion[]', val);
 };
 
@@ -50,10 +44,7 @@ const sendColor = (channel: string, val: [number, number, number, number]) => {
     SendMessage(channel, 'broadcast::color', val);
 };
 
-const sendColorArray = (
-    channel: string,
-    val: [number, number, number, number][]
-) => {
+const sendColorArray = (channel: string, val: [number, number, number, number][]) => {
     SendMessage(channel, 'broadcast::color[]', val);
 };
 
@@ -63,27 +54,20 @@ const sendJson = (channel: string, val: { [key: string]: unknown }) => {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type genericCallback = (val: any) => void;
-const listeners: Partial<
-    Record<string, Partial<Record<string, genericCallback[]>>>
-> = {};
+const listeners: Partial<Record<string, Partial<Record<string, genericCallback[]>>>> = {};
 
 // NOTE: T lets each call site pin the concrete payload type its callback expects
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
-const registerListener = <T>(
-    channel: string,
-    type: string,
-    callback: (val: T) => void
-) => {
+const registerListener = <T>(channel: string, type: string, callback: (val: T) => void) => {
     let channelListeners = listeners[channel];
     if (channelListeners === undefined) {
-        const newChannelListeners: Partial<Record<string, genericCallback[]>>
-            = {};
+        const newChannelListeners: Partial<Record<string, genericCallback[]>> = {};
         channelListeners = newChannelListeners;
         listeners[channel] = newChannelListeners;
-        RegisterChannel(channel, (msg) => {
+        RegisterChannel(channel, msg => {
             const commandListeners = newChannelListeners[msg.command];
             if (commandListeners !== undefined) {
-                commandListeners.forEach((cb) => {
+                commandListeners.forEach(cb => {
                     cb(msg.payload);
                 });
             }
@@ -103,10 +87,7 @@ const receiveBool = (channel: string, callback: (val: boolean) => void) => {
     registerListener<boolean>(channel, 'broadcast::bool', callback);
 };
 
-const receiveBoolArray = (
-    channel: string,
-    callback: (val: boolean[]) => void
-) => {
+const receiveBoolArray = (channel: string, callback: (val: boolean[]) => void) => {
     registerListener<boolean[]>(channel, 'broadcast::bool[]', callback);
 };
 
@@ -114,10 +95,7 @@ const receiveNumber = (channel: string, callback: (val: number) => void) => {
     registerListener<number>(channel, 'broadcast::float', callback);
 };
 
-const receiveNumberArray = (
-    channel: string,
-    callback: (val: number[]) => void
-) => {
+const receiveNumberArray = (channel: string, callback: (val: number[]) => void) => {
     registerListener<number[]>(channel, 'broadcast::float[]', callback);
 };
 
@@ -125,72 +103,35 @@ const receiveString = (channel: string, callback: (val: string) => void) => {
     registerListener<string>(channel, 'broadcast::string', callback);
 };
 
-const receiveStringArray = (
-    channel: string,
-    callback: (val: string[]) => void
-) => {
+const receiveStringArray = (channel: string, callback: (val: string[]) => void) => {
     registerListener<string[]>(channel, 'broadcast::string[]', callback);
 };
 
-const receiveVector3 = (
-    channel: string,
-    callback: (val: [number, number, number]) => void
-) => {
-    registerListener<[number, number, number]>(
-        channel,
-        'broadcast::vector3',
-        callback
-    );
+const receiveVector3 = (channel: string, callback: (val: [number, number, number]) => void) => {
+    registerListener<[number, number, number]>(channel, 'broadcast::vector3', callback);
 };
 
-const receiveVector3Array = (
-    channel: string,
-    callback: (val: [number, number, number][]) => void
-) => {
-    registerListener<[number, number, number][]>(
-        channel,
-        'broadcast::vector3[]',
-        callback
-    );
+const receiveVector3Array = (channel: string, callback: (val: [number, number, number][]) => void) => {
+    registerListener<[number, number, number][]>(channel, 'broadcast::vector3[]', callback);
 };
 
-const receiveQuaternion = (
-    channel: string,
-    callback: (val: [number, number, number, number]) => void
-) => {
-    registerListener<[number, number, number, number]>(
-        channel,
-        'broadcast::quaternion',
-        callback
-    );
+const receiveQuaternion = (channel: string, callback: (val: [number, number, number, number]) => void) => {
+    registerListener<[number, number, number, number]>(channel, 'broadcast::quaternion', callback);
 };
 
-const receiveQuaternionArray = (
-    channel: string,
-    callback: (val: [number, number, number, number][]) => void
-) => {
-    registerListener<[number, number, number, number][]>(
-        channel,
-        'broadcast::quaternion[]',
-        callback
-    );
+const receiveQuaternionArray = (channel: string, callback: (val: [number, number, number, number][]) => void) => {
+    registerListener<[number, number, number, number][]>(channel, 'broadcast::quaternion[]', callback);
 };
 
 const receiveColor = (channel: string, callback: (val: string) => void) => {
     registerListener<string>(channel, 'broadcast::color', callback);
 };
 
-const receiveColorArray = (
-    channel: string,
-    callback: (val: string[]) => void
-) => {
+const receiveColorArray = (channel: string, callback: (val: string[]) => void) => {
     registerListener<string[]>(channel, 'broadcast::color[]', callback);
 };
 
-const receiveJson = (
-    channel: string,
-    callback: (val: { [key: string]: unknown }) => void
-) => {
+const receiveJson = (channel: string, callback: (val: { [key: string]: unknown }) => void) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     registerListener<any>(channel, 'broadcast::json', callback);
 };
