@@ -1,9 +1,15 @@
 # Colibri - Web Client
 
+See [CHANGELOG.md](CHANGELOG.md) for release notes, including breaking changes when upgrading from 1.x.
+
 ## Installation
 
 - NPM: `npm install @hcikn/colibri`
 - Yarn: `yarn add @hcikn/colibri`
+
+> **Colibri targets TypeScript as of 2.0** — TypeScript 5.0 or newer, with standard
+> (non-`experimentalDecorators`) decorators. `@Synced()` is a TypeScript decorator, and the
+> documentation, samples and tests all assume a TypeScript project.
 
 ## Configuration
 
@@ -25,7 +31,7 @@ For server setup, refer to [colibri-server](../colibri-server/).
 
 Colibri provides a _web logger_ with web interface to send diagnostic data (currently: console logs) to the server. This may be useful for devices (e.g., VR devices, smartphones) where access to the console is not easily available.
 
-To setup, import the `RemoteLogger` and call its `init()` method. Any subsequent `console` calls should now also appear on your colibri server's web interface, which can be accessed via `http://<your-server-ip>:9011`.
+To setup, import the `RemoteLogger` and construct a new instance. Any subsequent `console` calls should now also appear on your colibri server's web interface, which can be accessed via `http://<your-server-ip>:9011`.
 
 ```ts
 import { RemoteLogger } from '@hcikn/colibri';
@@ -36,7 +42,7 @@ logger.enable();
 logger.disable();
 ```
 
-See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run sample/remote-logging`).
+See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run samples/remote-logging`).
 
 ### Sending Data between Clients
 
@@ -51,7 +57,7 @@ Sync.sendBool('myChannel', true);
 The sent data can then be received anywhere by registering a listener:
 
 ```ts
-Sync.receiveBool('myChannel', (value) => {
+Sync.receiveBool('myChannel', value => {
     // Will be called whenever a bool on "click" channel is received
 });
 ```
@@ -64,12 +70,14 @@ Sync.unregister('myChannel', MyMethod);
 
 The following built-in types are available for sync: `bool, int (as number), float (as number), string, Vector2, Vector3, Quaternion, Color` and arrays thereof. For arbitrary data, you can use JSON:
 
-```c#
+```ts
 Sync.sendJson('myChannel', { foo: 'bar' });
-Sync.receiveJson('myChannel', (json) => { /* ... */ });
+Sync.receiveJson('myChannel', json => {
+    /* ... */
+});
 ```
 
-See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run sample/broadcast`).
+See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run samples/broadcast`).
 
 Limitations:
 
@@ -88,36 +96,33 @@ import { SyncModel, Synced } from '@hcikn/colibri';
 
 export class SampleClass extends SyncModel<SampleClass> {
     @Synced()
-    get name() { return this._name; }
-    set name(val: string) { this._name = val; }
-    private _name = '';
+    accessor name = '';
 
     @Synced()
-    private age = 0;
+    accessor age = 0;
 
     @Synced('billingAddress')
-    private address = '';
+    accessor address = '';
 }
 ```
 
-and enable `experimentalDecorators` in the `tsconfig.json`:
+`@Synced()` requires TypeScript's standard decorators, the default since TypeScript 5.0 — make sure `experimentalDecorators` is **not** set (or is `false`) in your `tsconfig.json`, and declare every synced member with the `accessor` keyword.
 
-```json
-{
-  "compilerOptions": {
-    "experimentalDecorators": true
-  }
-}
+Any `accessor` member marked with `@Synced()` will be synchronized across all network clients.
 
-```
-
-Any property or field marked with `@Synced()` will be synchronized across all network clients. *Note: Synchronization of fields (e.g., `@Synced() private age = 0;` does not work on some frameworks such as React for some reason.*
+> **Migrating from 1.x:** `@Synced()` now requires standard TC39 decorators instead of legacy
+> (`experimentalDecorators`) ones. To migrate: remove `experimentalDecorators` from your
+> `tsconfig.json`, and turn every synced field/property into an `accessor` (e.g.
+> `@Synced() private age = 0;` → `@Synced() accessor age = 0;`). This also fixes field
+> synchronization in frameworks like React, which never worked correctly under the legacy decorator.
 
 Lastly, we need to register the class with the Synchronization mechanism by calling `RegisterModelSync`:
 
 ```ts
 import { RegisterModelSync } from '@hcikn/colibri';
-const [ SampleClasses$, registerExampleClass ] = RegisterModelSync<SampleClass>({ type: SampleClass });
+const [SampleClasses$, registerExampleClass] = RegisterModelSync<SampleClass>({
+    type: SampleClass
+});
 ```
 
 The first return value (e.g., `SampleClasses$`) is a [BehaviorSubject](https://www.learnrxjs.io/learn-rxjs/subjects/behaviorsubject) that will be updated whenever a new instance of SampleClass is added, updated, or deleted. The second return value (e.g., `registerExampleClass`) can be used to sync new instantiations:
@@ -127,7 +132,7 @@ const mySample = new SampleClass('myId'); // mySample is not synchronized across
 registerExampleClass(mySample); // mySample is sent out to all other clients and will be synchronized
 ```
 
-See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run sample/model-sync`).
+See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run samples/model-sync`).
 
 ### Remote Store
 
@@ -154,3 +159,12 @@ Each operation can be achieved by either directly interaction with the `Colibri`
 ## Samples
 
 See [Sample folder](samples/) for more examples on how to use the Colibri web client.
+
+The samples are TypeScript and run with [tsx](https://tsx.is/) directly against the sources; they share their prompts via `common.ts`.
+
+| Sample                                      | Run with                         |
+| ------------------------------------------- | -------------------------------- |
+| [broadcast](samples/broadcast.ts)           | `npm run samples/broadcast`      |
+| [model-sync](samples/model-sync.ts)         | `npm run samples/model-sync`     |
+| [remote-logging](samples/remote-logging.ts) | `npm run samples/remote-logging` |
+| [rest-api](samples/rest-api.ts)             | `npm run samples/rest-api`       |

@@ -1,0 +1,2 @@
+cd colibri-web
+npx lint-staged

@@ -1,0 +1,31 @@
+{
+    "folders": [
+        {
+            "name": "Overview (Repository)",
+            "path": ".",
+        },
+        {
+            "name": "Server",
+            "path": "colibri-server",
+        },
+        {
+            "name": "Web Client",
+            "path": "colibri-web",
+        },
+        {
+            "name": "Unity Client",
+            "path": "colibri-unity",
+        },
+    ],
+    "settings": {
+        // Shared settings across the whole repository
+        "files.exclude": {
+            "**/.git": true,
+            "**/.DS_Store": true,
+        },
+        // Keep nested subdirectories compact and collapsed
+        "explorer.compactFolders": true,
+        // Prevents deep trees from expanding when you open or switch files
+        "explorer.autoReveal": "focusNoScroll",
+    },
+}

@@ -1,59 +1,46 @@
 import { SyncModel } from './SyncModel';
 
 /**
- *  This decorator can be attached to any property or accessor of a SyncModel. 
+ *  This decorator can be attached to any `accessor` member of a SyncModel.
  *  It will cause the property to be synchronized with the server.
- *  Refer to https://www.typescriptlang.org/docs/handbook/decorators.html
+ *  Refer to https://github.com/tc39/proposal-decorators
  */
-export const Synced = <T>(syncedName: string = ''): PropertyDecorator => {
-
-    return function (target: unknown, key: string | symbol, descriptor?: PropertyDescriptor): void {
-        if (!syncedName)
-            syncedName = key.toString();
-        syncedName = syncedName.toLowerCase();
-
-        if (!(target instanceof SyncModel)) {
-            console.error('Synced decorator can only be used on SyncModel properties');
-            return;
+export function Synced<This extends SyncModel<unknown>, V>(syncedName: string = '') {
+    return function (
+        value: ClassAccessorDecoratorTarget<This, V>,
+        context: ClassAccessorDecoratorContext<This, V>
+    ): ClassAccessorDecoratorResult<This, V> {
+        // TypeScript's decorator types make this look unreachable, since a
+        // correctly-typed usage site can only pass an accessor context here —
+        // but plain-JS/Babel consumers get no such guarantee, so this guards
+        // against misuse the type system can't observe for them.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (context.kind !== 'accessor') {
+            throw new Error('@Synced() must decorate an `accessor` member');
         }
 
-        let original = target[key as keyof Object];
-        // FIXME: this sets the property on the prototype, not the instance!
-        target.registerSyncedProperty(syncedName, key);
+        const key = String(context.name);
+        const name = (syncedName || key).toLowerCase();
 
-        if (!descriptor?.get) {
-            /**
-             * TODO: This (i.e., for properties) doesn't work in react for some reason!
-             */
-            Reflect.deleteProperty(target, key);
-            Reflect.defineProperty(target, key, {
-                get: () => original,
-                set: newVal => {
-                    console.log(`Set ${key.toString()} to ${newVal}`);
-                    original = newVal;
-                },
-                enumerable: true,
-                configurable: true
-            });
-        } else {
-            const originalAccessors = {
-                get: descriptor.get,
-                set: descriptor.set
-            };
+        // Runs once per instance during construction, after the auto-accessor's
+        // own initializer has already set the backing value.
+        context.addInitializer(function (this: This) {
+            this.registerSyncedProperty(name, key);
+        });
 
-            descriptor.get = function (): T {
-                const ret: T = originalAccessors.get.call(this);
-                return ret;
-            };
+        return {
+            get(this: This) {
+                return value.get.call(this);
+            },
+            set(this: This, newVal: V) {
+                value.set.call(this, newVal);
 
-            descriptor.set = function (newval: T) {
-                const model = this as SyncModel<T>;
-                model.modelChanges.next(String(key));
-
-                if (originalAccessors.set) {
-                    originalAccessors.set.call(this, newval);
+                // Suppress emission while a remote update is being applied,
+                // see SyncModel.update().
+                if (!this.applyingRemoteUpdate) {
+                    this.modelChanges.next(key);
                 }
-            };
-        }
+            }
+        };
     };
-};
+}

@@ -1,0 +1,32 @@
+name: Lint colibri-web
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "colibri-web/**"
+      - ".github/workflows/lint-web.yml"
+  pull_request:
+    paths:
+      - "colibri-web/**"
+      - ".github/workflows/lint-web.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: colibri-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: colibri-web/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run format:check
