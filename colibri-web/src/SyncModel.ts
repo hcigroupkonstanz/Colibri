@@ -1,6 +1,11 @@
 import { Subject, bufferTime, filter, map, share } from 'rxjs';
 
 export abstract class SyncModel<T> {
+    // Populated per-instance by registerSyncedProperty() via Object.defineProperty
+    // as a non-enumerable field, so it stays out of Object.keys()/JSON serialization;
+    // `declare` documents the type without emitting a competing field initializer.
+    private declare __syncedProperties?: Record<string, string | symbol>;
+
     public readonly id: string;
 
     // Set synchronously while a remote update is being applied, so decorated
@@ -10,16 +15,16 @@ export abstract class SyncModel<T> {
     public readonly modelChanges = new Subject<string>();
     public readonly modelChanges$ = this.modelChanges.pipe(
         bufferTime(1),
-        map((changes) => changes.filter(this.uniq)),
-        filter((changes) => changes.length > 0),
-        share(),
+        map(changes => changes.filter(this.uniq)),
+        filter(changes => changes.length > 0),
+        share()
     );
 
     public constructor(id: string) {
         this.id = id;
     }
 
-    private uniq(value: string, index: number, array: string[]) {
+    private uniq(this: void, value: string, index: number, array: string[]) {
         return array.indexOf(value) === index;
     }
 
@@ -34,22 +39,22 @@ export abstract class SyncModel<T> {
     public registerSyncedProperty(name: string, prop: string | symbol): void {
         // Called per-instance (via the accessor decorator's addInitializer), once
         // for every @Synced member declared anywhere in the prototype chain.
-        if (!Object.prototype.hasOwnProperty.call(this, '__syncedProperties')) {
+        let syncedProperties = this.__syncedProperties;
+        if (syncedProperties === undefined) {
+            syncedProperties = {};
             Object.defineProperty(this, '__syncedProperties', {
-                value: {},
+                value: syncedProperties,
                 enumerable: false,
                 writable: true,
-                configurable: true,
+                configurable: true
             });
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (this as any).__syncedProperties[name] = prop;
+        syncedProperties[name] = prop;
     }
 
-    private getSyncedProperties(): { [key: string]: string | symbol } {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (this as any).__syncedProperties || {};
+    private getSyncedProperties(): Record<string, string | symbol> {
+        return this.__syncedProperties ?? {};
     }
 
     public update(updates: Partial<T>): void {
@@ -61,12 +66,15 @@ export abstract class SyncModel<T> {
                 if (key !== 'id') {
                     const localKey = syncedProps[key];
                     if (localKey) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (this as any)[localKey as keyof SyncModel<T>] =
-                            updates[key as keyof T];
+                        // Reflection-based assignment: `localKey` names whichever
+                        // decorated field this network key maps to, so its runtime
+                        // type can't be tied to `updates[key]`'s at compile time.
+                        (this as unknown as Record<string | symbol, unknown>)[
+                            localKey
+                        ] = updates[key as keyof T];
                     } else {
                         console.warn(
-                            `Unknown property ${key} in ${this.constructor.name}`,
+                            `Unknown property ${key} in ${this.constructor.name}`
                         );
                     }
                 }
@@ -77,20 +85,22 @@ export abstract class SyncModel<T> {
     }
 
     public toJson(attributes: string[] = []): Partial<T> {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const json: any = { id: this.id };
+        const json: Record<string, unknown> = { id: this.id };
 
         const syncedProps = this.getSyncedProperties();
         for (const key of Object.keys(syncedProps)) {
             const localKey = syncedProps[key] as keyof SyncModel<T>;
             if (
-                attributes.length === 0 ||
-                attributes.includes(localKey as string)
+                attributes.length === 0
+                || attributes.includes(localKey)
             ) {
+                // localKey is always a decorated data field in practice, never a
+                // method, but keyof SyncModel<T> can't express that narrowing
+                // eslint-disable-next-line @typescript-eslint/unbound-method
                 json[key] = this[localKey];
             }
         }
 
-        return json;
+        return json as Partial<T>;
     }
 }

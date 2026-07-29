@@ -2,11 +2,11 @@ import { Colibri, RemoteLogger } from '@hcikn/colibri';
 
 import { colibriAddress, colibriPort } from './common';
 
-(async () => {
+void (async () => {
     new Colibri('myAppName', await colibriAddress(), await colibriPort());
 
     console.log(
-        'The following prompts will be printed to the console, but also sent to the server:',
+        'The following prompts will be printed to the console, but also sent to the server:'
     );
     // once we initialize the remote logger, everything logged via console will now be sent to the server (and to the console)
     new RemoteLogger(true);

@@ -44,7 +44,9 @@ function closeSocket(client: Colibri): void {
 function waitForConnect(client: Colibri): Promise<void> {
     const socket = rawSocket(client);
     if (socket.connected) return Promise.resolve();
-    return new Promise((resolve) => socket.once('connect', resolve));
+    return new Promise((resolve) => {
+        socket.once('connect', resolve);
+    });
 }
 
 const activeClients: Colibri[] = [];
@@ -85,8 +87,9 @@ export async function createSingletonWithPeer(app: string): Promise<{
 
 /** Disconnects and forgets every client created via this module, and clears the singleton. */
 export function disconnectAll(): void {
-    while (activeClients.length > 0) {
-        closeSocket(activeClients.pop()!);
+    let client: Colibri | undefined;
+    while ((client = activeClients.pop()) !== undefined) {
+        closeSocket(client);
     }
     resetSingleton();
 }
@@ -98,17 +101,17 @@ export function disconnectAll(): void {
 export function nextMessage(
     client: Colibri,
     match: { channel: string; command?: string },
-    timeoutMs = 8000,
+    timeoutMs = 8000
 ): Promise<Message> {
     return firstValueFrom(
         client.messages.pipe(
             filter(
-                (msg) =>
-                    msg.channel === match.channel &&
-                    (match.command === undefined ||
-                        msg.command === match.command),
+                msg =>
+                    msg.channel === match.channel
+                    && (match.command === undefined
+                        || msg.command === match.command)
             ),
-            timeout(timeoutMs),
-        ),
+            timeout(timeoutMs)
+        )
     );
 }

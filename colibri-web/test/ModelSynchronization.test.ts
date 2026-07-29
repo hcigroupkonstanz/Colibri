@@ -5,7 +5,7 @@ import {
     expect,
     it,
     vi,
-    type Mock,
+    type Mock
 } from 'vitest';
 import type { Observable } from 'rxjs';
 
@@ -13,7 +13,7 @@ import type { Observable } from 'rxjs';
 // SendMessage / RegisterChannel come back as vi.fn() mocks we can inspect.
 vi.mock('../src/Colibri', () => ({
     SendMessage: vi.fn(),
-    RegisterChannel: vi.fn(),
+    RegisterChannel: vi.fn()
 }));
 
 import { SendMessage, RegisterChannel } from '../src/Colibri';
@@ -35,8 +35,12 @@ class Gadget extends SyncModel<Gadget> {
 
 // --- Helpers ---------------------------------------------------------------
 
-const sendMessageMock = SendMessage as unknown as Mock;
-const registerChannelMock = RegisterChannel as unknown as Mock;
+const sendMessageMock = SendMessage as unknown as Mock<
+    (channel: string, command: string, payload?: unknown) => void
+>;
+const registerChannelMock = RegisterChannel as unknown as Mock<
+    (channel: string, handler: (payload: Message) => void) => void
+>;
 
 /** Grab the handler that RegisterModelSync passed to RegisterChannel. */
 function capturedHandler(): (payload: Message) => void {
@@ -55,7 +59,7 @@ function latest<T>(obs: Observable<T[]>): T[] {
 
 /** All SendMessage calls that used the given command. */
 function updateCalls(command = 'model::update') {
-    return sendMessageMock.mock.calls.filter((c) => c[1] === command);
+    return sendMessageMock.mock.calls.filter(c => c[1] === command);
 }
 
 describe('ModelSynchronization', () => {
@@ -83,7 +87,7 @@ describe('ModelSynchronization', () => {
             // initial data fetch
             expect(sendMessageMock).toHaveBeenCalledWith(
                 'widget',
-                'model::request',
+                'model::request'
             );
 
             // registered exactly one channel, with the derived name
@@ -99,7 +103,7 @@ describe('ModelSynchronization', () => {
 
             expect(sendMessageMock).toHaveBeenCalledWith(
                 'CustomName',
-                'model::request',
+                'model::request'
             );
             expect(registerChannelMock.mock.calls[0][0]).toBe('CustomName');
         });
@@ -109,7 +113,7 @@ describe('ModelSynchronization', () => {
 
             expect(sendMessageMock).toHaveBeenCalledWith(
                 'widget',
-                'model::request',
+                'model::request'
             );
             expect(registerChannelMock.mock.calls[0][0]).toBe('widget');
 
@@ -124,7 +128,7 @@ describe('ModelSynchronization', () => {
         it('sends the full toJson() as an initial model::update and lists the model', () => {
             const [models, registerModel] = RegisterModelSync({
                 name: 'widget',
-                type: Widget,
+                type: Widget
             });
 
             const w = new Widget('local-1');
@@ -143,7 +147,7 @@ describe('ModelSynchronization', () => {
             expect(calls[0][2]).toEqual({
                 id: 'local-1',
                 label: 'hello',
-                count: 3,
+                count: 3
             });
 
             // Model is present in the latest emission.
@@ -157,7 +161,7 @@ describe('ModelSynchronization', () => {
 
             const [, registerModel] = RegisterModelSync({
                 name: 'widget',
-                type: Widget,
+                type: Widget
             });
 
             const w = new Widget('local-1');
@@ -184,14 +188,14 @@ describe('ModelSynchronization', () => {
         it('constructs a new model of the registered type for an unknown id', () => {
             const [models] = RegisterModelSync({
                 name: 'widget',
-                type: Widget,
+                type: Widget
             });
             const handler = capturedHandler();
 
             handler({
                 channel: 'widget',
                 command: 'model::update',
-                payload: { id: 'srv-1', label: 'from server', count: 7 },
+                payload: { id: 'srv-1', label: 'from server', count: 7 }
             });
 
             const current = latest(models);
@@ -203,7 +207,7 @@ describe('ModelSynchronization', () => {
             expect(current[0].toJson()).toEqual({
                 id: 'srv-1',
                 label: 'from server',
-                count: 7,
+                count: 7
             });
         });
 
@@ -218,7 +222,7 @@ describe('ModelSynchronization', () => {
             handler({
                 channel: 'widget',
                 command: 'model::update',
-                payload: { id: 'srv-1', label: 'from server' },
+                payload: { id: 'srv-1', label: 'from server' }
             });
 
             // Let the 1ms bufferTime window elapse.
@@ -232,14 +236,14 @@ describe('ModelSynchronization', () => {
         it('updates an existing model in place instead of duplicating it', () => {
             const [models] = RegisterModelSync({
                 name: 'widget',
-                type: Widget,
+                type: Widget
             });
             const handler = capturedHandler();
 
             handler({
                 channel: 'widget',
                 command: 'model::update',
-                payload: { id: 'srv-1', label: 'first', count: 1 },
+                payload: { id: 'srv-1', label: 'first', count: 1 }
             });
 
             const created = latest(models)[0];
@@ -247,7 +251,7 @@ describe('ModelSynchronization', () => {
             handler({
                 channel: 'widget',
                 command: 'model::update',
-                payload: { id: 'srv-1', label: 'second', count: 2 },
+                payload: { id: 'srv-1', label: 'second', count: 2 }
             });
 
             const current = latest(models);
@@ -261,31 +265,31 @@ describe('ModelSynchronization', () => {
         it('removes a model on model::delete', () => {
             const [models] = RegisterModelSync({
                 name: 'widget',
-                type: Widget,
+                type: Widget
             });
             const handler = capturedHandler();
 
             handler({
                 channel: 'widget',
                 command: 'model::update',
-                payload: { id: 'srv-1', label: 'a' },
+                payload: { id: 'srv-1', label: 'a' }
             });
             handler({
                 channel: 'widget',
                 command: 'model::update',
-                payload: { id: 'srv-2', label: 'b' },
+                payload: { id: 'srv-2', label: 'b' }
             });
             expect(latest(models).length).toBe(2);
 
             handler({
                 channel: 'widget',
                 command: 'model::delete',
-                payload: { id: 'srv-1' },
+                payload: { id: 'srv-1' }
             });
 
             const current = latest(models);
             expect(current.length).toBe(1);
-            expect(current.find((m) => m.id === 'srv-1')).toBeUndefined();
+            expect(current.find(m => m.id === 'srv-1')).toBeUndefined();
             expect(current[0].id).toBe('srv-2');
         });
 
@@ -293,16 +297,17 @@ describe('ModelSynchronization', () => {
             RegisterModelSync({ name: 'widget', type: Widget });
             const handler = capturedHandler();
 
-            expect(() =>
+            expect(() => {
                 handler({
                     channel: 'widget',
                     command: 'model::bogus',
-                    payload: { id: 'x' },
-                }),
+                    payload: { id: 'x' }
+                });
+            }
             ).not.toThrow();
 
             expect(errorSpy).toHaveBeenCalledWith(
-                expect.stringContaining('Unknown model command'),
+                expect.stringContaining('Unknown model command')
             );
         });
     });

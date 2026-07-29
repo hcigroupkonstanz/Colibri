@@ -5,7 +5,7 @@ import {
     createSingletonWithPeer,
     disconnectAll,
     nextMessage,
-    uniqueApp,
+    uniqueApp
 } from './helpers';
 import { Sync } from '../src/Broadcasting';
 import { RegisterModelSync } from '../src/ModelSynchronization';
@@ -24,7 +24,7 @@ describe('Sync (Broadcasting) high-level API', () => {
 
         const peerPromise = nextMessage(peer, {
             channel,
-            command: 'broadcast::json',
+            command: 'broadcast::json'
         });
 
         Sync.sendJson(channel, { hello: 'world' });
@@ -35,13 +35,13 @@ describe('Sync (Broadcasting) high-level API', () => {
 
     it('Sync.sendFloat (Unity compatibility alias) is received as broadcast::float', async () => {
         const { peer } = await createSingletonWithPeer(
-            uniqueApp('sync-app-float'),
+            uniqueApp('sync-app-float')
         );
         const channel = uniqueApp('sync-channel-float');
 
         const peerPromise = nextMessage(peer, {
             channel,
-            command: 'broadcast::float',
+            command: 'broadcast::float'
         });
 
         Sync.sendFloat(channel, 3.5);
@@ -52,7 +52,7 @@ describe('Sync (Broadcasting) high-level API', () => {
 
     it('Sync.receiveBool fires when the raw peer sends a matching broadcast', async () => {
         const { peer } = await createSingletonWithPeer(
-            uniqueApp('sync-app-recv'),
+            uniqueApp('sync-app-recv')
         );
         const channel = uniqueApp('sync-channel-recv');
 
@@ -73,12 +73,12 @@ describe('RegisterModelSync high-level API', () => {
 
     it('propagates a locally registered model to a raw peer', async () => {
         const { peer } = await createSingletonWithPeer(
-            uniqueApp('modelsync-app'),
+            uniqueApp('modelsync-app')
         );
         const channelName = 'testmodel';
 
         const [, registerModel] = RegisterModelSync<TestModel>({
-            type: TestModel,
+            type: TestModel
         });
 
         const model = new TestModel('model-1');
@@ -86,7 +86,7 @@ describe('RegisterModelSync high-level API', () => {
 
         const peerUpdatePromise = nextMessage(peer, {
             channel: channelName,
-            command: 'model::update',
+            command: 'model::update'
         });
 
         registerModel(model);
@@ -97,7 +97,7 @@ describe('RegisterModelSync high-level API', () => {
 
     it('adds a model to the observable array when a peer sends an inbound model::update', async () => {
         const { peer } = await createSingletonWithPeer(
-            uniqueApp('modelsync-app-inbound'),
+            uniqueApp('modelsync-app-inbound')
         );
         const channelName = 'testmodel';
 
@@ -105,18 +105,18 @@ describe('RegisterModelSync high-level API', () => {
 
         const modelsPromise = firstValueFrom(
             models$.pipe(
-                filter((models) => models.some((m) => m.id === 'model-2')),
-                timeout(5000),
-            ),
+                filter(models => models.some(m => m.id === 'model-2')),
+                timeout(5000)
+            )
         );
 
         peer.sendMessage(channelName, 'model::update', {
             id: 'model-2',
-            value: 'from-peer',
+            value: 'from-peer'
         });
 
         const models = await modelsPromise;
-        const found = models.find((m) => m.id === 'model-2');
+        const found = models.find(m => m.id === 'model-2');
         expect(found?.value).toBe('from-peer');
     });
 });
@@ -124,7 +124,7 @@ describe('RegisterModelSync high-level API', () => {
 describe('RemoteLogger high-level API', () => {
     it('forwards console.info without throwing or breaking the connection', async () => {
         const { singleton } = await createSingletonWithPeer(
-            uniqueApp('logger-app'),
+            uniqueApp('logger-app')
         );
 
         const originalConsole = {
@@ -132,7 +132,7 @@ describe('RemoteLogger high-level API', () => {
             log: console.log,
             info: console.info,
             warn: console.warn,
-            error: console.error,
+            error: console.error
         };
 
         const logger = new RemoteLogger();
@@ -142,14 +142,16 @@ describe('RemoteLogger high-level API', () => {
             // receipt isn't observable from here — that's covered by the
             // mocked unit suite. Here we just assert the wire path doesn't
             // throw and the connection stays healthy afterwards.
-            expect(() => console.info('e2e log message')).not.toThrow();
+            expect(() => {
+                console.info('e2e log message');
+            }).not.toThrow();
 
             await expect(
                 nextMessage(
                     singleton,
                     { channel: 'colibri', command: 'latency' },
-                    3000,
-                ),
+                    3000
+                )
             ).resolves.toBeDefined();
         } finally {
             console.debug = originalConsole.debug;

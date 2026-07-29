@@ -2,6 +2,11 @@ import { Subject } from 'rxjs';
 import { Socket, connect } from 'socket.io-client';
 import { ColibriError } from './ColibriError';
 
+// `window` is declared globally as non-optional by the "dom" lib, but colibri-web
+// also runs under plain Node (samples, e2e); shadow it here so the type reflects
+// that it's genuinely absent outside a browser.
+declare const window: Window | undefined;
+
 export interface Message {
     channel: string;
     command: string;
@@ -19,8 +24,8 @@ export class Colibri {
 
     public constructor(
         public readonly app: string,
-        public readonly server: string = window?.location?.hostname ?? '',
-        public readonly port: number = 9011,
+        public readonly server: string = window?.location.hostname ?? '',
+        public readonly port: number = 9011
     ) {
         if (server.trim().length <= 0) {
             throw new ColibriError('Server Address missing or empty!');
@@ -44,7 +49,7 @@ export class Colibri {
 
         this.socket = connect(this.uri, {
             query: { app, version: '2' },
-            transports: ['websocket'],
+            transports: ['websocket']
         });
         this.socket.on('connect', this.onSocketConnect.bind(this));
         this.socket.onAny(this.onSocketAny.bind(this));
@@ -61,13 +66,9 @@ export class Colibri {
         console.debug(`Connected to colibri server on ${this.server}`);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private onSocketAny(channel: string, msg: any) {
-        this.messageSubject.next({
-            channel,
-            command: msg.command,
-            payload: msg.payload,
-        });
+    private onSocketAny(channel: string, msg: unknown) {
+        const { command, payload } = msg as Pick<Message, 'command' | 'payload'>;
+        this.messageSubject.next({ channel, command, payload });
     }
 
     /**
@@ -76,7 +77,7 @@ export class Colibri {
      * @returns
      */
     public static getInstance(
-        warnIfNotInitialized: boolean = true,
+        warnIfNotInitialized: boolean = true
     ): Colibri | null {
         if (warnIfNotInitialized && !Colibri.instance) {
             console.warn('Colibri not initialized yet! (Instance is null)');
@@ -93,15 +94,15 @@ export class Colibri {
     public sendMessage(
         channel: string,
         command: string,
-        payload: unknown = {},
+        payload: unknown = {}
     ) {
         this.socket.emit(channel, {
             command,
-            payload,
+            payload
         });
     }
 
-    //#region Socket Events
+    // #region Socket Events
     /**
      * Adds a `handler` function listening for messages in `channel`.
      * @param channel message channel
@@ -109,7 +110,7 @@ export class Colibri {
      */
     public registerChannel(
         channel: string,
-        handler: (payload: Message) => void,
+        handler: (payload: Message) => void
     ) {
         this.socket.on(channel, handler);
     }
@@ -121,7 +122,7 @@ export class Colibri {
      */
     public unregisterChannel(
         channel: string,
-        handler: (payload: Message) => void,
+        handler: (payload: Message) => void
     ) {
         this.socket.off(channel, handler);
     }
@@ -134,9 +135,9 @@ export class Colibri {
     public registerOnce(channel: string, handler: (payload: Message) => void) {
         this.socket.once(channel, handler);
     }
-    //#endregion
+    // #endregion
 
-    //#region Rest API
+    // #region Rest API
     /**
      * Returns the REST API Endpoint for a given `key` or null of the key is empty.
      * @param key REST API storage key
@@ -147,21 +148,22 @@ export class Colibri {
         while (key.startsWith('/')) key = key.substring(1);
         return key.length === 0 ? null : this.uriRestApi + key;
     }
+
     /**
      * Queries an object from the REST API identified by `key`.
      * @param key REST API storage key
      * @returns JSON object with data or null if object does not exist or any other error occurs
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    public async getRestObject(key: string): Promise<any | null> {
+    public async getRestObject(key: string): Promise<any> {
         const uri = this.getRestUri(key);
         if (!uri) return null;
 
         const response = await fetch(uri, {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
-            },
+                'Content-Type': 'application/json'
+            }
         });
 
         if (response.status >= 400) return null;
@@ -181,14 +183,14 @@ export class Colibri {
         const response = await fetch(uri, {
             method: 'PUT',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data),
+            body: JSON.stringify(data)
         });
 
         return response.status >= 200 && response.status < 300;
     }
-    //#endregion
+    // #endregion
 }
 
 /////////////////////////////////////
@@ -203,7 +205,7 @@ export class Colibri {
 export const SendMessage = (
     channel: string,
     command: string,
-    payload: unknown = {},
+    payload: unknown = {}
 ) => Colibri.getInstance()?.sendMessage(channel, command, payload);
 
 /**
@@ -212,7 +214,7 @@ export const SendMessage = (
  */
 export const RegisterChannel = (
     channel: string,
-    handler: (payload: Message) => void,
+    handler: (payload: Message) => void
 ) => Colibri.getInstance()?.registerChannel(channel, handler);
 
 /**
@@ -221,7 +223,7 @@ export const RegisterChannel = (
  */
 export const UnregisterChannel = (
     channel: string,
-    handler: (payload: Message) => void,
+    handler: (payload: Message) => void
 ) => Colibri.getInstance()?.unregisterChannel(channel, handler);
 
 /**
@@ -230,7 +232,7 @@ export const UnregisterChannel = (
  */
 export const RegisterOnce = (
     channel: string,
-    handler: (payload: Message) => void,
+    handler: (payload: Message) => void
 ) => Colibri.getInstance()?.registerOnce(channel, handler);
 
 /**

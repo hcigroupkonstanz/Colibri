@@ -2,6 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { SyncModel } from '../src/SyncModel';
 import { Synced } from '../src/Synced';
 
+// Exposes the private `__syncedProperties` map the tests below reach into,
+// without resorting to `any`.
+interface SyncModelInternals {
+    __syncedProperties?: Record<string, string | symbol>;
+}
+
 interface PersonData {
     age: number;
 }
@@ -32,16 +38,24 @@ describe('Synced', () => {
                 },
                 set() {
                     /* noop */
-                },
+                }
             };
             const fakeContext = {
                 kind: 'method',
                 name: 'x',
-                addInitializer: () => undefined,
+                addInitializer: () => undefined
             };
 
             expect(() =>
-                decorator(fakeTarget as any, fakeContext as any),
+                decorator(
+                    fakeTarget as unknown as ClassAccessorDecoratorTarget<
+                        SyncModel<unknown>,
+                        unknown
+                    >,
+                    fakeContext as unknown as ClassAccessorDecoratorContext<
+                        SyncModel<unknown>
+                    >
+                )
             ).toThrow('@Synced() must decorate an `accessor` member');
         });
     });
@@ -50,7 +64,7 @@ describe('Synced', () => {
         it('emits the LOCAL key synchronously on modelChanges when set locally', () => {
             const person = new Person('p1');
             const emissions: string[] = [];
-            person.modelChanges.subscribe((key) => emissions.push(key));
+            person.modelChanges.subscribe(key => emissions.push(key));
 
             person.age = 42;
 
@@ -81,7 +95,7 @@ describe('Synced', () => {
         it('does not emit while applyingRemoteUpdate is true', () => {
             const person = new Person('p1');
             const emissions: string[] = [];
-            person.modelChanges.subscribe((key) => emissions.push(key));
+            person.modelChanges.subscribe(key => emissions.push(key));
 
             person.applyingRemoteUpdate = true;
             person.age = 7;
@@ -100,13 +114,17 @@ describe('Synced', () => {
             const animal = new Animal('animal-1');
             const dog = new Dog('dog-1');
 
-            expect((animal as any).__syncedProperties).toEqual({
-                legs: 'legs',
+            expect(
+                (animal as unknown as SyncModelInternals).__syncedProperties
+            ).toEqual({
+                legs: 'legs'
             });
 
-            expect((dog as any).__syncedProperties).toEqual({
+            expect(
+                (dog as unknown as SyncModelInternals).__syncedProperties
+            ).toEqual({
                 legs: 'legs',
-                breed: 'breed',
+                breed: 'breed'
             });
 
             expect(animal.toJson()).toEqual({ id: 'animal-1', legs: 4 });
@@ -115,7 +133,7 @@ describe('Synced', () => {
             expect(dog.toJson()).toEqual({
                 id: 'dog-1',
                 legs: 4,
-                breed: 'unknown',
+                breed: 'unknown'
             });
         });
     });
@@ -127,7 +145,7 @@ describe('Synced', () => {
             try {
                 const person = new Person('p1');
                 const buffered: string[][] = [];
-                person.modelChanges$.subscribe((keys) => buffered.push(keys));
+                person.modelChanges$.subscribe(keys => buffered.push(keys));
 
                 person.age = 1;
                 person.age = 2; // same key 'age' again within the window

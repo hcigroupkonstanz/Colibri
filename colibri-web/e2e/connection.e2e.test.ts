@@ -12,7 +12,7 @@ describe('connecting to a real colibri-server', () => {
         const msg = await nextMessage(
             client,
             { channel: 'colibri', command: 'latency' },
-            3000,
+            3000
         );
 
         expect(msg.channel).toBe('colibri');
@@ -25,7 +25,7 @@ describe('connecting to a real colibri-server', () => {
 
         const [msgA, msgB] = await Promise.all([
             nextMessage(a, { channel: 'colibri', command: 'latency' }, 3000),
-            nextMessage(b, { channel: 'colibri', command: 'latency' }, 3000),
+            nextMessage(b, { channel: 'colibri', command: 'latency' }, 3000)
         ]);
 
         expect(msgA.command).toBe('latency');

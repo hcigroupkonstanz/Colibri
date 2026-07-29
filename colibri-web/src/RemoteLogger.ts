@@ -17,32 +17,27 @@ export class RemoteLogger {
     public constructor(private enabled: boolean = true) {
         // intercept calls from console
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        console.debug = (...args: any[]) => {
+        console.debug = (...args: unknown[]) => {
             this.consoleDebug(...args);
             this.sendMessage('debug', args);
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        console.log = (...args: any[]) => {
+        console.log = (...args: unknown[]) => {
             this.consoleLog(...args);
             this.sendMessage('info', args);
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        console.info = (...args: any[]) => {
+        console.info = (...args: unknown[]) => {
             this.consoleInfo(...args);
             this.sendMessage('info', args);
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        console.warn = (...args: any[]) => {
+        console.warn = (...args: unknown[]) => {
             this.consoleWarn(...args);
             this.sendMessage('warn', args);
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        console.error = (...args: any[]) => {
+        console.error = (...args: unknown[]) => {
             this.consoleError(...args);
             this.sendMessage('error', args);
         };
@@ -50,8 +45,7 @@ export class RemoteLogger {
 
     private sendMessage(
         level: 'error' | 'warn' | 'info' | 'debug',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        args: any[],
+        args: unknown[]
     ) {
         if (!this.enabled) return;
         SendMessage('log', level, [...args].map(stringify).join().trim());
@@ -68,10 +62,10 @@ export class RemoteLogger {
 
 const stringify = (obj: unknown): string => {
     if (obj instanceof Error) {
-        return obj.message + '\n' + obj.stack;
+        return obj.message + '\n' + (obj.stack ?? '');
     }
 
-    if (typeof obj === 'string') return obj as string;
+    if (typeof obj === 'string') return obj;
 
     const cache: unknown[] = [];
     const str = JSON.stringify(
@@ -87,7 +81,7 @@ const stringify = (obj: unknown): string => {
             }
             return value;
         },
-        2,
+        2
     );
     return str;
 };

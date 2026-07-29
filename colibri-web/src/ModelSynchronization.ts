@@ -15,7 +15,7 @@ interface ModelSyncRegistration<T> {
 type ModelSync<T> = [Observable<T[]>, (model: T) => void];
 
 export const RegisterModelSync = <T extends SyncModel<T>>(
-    registration: ModelSyncRegistration<T>,
+    registration: ModelSyncRegistration<T>
 ): ModelSync<T> => {
     const name = registration.name || registration.type.name.toLowerCase();
 
@@ -23,14 +23,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(
     SendMessage(name, 'model::request');
 
     // Register for updates
-    RegisterChannel(`${name}`, (payload: Message) => {
-        const msg = payload as ModelSyncMsg<T>;
-        if (msg.command === 'model::update') {
-            onUpdate(msg.payload);
-        } else if (msg.command === 'model::delete') {
-            onDelete(msg.payload.id);
+    RegisterChannel(name, (payload: Message) => {
+        if (payload.command === 'model::update') {
+            onUpdate((payload as ModelSyncMsg<T>).payload);
+        } else if (payload.command === 'model::delete') {
+            onDelete((payload as ModelSyncMsg<T>).payload.id);
         } else {
-            console.error(`Unknown model command: ${msg.command}`);
+            console.error(`Unknown model command: ${payload.command}`);
         }
     });
 
@@ -38,7 +37,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(
     const models = new BehaviorSubject<T[]>([]);
 
     const onUpdate = (modelData: Partial<T>) => {
-        const model = models.value.find((m) => m.id === modelData.id);
+        const model = models.value.find(m => m.id === modelData.id);
         if (model) {
             // Update existing model
             model.update(modelData);
@@ -48,9 +47,9 @@ export const RegisterModelSync = <T extends SyncModel<T>>(
 
             newModel.modelChanges$.subscribe((changes) => {
                 SendMessage(
-                    `${name}`,
+                    name,
                     'model::update',
-                    newModel.toJson(changes),
+                    newModel.toJson(changes)
                 );
                 models.next([...models.value]);
             });
@@ -61,18 +60,18 @@ export const RegisterModelSync = <T extends SyncModel<T>>(
     };
 
     const onDelete = (id: string) => {
-        const model = models.value.find((m) => m.id === id);
+        const model = models.value.find(m => m.id === id);
         model?.delete();
-        models.next(models.value.filter((m) => m.id !== id));
+        models.next(models.value.filter(m => m.id !== id));
     };
 
     const registerModel = (model: T) => {
         model.modelChanges$.subscribe((changes) => {
-            SendMessage(`${name}`, 'model::update', model.toJson(changes));
+            SendMessage(name, 'model::update', model.toJson(changes));
         });
 
         // send initial model
-        SendMessage(`${name}`, 'model::update', model.toJson());
+        SendMessage(name, 'model::update', model.toJson());
         models.next([...models.value, model]);
     };
 

@@ -19,7 +19,7 @@ describe('REST store', () => {
         const client = await createClient(uniqueApp('rest-app'));
 
         await expect(
-            client.getRestObject(uniqueApp('missing-key')),
+            client.getRestObject(uniqueApp('missing-key'))
         ).resolves.toBeNull();
     });
 });

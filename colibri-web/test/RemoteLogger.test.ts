@@ -5,16 +5,18 @@ import {
     expect,
     it,
     vi,
-    type Mock,
+    type Mock
 } from 'vitest';
 import { RemoteLogger } from '../src/RemoteLogger';
 import { SendMessage } from '../src/Colibri';
 
 vi.mock('../src/Colibri', () => ({
-    SendMessage: vi.fn(),
+    SendMessage: vi.fn()
 }));
 
-const sendMessage = SendMessage as unknown as Mock;
+const sendMessage = SendMessage as unknown as Mock<
+    (channel: string, command: string, payload: string) => void
+>;
 
 type ConsoleMethod = 'debug' | 'log' | 'info' | 'warn' | 'error';
 let originalConsole: Record<ConsoleMethod, Console[ConsoleMethod]>;
@@ -25,7 +27,7 @@ beforeEach(() => {
         log: console.log,
         info: console.info,
         warn: console.warn,
-        error: console.error,
+        error: console.error
     };
     sendMessage.mockClear();
 });
@@ -44,25 +46,29 @@ describe('RemoteLogger console patching', () => {
         ['log', 'info'],
         ['info', 'info'],
         ['warn', 'warn'],
-        ['error', 'error'],
+        ['error', 'error']
     ] as const)(
         'console.%s still calls the original and forwards as level "%s"',
         (method, level) => {
             const original = vi.fn();
+            const patchableConsole = console as unknown as Record<
+                ConsoleMethod,
+                (...args: unknown[]) => void
+            >;
 
-            (console as any)[method] = original;
+            patchableConsole[method] = original;
 
             new RemoteLogger();
 
-            (console as any)[method]('hello', 42);
+            patchableConsole[method]('hello', 42);
 
             expect(original).toHaveBeenCalledWith('hello', 42);
             expect(sendMessage).toHaveBeenCalledWith(
                 'log',
                 level,
-                expect.any(String),
+                expect.any(String)
             );
-        },
+        }
     );
 });
 
@@ -117,12 +123,16 @@ describe('RemoteLogger message stringification', () => {
     it('does not throw on circular references', () => {
         new RemoteLogger();
 
-        const obj: any = { a: 1 };
+        const obj: { a: number; self?: unknown } = { a: 1 };
         obj.self = obj;
 
-        expect(() => console.log(obj)).not.toThrow();
+        expect(() => {
+            console.log(obj);
+        }).not.toThrow();
 
         const [, , message] = sendMessage.mock.calls[0];
-        expect(() => JSON.parse(message)).not.toThrow();
+        expect(() => {
+            JSON.parse(message);
+        }).not.toThrow();
     });
 });

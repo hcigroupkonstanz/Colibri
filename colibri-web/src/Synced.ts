@@ -6,12 +6,17 @@ import { SyncModel } from './SyncModel';
  *  Refer to https://github.com/tc39/proposal-decorators
  */
 export function Synced<This extends SyncModel<unknown>, V>(
-    syncedName: string = '',
+    syncedName: string = ''
 ) {
     return function (
         value: ClassAccessorDecoratorTarget<This, V>,
-        context: ClassAccessorDecoratorContext<This, V>,
+        context: ClassAccessorDecoratorContext<This, V>
     ): ClassAccessorDecoratorResult<This, V> {
+        // TypeScript's decorator types make this look unreachable, since a
+        // correctly-typed usage site can only pass an accessor context here —
+        // but plain-JS/Babel consumers get no such guarantee, so this guards
+        // against misuse the type system can't observe for them.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (context.kind !== 'accessor') {
             throw new Error('@Synced() must decorate an `accessor` member');
         }
@@ -34,10 +39,10 @@ export function Synced<This extends SyncModel<unknown>, V>(
 
                 // Suppress emission while a remote update is being applied,
                 // see SyncModel.update().
-                if (this.modelChanges && !this.applyingRemoteUpdate) {
+                if (!this.applyingRemoteUpdate) {
                     this.modelChanges.next(key);
                 }
-            },
+            }
         };
     };
 }

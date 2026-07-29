@@ -16,7 +16,7 @@ const PORT = Number(process.env.COLIBRI_E2E_PORT ?? 9011);
 async function waitForPort(
     host: string,
     port: number,
-    timeoutMs: number,
+    timeoutMs: number
 ): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -26,29 +26,31 @@ async function waitForPort(
                 socket.end();
                 resolve(true);
             });
-            socket.once('error', () => resolve(false));
+            socket.once('error', () => {
+                resolve(false);
+            });
         });
         if (ok) return;
         if (Date.now() >= deadline) {
             throw new Error(
-                `Timed out waiting for ${host}:${port} to accept connections`,
+                `Timed out waiting for ${host}:${port} to accept connections`
             );
         }
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
 }
 
 async function waitForSocketIoHandshake(
     host: string,
     port: number,
-    timeoutMs: number,
+    timeoutMs: number
 ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
         const socket = connect(`ws://${host}:${port}`, {
             query: { app: 'e2e-globalsetup-probe', version: '2' },
             transports: ['websocket'],
             reconnectionDelay: 250,
-            reconnectionDelayMax: 250,
+            reconnectionDelayMax: 250
         });
 
         const timer = setTimeout(() => {
@@ -84,14 +86,14 @@ export default async function setup() {
         await waitForSocketIoHandshake(HOST, PORT, 30_000);
     } catch (error) {
         await execFileAsync('docker', ['compose', 'down'], {
-            cwd: SERVER_DIR,
+            cwd: SERVER_DIR
         }).catch(() => undefined);
         throw error;
     }
 
     return async () => {
         await execFileAsync('docker', ['compose', 'down'], {
-            cwd: SERVER_DIR,
+            cwd: SERVER_DIR
         });
     };
 }

@@ -15,7 +15,7 @@ describe('model sync relay (transport level)', () => {
 
         const updatePromise = nextMessage(b, {
             channel,
-            command: 'model::update',
+            command: 'model::update'
         });
 
         a.sendMessage(channel, 'model::update', { id: 'model-1', value: 42 });
@@ -37,18 +37,18 @@ describe('model sync relay (transport level)', () => {
         // already happened by the time we ask for it below.
         const witnessPromise = nextMessage(witness, {
             channel,
-            command: 'model::update',
+            command: 'model::update'
         });
         a.sendMessage(channel, 'model::update', {
             id: 'model-1',
-            value: 'persisted',
+            value: 'persisted'
         });
         await witnessPromise;
 
         const late = await createClient(app);
         const statePromise = nextMessage(late, {
             channel,
-            command: 'model::update',
+            command: 'model::update'
         });
         late.sendMessage(channel, 'model::request');
 
@@ -65,14 +65,14 @@ describe('model sync relay (transport level)', () => {
 
         const createdPromise = nextMessage(b, {
             channel,
-            command: 'model::update',
+            command: 'model::update'
         });
         a.sendMessage(channel, 'model::update', { id: 'model-1' });
         await createdPromise;
 
         const deletePromise = nextMessage(b, {
             channel,
-            command: 'model::delete',
+            command: 'model::delete'
         });
         a.sendMessage(channel, 'model::delete', { id: 'model-1' });
 

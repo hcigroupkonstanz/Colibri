@@ -5,11 +5,11 @@ import {
     expect,
     it,
     vi,
-    type Mock,
+    type Mock
 } from 'vitest';
 
 vi.mock('socket.io-client', () => ({
-    connect: vi.fn(),
+    connect: vi.fn()
 }));
 
 import { connect } from 'socket.io-client';
@@ -20,19 +20,30 @@ import {
     RegisterChannel,
     RegisterOnce,
     SendMessage,
-    UnregisterChannel,
+    UnregisterChannel
 } from '../src/Colibri';
 
 const connectMock = connect as unknown as Mock;
 
+type SocketHandler = (...args: unknown[]) => void;
+
 function makeFakeSocket() {
     return {
-        on: vi.fn(),
-        once: vi.fn(),
-        off: vi.fn(),
-        onAny: vi.fn(),
-        emit: vi.fn(),
+        on: vi.fn<(event: string, cb: SocketHandler) => void>(),
+        once: vi.fn<(event: string, cb: SocketHandler) => void>(),
+        off: vi.fn<(event: string, cb: SocketHandler) => void>(),
+        onAny: vi.fn<(cb: SocketHandler) => void>(),
+        emit: vi.fn<(event: string, ...args: unknown[]) => void>()
     };
+}
+
+function getHandler(
+    mock: ReturnType<typeof makeFakeSocket>['on'],
+    event: string
+): SocketHandler {
+    const call = mock.mock.calls.find(([e]) => e === event);
+    if (!call) throw new Error(`no handler registered for "${event}"`);
+    return call[1];
 }
 
 let fakeSocket: ReturnType<typeof makeFakeSocket>;
@@ -52,13 +63,13 @@ afterEach(() => {
 describe('Colibri constructor', () => {
     it('throws when the server address is empty', () => {
         expect(() => new Colibri('app', '', 9011)).toThrow(
-            'Server Address missing or empty!',
+            'Server Address missing or empty!'
         );
     });
 
     it('throws when the server address is whitespace only', () => {
         expect(() => new Colibri('app', '   ', 9011)).toThrow(
-            'Server Address missing or empty!',
+            'Server Address missing or empty!'
         );
     });
 
@@ -66,9 +77,9 @@ describe('Colibri constructor', () => {
         'throws when the port %d is out of range',
         (port) => {
             expect(() => new Colibri('app', 'localhost', port)).toThrow(
-                'Port out of allowed range (0 - 65535)',
+                'Port out of allowed range (0 - 65535)'
             );
-        },
+        }
     );
 
     it('builds a ws:// uri when the server has no scheme', () => {
@@ -100,7 +111,7 @@ describe('Colibri constructor', () => {
         new Colibri('myapp', 'localhost', 9011);
         expect(connectMock).toHaveBeenCalledWith('ws://localhost:9011', {
             query: { app: 'myapp', version: '2' },
-            transports: ['websocket'],
+            transports: ['websocket']
         });
     });
 
@@ -108,26 +119,24 @@ describe('Colibri constructor', () => {
         new Colibri('app', 'localhost', 9011);
         expect(fakeSocket.on).toHaveBeenCalledWith(
             'connect',
-            expect.any(Function),
+            expect.any(Function)
         );
         expect(fakeSocket.on).toHaveBeenCalledWith(
             'colibri',
-            expect.any(Function),
+            expect.any(Function)
         );
         expect(fakeSocket.onAny).toHaveBeenCalledWith(expect.any(Function));
     });
 
     it('echoes inbound latency messages back out through the colibri channel', () => {
         const c = new Colibri('app', 'localhost', 9011);
-        const [, handler] = fakeSocket.on.mock.calls.find(
-            ([channel]) => channel === 'colibri',
-        )!;
+        const handler = getHandler(fakeSocket.on, 'colibri');
 
         handler({ channel: 'colibri', command: 'latency', payload: 123 });
 
         expect(fakeSocket.emit).toHaveBeenCalledWith('colibri', {
             command: 'latency',
-            payload: 123,
+            payload: 123
         });
         void c;
     });
@@ -137,14 +146,12 @@ describe('Colibri constructor', () => {
             .spyOn(console, 'debug')
             .mockImplementation(() => undefined);
         new Colibri('app', 'localhost', 9011);
-        const [, connectHandler] = fakeSocket.on.mock.calls.find(
-            ([channel]) => channel === 'connect',
-        )!;
+        const connectHandler = getHandler(fakeSocket.on, 'connect');
 
         connectHandler();
 
         expect(debugSpy).toHaveBeenCalledWith(
-            expect.stringContaining('Connected to colibri server'),
+            expect.stringContaining('Connected to colibri server')
         );
     });
 
@@ -153,19 +160,19 @@ describe('Colibri constructor', () => {
         const [onAnyHandler] = fakeSocket.onAny.mock.calls[0];
 
         const received: unknown[] = [];
-        c.messages.subscribe((msg) => received.push(msg));
+        c.messages.subscribe(msg => received.push(msg));
 
         onAnyHandler('some-channel', { command: 'cmd', payload: { a: 1 } });
 
         expect(received).toEqual([
-            { channel: 'some-channel', command: 'cmd', payload: { a: 1 } },
+            { channel: 'some-channel', command: 'cmd', payload: { a: 1 } }
         ]);
     });
 
     it('throws when a second instance is constructed', () => {
         new Colibri('app', 'localhost', 9011);
         expect(() => new Colibri('app2', 'localhost', 9012)).toThrow(
-            'A Colibri instance already exists!',
+            'A Colibri instance already exists!'
         );
     });
 });
@@ -207,13 +214,13 @@ describe('Colibri instance methods delegate to the socket', () => {
         c.sendMessage('ch', 'cmd');
         expect(fakeSocket.emit).toHaveBeenCalledWith('ch', {
             command: 'cmd',
-            payload: {},
+            payload: {}
         });
 
         c.sendMessage('ch', 'cmd2', { a: 1 });
         expect(fakeSocket.emit).toHaveBeenCalledWith('ch', {
             command: 'cmd2',
-            payload: { a: 1 },
+            payload: { a: 1 }
         });
     });
 
@@ -236,14 +243,14 @@ describe('Colibri.getRestUri', () => {
     it('joins the REST base uri with the trimmed key', () => {
         const c = new Colibri('app', 'localhost', 9011);
         expect(c.getRestUri('mykey')).toBe(
-            'http://localhost:9011/api/store/app/mykey',
+            'http://localhost:9011/api/store/app/mykey'
         );
     });
 
     it('trims leading slashes from the key', () => {
         const c = new Colibri('app', 'localhost', 9011);
         expect(c.getRestUri('///nested/key')).toBe(
-            'http://localhost:9011/api/store/app/nested/key',
+            'http://localhost:9011/api/store/app/nested/key'
         );
     });
 
@@ -268,7 +275,7 @@ describe('Colibri REST API', () => {
         const c = new Colibri('app', 'localhost', 9011);
         const fetchMock = vi.fn().mockResolvedValue({
             status: 200,
-            json: () => Promise.resolve({ a: 1 }),
+            json: () => Promise.resolve({ a: 1 })
         });
         vi.stubGlobal('fetch', fetchMock);
 
@@ -277,8 +284,8 @@ describe('Colibri REST API', () => {
             'http://localhost:9011/api/store/app/mykey',
             {
                 method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
-            },
+                headers: { 'Content-Type': 'application/json' }
+            }
         );
     });
 
@@ -288,8 +295,8 @@ describe('Colibri REST API', () => {
             'fetch',
             vi.fn().mockResolvedValue({
                 status: 404,
-                json: () => Promise.resolve({}),
-            }),
+                json: () => Promise.resolve({})
+            })
         );
 
         await expect(c.getRestObject('mykey')).resolves.toBeNull();
@@ -315,8 +322,8 @@ describe('Colibri REST API', () => {
             {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ a: 1 }),
-            },
+                body: JSON.stringify({ a: 1 })
+            }
         );
     });
 
@@ -351,7 +358,7 @@ describe('wrapper functions', () => {
         SendMessage('ch', 'cmd', { a: 1 });
         expect(fakeSocket.emit).toHaveBeenCalledWith('ch', {
             command: 'cmd',
-            payload: { a: 1 },
+            payload: { a: 1 }
         });
 
         RegisterChannel('ch', handler);

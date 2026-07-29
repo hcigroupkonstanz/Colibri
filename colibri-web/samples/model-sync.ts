@@ -18,15 +18,15 @@ export class SampleClass extends SyncModel<SampleClass> {
     accessor address = '';
 }
 
-(async () => {
+void (async () => {
     new Colibri('myAppName', await colibriAddress(), await colibriPort());
 
     /**
      *  This is the registration for the SampleClass.
      *  It returns an observable (BehaviorSubject) that contains all instances of SampleClass and a function to register new instances.
      */
-    const [SampleClasses$, registerExampleClass] =
-        RegisterModelSync<SampleClass>({ type: SampleClass });
+    const [SampleClasses$, registerExampleClass]
+        = RegisterModelSync<SampleClass>({ type: SampleClass });
 
     // SampleClasses$ contains all synchronized instances.
     // Since 'RegisterModelSync' returns a BehaviorSubject, the method will be executed with the current value.
@@ -35,11 +35,11 @@ export class SampleClass extends SyncModel<SampleClass> {
         // please refer to RxJS documentation for more information: https://rxjs.dev/guide/overview
         console.log(
             'Current SampleClasses:',
-            classes.map((c) => ({
+            classes.map(c => ({
                 name: c.name,
                 age: c.age,
-                address: c.address,
-            })),
+                address: c.address
+            }))
         );
     });
 
@@ -51,7 +51,7 @@ export class SampleClass extends SyncModel<SampleClass> {
     // newClass.delete();
 
     const sendNumber = () => {
-        return new Promise((res) => {
+        return new Promise((resolve) => {
             rl.question('> ', (answer) => {
                 if (answer === 'exit') {
                     rl.close();
@@ -62,7 +62,7 @@ export class SampleClass extends SyncModel<SampleClass> {
                     } catch (e) {
                         console.error(e);
                     }
-                    res(0);
+                    resolve(0);
                 }
             });
         });
@@ -70,16 +70,16 @@ export class SampleClass extends SyncModel<SampleClass> {
 
     console.log(' ');
     console.log(
-        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"',
+        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"'
     );
     console.log(
-        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" ',
+        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" '
     );
     console.log(' ');
     console.log('Terminate by typing "exit"');
     console.log(' ');
 
-    while (true) {
+    for (;;) {
         await sendNumber();
     }
 })();

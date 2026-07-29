@@ -15,15 +15,15 @@ describe('broadcast relay', () => {
 
         const receiverPromise = nextMessage(receiver, {
             channel,
-            command: 'broadcast::json',
+            command: 'broadcast::json'
         });
         const senderEcho = nextMessage(
             sender,
             { channel, command: 'broadcast::json' },
-            500,
+            500
         ).then(
             () => true,
-            () => false,
+            () => false
         );
 
         sender.sendMessage(channel, 'broadcast::json', { hello: 'world' });
@@ -42,14 +42,14 @@ describe('broadcast relay', () => {
         const receiverPromise = nextMessage(
             receiver,
             { channel, command: 'broadcast::json' },
-            500,
+            500
         ).then(
             () => true,
-            () => false,
+            () => false
         );
 
         sender.sendMessage(channel, 'broadcast::json', {
-            should: 'not-arrive',
+            should: 'not-arrive'
         });
 
         await expect(receiverPromise).resolves.toBe(false);

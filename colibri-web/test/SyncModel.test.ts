@@ -7,6 +7,13 @@ interface UserData {
     address: string;
 }
 
+// Exposes the private/protected internals the tests below reach into,
+// without resorting to `any`.
+interface SyncModelInternals {
+    __syncedProperties?: Record<string, string | symbol>;
+    onModelChanges: (prop: string) => void;
+}
+
 // Concrete fixture: `address` has a custom wire-name so we can prove the
 // local-key vs. wire-name asymmetry. Wire-name is lowercased: 'billingaddress'.
 class User extends SyncModel<UserData> {
@@ -32,7 +39,7 @@ describe('SyncModel', () => {
 
             const descriptor = Object.getOwnPropertyDescriptor(
                 user,
-                '__syncedProperties',
+                '__syncedProperties'
             );
             expect(descriptor).toBeDefined();
             expect(descriptor?.enumerable).toBe(false);
@@ -45,11 +52,12 @@ describe('SyncModel', () => {
         it('maps wire-names to local keys (lowercased custom name)', () => {
             const user = new User('user-1');
 
-            const synced = (user as any).__syncedProperties;
+            const synced = (user as unknown as SyncModelInternals)
+                .__syncedProperties;
 
             expect(synced).toEqual({
                 name: 'name',
-                billingaddress: 'address',
+                billingaddress: 'address'
             });
         });
 
@@ -57,8 +65,10 @@ describe('SyncModel', () => {
             const a = new User('a');
             const b = new User('b');
 
-            expect((a as any).__syncedProperties).not.toBe(
-                (b as any).__syncedProperties,
+            expect(
+                (a as unknown as SyncModelInternals).__syncedProperties
+            ).not.toBe(
+                (b as unknown as SyncModelInternals).__syncedProperties
             );
         });
     });
@@ -72,7 +82,7 @@ describe('SyncModel', () => {
             expect(user.toJson()).toEqual({
                 id: 'user-1',
                 name: 'Alice',
-                billingaddress: '123 Main St',
+                billingaddress: '123 Main St'
             });
         });
 
@@ -86,13 +96,13 @@ describe('SyncModel', () => {
             // wire-name.
             expect(user.toJson(['address'])).toEqual({
                 id: 'user-1',
-                billingaddress: '123 Main St',
+                billingaddress: '123 Main St'
             });
 
             // Passing the wire-name 'billingaddress' does NOT match, so the
             // property is excluded entirely.
             expect(user.toJson(['billingaddress'])).toEqual({
-                id: 'user-1',
+                id: 'user-1'
             });
         });
     });
@@ -103,7 +113,7 @@ describe('SyncModel', () => {
 
             user.update({
                 name: 'Bob',
-                billingaddress: '456 Oak Ave',
+                billingaddress: '456 Oak Ave'
             } as never);
 
             expect(user.name).toBe('Bob');
@@ -125,20 +135,22 @@ describe('SyncModel', () => {
                 .spyOn(console, 'warn')
                 .mockImplementation(() => undefined);
 
-            expect(() => user.update({ bogus: 'x' } as never)).not.toThrow();
+            expect(() => {
+                user.update({ bogus: 'x' } as never);
+            }).not.toThrow();
 
             expect(warnSpy).toHaveBeenCalledTimes(1);
             expect(warnSpy).toHaveBeenCalledWith(
-                'Unknown property bogus in User',
+                'Unknown property bogus in User'
             );
         });
 
         it('suppresses modelChanges emissions while applying (finally resets flag)', () => {
             const user = new User('user-1');
             const emissions: string[] = [];
-            user.modelChanges.subscribe((key) => emissions.push(key));
+            user.modelChanges.subscribe(key => emissions.push(key));
 
-            user.update({ name: 'Dave' } as never);
+            user.update({ name: 'Dave' });
 
             // Setter emission suppressed during update.
             expect(emissions).toEqual([]);
@@ -157,10 +169,10 @@ describe('SyncModel', () => {
             const emissions: string[] = [];
             let completed = false;
             user.modelChanges.subscribe({
-                next: (key) => emissions.push(key),
+                next: key => emissions.push(key),
                 complete: () => {
                     completed = true;
-                },
+                }
             });
 
             user.delete();
@@ -176,13 +188,13 @@ describe('SyncModel', () => {
         it('emits the given key on modelChanges when called directly', () => {
             const user = new User('user-1');
             const emissions: string[] = [];
-            user.modelChanges.subscribe((key) => emissions.push(key));
+            user.modelChanges.subscribe(key => emissions.push(key));
 
             // Protected in TypeScript, but reachable from within a subclass or
             // (as here) via a direct cast - this is the manual-emission escape
             // hatch subclasses get alongside the @Synced-driven emissions.
 
-            (user as any).onModelChanges('manual');
+            (user as unknown as SyncModelInternals).onModelChanges('manual');
 
             expect(emissions).toEqual(['manual']);
         });

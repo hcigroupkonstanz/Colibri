@@ -11,43 +11,43 @@ import * as readline from 'node:readline';
 import { Colibri, RegisterModelSync, SyncModel } from '@hcikn/colibri';
 
 console.log(
-    '==============================================================================',
+    '=============================================================================='
 );
 console.log(
-    'Please start a second instance of this application to see the sample in action',
+    'Please start a second instance of this application to see the sample in action'
 );
 console.log(
-    '==============================================================================',
+    '=============================================================================='
 );
 
 const rl = readline.createInterface({
     input: process.stdin,
-    output: process.stdout,
+    output: process.stdout
 });
 
 const colibriAddress = async () => {
-    return new Promise((res) => {
+    return new Promise((resolve) => {
         rl.question(
             'Please specify a colibri server address (default: colibri.hci.uni-konstanz.de) >> ',
             (answer) => {
-                res(
+                resolve(
                     answer.trim().length === 0
                         ? 'colibri.hci.uni-konstanz.de'
-                        : answer,
+                        : answer
                 );
-            },
+            }
         );
     });
 };
 
 const colibriPort = async () => {
-    return new Promise((res) => {
+    return new Promise((resolve) => {
         rl.question(
             'Please specify a colibri server port (default: 9011) >> ',
             (answer) => {
                 const port = parseInt(answer);
-                res(port > 0 ? port : 9011);
-            },
+                resolve(port > 0 ? port : 9011);
+            }
         );
     });
 };
@@ -79,7 +79,7 @@ const defineSynced = (model, prop, initialValue, syncedName = '') => {
             if (model.modelChanges && !model.applyingRemoteUpdate) {
                 model.modelChanges.next(prop);
             }
-        },
+        }
     });
 };
 
@@ -102,7 +102,7 @@ export class SampleClass extends SyncModel {
      *  It returns an observable (BehaviorSubject) that contains all instances of SampleClass and a function to register new instances.
      */
     const [SampleClasses$, registerExampleClass] = RegisterModelSync({
-        type: SampleClass,
+        type: SampleClass
     });
 
     // SampleClasses$ contains all synchronized instances.
@@ -112,11 +112,11 @@ export class SampleClass extends SyncModel {
         // please refer to RxJS documentation for more information: https://rxjs.dev/guide/overview
         console.log(
             'Current SampleClasses:',
-            classes.map((c) => ({
+            classes.map(c => ({
                 name: c.name,
                 age: c.age,
-                address: c.address,
-            })),
+                address: c.address
+            }))
         );
     });
 
@@ -128,7 +128,7 @@ export class SampleClass extends SyncModel {
     // newClass.delete();
 
     const sendNumber = () => {
-        return new Promise((res) => {
+        return new Promise((resolve) => {
             rl.question('> ', (answer) => {
                 if (answer === 'exit') {
                     rl.close();
@@ -139,7 +139,7 @@ export class SampleClass extends SyncModel {
                     } catch (e) {
                         console.error(e);
                     }
-                    res(0);
+                    resolve(0);
                 }
             });
         });
@@ -147,10 +147,10 @@ export class SampleClass extends SyncModel {
 
     console.log(' ');
     console.log(
-        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"',
+        'Try to modify the name of the SampleClass instance by typing "newClass.name = \'new name\'"'
     );
     console.log(
-        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" ',
+        'or instantiate new objects here via "registerExampleClass(new SampleClass(\'myId\'))" '
     );
     console.log(' ');
     console.log('Terminate by typing "exit"');
