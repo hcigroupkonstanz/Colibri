@@ -99,16 +99,19 @@ export class SampleClass extends SyncModel {
 
     /**
      *  This is the registration for the SampleClass.
-     *  It returns an observable (BehaviorSubject) that contains all instances of SampleClass and a function to register new instances.
+     *  It returns an observable (BehaviorSubject) that contains all instances
+     *  of SampleClass and a function to register new instances.
      */
     const [SampleClasses$, registerExampleClass] = RegisterModelSync({
         type: SampleClass
     });
 
     // SampleClasses$ contains all synchronized instances.
-    // Since 'RegisterModelSync' returns a BehaviorSubject, the method will be executed with the current value.
+    // Since 'RegisterModelSync' returns a BehaviorSubject,
+    // the method will be executed with the current value.
     SampleClasses$.subscribe((classes) => {
-        // will be called whenever a new instance is created, an existing one is updated, or one is deleted
+        // will be called whenever a new instance is created,
+        // an existing one is updated, or one is deleted
         // please refer to RxJS documentation for more information: https://rxjs.dev/guide/overview
         console.log(
             'Current SampleClasses:',

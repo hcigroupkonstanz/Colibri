@@ -36,7 +36,13 @@ export default tseslint.config(
         rules: {
             'no-useless-constructor': 'off',
             'no-empty-function': ['warn', { allow: ['constructors'] }],
-            'eqeqeq': ['error', 'always']
+            'eqeqeq': ['error', 'always'],
+            '@stylistic/max-len': ['warn', {
+                code: 100,
+                ignoreUrls: true,
+                ignoreStrings: true,
+                ignoreTemplateLiterals: true
+            }]
         }
     },
     {

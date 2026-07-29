@@ -67,7 +67,8 @@ const listeners: Partial<
     Record<string, Partial<Record<string, genericCallback[]>>>
 > = {};
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- T lets each call site pin the concrete payload type its callback expects
+// NOTE: T lets each call site pin the concrete payload type its callback expects
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 const registerListener = <T>(
     channel: string,
     type: string,

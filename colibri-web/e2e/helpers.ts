@@ -7,7 +7,10 @@ export const PORT = Number(process.env.COLIBRI_E2E_PORT ?? 9011);
 
 let uniqueCounter = 0;
 
-/** Monotonic, per-process-unique app/key name so parallel test runs never collide server-side state. */
+/**
+ * Monotonic, per-process-unique app/key name
+ * so parallel test runs never collide server-side state.
+ */
 export function uniqueApp(prefix: string): string {
     uniqueCounter += 1;
     return `${prefix}-${Date.now()}-${uniqueCounter}`;
