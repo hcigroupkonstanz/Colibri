@@ -3,7 +3,8 @@ import type { Message } from '../src/Colibri';
 
 vi.mock('../src/Colibri', () => ({
     SendMessage: vi.fn(),
-    RegisterChannel: vi.fn()
+    RegisterChannel: vi.fn(),
+    UnregisterChannel: vi.fn()
 }));
 
 type SyncSender = (channel: string, value: unknown) => void;
@@ -12,6 +13,7 @@ type SyncReceiver = (channel: string, callback: (value: unknown) => void) => voi
 let Sync: (typeof import('../src/Broadcasting'))['Sync'];
 let sendMessage: Mock<(channel: string, command: string, payload?: unknown) => void>;
 let registerChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
+let unregisterChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
 
 beforeEach(async () => {
     // Broadcasting.ts keeps a module-level `listeners` registry that must not
@@ -21,11 +23,13 @@ beforeEach(async () => {
     const colibri = await import('../src/Colibri');
     sendMessage = colibri.SendMessage as unknown as Mock;
     registerChannel = colibri.RegisterChannel as unknown as Mock;
+    unregisterChannel = colibri.UnregisterChannel as unknown as Mock;
     // vi.mock's factory result is cached across resetModules(), so the mock
     // functions themselves persist between tests - clear their call history
     // explicitly rather than relying on a fresh instance.
     sendMessage.mockClear();
     registerChannel.mockClear();
+    unregisterChannel.mockClear();
     ({ Sync } = await import('../src/Broadcasting'));
 });
 
@@ -150,6 +154,40 @@ describe('Sync receivers', () => {
         handler({ channel: 'ch', command: 'broadcast::string', payload: 'hi' });
 
         expect(cb1).not.toHaveBeenCalled();
+        expect(cb2).toHaveBeenCalledWith('hi');
+    });
+
+    it('does not unsubscribe the channel while other listeners remain', () => {
+        const cb1 = vi.fn();
+        const cb2 = vi.fn();
+        Sync.receiveString('ch', cb1);
+        Sync.receiveString('ch', cb2);
+        Sync.unregister('ch', cb1);
+
+        expect(unregisterChannel).not.toHaveBeenCalled();
+    });
+
+    it('unsubscribes the channel once its last listener is removed', () => {
+        const cb = vi.fn();
+        Sync.receiveString('ch', cb);
+        const handler = registerChannel.mock.calls[0][1];
+
+        Sync.unregister('ch', cb);
+
+        expect(unregisterChannel).toHaveBeenCalledWith('ch', handler);
+    });
+
+    it('resubscribes with a fresh handler after the channel was fully unregistered', () => {
+        const cb1 = vi.fn();
+        Sync.receiveString('ch', cb1);
+        Sync.unregister('ch', cb1);
+
+        const cb2 = vi.fn();
+        Sync.receiveString('ch', cb2);
+
+        expect(registerChannel).toHaveBeenCalledTimes(2);
+        const handler = registerChannel.mock.calls[1][1];
+        handler({ channel: 'ch', command: 'broadcast::string', payload: 'hi' });
         expect(cb2).toHaveBeenCalledWith('hi');
     });
 });

@@ -1,4 +1,4 @@
-import { RegisterChannel, SendMessage } from './Colibri';
+import { RegisterChannel, SendMessage, UnregisterChannel } from './Colibri';
 
 const sendBool = (channel: string, val: boolean) => {
     SendMessage(channel, 'broadcast::bool', val);
@@ -55,6 +55,7 @@ const sendJson = (channel: string, val: { [key: string]: unknown }) => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type genericCallback = (val: any) => void;
 const listeners: Partial<Record<string, Partial<Record<string, genericCallback[]>>>> = {};
+const channelHandlers: Partial<Record<string, Parameters<typeof RegisterChannel>[1]>> = {};
 
 // NOTE: T lets each call site pin the concrete payload type its callback expects
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
@@ -64,14 +65,16 @@ const registerListener = <T>(channel: string, type: string, callback: (val: T) =
         const newChannelListeners: Partial<Record<string, genericCallback[]>> = {};
         channelListeners = newChannelListeners;
         listeners[channel] = newChannelListeners;
-        RegisterChannel(channel, msg => {
+        const handler: Parameters<typeof RegisterChannel>[1] = msg => {
             const commandListeners = newChannelListeners[msg.command];
             if (commandListeners !== undefined) {
                 commandListeners.forEach(cb => {
                     cb(msg.payload);
                 });
             }
-        });
+        };
+        channelHandlers[channel] = handler;
+        RegisterChannel(channel, handler);
     }
 
     let typeListeners = channelListeners[type];
@@ -140,15 +143,26 @@ const unregister = (channel: string, callback: genericCallback) => {
     const channelListeners = listeners[channel];
     if (channelListeners === undefined) return;
 
+    let hasRemainingListeners = false;
     for (const command in channelListeners) {
         const commandListeners = channelListeners[command];
         const index = commandListeners?.indexOf(callback) ?? -1;
         if (index >= 0) {
             commandListeners?.splice(index, 1);
         }
+        if ((commandListeners?.length ?? 0) > 0) {
+            hasRemainingListeners = true;
+        }
     }
 
-    // TODO: we should ideally unsubscribe from the channel if there are no more listeners
+    if (!hasRemainingListeners) {
+        const handler = channelHandlers[channel];
+        if (handler !== undefined) {
+            UnregisterChannel(channel, handler);
+        }
+        Reflect.deleteProperty(listeners, channel);
+        Reflect.deleteProperty(channelHandlers, channel);
+    }
 };
 
 export const Sync = {
