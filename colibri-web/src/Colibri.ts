@@ -556,6 +556,30 @@ export class Colibri {
 
         return response.status >= 200 && response.status < 300;
     }
+
+    /**
+     * Deletes the object identified by `key` from the REST API.
+     *
+     * Not every failure resolves to false: when the server cannot be reached at all (a wrong
+     * address, the server down, no network), `fetch` rejects, and so does this - typically with a
+     * `TypeError`. Catch it where that matters.
+     * @param key REST API storage key
+     * @returns true if the server deleted the value; false if `key` is empty or the server answered
+     *   with any other status, such as 404 for a key that holds no value
+     */
+    public async deleteRestObject(key: string): Promise<boolean> {
+        const uri = this.getRestUri(key);
+        if (!uri) return false;
+
+        const response = await fetch(uri, {
+            method: 'DELETE',
+            headers: {
+                Accept: REST_MEDIA_TYPE
+            }
+        });
+
+        return response.status >= 200 && response.status < 300;
+    }
     // #endregion
 }
 
@@ -624,3 +648,9 @@ export const GetRestApi = (key: string) => Colibri.getInstance()?.getRestObject(
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
 export const PutRestApi = (key: string, data: unknown) => Colibri.getInstance()?.setRestObject(key, data);
+
+/**
+ * @see {@link Colibri.deleteRestObject `Colibri.deleteRestObject()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
+ */
+export const DeleteRestApi = (key: string) => Colibri.getInstance()?.deleteRestObject(key);

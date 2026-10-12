@@ -9,6 +9,7 @@ import { connect } from 'socket.io-client';
 import { Sync } from '../src/Broadcasting';
 import {
     Colibri,
+    DeleteRestApi,
     GetRestApi,
     type Message,
     PROTOCOL_VERSION,
@@ -514,15 +515,45 @@ describe('Colibri REST API', () => {
         await expect(c.setRestObject('mykey', { a: 1 })).resolves.toBe(false);
     });
 
+    it('deleteRestObject skips fetch and returns false for an empty key, . or ..', async () => {
+        const c = new Colibri('app', 'localhost', 9211);
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(c.deleteRestObject('')).resolves.toBe(false);
+        await expect(c.deleteRestObject('..')).resolves.toBe(false);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('deleteRestObject sends a DELETE and returns true on a 2xx status', async () => {
+        const c = new Colibri('app', 'localhost', 9211);
+        const fetchMock = vi.fn().mockResolvedValue({ status: 200 });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(c.deleteRestObject('my key')).resolves.toBe(true);
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:9211/api/store/app/my%20key', {
+            method: 'DELETE',
+            headers: { Accept: `application/vnd.colibri.v${PROTOCOL_VERSION}+json` }
+        });
+    });
+
+    it('deleteRestObject returns false for a key that holds no value', async () => {
+        const c = new Colibri('app', 'localhost', 9211);
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 404 }));
+
+        await expect(c.deleteRestObject('mykey')).resolves.toBe(false);
+    });
+
     // What the JSDoc promises: a server that cannot be reached is not a null or a false, it is a
     // rejection, exactly as fetch gives it.
-    it('getRestObject and setRestObject reject when the server cannot be reached', async () => {
+    it('getRestObject, setRestObject and deleteRestObject reject when the server cannot be reached', async () => {
         const c = new Colibri('app', 'localhost', 9211);
         const networkError = new TypeError('fetch failed');
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(networkError));
 
         await expect(c.getRestObject('mykey')).rejects.toBe(networkError);
         await expect(c.setRestObject('mykey', { a: 1 })).rejects.toBe(networkError);
+        await expect(c.deleteRestObject('mykey')).rejects.toBe(networkError);
     });
 });
 
@@ -535,6 +566,7 @@ describe('wrapper functions', () => {
         expect(SendMessage('ch', 'cmd')).toBeUndefined();
         expect(GetRestApi('key')).toBeUndefined();
         expect(PutRestApi('key', {})).toBeUndefined();
+        expect(DeleteRestApi('key')).toBeUndefined();
 
         warnSpy.mockRestore();
     });

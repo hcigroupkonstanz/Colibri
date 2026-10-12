@@ -16,6 +16,16 @@ describe('REST store', () => {
         await expect(client.getRestObject(key)).resolves.toEqual(data);
     });
 
+    it('deletes a value with deleteRestObject, and says false for one that is not there', async () => {
+        const client = await createClient(uniqueApp('rest-app'));
+        const key = `${uniqueApp('rest-key')} a#b`;
+
+        await expect(client.setRestObject(key, { n: 1 })).resolves.toBe(true);
+        await expect(client.deleteRestObject(key)).resolves.toBe(true);
+        await expect(client.getRestObject(key)).resolves.toBeNull();
+        await expect(client.deleteRestObject(key)).resolves.toBe(false);
+    });
+
     it('returns null for a key that was never set', async () => {
         const client = await createClient(uniqueApp('rest-app'));
 
