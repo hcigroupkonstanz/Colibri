@@ -8,12 +8,16 @@ Changelogs with full details: [server](colibri-server/docs/v2-changelog.md),
 **Upgrade the server first, then Unity, then the web clients** ([upgrade order](#upgrade-order)).
 No 1.x client, Unity or web, works with a 2.0 server.
 
+- [ ] [New default ports 9211, 9212 and 9213](#default-ports): update the server's firewall, proxy
+      and port mappings, the ports in each Unity project and the web clients' server URLs, or keep
+      9011 to 9013 on the server
+
 **Server**
 
 - [ ] [Node 24, native ESM](#breaking)
 - [ ] [Port your own TCP clients to the new protocol](#breaking)
 - [ ] [Port your own voice code to the new packet format](#breaking)
-- [ ] [Voice through a UDP proxy: add the proxy to `TRUSTED_PROXIES`, or publish 9013/udp
+- [ ] [Voice through a UDP proxy: add the proxy to `TRUSTED_PROXIES`, or publish 9213/udp
       directly](#breaking)
 - [ ] [Docker: pin the image version](#other-changes)
 - [ ] [Docker: remove `tty: true` from a compose file based on the 1.x README](#other-changes)
@@ -51,6 +55,25 @@ No 1.x client, Unity or web, works with a 2.0 server.
 
 - [ ] Read [Behaviour changes that still compile](#behaviour-changes-that-still-compile)
 - [ ] Do the [post-upgrade checks](#post-upgrade-checks)
+
+---
+
+## Default ports
+
+2.0 moves the default ports from 9011 (web: admin UI, web clients, REST store), 9012 (Unity TCP) and
+9013 (voice, UDP) to 9211, 9212 and 9213. A 1.x and a 2.0 server can then run side by side, and a
+client does not reach a server of the other version by its defaults. `WEBSERVER_PORT`, `TCP_PORT`
+and `VOICE_PORT` still set them.
+
+- **Server:** update firewall rules, reverse proxy configuration and compose port mappings. To keep
+  the old ports, set `WEBSERVER_PORT=9011`, `TCP_PORT=9012` and `VOICE_PORT=9013`, or with Docker
+  publish 9011 to 9013 on the new container ports
+  ([settings and ports](colibri-server/docs/guide.md#settings-and-ports)).
+- **Unity:** a project keeps the ports saved in its Colibri configuration, 9011 to 9013 from 1.x.
+  Set 9211, 9212 and 9213 in *Window → Colibri Configuration*, unless the server keeps the old
+  ports.
+- **Web:** update the server URL. Without a port in the address or as the third argument,
+  colibri-web 2.0 connects to 9211.
 
 ---
 
@@ -129,7 +152,7 @@ own voice code to
 address. Voice that reaches it through a UDP proxy, or from another address than the client's TCP
 connection, is now dropped. Once that has gone on for 3 s, the server logs `Ignoring voice packet
 from <address>:<port> for app <app id>: no Unity client of that app is connected from <address>`.
-Add the proxy to `TRUSTED_PROXIES`, or publish 9013/udp directly
+Add the proxy to `TRUSTED_PROXIES`, or publish 9213/udp directly
 ([Voice relay](colibri-server/docs/guide.md#voice-relay)). colibri-unity 2.0 connects over IPv4 when
 the server name has an IPv4 address, as 1.x did, and sends voice there too. If that address does not
 answer on the TCP port while the name's IPv6 address does, TCP falls back to IPv6 and the voice is
@@ -280,9 +303,9 @@ Sync.receiveColor('tint', colour => setTint(toHexColor(colour)));
 - `require()` consumers get their own `.d.cts` declarations.
 - The `console.log` on every model registration is gone. With `RemoteLogger`, it also caused
   needless network traffic.
-- The server address can be written as a browser shows it, such as `'http://192.168.0.10:9011'`.
+- The server address can be written as a browser shows it, such as `'http://192.168.0.10:9211'`.
   `https://`, `ws://`, `wss://`, a port in the address and a trailing slash work too. Port
-  precedence: the port in the address, then the third argument, then 9011, also for `https://`.
+  precedence: the port in the address, then the third argument, then 9211, also for `https://`.
 - An address that 1.x turned into a URL that could never connect now throws a `ColibriError`: a path
   after the host (such as the admin UI's `…/log`), an unknown scheme, a port that is not a whole
   number, or a port in the address that differs from the port argument.
@@ -400,8 +423,8 @@ TLS is optional in 2.0. To turn it on, set `TLS_CERT` and `TLS_KEY` on the serve
 
 - The setting (`ColibriConfig.IsSSL`) now covers the TCP connection too, not only the Store.
 - With the setting ticked, a deployment with only the web port behind a TLS proxy, such as nginx on
-  443, and a plain TCP port 9012 needs TLS on 9012 as well. Set `TLS_CERT` and `TLS_KEY`, or
-  terminate TLS for 9012 in the proxy. Otherwise the client reports that the server
+  443, and a plain TCP port needs TLS on the TCP port as well. Set `TLS_CERT` and `TLS_KEY`, or
+  terminate TLS for it in the proxy. Otherwise the client reports that the server
   `did not answer the TLS handshake`.
 - Existing `ColibriConfig` assets load unchanged, with both new certificate settings off or empty.
 - 1.x clients cannot use TLS. The protocol version does not change.
