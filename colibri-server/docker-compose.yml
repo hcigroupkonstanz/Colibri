@@ -27,6 +27,6 @@ services:
         - ./data/:/srv/colibri/data
     #     - ./certs/:/srv/colibri/certs:ro
     ports:
-      - 9011:9011 # web interface / web sockets
-      - 9012:9012 # tcp (unity)
-      - "9013:9013/udp" # voice
+      - 9211:9211 # web interface / web sockets
+      - 9212:9212 # tcp (unity)
+      - "9213:9213/udp" # voice

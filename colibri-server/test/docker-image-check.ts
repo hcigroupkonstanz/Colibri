@@ -244,7 +244,7 @@ const installCertificate = async function (setup: TlsSetup, certificate: TestCer
 // TLS on both ports: the certificate, a client without TLS, and a renewal without a restart.
 const checkTls = async function (container: string, webPort: number, setup: TlsSetup): Promise<void> {
     const web = await hostPort(container, webPort);
-    const tcp = await hostPort(container, 9012);
+    const tcp = await hostPort(container, 9212);
     const logs = await logsOf(container);
 
     check('logs the certificate\'s SHA-256 fingerprint', logs.includes(`SHA-256 fingerprint ${setup.first.fingerprint256}`), logs.slice(0, 1500));
@@ -276,8 +276,8 @@ const runDeployment = async function (image: string, deployment: Deployment): Pr
     await docker([ 'rm', '-f', container ]);
 
     const mount = await deployment.mount(image);
-    const webPort = deployment.webPort ?? 9011;
-    const args = [ 'run', '-d', '--name', container, ...publish(0, webPort), ...publish(1, 9012), '-v', mount, ...(deployment.dockerArgs ?? []) ];
+    const webPort = deployment.webPort ?? 9211;
+    const args = [ 'run', '-d', '--name', container, ...publish(0, webPort), ...publish(1, 9212), '-v', mount, ...(deployment.dockerArgs ?? []) ];
     for (const [ name, value ] of Object.entries(deployment.env ?? {})) args.push('-e', `${name}=${value}`);
     if (deployment.user) args.push('--user', deployment.user);
     args.push(image);
@@ -319,7 +319,7 @@ const runDeployment = async function (image: string, deployment: Deployment): Pr
 
     check('sends the admin UI its log over Socket.IO', await adminLogAnswers(web));
 
-    check('TCP server answers a handshake', await tcpAnswers(await hostPort(container, 9012), deployment.tls !== undefined));
+    check('TCP server answers a handshake', await tcpAnswers(await hostPort(container, 9212), deployment.tls !== undefined));
 
     const malformed = await fetch(`${web}/api/store/image-check/malformed`, {
         method: 'PUT',
@@ -508,7 +508,8 @@ const main = async function (): Promise<void> {
         },
         {
             // The health check has to ask the port the server listens on: one hard-coded to
-            // 9011 left this container unhealthy for good, and an orchestrator restarting it.
+            // the default port left this container unhealthy for good, and an orchestrator
+            // restarting it.
             name: 'web-port-9111',
             mount: () => volume('web-port-9111'),
             env: { WEBSERVER_PORT: '9111' },

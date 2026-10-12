@@ -2,12 +2,12 @@
 // Point a client's TCP port at this instead of the server's to see exactly what it puts on
 // the wire - handshake bytes, heartbeat echoes, and whether a payload is quoted.
 //
-//   npx tsx test/tcp-wire-tap.ts [listenPort=9022] [serverPort=9012]
+//   npx tsx test/tcp-wire-tap.ts [listenPort=9222] [serverPort=9212]
 import * as net from 'net';
 import { FrameReader, FrameType } from '../src/server/modules/networking/protocol.js';
 
-const listenPort = Number(process.argv[2] ?? 9022);
-const serverPort = Number(process.argv[3] ?? 9012);
+const listenPort = Number(process.argv[2] ?? 9222);
+const serverPort = Number(process.argv[3] ?? 9212);
 
 let heartbeatsUp = 0;
 let heartbeatsDown = 0;

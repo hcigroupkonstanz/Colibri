@@ -46,18 +46,18 @@ RUN sed -i 's/\r$//' /usr/local/bin/colibri-entrypoint.sh && chmod 755 /usr/loca
 RUN mkdir data && chown node:node data
 
 # Webserver
-EXPOSE 9011
+EXPOSE 9211
 # TCP (Unity) Port
-EXPOSE 9012
+EXPOSE 9212
 # Voice
-EXPOSE 9013/udp
+EXPOSE 9213/udp
 
 # Probes the web server where it actually listens: WEBSERVER_HOST and WEBSERVER_PORT (default
-# 9011), from the environment or a .env in the working directory, as the server reads them -
-# a wildcard host on loopback. A probe hard-coded to 127.0.0.1:9011 left a container with any
-# other WEBSERVER_PORT, or a host such as localhost (which Node binds to ::1), unhealthy for
-# good, and an orchestrator restarting it over and over. /api/store rather than /, which is
-# only the admin UI while BASE_URL is empty.
+# 9211), from the environment or a .env in the working directory, as the server reads them -
+# a wildcard host on loopback. A probe hard-coded to 127.0.0.1 and the default port left a
+# container with any other WEBSERVER_PORT, or a host such as localhost (which Node binds to
+# ::1), unhealthy for good, and an orchestrator restarting it over and over. /api/store rather
+# than /, which is only the admin UI while BASE_URL is empty.
 #
 # Over HTTPS when TLS_CERT and TLS_KEY are set, since the server then serves nothing else, and
 # without checking the certificate: one that is self-signed, or names the server's public address
@@ -70,7 +70,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
         const host = h === '' || h === '0.0.0.0' || h === '::' ? '127.0.0.1' : h; \
         const tls = cert.trim() !== '' && key.trim() !== ''; \
         require(tls ? 'https' : 'http') \
-            .get({ host, port: port || '9011', path: '/api/store', rejectUnauthorized: false }, \
+            .get({ host, port: port || '9211', path: '/api/store', rejectUnauthorized: false }, \
                 r => process.exit(r.statusCode >= 200 && r.statusCode < 300 ? 0 : 1)) \
             .on('error', () => process.exit(1))"
 

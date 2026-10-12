@@ -64,6 +64,22 @@ describe('Config', () => {
         });
     });
 
+    describe('ports', () => {
+        // Not 1.x's 9011, 9012 and 9013, so that a 1.x server can run next to this one, and a
+        // client of one version does not reach the other by its defaults.
+        it('default to 9211 (web), 9212 (TCP) and 9213 (voice)', async () => {
+            const config = await loadConfig({ WEBSERVER_PORT: undefined, TCP_PORT: undefined, VOICE_PORT: undefined });
+
+            expect([ config.WEBSERVER_PORT, config.TCP_PORT, config.VOICE_PORT ]).toEqual([ 9211, 9212, 9213 ]);
+        });
+
+        it('take the 1.x ports when set', async () => {
+            const config = await loadConfig({ WEBSERVER_PORT: '9011', TCP_PORT: '9012', VOICE_PORT: '9013' });
+
+            expect([ config.WEBSERVER_PORT, config.TCP_PORT, config.VOICE_PORT ]).toEqual([ 9011, 9012, 9013 ]);
+        });
+    });
+
     describe('inbound limits', () => {
         it('default to dropping past a backlog of 2000 TCP messages', async () => {
             const config = await loadConfig({ TCP_INBOUND_BACKLOG_LIMIT: undefined });
