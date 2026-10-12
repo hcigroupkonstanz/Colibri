@@ -31,15 +31,15 @@ services:
     volumes:
       - colibri-data:/srv/colibri/data
     ports:
-      - 9011:9011 # admin UI, web clients, REST store
-      - 9012:9012 # TCP, Unity clients
-      - "9013:9013/udp" # voice
+      - 9211:9211 # admin UI, web clients, REST store
+      - 9212:9212 # TCP, Unity clients
+      - "9213:9213/udp" # voice
 
 volumes:
   colibri-data:
 ```
 
-Admin UI: `http://<server-ip>:9011`.
+Admin UI: `http://<server-ip>:9211`.
 
 To build from a checkout, run `docker compose up -d` in `colibri-server`. That compose file builds the
 image from source and keeps the data in `./data`. Alternatively, replace the `image:` line with
@@ -110,8 +110,19 @@ lost when it stops. Restart the server after the fix.
 
 Put [settings](#configuration) in `environment:`, e.g. `CONSOLE_LOG_LEVEL: debug`, or in a `.env`
 file mounted at `/srv/colibri/.env`. To change a port, change only the host side of `ports:`, e.g.
-`"8011:9011"`. If you set `WEBSERVER_PORT`, publish that port, e.g. `"9111:9111"`. The health check
+`"8211:9211"`. If you set `WEBSERVER_PORT`, publish that port, e.g. `"9111:9111"`. The health check
 reads `WEBSERVER_PORT` and `WEBSERVER_HOST` from the environment or the `.env` file.
+
+To keep 1.x's ports 9011 to 9013 for existing clients and firewall rules, publish them:
+
+```yaml
+    ports:
+      - 9011:9211 # admin UI, web clients, REST store
+      - 9012:9212 # TCP, Unity clients
+      - "9013:9213/udp" # voice
+```
+
+A 1.x server on the same host then needs other ports ([default ports](../../MIGRATION.md#default-ports)).
 
 ### Node.js
 
@@ -131,9 +142,9 @@ with its default.
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `WEBSERVER_HOST`, `WEBSERVER_PORT` | `0.0.0.0`, `9011` | Admin UI, web clients (Socket.IO), REST store |
-| `TCP_HOST`, `TCP_PORT` | `0.0.0.0`, `9012` | Unity clients |
-| `VOICE_HOST`, `VOICE_PORT` | `0.0.0.0`, `9013` | Voice relay (UDP) |
+| `WEBSERVER_HOST`, `WEBSERVER_PORT` | `0.0.0.0`, `9211` | Admin UI, web clients (Socket.IO), REST store |
+| `TCP_HOST`, `TCP_PORT` | `0.0.0.0`, `9212` | Unity clients |
+| `VOICE_HOST`, `VOICE_PORT` | `0.0.0.0`, `9213` | Voice relay (UDP) |
 | `VOICE_SAMPLING_RATE` | `48000` | Sampling rate of voice recordings, in Hz |
 | `VOICE_RECORDING` | `false` | `true` saves each voice client's PCM audio as a `.wav` file in the data directory, named as in [Voice packets](protocol.md#voice-packets-udp) |
 | `DATA_ROOT` | `../../data` | Data directory: `store.json` and voice recordings |
@@ -150,7 +161,10 @@ with its default.
 | `TLS_CERT`, `TLS_KEY` | empty | PEM files of the certificate with its chain, and of its private key. With both set, the TCP and web ports serve [TLS](#tls) only. |
 | `TRUSTED_PROXIES` | empty | Reverse proxies trusted to report the client's address, and on the web port whether it used HTTPS: IP addresses, CIDR ranges and `loopback`, `linklocal`, `uniquelocal`, separated by commas, as in Express's `trust proxy`. Voice from them is relayed unchecked ([Voice relay](#voice-relay)). Empty: none. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 | `TCP_PROXY_PROTOCOL` | `false` | `true`: a connection to the TCP port from a `TRUSTED_PROXIES` address must start with a PROXY protocol header, which names the Unity client. Requires `TRUSTED_PROXIES`. |
-| `TCP_TLS_AT_PROXY` | `false` | `true`: the proxy in front of the TCP port terminates TLS, e.g. nginx's `listen 9012 ssl`. Without a certificate, the admin UI then shows TLS terminated by proxy for Unity clients through a trusted proxy. Only the display depends on it. Requires `TCP_PROXY_PROTOCOL`. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
+| `TCP_TLS_AT_PROXY` | `false` | `true`: the proxy in front of the TCP port terminates TLS, e.g. nginx's `listen 9212 ssl`. Without a certificate, the admin UI then shows TLS terminated by proxy for Unity clients through a trusted proxy. Only the display depends on it. Requires `TCP_PROXY_PROTOCOL`. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
+
+1.x's default ports were 9011, 9012 and 9013. To keep them, set `WEBSERVER_PORT=9011`, `TCP_PORT=9012`
+and `VOICE_PORT=9013` ([default ports](../../MIGRATION.md#default-ports)).
 
 The `*_HOST` settings take an IPv4 address, an IPv6 address without brackets, or a host name. The
 default `0.0.0.0` listens on IPv4 only. `::` listens on IPv6 and IPv4: set `TCP_HOST=::`,
@@ -159,7 +173,7 @@ whose DNS name has only an AAAA record because its IPv4 address is behind carrie
 Another IPv6 address listens on that address only, without IPv4. Voice on `::` takes IPv4 too unless
 the system makes IPv6 sockets IPv6-only (Linux: `net.ipv6.bindv6only=1`). Behind a reverse proxy or
 Docker's published ports, it is the proxy or the published port that has to listen on IPv6, e.g.
-nginx with `listen [::]:9012;` and `listen [::]:9013 udp;` in its `stream` servers. The server's own
+nginx with `listen [::]:9212;` and `listen [::]:9213 udp;` in its `stream` servers. The server's own
 settings can then stay at the default.
 
 Unity clients connect and send voice over IPv4 when the server name has an IPv4 address, and over
@@ -224,9 +238,9 @@ the proxy:
 
 ```yaml
     ports:
-      - 127.0.0.1:9011:9011 # admin UI, web clients, REST store
-      - 127.0.0.1:9012:9012 # TCP, Unity clients
-      - "9013:9013/udp" # voice
+      - 127.0.0.1:9211:9211 # admin UI, web clients, REST store
+      - 127.0.0.1:9212:9212 # TCP, Unity clients
+      - "9213:9213/udp" # voice
 ```
 
 The proxy then appears as the gateway of the Docker network, e.g. `172.20.0.1`, and its subnet can
@@ -276,7 +290,7 @@ and to the `stream` server that proxies to the TCP port:
 proxy_protocol on;
 ```
 
-If that server terminates TLS (`listen 9012 ssl`), also set `TCP_TLS_AT_PROXY=true`.
+If that server terminates TLS (`listen 9212 ssl`), also set `TCP_TLS_AT_PROXY=true`.
 
 Restart the server with `TCP_PROXY_PROTOCOL=true` first, then reload nginx with `proxy_protocol on`.
 Until both are done, every Unity connection through the proxy fails. In this order the log names the
@@ -284,7 +298,7 @@ missing header. In the other order, the server reads the header as a frame and l
 length, or with TLS on, a client that does not use TLS. At startup the log shows:
 
 ```
-Starting Colibri TCP server on 0.0.0.0:9012, PROXY protocol header required from TRUSTED_PROXIES (loopback, uniquelocal)
+Starting Colibri TCP server on 0.0.0.0:9212, PROXY protocol header required from TRUSTED_PROXIES (loopback, uniquelocal)
 ```
 
 With `TCP_TLS_AT_PROXY=true`, the line ends with `, TLS terminated by proxy (TCP_TLS_AT_PROXY)`.
@@ -302,14 +316,14 @@ The refusals are logged at most once a minute per address, repeats at debug leve
 
 ## TLS
 
-With `TLS_CERT` and `TLS_KEY` set, the TCP port (9012) accepts only TLS and the web port (9011) serves
+With `TLS_CERT` and `TLS_KEY` set, the TCP port (9212) accepts only TLS and the web port (9211) serves
 only HTTPS and WSS, admin UI included, both with one certificate. Without them, both stay
 unencrypted. There is no mixed mode. Every client must use TLS:
 
 - **Unity:** tick *Server supports SSL/TLS?* in the Colibri configuration
   ([Unity guide](../../colibri-unity/docs/guide.md#tls)).
-- **Web clients and admin UI:** use `https://<host>:9011` or `wss://<host>:9011`
-  ([web guide](../../colibri-web/docs/guide.md#tls)). `http://<host>:9011` is closed without an
+- **Web clients and admin UI:** use `https://<host>:9211` or `wss://<host>:9211`
+  ([web guide](../../colibri-web/docs/guide.md#tls)). `http://<host>:9211` is closed without an
   answer, not redirected.
 
 Frames and protocol version are unchanged inside TLS ([protocol](protocol.md#tls)). TLS does not
@@ -328,8 +342,8 @@ RSA and EC certificates both work. The server does not create certificates. Use 
 certificate authority such as Let's Encrypt or your institution, or a
 [self-signed one](#self-signed-certificate).
 
-At startup the log shows `Web server listening on 0.0.0.0:9011, HTTPS and WSS only`,
-`Starting Colibri TCP server on 0.0.0.0:9012, TLS only` and the certificate:
+At startup the log shows `Web server listening on 0.0.0.0:9211, HTTPS and WSS only`,
+`Starting Colibri TCP server on 0.0.0.0:9212, TLS only` and the certificate:
 
 ```
 TLS is on, with the certificate in /srv/colibri/certs/fullchain.pem and the key in /srv/colibri/certs/privkey.pem: for DNS:colibri.example.org, IP Address:192.0.2.10, self-signed, valid until 2036-10-05T12:00:00.000Z; SHA-256 fingerprint 83:88:B1:CD:...
@@ -352,7 +366,7 @@ RSA, use `-newkey rsa:2048` instead of `-newkey ec -pkeyopt ec_paramgen_curve:pr
 Windows ships openssl in `usr/bin`. The certificate is valid for 10 years.
 
 Unity apps accept it by fingerprint ([Unity guide](../../colibri-unity/docs/guide.md#tls)). A browser
-must trust it once. Open `https://<host>:9011` and accept it, or install it.
+must trust it once. Open `https://<host>:9211` and accept it, or install it.
 
 ### TLS with Docker
 
@@ -428,7 +442,7 @@ debug level.
 ### Reverse proxy
 
 TLS can instead terminate in an existing reverse proxy, with `TLS_CERT` and `TLS_KEY` unset. For the
-TCP port, use nginx's `stream` module with `listen 9012 ssl`, or a Traefik TCP router with TLS.
+TCP port, use nginx's `stream` module with `listen 9212 ssl`, or a Traefik TCP router with TLS.
 Colibri needs no changes. Unity apps tick *Server supports SSL/TLS?* when the proxy's TCP port uses
 TLS. To show each client at its own address rather than the proxy's, and TLS terminated by proxy
 in the admin UI (for Unity clients with `TCP_TLS_AT_PROXY`), see
@@ -453,7 +467,7 @@ The cost of TLS on a headset was not measured.
 
 ## Features
 
-- **Admin UI** at `http://<server-ip>:9011` (`https://` with [TLS](#tls)), on a phone too: the log
+- **Admin UI** at `http://<server-ip>:9211` (`https://` with [TLS](#tls)), on a phone too: the log
   of the server and every connected client, the connected clients, the synchronized models and the
   settings in effect ([Admin UI](#admin-ui)).
 - **Model synchronization** and **broadcasts** between the Unity (TCP) and web (Socket.IO) clients of
@@ -461,7 +475,7 @@ The cost of TLS on a headset was not measured.
   are relayed to other clients ([Relayed messages](protocol.md#relayed-messages)).
 - **REST store** at `/api/store` on the web port, saved to `store.json` in the data directory
   ([REST store](protocol.md#rest-store)).
-- **Voice relay** on UDP port 9013. A voice packet goes to the other clients of the sender's app that
+- **Voice relay** on UDP port 9213. A voice packet goes to the other clients of the sender's app that
   send voice to this server, if a Unity client of that app is connected from the sender's address
   ([Voice relay](#voice-relay)). Voice is not encrypted.
 

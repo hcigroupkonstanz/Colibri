@@ -21,6 +21,13 @@ this is the server's full detail.
   the relay passes a packet on only to the voice clients of the sender's app. It relays voice only
   from the address of a Unity client of that app. Voice packets from colibri-unity 1.x are dropped;
   use colibri-unity 2.x. See [Voice relay](#voice-relay-breaking-change).
+- **Default ports.** 9211 (web), 9212 (TCP) and 9213 (voice) instead of 9011, 9012 and 9013, so
+  that a 1.x and a 2.0 server can run side by side on one host, and a client of one version does
+  not reach a server of the other by its defaults. `WEBSERVER_PORT`, `TCP_PORT` and `VOICE_PORT`
+  still set them. The image exposes the new ports, its health check defaults to 9211, and the
+  bundled compose file publishes them. To keep the old ports, set the three variables, or with
+  Docker publish 9011 to 9013 on the new container ports. See
+  [MIGRATION.md](../../MIGRATION.md#default-ports).
 - **Node 24 and native ESM** to run from source.
 - **Docker image.** The server runs as the non-root `node` user, started through a new
   `colibri-entrypoint.sh` that replaces the node base image's entrypoint; `CMD` is
@@ -163,7 +170,7 @@ this is the server's full detail.
   configured with, read like the server reads them: from the environment, else from a `.env` in
   `/srv/colibri`. A container with another web port, with `WEBSERVER_HOST=localhost` (which Node
   binds to `::1` there) or with a `BASE_URL` is healthy, where a check of a fixed
-  `127.0.0.1:9011/` would leave it unhealthy for good, and restarted over and over by anything
+  `127.0.0.1:9211/` would leave it unhealthy for good, and restarted over and over by anything
   that acts on health.
 - The server runs as the non-root `node` user (uid 1000). The image starts as root only long
   enough to give `/srv/colibri/data` to `node` (when something in it belongs to someone else, and

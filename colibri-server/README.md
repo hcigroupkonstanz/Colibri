@@ -9,7 +9,8 @@ Full documentation: [docs/guide.md](docs/guide.md). Changes since 1.x: [docs/v2-
 ## Requirements
 
 - Docker, or Node.js 24 or newer
-- Open ports 9011/tcp (admin UI, web clients, REST store), 9012/tcp (Unity clients) and 9013/udp (voice)
+- Open ports 9211/tcp (admin UI, web clients, REST store), 9212/tcp (Unity clients) and 9213/udp (voice). 1.x used
+  9011 to 9013 ([default ports](../MIGRATION.md#default-ports)).
 - colibri-unity or colibri-web 2.x clients. The server refuses 1.x clients ([upgrading](../MIGRATION.md)).
 
 ## Installation
@@ -33,21 +34,21 @@ services:
     volumes:
       - colibri-data:/srv/colibri/data
     ports:
-      - 9011:9011 # admin UI, web clients, REST store
-      - 9012:9012 # TCP, Unity clients
-      - "9013:9013/udp" # voice
+      - 9211:9211 # admin UI, web clients, REST store
+      - 9212:9212 # TCP, Unity clients
+      - "9213:9213/udp" # voice
 
 volumes:
   colibri-data:
 ```
 
-The admin UI is at `http://<server-ip>:9011`. `docker logs colibri` shows the log.
+The admin UI is at `http://<server-ip>:9211`. `docker logs colibri` shows the log.
 
 - `/srv/colibri/data` holds `store.json` and voice recordings. To use a host directory instead of the volume,
   mount it there, e.g. `./data:/srv/colibri/data`. Leave `DATA_ROOT` unset.
 - At startup the entrypoint chowns `/srv/colibri/data` to uid 1000 (`node`), including a 1.x data directory.
   With `--user`, see [Running as another user](docs/guide.md#running-as-another-user).
-- To change a port, change only the host side of `ports:`, e.g. `"8011:9011"`.
+- To change a port, change only the host side of `ports:`, e.g. `"9011:9211"` to keep 1.x's web port.
 
 ### Node.js
 
@@ -66,7 +67,7 @@ use an `environment:` section or mount the file at `/srv/colibri/.env`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `WEBSERVER_PORT`, `TCP_PORT`, `VOICE_PORT` | `9011`, `9012`, `9013` | Admin UI and web clients, Unity clients, UDP voice |
+| `WEBSERVER_PORT`, `TCP_PORT`, `VOICE_PORT` | `9211`, `9212`, `9213` | Admin UI and web clients, Unity clients, UDP voice. 1.x: `9011`, `9012`, `9013`. |
 | `TLS_CERT`, `TLS_KEY` | unset | PEM certificate and key. Enable [TLS](docs/guide.md#tls) on the web and TCP ports. All clients must then use TLS. Voice stays unencrypted. |
 | `CONSOLE_LOG_LEVEL` | `info` | `error`, `warn`, `info` or `debug` |
 | `TCP_IDLE_TIMEOUT_SECONDS` | `10` | Seconds of silence before a Unity client is disconnected. `0` disables it. |
@@ -83,6 +84,7 @@ data, and read the log, the connected clients and the server settings. Run the s
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | Startup error on stderr about the data directory | The server cannot write there. It keeps running but saves nothing. | Apply the fix named in the message ([details](docs/guide.md#unwritable-data-directory)) |
+| Unity clients upgraded from 1.x never appear in the admin UI or the log | Their projects keep 1.x's ports 9011 to 9013 in `ColibriConfig` | *Use 2.0 defaults* in the Unity Setup window, or keep 1.x's ports on the server ([default ports](../MIGRATION.md#default-ports)) |
 | A client is missing from the admin UI, and the log shows `Refusing ...` | A 1.x client, or the Unity app's *Server supports SSL/TLS?* does not match the server | Update the client to 2.x, or fix the TLS setting ([TLS log messages](docs/guide.md#tls-log-messages)) |
 | A Unity client disconnects while stopped at a breakpoint | The debugger also pauses heartbeat replies | Raise `TCP_IDLE_TIMEOUT_SECONDS` or set it to `0` |
 | `App 'MyApp' now has 9 clients, more than 8 ...` | Separate projects use the same app name | Give each project its own app name |

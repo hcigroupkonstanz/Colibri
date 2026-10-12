@@ -814,7 +814,7 @@ saved yet, and leaves `store.json` untouched if that is nothing.
 
 ## Voice packets (UDP)
 
-colibri-unity's voice chat sends each audio frame to the voice port (`VOICE_PORT`, UDP 9013) as one
+colibri-unity's voice chat sends each audio frame to the voice port (`VOICE_PORT`, UDP 9213) as one
 datagram: an 11-byte header, then the audio. All integers are little-endian.
 
 The voice port takes IPv4, and with `VOICE_HOST=::` IPv6 as well; there an IPv4 client's address
