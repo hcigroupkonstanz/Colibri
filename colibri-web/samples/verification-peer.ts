@@ -11,7 +11,7 @@
 import { Colibri, Sync } from '../src/index';
 
 const host = process.argv[2] ?? 'localhost';
-const port = Number(process.argv[3] ?? 9011);
+const port = Number(process.argv[3] ?? 9211);
 
 new Colibri('myAppName', host, port);
 console.log(`[peer] connecting to ${host}:${port} as myAppName`);

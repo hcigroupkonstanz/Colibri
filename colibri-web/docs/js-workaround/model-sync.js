@@ -29,9 +29,9 @@ const colibriAddress = async () => {
 
 const colibriPort = async () => {
     return new Promise(resolve => {
-        rl.question('Please specify a colibri server port (default: 9011) >> ', answer => {
+        rl.question('Please specify a colibri server port (default: 9211) >> ', answer => {
             const port = parseInt(answer);
-            resolve(port > 0 ? port : 9011);
+            resolve(port > 0 ? port : 9211);
         });
     });
 };

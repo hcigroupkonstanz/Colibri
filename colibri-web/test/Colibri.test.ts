@@ -81,11 +81,11 @@ afterEach(() => {
 
 describe('Colibri constructor', () => {
     it('throws when the server address is empty', () => {
-        expect(() => new Colibri('app', '', 9011)).toThrow('Server Address missing or empty!');
+        expect(() => new Colibri('app', '', 9211)).toThrow('Server Address missing or empty!');
     });
 
     it('throws when the server address is whitespace only', () => {
-        expect(() => new Colibri('app', '   ', 9011)).toThrow('Server Address missing or empty!');
+        expect(() => new Colibri('app', '   ', 9211)).toThrow('Server Address missing or empty!');
     });
 
     it.each([0, -1, 65536, 100000])('throws when the port %d is out of range', port => {
@@ -93,16 +93,16 @@ describe('Colibri constructor', () => {
     });
 
     // NaN fails every range comparison, so it used to sail through and connect to "host:NaN".
-    it.each([NaN, 9011.5])('throws a ColibriError for the port %d, which is not a whole number', port => {
+    it.each([NaN, 9211.5])('throws a ColibriError for the port %d, which is not a whole number', port => {
         expect(() => new Colibri('app', 'localhost', port)).toThrow(ColibriError);
     });
 
-    // 1.x took '9011' from plain JavaScript because its range checks coerced the string; the
-    // stricter whole-number check must not turn that into a refusal.
-    it.each(['9011', ' 9011 '])('accepts the port as the numeric string %j', port => {
+    // 1.x took a port string such as '9011' from plain JavaScript because its range checks coerced
+    // it; the stricter whole-number check must not turn that into a refusal.
+    it.each(['9211', ' 9211 '])('accepts the port as the numeric string %j', port => {
         const colibri = new Colibri('app', 'localhost', port as unknown as number);
-        expect(colibri.port).toBe(9011);
-        expect(colibri.uri).toBe('ws://localhost:9011');
+        expect(colibri.port).toBe(9211);
+        expect(colibri.uri).toBe('ws://localhost:9211');
     });
 
     it.each(['abc', '90x1', ''])('throws a ColibriError for the port string %j, which is not a number', port => {
@@ -131,17 +131,17 @@ describe('Colibri constructor', () => {
         const c = new Colibri('app');
 
         expect(c.server).toBe('colibri.example.org');
-        expect(c.uri).toBe('ws://colibri.example.org:9011');
+        expect(c.uri).toBe('ws://colibri.example.org:9211');
     });
 
     it('builds a ws:// uri when the server has no scheme', () => {
-        const c = new Colibri('app', 'localhost', 9011);
-        expect(c.uri).toBe('ws://localhost:9011');
+        const c = new Colibri('app', 'localhost', 9211);
+        expect(c.uri).toBe('ws://localhost:9211');
     });
 
     it('leaves an explicit ws:// scheme untouched', () => {
-        const c = new Colibri('app', 'ws://localhost', 9011);
-        expect(c.uri).toBe('ws://localhost:9011');
+        const c = new Colibri('app', 'ws://localhost', 9211);
+        expect(c.uri).toBe('ws://localhost:9211');
     });
 
     it('leaves an explicit wss:// scheme untouched', () => {
@@ -150,8 +150,8 @@ describe('Colibri constructor', () => {
     });
 
     it('derives an http REST API uri from a ws server', () => {
-        const c = new Colibri('myapp', 'localhost', 9011);
-        expect(c.uriRestApi).toBe('http://localhost:9011/api/store/myapp/');
+        const c = new Colibri('myapp', 'localhost', 9211);
+        expect(c.uriRestApi).toBe('http://localhost:9211/api/store/myapp/');
     });
 
     it('derives an https REST API uri from a wss server', () => {
@@ -162,18 +162,18 @@ describe('Colibri constructor', () => {
     // http(s):// is what an address bar shows for the same server, and used to be glued behind a
     // second scheme: 'ws://https://example.com:9011' and 'http://https://example.com:9011'.
     it.each([
-        ['example.com', 'ws://example.com:9011', 'http://example.com:9011/api/store/app/'],
-        ['ws://example.com', 'ws://example.com:9011', 'http://example.com:9011/api/store/app/'],
-        ['wss://example.com', 'wss://example.com:9011', 'https://example.com:9011/api/store/app/'],
-        ['http://example.com', 'ws://example.com:9011', 'http://example.com:9011/api/store/app/'],
-        ['https://example.com', 'wss://example.com:9011', 'https://example.com:9011/api/store/app/'],
-        ['HTTPS://example.com', 'wss://example.com:9011', 'https://example.com:9011/api/store/app/'],
+        ['example.com', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
+        ['ws://example.com', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
+        ['wss://example.com', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/'],
+        ['http://example.com', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
+        ['https://example.com', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/'],
+        ['HTTPS://example.com', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/'],
         // A trailing slash, as copied out of an address bar, used to land in front of the port.
-        ['example.com/', 'ws://example.com:9011', 'http://example.com:9011/api/store/app/'],
-        ['https://example.com/', 'wss://example.com:9011', 'https://example.com:9011/api/store/app/'],
-        ['  wss://example.com//  ', 'wss://example.com:9011', 'https://example.com:9011/api/store/app/']
+        ['example.com/', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
+        ['https://example.com/', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/'],
+        ['  wss://example.com//  ', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/']
     ])('maps the server %j to the socket %s and the REST API %s', (server, uri, rest) => {
-        const c = new Colibri('app', server, 9011);
+        const c = new Colibri('app', server, 9211);
 
         expect(c.uri).toBe(uri);
         expect(c.uriRestApi).toBe(rest);
@@ -181,23 +181,23 @@ describe('Colibri constructor', () => {
     });
 
     it('rejects a scheme that is neither ws(s) nor http(s)', () => {
-        expect(() => new Colibri('app', 'ftp://example.com', 9011)).toThrow(ColibriError);
+        expect(() => new Colibri('app', 'ftp://example.com', 9211)).toThrow(ColibriError);
         expect(connectMock).not.toHaveBeenCalled();
     });
 
     it('rejects a server address that is nothing but a scheme', () => {
-        expect(() => new Colibri('app', 'https://', 9011)).toThrow('Server Address missing or empty!');
+        expect(() => new Colibri('app', 'https://', 9211)).toThrow('Server Address missing or empty!');
     });
 
-    // The admin UI's URL is 'http://<server>:9011', and the port in it used to stay part of the
+    // The admin UI's URL is 'http://<server>:9211', and the port in it used to stay part of the
     // host: 'ws://host:9011:9011', which retried forever without a word.
     it.each([
-        ['http://example.com:9011/', 9011, 'ws://example.com:9011', 'http://example.com:9011/api/store/app/'],
+        ['http://example.com:9211/', 9211, 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
         ['ws://example.com:8080', 8080, 'ws://example.com:8080', 'http://example.com:8080/api/store/app/'],
         ['https://example.com:443', 443, 'wss://example.com:443', 'https://example.com:443/api/store/app/'],
-        ['example.com:9011', 9011, 'ws://example.com:9011', 'http://example.com:9011/api/store/app/'],
+        ['example.com:9211', 9211, 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
         ['http://[::1]:44011', 44011, 'ws://[::1]:44011', 'http://[::1]:44011/api/store/app/'],
-        ['[::1]', 9011, 'ws://[::1]:9011', 'http://[::1]:9011/api/store/app/']
+        ['[::1]', 9211, 'ws://[::1]:9211', 'http://[::1]:9211/api/store/app/']
     ])('takes the port from the server %j when none is passed', (server, port, uri, rest) => {
         const c = new Colibri('app', server);
 
@@ -212,13 +212,13 @@ describe('Colibri constructor', () => {
     });
 
     it('rejects a server address whose port disagrees with the one passed', () => {
-        expect(() => new Colibri('app', 'http://example.com:9011', 44011)).toThrow(ColibriError);
-        expect(() => new Colibri('app', 'http://example.com:9011', 44011)).toThrow('give the port once');
+        expect(() => new Colibri('app', 'http://example.com:9211', 44011)).toThrow(ColibriError);
+        expect(() => new Colibri('app', 'http://example.com:9211', 44011)).toThrow('give the port once');
         expect(connectMock).not.toHaveBeenCalled();
     });
 
-    it('uses 9011 when neither the server address nor the argument has a port', () => {
-        expect(new Colibri('app', 'example.com').port).toBe(9011);
+    it('uses 9211 when neither the server address nor the argument has a port', () => {
+        expect(new Colibri('app', 'example.com').port).toBe(9211);
     });
 
     it.each(['example.com:0', 'example.com:65536'])('rejects the out-of-range port in the server %j', server => {
@@ -229,8 +229,8 @@ describe('Colibri constructor', () => {
     it.each([
         'https://example.com/colibri',
         'https://example.com/colibri/',
-        'http://example.com:9011/log',
-        'http://example.com:9011/#/log',
+        'http://example.com:9211/log',
+        'http://example.com:9211/#/log',
         'example.com?app=x'
     ])('rejects the server %j, which has a path or query after the host', server => {
         expect(() => new Colibri('app', server)).toThrow(ColibriError);
@@ -238,7 +238,7 @@ describe('Colibri constructor', () => {
         expect(connectMock).not.toHaveBeenCalled();
     });
 
-    it.each(['example.com:', 'example.com:abc', 'ws://:9011', 'fe80::1'])(
+    it.each(['example.com:', 'example.com:abc', 'ws://:9211', 'fe80::1'])(
         'rejects the server %j, which is not a host and an optional port',
         server => {
             expect(() => new Colibri('app', server)).toThrow(ColibriError);
@@ -247,22 +247,22 @@ describe('Colibri constructor', () => {
     );
 
     it('connects with the app/version query and websocket transport', () => {
-        new Colibri('myapp', 'localhost', 9011);
-        expect(connectMock).toHaveBeenCalledWith('ws://localhost:9011', {
+        new Colibri('myapp', 'localhost', 9211);
+        expect(connectMock).toHaveBeenCalledWith('ws://localhost:9211', {
             query: { app: 'myapp', version: '2' },
             transports: ['websocket']
         });
     });
 
     it('registers the connect handler and the colibri latency channel', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         expect(fakeSocket.on).toHaveBeenCalledWith('connect', expect.any(Function));
         expect(fakeSocket.on).toHaveBeenCalledWith('colibri', expect.any(Function));
         expect(fakeSocket.onAny).toHaveBeenCalledWith(expect.any(Function));
     });
 
     it('echoes inbound latency messages back out through the colibri channel', () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const handler = getHandler(fakeSocket.on, 'colibri');
 
         handler({ channel: 'colibri', command: 'latency', payload: 123 });
@@ -276,7 +276,7 @@ describe('Colibri constructor', () => {
 
     it('logs on socket connect', () => {
         const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const connectHandler = getHandler(fakeSocket.on, 'connect');
 
         connectHandler();
@@ -285,7 +285,7 @@ describe('Colibri constructor', () => {
     });
 
     it('forwards inbound onAny messages through the messages observable', () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const [onAnyHandler] = fakeSocket.onAny.mock.calls[0];
 
         const received: unknown[] = [];
@@ -301,12 +301,12 @@ describe('Colibri constructor', () => {
     it("warns that the app name 'colibri' is reserved for the admin UI", () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-        new Colibri('colibri', 'localhost', 9011);
+        new Colibri('colibri', 'localhost', 9211);
 
         expect(warnSpy).toHaveBeenCalledTimes(1);
         expect(warnSpy.mock.calls[0][0]).toContain("'colibri' is reserved for the server's admin UI");
         // Still connects under that name: an app relying on it keeps working.
-        expect(connectMock).toHaveBeenCalledWith('ws://localhost:9011', {
+        expect(connectMock).toHaveBeenCalledWith('ws://localhost:9211', {
             query: { app: 'colibri', version: PROTOCOL_VERSION },
             transports: ['websocket']
         });
@@ -317,14 +317,14 @@ describe('Colibri constructor', () => {
     it.each(['my-app', 'Colibri', 'colibri-study'])('does not warn about the app name %j', app => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-        new Colibri(app, 'localhost', 9011);
+        new Colibri(app, 'localhost', 9211);
 
         expect(warnSpy).not.toHaveBeenCalled();
         warnSpy.mockRestore();
     });
 
     it('throws when a second instance is constructed', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         expect(() => new Colibri('app2', 'localhost', 9012)).toThrow('A Colibri instance already exists!');
     });
 });
@@ -346,7 +346,7 @@ describe('Colibri.getInstance', () => {
 
     it('returns the existing instance without warning', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
 
         expect(Colibri.getInstance()).toBe(c);
         expect(warnSpy).not.toHaveBeenCalled();
@@ -355,7 +355,7 @@ describe('Colibri.getInstance', () => {
 
 describe('Colibri instance methods delegate to the socket', () => {
     it('sendMessage emits {command, payload}, defaulting payload to {}', () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
 
         c.sendMessage('ch', 'cmd');
         expect(fakeSocket.emit).toHaveBeenCalledWith('ch', {
@@ -371,7 +371,7 @@ describe('Colibri instance methods delegate to the socket', () => {
     });
 
     it('registerChannel/unregisterChannel/registerOnce delegate to socket.on/off/once', () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const handler = () => undefined;
 
         c.registerChannel('ch', handler);
@@ -387,17 +387,17 @@ describe('Colibri instance methods delegate to the socket', () => {
 
 describe('Colibri.getRestUri', () => {
     it('joins the REST base uri with the trimmed key', () => {
-        const c = new Colibri('app', 'localhost', 9011);
-        expect(c.getRestUri('mykey')).toBe('http://localhost:9011/api/store/app/mykey');
+        const c = new Colibri('app', 'localhost', 9211);
+        expect(c.getRestUri('mykey')).toBe('http://localhost:9211/api/store/app/mykey');
     });
 
     it('trims leading slashes from the key', () => {
-        const c = new Colibri('app', 'localhost', 9011);
-        expect(c.getRestUri('///nested/key')).toBe('http://localhost:9011/api/store/app/nested%2Fkey');
+        const c = new Colibri('app', 'localhost', 9211);
+        expect(c.getRestUri('///nested/key')).toBe('http://localhost:9211/api/store/app/nested%2Fkey');
     });
 
     it('returns null for an empty or whitespace-only key', () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         expect(c.getRestUri('')).toBeNull();
         expect(c.getRestUri('   ')).toBeNull();
     });
@@ -416,27 +416,27 @@ describe('Colibri.getRestUri', () => {
         ['a..b', 'a..b'],
         ['plain-key_1', 'plain-key_1']
     ])('encodes the key %j as the path segment %j', (key, segment) => {
-        const c = new Colibri('app', 'localhost', 9011);
-        expect(c.getRestUri(key)).toBe(`http://localhost:9011/api/store/app/${segment}`);
+        const c = new Colibri('app', 'localhost', 9211);
+        expect(c.getRestUri(key)).toBe(`http://localhost:9211/api/store/app/${segment}`);
     });
 
     // A URL parser resolves '.' and '..' - encoded or not - as directory steps, so '..' used to
     // GET the server's list of apps instead of a value. No URL can name them as a key.
     it.each(['.', '..', ' .. ', '/..'])('returns null for the key %j, which a URL cannot carry', key => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         expect(c.getRestUri(key)).toBeNull();
     });
 
     it('encodes the app name in the REST API uri', () => {
-        const c = new Colibri('my app/#?%', 'localhost', 9011);
-        expect(c.uriRestApi).toBe('http://localhost:9011/api/store/my%20app%2F%23%3F%25/');
-        expect(c.getRestUri('key')).toBe('http://localhost:9011/api/store/my%20app%2F%23%3F%25/key');
+        const c = new Colibri('my app/#?%', 'localhost', 9211);
+        expect(c.uriRestApi).toBe('http://localhost:9211/api/store/my%20app%2F%23%3F%25/');
+        expect(c.getRestUri('key')).toBe('http://localhost:9211/api/store/my%20app%2F%23%3F%25/key');
     });
 });
 
 describe('Colibri REST API', () => {
     it('getRestObject skips fetch and returns null for an empty key', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
 
@@ -445,7 +445,7 @@ describe('Colibri REST API', () => {
     });
 
     it('getRestObject returns parsed JSON on success', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const fetchMock = vi.fn().mockResolvedValue({
             status: 200,
             json: () => Promise.resolve({ a: 1 })
@@ -453,14 +453,14 @@ describe('Colibri REST API', () => {
         vi.stubGlobal('fetch', fetchMock);
 
         await expect(c.getRestObject('mykey')).resolves.toEqual({ a: 1 });
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:9011/api/store/app/mykey', {
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:9211/api/store/app/mykey', {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
         });
     });
 
     it('getRestObject returns null on a >= 400 status', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         vi.stubGlobal(
             'fetch',
             vi.fn().mockResolvedValue({
@@ -473,7 +473,7 @@ describe('Colibri REST API', () => {
     });
 
     it('skips fetch for the key .., which no URL can carry', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
 
@@ -483,7 +483,7 @@ describe('Colibri REST API', () => {
     });
 
     it('setRestObject skips fetch and returns false for an empty key', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
 
@@ -492,12 +492,12 @@ describe('Colibri REST API', () => {
     });
 
     it('setRestObject returns true on a 2xx status', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const fetchMock = vi.fn().mockResolvedValue({ status: 204 });
         vi.stubGlobal('fetch', fetchMock);
 
         await expect(c.setRestObject('mykey', { a: 1 })).resolves.toBe(true);
-        expect(fetchMock).toHaveBeenCalledWith('http://localhost:9011/api/store/app/mykey', {
+        expect(fetchMock).toHaveBeenCalledWith('http://localhost:9211/api/store/app/mykey', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ a: 1 })
@@ -505,7 +505,7 @@ describe('Colibri REST API', () => {
     });
 
     it('setRestObject returns false on a non-2xx status', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 500 }));
 
         await expect(c.setRestObject('mykey', { a: 1 })).resolves.toBe(false);
@@ -514,7 +514,7 @@ describe('Colibri REST API', () => {
     // What the JSDoc promises: a server that cannot be reached is not a null or a false, it is a
     // rejection, exactly as fetch gives it.
     it('getRestObject and setRestObject reject when the server cannot be reached', async () => {
-        const c = new Colibri('app', 'localhost', 9011);
+        const c = new Colibri('app', 'localhost', 9211);
         const networkError = new TypeError('fetch failed');
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(networkError));
 
@@ -537,7 +537,7 @@ describe('wrapper functions', () => {
     });
 
     it('delegate to the instance once Colibri is initialized', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const handler = () => undefined;
 
         SendMessage('ch', 'cmd', { a: 1 });
@@ -620,7 +620,7 @@ describe('registering before new Colibri()', () => {
         RegisterOnce('early-once', onceHandler);
         expect(connectMock).not.toHaveBeenCalled();
 
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
 
         expect(fakeSocket.on).toHaveBeenCalledWith('early', handler);
         expect(fakeSocket.once).toHaveBeenCalledWith('early-once', onceHandler);
@@ -635,7 +635,7 @@ describe('registering before new Colibri()', () => {
         UnregisterChannel('early', handler);
         UnregisterChannel('early', handler);
 
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
 
         expect(fakeSocket.on).not.toHaveBeenCalledWith('early', handler);
         expect(fakeSocket.once).not.toHaveBeenCalledWith('early', handler);
@@ -645,7 +645,7 @@ describe('registering before new Colibri()', () => {
         const received = vi.fn();
         Sync.receiveString('early-sync', received);
 
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         deliver('early-sync', { command: 'broadcast::string', payload: 'hello' });
 
         expect(received).toHaveBeenCalledWith('hello');
@@ -656,7 +656,7 @@ describe('registering before new Colibri()', () => {
         Sync.receiveBool('early-unregistered', received);
         Sync.unregister('early-unregistered', received);
 
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
 
         expect(fakeSocket.on.mock.calls.map(([event]) => event)).not.toContain('early-unregistered');
     });
@@ -665,7 +665,7 @@ describe('registering before new Colibri()', () => {
         const [models$] = RegisterModelSync({ name: 'early-widget', type: Widget });
         expect(warnSpy).not.toHaveBeenCalled();
 
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         await nextTask();
 
         expect(fakeSocket.emit).toHaveBeenCalledWith('early-widget', { command: 'model::request', payload: {} });
@@ -685,7 +685,7 @@ describe('registering before new Colibri()', () => {
             registerModel(widget);
             widget.label = 'changed before connecting';
 
-            new Colibri('app', 'localhost', 9011);
+            new Colibri('app', 'localhost', 9211);
 
             expect(fakeSocket.emit).toHaveBeenCalledWith('early-local', {
                 command: 'model::request',
@@ -734,7 +734,7 @@ describe('catching up on models after a reconnect', () => {
     });
 
     it('asks for every registered model channel again on each reconnect', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         RegisterModelSync({ name: 'resync-a', type: Widget });
         RegisterModelSync({ name: 'resync-b', type: Widget });
         await nextTask();
@@ -753,7 +753,7 @@ describe('catching up on models after a reconnect', () => {
 
     it('does the same for a RegisterModelSync made before new Colibri()', async () => {
         RegisterModelSync({ name: 'resync-early', type: Widget });
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         await nextTask();
 
         connectSocket();
@@ -763,7 +763,7 @@ describe('catching up on models after a reconnect', () => {
     });
 
     it('brings a model missed during the outage up to date, in place, without duplicating it', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$] = RegisterModelSync({ name: 'resync-widget', type: Widget });
         await nextTask();
         connectSocket();
@@ -815,7 +815,7 @@ describe('sending its own models again after a reconnect', () => {
 
     /** A Colibri with one own model, 'w1', connected and then reconnected. */
     const reconnectedWithOwnModel = () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'own', type: Widget });
         const widget = new Widget('w1');
         widget.label = 'mine';
@@ -829,7 +829,7 @@ describe('sending its own models again after a reconnect', () => {
     };
 
     it('asks again for each of its own models by id on a reconnect', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'own', type: Widget });
         registerModel(new Widget('w1'));
         registerModel(new Widget('w2'));
@@ -859,7 +859,7 @@ describe('sending its own models again after a reconnect', () => {
     // Asked for again, the server would answer model::delete for an id another client deleted a
     // moment ago - but this client has the model now, and has never had an answer for it.
     it('asks afresh after a reconnect for an own model the server has not answered for yet', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'own', type: Widget });
         registerModel(new Widget('w1'));
         await nextTask();
@@ -899,7 +899,7 @@ describe('sending its own models again after a reconnect', () => {
     });
 
     it('leaves alone the models the server told it about', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         RegisterModelSync({ name: 'own', type: Widget });
         await nextTask();
         connectSocket();
@@ -928,7 +928,7 @@ describe('sending its own models again after a reconnect', () => {
     });
 
     it('asks for everything else once every own model is answered, a delete among the answers', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'own', type: Widget });
         const kept = new Widget('w2');
         registerModel(new Widget('w1'));
@@ -977,7 +977,7 @@ describe('sending its own models again after a reconnect', () => {
         const widget = new Widget('early');
         widget.label = 'mine';
         registerModel(widget);
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         connectSocket();
         connectSocket();
         fakeSocket.emit.mockClear();
@@ -1004,7 +1004,7 @@ describe('sending its own models again after a reconnect', () => {
 
     /** A Colibri with one own model, 'p1', that has been connected and is now disconnected. */
     const disconnectedWithOwnPair = () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'own', type: Pair });
         const pair = new Pair('p1');
         pair.a = 'A';
@@ -1018,7 +1018,7 @@ describe('sending its own models again after a reconnect', () => {
     };
 
     it('asks for everything else once its own models are answered, not before', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'own', type: Widget });
         registerModel(new Widget('w1'));
         registerModel(new Widget('w2'));
@@ -1130,7 +1130,7 @@ describe('sending its own models again after a reconnect', () => {
 
     // delete() stops this client sending the model's changes; the whole model is one of them.
     it('does not ask for or send again an own model whose delete() was called', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'own', type: Widget });
         const widget = new Widget('w1');
         widget.label = 'mine';
@@ -1209,7 +1209,7 @@ describe('keeping a change sent just after asking for every model', () => {
 
     /** A Colibri with an own Pair 'p1' (a: 'A', b: 'B') that the server had nothing for, so it was sent in full. */
     const connectedWithOwnPair = () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'own', type: Pair });
         const pair = new Pair('p1');
         pair.a = 'A';
@@ -1263,7 +1263,7 @@ describe('keeping a change sent just after asking for every model', () => {
     // Every RegisterModelSync on the page receives the answer to each one's request on
     // 'colibri::reconnect', and another one's may come first.
     it("keeps it out until the end of its own answers, not another RegisterModelSync's", async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'own', type: Pair });
         RegisterModelSync({ name: 'other', type: Pair });
         const pair = new Pair('p1');
@@ -1312,7 +1312,7 @@ describe('keeping a change sent just after asking for every model', () => {
     // On a reconnect, the one registered first asks for every model at once; the other one, still
     // waiting for the answer for its own model, only later.
     it('keeps a change sent just after another RegisterModelSync on the channel asked on a reconnect', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         RegisterModelSync({ name: 'own', type: Pair });
         const [models$, registerModel] = RegisterModelSync({ name: 'own', type: Pair });
         registerModel(new Pair('p1'));
@@ -1336,7 +1336,7 @@ describe('keeping a change sent just after asking for every model', () => {
     });
 
     it('keeps a change to a model another client made, sent just after it', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$] = RegisterModelSync({ name: 'own', type: Pair });
         connectSocket();
         await nextTask();
@@ -1358,7 +1358,7 @@ describe('keeping a change sent just after asking for every model', () => {
     // SyncModel reports a change 1 ms after it is made. An update that came in between was applied
     // over it, and the report sent that update's value in its place.
     it('keeps a change to a model another client made when an update for it comes before it is sent', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$] = RegisterModelSync({ name: 'own', type: Pair });
         connectSocket();
         await nextTask();
@@ -1420,7 +1420,7 @@ describe('registering a model whose id the server may already have', () => {
      * Pair 'p1' of its own, registered.
      */
     const registered = async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
         connectSocket();
         await nextTask();
@@ -1508,7 +1508,7 @@ describe('registering a model whose id the server may already have', () => {
     });
 
     it('asks for a model registered while disconnected once reconnected, as one it has now', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
         connectSocket();
         await nextTask();
@@ -1546,7 +1546,7 @@ describe('registering a model whose id the server may already have', () => {
 
     // Both used to stay listed, and every later update for the id went to the first of them only.
     it('replaces the copy of the id the server told it about, instead of listing the id twice', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
         connectSocket();
         await nextTask();
@@ -1586,7 +1586,7 @@ describe('registering a model whose id the server may already have', () => {
 
     // Every RegisterModelSync on a channel receives the answer to a request another one sent.
     it('does not list the bare answer to another RegisterModelSync on the channel as a model', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'reg-twice', type: Pair });
         const [other$] = RegisterModelSync({ name: 'reg-twice', type: Pair });
         connectSocket();
@@ -1678,7 +1678,7 @@ describe('keeping a change made after registerModel', () => {
 
     /** A connected RegisterModelSync on `channel` that has asked for every model, then 'p1' registered. */
     const registeredLate = async (channel = 'reg') => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: channel, type: Pair });
         connectSocket();
         await nextTask();
@@ -1840,7 +1840,7 @@ describe('keeping a change made after registerModel', () => {
     // A field sent before that request is kept out only until the answer to the request after asking
     // for every model: what another client sets once the server has it comes after that answer.
     it('takes what another client sets after a field sent before it, once the server has that', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
         connectSocket();
         await nextTask();
@@ -1869,7 +1869,7 @@ describe('keeping a change made after registerModel', () => {
         const pair = new Pair('p1');
         registerModel(pair);
         pair.a = 'changed';
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         connectSocket();
         await settle();
         expect(sentInOrder()).toEqual([['model::request', { id: 'p1' }]]);
@@ -1891,7 +1891,7 @@ describe('keeping a change made after registerModel', () => {
     });
 
     it('asks for a model registered in the same block as RegisterModelSync before asking for every model', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         connectSocket();
         const [, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
         const pair = new Pair('p1');
@@ -1971,7 +1971,7 @@ describe('keeping a change made after registerModel', () => {
     // model stayed asked for, one update a round trip went out, and everything else was never asked
     // for.
     it('asks for every model after asking again once, though the model changed before every answer', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         connectSocket();
         const [, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
         const pair = new Pair('p1');
@@ -2082,7 +2082,7 @@ describe('keeping a change made after registerModel', () => {
         class Note extends SyncModel<Note> {
             @Synced() accessor text: string | undefined = 'mine';
         }
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'notes', type: Note });
         connectSocket();
         await nextTask();
@@ -2179,7 +2179,7 @@ describe('sending again a change lost in a connection that died', () => {
      * over.
      */
     const connectedWithOwnPair = async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'own', type: Pair });
         const pair = new Pair('p1');
         pair.a = 'A';
@@ -2456,7 +2456,7 @@ describe('sending again a change lost in a connection that died', () => {
     // sent first comes ahead of the answers to the next one's re-requests. Taken for the end of those,
     // it settled the model early, and the answer that came next undid the change.
     it('waits for the end of its own answers when another RegisterModelSync asked again first', async () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         const [, registerOther] = RegisterModelSync({ name: 'other', type: Pair });
         const [, registerModel] = RegisterModelSync({ name: 'own', type: Pair });
         registerOther(new Pair('q1'));
@@ -2691,7 +2691,7 @@ describe('reporting a server that cannot be reached', () => {
     });
 
     it('uses the message alone when the error has no underlying cause, as in a browser', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
 
         fire('connect_error', transportError());
 
@@ -2700,7 +2700,7 @@ describe('reporting a server that cannot be reached', () => {
     });
 
     it('warns again for the next outage, once connected in between', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
 
         fire('connect_error', transportError('first'));
         fire('connect');
@@ -2712,7 +2712,7 @@ describe('reporting a server that cannot be reached', () => {
     });
 
     it('says nothing when the connection simply comes up', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
 
         fire('connect');
         fire('connect');
@@ -2721,7 +2721,7 @@ describe('reporting a server that cannot be reached', () => {
     });
 
     it('does not promise a retry that Socket.IO will not make', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
         fakeSocket.active = false;
 
         fire('connect_error', new Error('refused by the server'));
@@ -2734,16 +2734,16 @@ describe('reporting a server that cannot be reached', () => {
 
 describe('protocol version handshake', () => {
     it('announces the client protocol version in the handshake query', () => {
-        new Colibri('app', 'localhost', 9011);
+        new Colibri('app', 'localhost', 9211);
 
         expect(connectMock).toHaveBeenCalledWith(
-            'ws://localhost:9011',
+            'ws://localhost:9211',
             expect.objectContaining({ query: { app: 'app', version: PROTOCOL_VERSION } })
         );
     });
 
     it('stops reconnecting and reports a mismatch when the server refuses the version', async () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const mismatch = firstValueFrom(client.protocolMismatch);
 
@@ -2765,7 +2765,7 @@ describe('protocol version handshake', () => {
     });
 
     it('keeps the rejection off the ordinary message stream', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const seen: string[] = [];
         client.messages.subscribe(msg => seen.push(msg.command));
@@ -2780,7 +2780,7 @@ describe('protocol version handshake', () => {
     });
 
     it('reports a refusal once, however many times the server sends it', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const seen: ProtocolMismatchError[] = [];
         client.protocolMismatch.subscribe(e => seen.push(e));
@@ -2798,7 +2798,7 @@ describe('protocol version handshake', () => {
     });
 
     it('survives a rejection payload with nothing useful in it', async () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const mismatch = firstValueFrom(client.protocolMismatch);
 
@@ -2841,7 +2841,7 @@ describe('detecting a server that predates the version check', () => {
     });
 
     it('reports a suspected old server when it never announces itself', async () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const mismatch = firstValueFrom(client.protocolMismatch);
 
         connectSocket();
@@ -2860,7 +2860,7 @@ describe('detecting a server that predates the version check', () => {
     });
 
     it('stays quiet once the server identifies itself', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const seen: ProtocolMismatchError[] = [];
         client.protocolMismatch.subscribe(e => seen.push(e));
 
@@ -2878,7 +2878,7 @@ describe('detecting a server that predates the version check', () => {
     // speaking the old protocol, so keying on that silently accepts every 1.2.x and 1.3.x server
     // as current - confirmed against the published 1.1.1 and 1.3.1 images.
     it('still reports an old server that sends the latency broadcast', async () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const mismatch = firstValueFrom(client.protocolMismatch);
 
         connectSocket();
@@ -2894,7 +2894,7 @@ describe('detecting a server that predates the version check', () => {
     // A pre-2.0.0 server relays broadcasts and model updates perfectly well, so if ordinary
     // traffic cleared the timer the check would never fire against a busy one.
     it('still reports a busy old server that is relaying traffic', async () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const mismatch = firstValueFrom(client.protocolMismatch);
 
         connectSocket();
@@ -2909,7 +2909,7 @@ describe('detecting a server that predates the version check', () => {
     });
 
     it('keeps the server hello off the ordinary message stream', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const seen: string[] = [];
         client.messages.subscribe(msg => seen.push(msg.command));
 
@@ -2921,7 +2921,7 @@ describe('detecting a server that predates the version check', () => {
     });
 
     it('delivers messages untouched while the check is pending', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const seen: Message[] = [];
         client.messages.subscribe(msg => seen.push(msg));
 
@@ -2939,7 +2939,7 @@ describe('detecting a server that predates the version check', () => {
     });
 
     it('reports once, not once per reconnect', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const seen: ProtocolMismatchError[] = [];
         client.protocolMismatch.subscribe(e => seen.push(e));
 
@@ -2952,7 +2952,7 @@ describe('detecting a server that predates the version check', () => {
     });
 
     it('says nothing when the socket went down before the window elapsed', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const seen: ProtocolMismatchError[] = [];
         client.protocolMismatch.subscribe(e => seen.push(e));
 
@@ -2967,7 +2967,7 @@ describe('detecting a server that predates the version check', () => {
     // still be queued when this fires. Waiting another window costs nothing.
     it('waits another window instead of reporting while the tab is hidden', () => {
         vi.stubGlobal('document', { visibilityState: 'hidden' });
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const seen: ProtocolMismatchError[] = [];
         client.protocolMismatch.subscribe(e => seen.push(e));
 
@@ -2985,7 +2985,7 @@ describe('detecting a server that predates the version check', () => {
     // Each kind at most once, but the two are independent: a suspicion says nothing about whether
     // a refusal can follow, e.g. once the old server is replaced by one speaking another version.
     it('reports a suspicion and a later refusal once each', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const seen: ProtocolMismatchError[] = [];
         client.protocolMismatch.subscribe(e => seen.push(e));
@@ -3007,7 +3007,7 @@ describe('detecting a server that predates the version check', () => {
     });
 
     it('does not follow an explicit refusal with a contradictory old-server guess', () => {
-        const client = new Colibri('app', 'localhost', 9011);
+        const client = new Colibri('app', 'localhost', 9211);
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         const seen: ProtocolMismatchError[] = [];
         client.protocolMismatch.subscribe(e => seen.push(e));

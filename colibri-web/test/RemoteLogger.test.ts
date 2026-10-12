@@ -61,7 +61,7 @@ afterEach(() => {
 const forwarded = () =>
     emit.mock.calls.filter(([channel]) => channel === 'log').map(([, msg]) => [msg.command, msg.payload]);
 
-const createColibri = () => new Colibri('app', 'localhost', 9011);
+const createColibri = () => new Colibri('app', 'localhost', 9211);
 
 describe('RemoteLogger console patching', () => {
     it.each([

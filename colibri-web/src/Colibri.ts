@@ -86,7 +86,7 @@ const parseServerAddress = (server: string) => {
     // Dropping it instead would quietly connect somewhere other than what was asked for.
     if (/[/?#]/.test(authority)) {
         throw new ColibriError(
-            `Server address '${server}' has a path or query after the host - pass only the host and, optionally, the port, e.g. 'http://example.com:9011'.`
+            `Server address '${server}' has a path or query after the host - pass only the host and, optionally, the port, e.g. 'http://example.com:9211'.`
         );
     }
 
@@ -105,7 +105,9 @@ const parseServerAddress = (server: string) => {
     return { ...schemes, host: hostAndPort[1], port: portText === undefined ? undefined : Number(portText) };
 };
 
-const DEFAULT_PORT = 9011;
+// colibri-server 2.x's default web port. 1.x's was 9011: the defaults differ so that a client of one
+// version does not reach a server of the other by them.
+const DEFAULT_PORT = 9211;
 
 const checkPort = (port: number) => {
     // Number.isInteger also rejects NaN, which every comparison lets through - and
@@ -175,7 +177,7 @@ export class Colibri {
     public readonly protocolMismatch = this.protocolMismatchSubject.asObservable();
     public readonly uri: string;
     public readonly uriRestApi: string;
-    /** The port connected to: the one in the server address, else the one passed, else 9011. */
+    /** The port connected to: the one in the server address, else the one passed, else 9211. */
     public readonly port: number;
 
     private oldServerTimer: ReturnType<typeof setTimeout> | undefined;
@@ -197,9 +199,9 @@ export class Colibri {
      * @param app the application name; clients only see each other's messages within one app
      * @param server the host, optionally after `ws://`, `wss://`, `http://` or `https://` (the
      *   secure ones mean `wss` for the socket and `https` for the REST API) and optionally with a
-     *   port, as in `'http://example.com:9011'`; nothing after the host and port. Defaults to the
+     *   port, as in `'http://example.com:9211'`; nothing after the host and port. Defaults to the
      *   host that served the page, and is required outside a browser.
-     * @param port the server port, if the address does not have one; 9011 if neither does. When
+     * @param port the server port, if the address does not have one; 9211 if neither does. When
      *   both have one, they must agree.
      * @throws ColibriError for an address or port this client cannot connect to, or when an
      *   instance already exists
