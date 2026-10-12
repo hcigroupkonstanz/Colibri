@@ -62,18 +62,18 @@ Server setup: [colibri-server](../../colibri-server/). Create the client once:
 import { Colibri } from '@hcikn/colibri';
 
 // the admin UI's address without its page path ('/log', '/clients', ...)
-new Colibri('app_name', 'http://<your-server>:9011');
+new Colibri('app_name', 'http://<your-server>:9211');
 
 // or the host, with an optional port
 new Colibri('app_name', '<your-server>');
-new Colibri('app_name', '<your-server>', 9011);
+new Colibri('app_name', '<your-server>', 9211);
 ```
 
 | Argument | Default                                      | Description                                                                                                      |
 | -------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `app`    | required                                     | App name. Messages, synchronized models and stored data are shared only within one app name.                     |
 | `server` | Host that served the page. Required in Node. | Host name or IP address, optionally with `http://`, `ws://`, `https://` or `wss://`, `:port` and a trailing `/`. |
-| `port`   | `9011`                                       | Server port, a `number` from 1 to 65535. Used if `server` has no port.                                           |
+| `port`   | `9211`                                       | Server port, a `number` from 1 to 65535. Used if `server` has no port.                                           |
 
 ### App name
 
@@ -85,13 +85,14 @@ new Colibri('app_name', '<your-server>', 9011);
 ### Server address and port
 
 - `https://` and `wss://` encrypt the socket and the REST requests. They need [TLS](#tls) on the server.
-- IPv6 addresses go in brackets: `http://[::1]:9011`.
+- IPv6 addresses go in brackets: `http://[::1]:9211`.
 - A path such as the admin UI's `/log`, a query, a fragment or an unsupported scheme throws a `ColibriError`.
-- Port precedence: the port in the address, then the third argument, then 9011. If both give a port, they must match,
+- Port precedence: the port in the address, then the third argument, then 9211. If both give a port, they must match,
   or `new Colibri()` throws. `colibri.port` returns the port in use.
-- The scheme never implies a port. `https://<your-server>` means port 9011, not 443.
-- Convert a port from `URLSearchParams` first: `Number(params.get('port') ?? 9011)`. Plain JavaScript may still pass a
-  string of digits such as `'9011'`, as in 1.x.
+- The scheme never implies a port. `https://<your-server>` means port 9211, not 443.
+- The default port was 9011 in 1.x. A server that keeps 9011 needs the port in the address or as the argument.
+- Convert a port from `URLSearchParams` first: `Number(params.get('port') ?? 9211)`. Plain JavaScript may still pass a
+  string of digits such as `'9211'`, as in 1.x.
 
 ### Instance and connection
 
@@ -110,14 +111,14 @@ new Colibri('app_name', '<your-server>', 9011);
 With `TLS_CERT` and `TLS_KEY` set ([server guide](../../colibri-server/docs/guide.md#tls)), colibri-server serves its
 web port over HTTPS and WSS only.
 
-- Connect with `https://<your-server>:9011` or `wss://<your-server>:9011`. Both use `wss` for the socket and `https`
+- Connect with `https://<your-server>:9211` or `wss://<your-server>:9211`. Both use `wss` for the socket and `https`
   for the REST requests.
-- The admin UI is at `https://<your-server>:9011`.
-- `http://<your-server>:9011` gets no answer. The connection is closed, not redirected.
+- The admin UI is at `https://<your-server>:9211`.
+- `http://<your-server>:9211` gets no answer. The connection is closed, not redirected.
 
 | Certificate                                         | Client setup                                                                      |
 | --------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Self-signed, in a browser                           | Open `https://<your-server>:9011` once and accept the certificate, or install it. |
+| Self-signed, in a browser                           | Open `https://<your-server>:9211` once and accept the certificate, or install it. |
 | Self-signed, under Node (scripts, tests)            | Start Node with `NODE_EXTRA_CA_CERTS=<cert.pem>`.                                 |
 | From a certificate authority, such as Let's Encrypt | None                                                                              |
 | Reverse proxy that adds TLS                         | Give the proxy's port, such as `wss://<your-server>:443`.                         |
@@ -140,7 +141,7 @@ The server refuses a client whose protocol version (`PROTOCOL_VERSION`, exported
 ```ts
 import { Colibri } from '@hcikn/colibri';
 
-const colibri = new Colibri('app_name', 'http://<your-server>:9011');
+const colibri = new Colibri('app_name', 'http://<your-server>:9211');
 colibri.protocolMismatch.subscribe(error => {
     if (error.fatal) {
         // disconnected, no reconnect: install matching colibri-web and colibri-server versions
@@ -386,7 +387,7 @@ logger.disable(); // stop forwarding
 logger.enable(); // forward again
 ```
 
-- Forwarded lines appear in the admin UI at `http://<your-server>:9011` and in the server's console output
+- Forwarded lines appear in the admin UI at `http://<your-server>:9211` and in the server's console output
   (`docker logs` for Docker). `console.debug` lines reach the console output only with `CONSOLE_LOG_LEVEL=debug`.
 - Create one `RemoteLogger` at startup. A further instance does not forward a second time. It warns once
   (`RemoteLogger: the console is already forwarded by an earlier new RemoteLogger() ...`). Its `enabled` argument,
@@ -422,5 +423,5 @@ sends one value of every type, for testing against a Unity client.
 | `npm run test:e2e`     | End-to-end tests against a real colibri-server                                                   |
 | `npm run release`      | Builds and publishes to npm. `npm publish` also builds first. Replaces the 1.x `publish` script. |
 
-`npm run test:e2e` starts a server from `../colibri-server` with Docker Compose on port 9011, unless
-`COLIBRI_E2E_SERVER` names a running server (port: `COLIBRI_E2E_PORT`, default 9011).
+`npm run test:e2e` starts a server from `../colibri-server` with Docker Compose on port 9211, unless
+`COLIBRI_E2E_SERVER` names a running server (port: `COLIBRI_E2E_PORT`, default 9211).

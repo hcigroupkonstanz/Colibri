@@ -27,6 +27,11 @@ Colibri component from 1.x.
   colibri-server 2.0.0 checks it and refuses any other version. colibri-web 1.x and
   colibri-server 2.0.0 therefore cannot be used together; upgrade both. See
   `Colibri.protocolMismatch` below for what this release does about a mismatch.
+- **Breaking:** the default port is 9211, colibri-server 2.0's default, instead of 9011. A
+  `Colibri` created without a port, in the address or as the third argument, connects to 9211.
+  For a server that keeps 9011, pass the port. colibri-server 2.0 moved its defaults so that a
+  1.x and a 2.0 server can run side by side, and a client of one version does not reach a
+  server of the other by its defaults.
 - **Breaking:** `Sync.receiveColor`/`receiveColorArray` callbacks get a `ColorValue` instead
   of a `string`. Unity puts the HTML string `"#RRGGBBAA"` on the wire for a colour and this
   library puts `[r, g, b, a]`, so a colour sent by another web client arrived as an array
@@ -169,7 +174,7 @@ Colibri component from 1.x.
   reported an error. `http://` and `ws://` now mean `ws` for the socket and `http` for the REST API, `https://`
   and `wss://` mean `wss` and `https`, a port in the address is used, and a trailing slash is
   ignored. `Colibri.port` is the port actually used: the one in the address, else the one
-  passed, else 9011. A `ColibriError` is now thrown for anything that cannot connect: a port
+  passed, else 9211. A `ColibriError` is now thrown for anything that cannot connect: a port
   in the address that disagrees with the one passed, a path, query or fragment after the host
   (such as the admin UI's `/log`), any other scheme, an IPv6 address without brackets, and a
   port that is not a whole number from 1 to 65535 (`NaN` used to get through). The `port`

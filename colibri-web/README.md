@@ -29,7 +29,7 @@ Keep the `@2` to avoid installing a 1.x release. If npm reports `No matching ver
 ```ts
 import { Colibri, Sync } from '@hcikn/colibri';
 
-new Colibri('your-app-name', 'http://<your-server>:9011'); // 9011 is the default port
+new Colibri('your-app-name', 'http://<your-server>:9211'); // 9211 is the default port
 
 Sync.receiveNumber('temperature', value => console.log('temperature', value));
 Sync.sendNumber('temperature', 21.5); // reaches other clients only, e.g. a second browser tab
@@ -69,7 +69,7 @@ me.score = 10; // sent to the other clients
 | -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `app`    | required                        | App name. Must match on all clients that exchange data.                                                                      |
 | `server` | Host of the page (browser only) | Host name or IP address, optionally with `http://`, `https://`, `ws://` or `wss://` and `:port`. No path, query or fragment. |
-| `port`   | `9011`                          | Used when `server` has no port. If both have one, they must match.                                                           |
+| `port`   | `9211`                          | Used when `server` has no port. If both have one, they must match.                                                           |
 
 A second `new Colibri()` throws. Use `Colibri.getInstance()`. All options: [guide](docs/guide.md#configuration).
 
@@ -80,6 +80,7 @@ A second `new Colibri()` throws. Use `Colibri.getInstance()`. All options: [guid
 | `new Colibri()` throws a `ColibriError`                                | Path such as `/log`, query or fragment in the address, another scheme, a port that conflicts with the third argument, or a second instance | Pass only scheme, host and port. Use `Colibri.getInstance()`.              |
 | Clients do not see each other                                          | Different app names or servers, or the listener was not registered and connected at send time                                              | Use the same app name and server. Register listeners first.                |
 | Nothing connects from an `https://` page                               | The browser blocks `ws://` and `http://` (mixed content)                                                                                   | Use `https://` or `wss://` with [TLS](docs/guide.md#tls) or a TLS proxy    |
+| `Colibri: could not connect to ...` after upgrading from 1.x           | The address or `port` names 9011, 1.x's default port. 2.x servers default to 9211.                                                         | Use the server's port                                                      |
 | `colibri.protocolMismatch` emits with `fatal: true`                    | The server refused this client and closed the connection                                                                                   | Use 2.x on both sides ([Protocol version](docs/guide.md#protocol-version)) |
 | `colibri.protocolMismatch` emits with `fatal: false`                   | No version announcement within 5 s, typical of a pre-2.0.0 server. The connection stays up.                                                | Upgrade the server to 2.x                                                  |
 | `@Synced()` fails to compile or does not sync                          | `experimentalDecorators` is on, or a member lacks `accessor`                                                                               | Remove `experimentalDecorators`. Declare synced members with `accessor`.   |
