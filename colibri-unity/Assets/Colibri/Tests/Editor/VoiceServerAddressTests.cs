@@ -25,7 +25,7 @@ namespace HCIKonstanz.Colibri.Tests
         private static readonly IPAddress OtherV4 = IPAddress.Parse("10.0.0.2");
         private static readonly IPAddress V6 = IPAddress.Parse("fe80::1");
         private static readonly IPAddress GlobalV6 = IPAddress.Parse("2001:db8::1");
-        private const int VoicePort = 9013;
+        private const int VoicePort = 9213;
 
         private static readonly Func<IPAddress, bool> EveryRoute = _ => true;
         private static readonly Func<IPAddress, bool> NoRoute = _ => false;

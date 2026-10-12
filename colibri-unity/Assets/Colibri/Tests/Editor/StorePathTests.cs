@@ -32,7 +32,7 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(ColibriStore.StorePath("my app/1", "key"), Is.EqualTo("api/store/my%20app%2F1/key"));
         }
 
-        /// <summary>"http://2001:db8::1:9011/" is no URL: an IPv6 server address needs brackets there.</summary>
+        /// <summary>"http://2001:db8::1:9211/" is no URL: an IPv6 server address needs brackets there.</summary>
         [TestCase("2001:db8::1", "[2001:db8::1]")]
         [TestCase("[2001:db8::1]", "[2001:db8::1]")]
         [TestCase("::1", "[::1]")]

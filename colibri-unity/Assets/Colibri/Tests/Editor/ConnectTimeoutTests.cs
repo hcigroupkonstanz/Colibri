@@ -95,7 +95,7 @@ namespace HCIKonstanz.Colibri.Tests
             var neverCompletes = new TaskCompletionSource<bool>().Task;
 
             var clock = Stopwatch.StartNew();
-            var attempt = WebServerConnection.WaitForConnectAsync(socket, neverCompletes, "127.0.0.1", 9012, 10000, CancellationToken.None);
+            var attempt = WebServerConnection.WaitForConnectAsync(socket, neverCompletes, "127.0.0.1", 9212, 10000, CancellationToken.None);
             Thread.Sleep(100);
             socket.Close();
 
