@@ -149,7 +149,7 @@ with its default.
 | `VOICE_RECORDING` | `false` | `true` saves each voice client's PCM audio as a `.wav` file in the data directory, named as in [Voice packets](protocol.md#voice-packets-udp) |
 | `DATA_ROOT` | `../../data` | Data directory: `store.json` and voice recordings |
 | `WEBSERVER_ROOT` | `../ui/` | Admin UI build output |
-| `BASE_URL` | empty | Path of the admin UI on the web port, e.g. `/colibri`. `/api/store` and `/socket.io/` keep their paths. A reverse proxy that serves the admin UI under this path also has to forward `/socket.io/`, which the admin UI connects to. |
+| `BASE_URL` | empty | Path of the admin UI, e.g. `/colibri` behind a reverse proxy. `/api/store` and Socket.IO stay at the root. |
 | `STACK_TRACE_LIMIT` | `30` | Stack frames captured for a logged error |
 | `CONSOLE_LOG_LEVEL` | `info` | Least severe level printed to stdout/stderr: `error`, `warn`, `info` or `debug` |
 | `CONSOLE_LOG_BROADCAST_TRAFFIC` | `false` | `true` also prints every `broadcast::` message, regardless of `CONSOLE_LOG_LEVEL` |
