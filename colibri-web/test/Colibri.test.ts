@@ -325,7 +325,7 @@ describe('Colibri constructor', () => {
 
     it('throws when a second instance is constructed', () => {
         new Colibri('app', 'localhost', 9211);
-        expect(() => new Colibri('app2', 'localhost', 9012)).toThrow('A Colibri instance already exists!');
+        expect(() => new Colibri('app2', 'localhost', 9212)).toThrow('A Colibri instance already exists!');
     });
 });
 
