@@ -19,6 +19,8 @@ No 1.x client, Unity or web, works with a 2.0 server.
 - [ ] [Port your own voice code to the new packet format](#breaking)
 - [ ] [Voice through a UDP proxy: add the proxy to `TRUSTED_PROXIES`, or publish 9213/udp
       directly](#breaking)
+- [ ] [Your own scripts that write the REST store: send
+      `Content-Type: application/vnd.colibri.v2+json`](#breaking)
 - [ ] [Docker: pin the image version](#other-changes)
 - [ ] [Docker: remove `tty: true` from a compose file based on the 1.x README](#other-changes)
 - [ ] [Docker with `--user` (or `user:` in compose): give the data directory to that
@@ -157,6 +159,17 @@ Add the proxy to `TRUSTED_PROXIES`, or publish 9213/udp directly
 the server name has an IPv4 address, as 1.x did, and sends voice there too. If that address does not
 answer on the TCP port while the name's IPv6 address does, TCP falls back to IPv6 and the voice is
 dropped.
+
+**REST store media type.** The store takes and answers only `application/vnd.colibri.v2+json`. A
+`PUT` sent as `application/json` or as form data gets `415` and stores nothing. A request whose
+`Accept` leaves the type out, e.g. `Accept: application/json`, gets `406`. A request without `Accept`
+or with `*/*` is answered. Both 2.0 clients send the type. Your own scripts and tools that write the store send it too:
+
+```sh
+curl -X PUT -H 'Content-Type: application/vnd.colibri.v2+json' -d '{"x":1}' http://localhost:9211/api/store/app/name
+```
+
+See [REST store](colibri-server/docs/protocol.md#rest-store).
 
 **Removed dependencies:** `flatbuffers`, `body-parser`, `uuid` and `source-map-support`.
 

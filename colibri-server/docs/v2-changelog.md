@@ -28,6 +28,9 @@ this is the server's full detail.
   bundled compose file publishes them. To keep the old ports, set the three variables, or with
   Docker publish 9011 to 9013 on the new container ports. See
   [MIGRATION.md](../../MIGRATION.md#default-ports).
+- **REST store media type.** The store takes and answers only `application/vnd.colibri.v2+json`.
+  A `PUT` sent as `application/json` or form data gets 415, and an `Accept` that leaves the type
+  out gets 406. See [REST store](#rest-store).
 - **Node 24 and native ESM** to run from source.
 - **Docker image.** The server runs as the non-root `node` user, started through a new
   `colibri-entrypoint.sh` that replaces the node base image's entrypoint; `CMD` is
@@ -526,6 +529,13 @@ EditMode tests, which `npm run test:vectors` checks in CI.
 
 ### REST store
 
+- **Its own media type**, `application/vnd.colibri.v2+json` (`REST_MEDIA_TYPE`, from the protocol
+  version), for request and response bodies. A `PUT` with any other `Content-Type`,
+  `application/json` and form data included, answers 415 and stores nothing. Every answer under
+  `/api`, errors included, is in the media type. A request whose `Accept` leaves it out answers
+  406. No `Accept`, `*/*` and `application/*` take it. colibri-unity's `Store` and colibri-web send
+  `Accept` and `Content-Type` in the media type. 1.x parsed `application/json` and form data, so
+  `curl -X PUT -d '{"x":1}'`, which sends form data, stored `{"{\"x\":1}": ""}`.
 - **Any JSON value up to 5 MiB.** `PUT /api/store/:app/:name` takes numbers, strings, booleans and
   `null` as well as objects and arrays, and bodies up to 5 MiB. colibri-unity's
   `Store.Put(name, 42)` and colibri-web's `setRestObject(key, 'text')` used to get HTTP 400, and
@@ -542,17 +552,12 @@ EditMode tests, which `npm run test:vectors` checks in CI.
 - **A request under `/api` that no API route handles gets 404**, with a JSON error, instead of 200
   and the admin UI page. A wrong method or path, such as `POST /api/store/app/name`, stored nothing
   and looked successful.
-- **A `PUT` without a JSON body is refused.** With no body, an empty one, or a `Content-Type`
-  other than JSON or form data (`text/plain`, say), `PUT /api/store/:app/:name` answers 400 with
-  an error that names `Content-Type: application/json`, and stores nothing. It used to store
-  `undefined` (a name listed under its app that `GET` and `DELETE` then answered 404 for) or,
-  for an empty JSON body, `{}`. colibri-unity's `Store` and colibri-web's `setRestObject` send a
-  JSON body for every value, `null` included, except that `setRestObject(key, undefined)` sends
-  none: it now gets `false` back and stores nothing, where it used to store `{}`. Store `null`
-  instead. Form data (`application/x-www-form-urlencoded`) is still parsed into an object of its
-  fields and stored, up to 100 kB, as in 1.3.1. That is what `curl -d` sends without
-  `-H 'Content-Type: application/json'`, so `curl -X PUT -d '{"x":1}'` stores
-  `{"{\"x\":1}": ""}` rather than answering 400.
+- **A `PUT` without a JSON body is refused.** With no body or an empty one,
+  `PUT /api/store/:app/:name` answers 400 and stores nothing. It used to store `undefined` (a name
+  listed under its app that `GET` and `DELETE` then answered 404 for) or, for an empty JSON body,
+  `{}`. colibri-unity's `Store` and colibri-web's `setRestObject` send a JSON body for every value,
+  `null` included, except that `setRestObject(key, undefined)` sends none: it now gets `false` back
+  and stores nothing, where it used to store `{}`. Store `null` instead.
 - Saving `store.json` is debounced (~250 ms) and atomic (write `store.json.tmp`, then rename), and
   a save waits for the one still in flight, so two quick writes cannot interleave into a partial
   file. The store is flushed on crash paths as well as on a clean shutdown, but only when it holds
