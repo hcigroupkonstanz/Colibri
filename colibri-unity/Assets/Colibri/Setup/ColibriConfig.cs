@@ -87,9 +87,13 @@ namespace HCIKonstanz.Colibri.Setup
 
         public string AppName = "";
         public string ServerAddress = "colibri.hci.uni-konstanz.de";
-        public int WebServerPort = 9011;
-        public int TcpServerPort = 9012;
-        public int VoiceServerPort = 9013;
+
+        // colibri-server 2.x's default ports. 1.x's were 9011, 9012 and 9013: the defaults differ so
+        // that a client of one version does not reach a server of the other by them. A configuration
+        // saved by 1.x keeps the ports it saved; only a new one starts out with these.
+        public int WebServerPort = 9211;
+        public int TcpServerPort = 9212;
+        public int VoiceServerPort = 9213;
 
         /// <summary>
         /// The server has TLS turned on (<c>TLS_CERT</c> and <c>TLS_KEY</c> at colibri-server): the

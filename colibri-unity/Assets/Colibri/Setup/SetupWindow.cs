@@ -364,13 +364,13 @@ namespace HCIKonstanz.Colibri.Setup
                     : "Server address should not contain a protocol (only IP or domain name)"),
             (new[] { nameof(ColibriConfig.WebServerPort) },
                 config => IsPort(config.WebServerPort) ? null
-                    : "Web server port invalid (must be a number between 1 - 65535, default 9011)"),
+                    : "Web server port invalid (must be a number between 1 - 65535, default 9211)"),
             (new[] { nameof(ColibriConfig.TcpServerPort) },
                 config => IsPort(config.TcpServerPort) ? null
-                    : "TCP server port invalid (must be a number between 1 - 65535, default 9012)"),
+                    : "TCP server port invalid (must be a number between 1 - 65535, default 9212)"),
             (new[] { nameof(ColibriConfig.VoiceServerPort) },
                 config => IsPort(config.VoiceServerPort) ? null
-                    : "Voice server port invalid (must be a number between 1 - 65535, default 9013)"),
+                    : "Voice server port invalid (must be a number between 1 - 65535, default 9213)"),
             (new[] { nameof(ColibriConfig.WebServerPort), nameof(ColibriConfig.TcpServerPort), nameof(ColibriConfig.VoiceServerPort) },
                 config => new[] { config.WebServerPort, config.TcpServerPort, config.VoiceServerPort }.Distinct().Count() == 3 ? null
                     : "Two ports may not have the same value!"),

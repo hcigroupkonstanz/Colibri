@@ -2281,7 +2281,7 @@ namespace HCIKonstanz.Colibri.Networking
         public string SuspectedProtocolMismatch => _suspectedProtocolMismatch;
 
         /// <summary>
-        /// Why the last attempt to open the TCP connection failed - "192.168.0.10:9012 did not
+        /// Why the last attempt to open the TCP connection failed - "192.168.0.10:9212 did not
         /// answer within 5 s", say, a refusal, or with TLS a failed handshake or a rejected
         /// certificate - or null once one has opened. For showing why the client is still not
         /// connected; each failure is logged as well. Unaffected by anything that happens after the
