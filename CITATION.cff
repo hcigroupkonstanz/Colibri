@@ -66,11 +66,15 @@ preferred-citation:
     email: Tiare.Feuchtner@uni-konstanz.de
     orcid: 'https://orcid.org/0000-0002-9922-5538'
     affiliation: 'HCI Group, University of Konstanz & Aarhus University'
-  doi: "10.1109/ISMAR-Adjunct60411.2023.00010 "
+  doi: "10.1109/ISMAR-Adjunct60411.2023.00010"
   title: "Colibri: A toolkit for rapid prototyping of networking across realities"
   year: 2023
-  booktitle: "2023 IEEE International Symposium on Mixed and Augmented Reality Adjunct (ISMAR-Adjunct)"
-  location: "Sydney, Australia"
-  series: "ISMAR'23 Adjunct"
-  numpages: 4
+  collection-title: "2023 IEEE International Symposium on Mixed and Augmented Reality Adjunct (ISMAR-Adjunct)"
+  collection-type: proceedings
+  location:
+    name: "Sydney, Australia"
+    city: Sydney
+    country: AU
+  pages: 4
 repository-code: 'https://github.com/hcigroupkonstanz/Colibri'
+version: "2.0.0"

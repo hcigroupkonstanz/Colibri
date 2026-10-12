@@ -1,0 +1,40 @@
+:host {
+    position: relative;
+    display: block;
+}
+
+// over the plot, which keeps its axes
+.message {
+    position: absolute;
+    inset: 0 0 28px 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+
+    color: var(--text-muted);
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.chart {
+    position: relative;
+    height: clamp(200px, 40vh, 420px);
+    overflow: hidden;
+
+    // drawn by d3, so outside the reach of this component's own (encapsulated) styles
+    ::ng-deep svg {
+        position: absolute;
+        inset: 0;
+        color: var(--text-muted);
+
+        .axis {
+            font: 11px var(--sans);
+
+            .domain,
+            line {
+                stroke: var(--surface-3);
+            }
+        }
+    }
+}

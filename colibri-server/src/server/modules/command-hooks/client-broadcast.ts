@@ -1,6 +1,5 @@
-import { filter } from 'rxjs';
-import { Service } from '../core';
-import { ConnectionPool, NetworkClient, NetworkMessage } from './connection-pool';
+import { Payload, Service } from '../core/index.js';
+import { ConnectionPool, NetworkClient, NetworkMessage } from './connection-pool.js';
 
 /**
  *  Broadcasts infos about current clients (i.e., client dis-/connected)
@@ -18,16 +17,16 @@ export class ClientBroadcast extends Service {
         pool.clientDisconnected$
             .subscribe(c => this.broadcastClient(c, 'client::disconnected'));
 
-        pool.messages$
-            .pipe(filter(msg => msg.channel === 'colibri::clients' && msg.command === 'client::request'))
-            .subscribe(this.sendInitialState.bind(this));
+        pool.onCommand('client::request', msg => {
+            if (msg.channel === 'colibri::clients') this.sendInitialState(msg);
+        });
     }
 
     private broadcastClient(client: NetworkClient, event: string): void {
         const msg = {
             channel: 'colibri::clients',
             command: event,
-            payload: JSON.stringify({
+            payload: Payload.fromValue({
                 id: client.id,
                 name: client.name,
                 app: client.app
@@ -69,7 +68,7 @@ export class ClientBroadcast extends Service {
             this.pool.emit({
                 channel: 'colibri::clients',
                 command: 'client::connected',
-                payload: JSON.stringify(client),
+                payload: Payload.fromValue(client),
             }, msg.origin);
         }
     }

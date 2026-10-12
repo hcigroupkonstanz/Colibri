@@ -1,156 +1,101 @@
-# Colibri - Web Client
+# Colibri Web
+
+TypeScript client for [Colibri](../README.md) with pub/sub messages, synchronized models, a
+[key-value store](docs/guide.md#remote-store) and [remote logging](docs/guide.md#web-interface-for-logging). Exchanges
+data with web and [colibri-unity](../colibri-unity/README.md) clients through a [colibri-server](../colibri-server/README.md) 2.x.
+
+Full documentation: [docs/guide.md](docs/guide.md). Upgrading from 1.x: [MIGRATION.md](../MIGRATION.md).
+Release notes: [CHANGELOG.md](CHANGELOG.md).
+
+## Requirements
+
+- A browser, or Node.js 18 or newer. In Node.js, pass the server address to `new Colibri()`.
+- colibri-server 2.x. 1.x and 2.x [do not interoperate](docs/guide.md#protocol-version).
+- TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false`. Plain
+  JavaScript: [unsupported workaround](docs/js-workaround/README.md).
+- Peer dependency rxjs `^7.8.1`, installed by npm 7 and newer.
 
 ## Installation
 
-- NPM: `npm install @hcikn/colibri`
-- Yarn: `yarn add @hcikn/colibri`
-
-## Configuration
-
-Initialize Colibri once with:
-
-```ts
-import { Colibri } from '@hcikn/colibri';
-new Colibri('app_name', 'server_address');
-
-// if using a custom port:
-new Colibri('app_name', 'server_address', 9011);
+```sh
+npm install @hcikn/colibri@2
 ```
 
-For server setup, refer to [colibri-server](../colibri-server/).
+Keep the `@2` to avoid installing a 1.x release. If npm reports `No matching version found for @hcikn/colibri@2`,
+[build the package from source](docs/guide.md#building-from-source).
+
+## Quick start
+
+```ts
+import { Colibri, Sync } from '@hcikn/colibri';
+
+new Colibri('your-app-name', 'http://<your-server>:9211'); // 9211 is the default port
+
+Sync.receiveNumber('temperature', value => console.log('temperature', value));
+Sync.sendNumber('temperature', 21.5); // reaches other clients only, e.g. a second browser tab
+```
+
+Web and Unity clients exchange data only if their app names match. Use a name no other project on the server uses.
+Do not use `colibri`, which the admin UI uses.
 
 ## Usage
 
-### Web Interface for Logging
-
-Colibri provides a _web logger_ with web interface to send diagnostic data (currently: console logs) to the server. This may be useful for devices (e.g., VR devices, smartphones) where access to the console is not easily available.
-
-To setup, import the `RemoteLogger` and call its `init()` method. Any subsequent `console` calls should now also appear on your colibri server's web interface, which can be accessed via `http://<your-server-ip>:9011`.
-
-```ts
-import { RemoteLogger } from '@hcikn/colibri';
-const logger = new RemoteLogger();
-
-// en-/disable RemoteLogger
-logger.enable();
-logger.disable();
-```
-
-See also [the remote-logging sample](samples/remote-logging.ts) (run sample with `npm run sample/remote-logging`).
-
-### Sending Data between Clients
-
-Colibri supports simple data transmission via pub/sub communication. Data can be published from anywhere in  
-the executed code, as illustrated with the following simple example of sending a boolean value on a "click" channel:
-
-```ts
-import { Sync } from '@hcikn/colibri';
-Sync.sendBool('myChannel', true);
-```
-
-The sent data can then be received anywhere by registering a listener:
-
-```ts
-Sync.receiveBool('myChannel', (value) => {
-    // Will be called whenever a bool on "click" channel is received
-});
-```
-
-The listener can be deregistered via:
-
-```ts
-Sync.unregister('myChannel', MyMethod);
-```
-
-The following built-in types are available for sync: `bool, int (as number), float (as number), string, Vector2, Vector3, Quaternion, Color` and arrays thereof. For arbitrary data, you can use JSON:
-
-```c#
-Sync.sendJson('myChannel', { foo: 'bar' });
-Sync.receiveJson('myChannel', (json) => { /* ... */ });
-```
-
-See also [the broadcast sample](samples/broadcast.ts) (run sample with `npm run sample/broadcast`).
-
-Limitations:
-
-- You have to register the listener _before_ sending out data
-- Type and channel _must_ match between Listener and Sender (`number` will be converted to float for Unity clients, i.e., use `float` listener on Unity clients for sending numbers!)
-- Remember to unregister your listener where necessary!
-
 ### SyncModel
 
-(Counterpart to [SyncBehaviour in Unity client](../colibri-unity#SyncBehaviour))
-
-For more complex scenarios, Colibri supports synchronization of data models (e.g., for use in model-view-controller architectures). For this, we need extend the _Model_ with `SyncModel`:
-
 ```ts
-import { SyncModel, Synced } from '@hcikn/colibri';
+import { RegisterModelSync, SyncModel, Synced } from '@hcikn/colibri';
 
-export class SampleClass extends SyncModel<SampleClass> {
+class Player extends SyncModel<Player> {
     @Synced()
-    get name() { return this._name; }
-    set name(val: string) { this._name = val; }
-    private _name = '';
-
-    @Synced()
-    private age = 0;
-
-    @Synced('billingAddress')
-    private address = '';
-}
-```
-
-and enable `experimentalDecorators` in the `tsconfig.json`:
-
-```json
-{
-  "compilerOptions": {
-    "experimentalDecorators": true
-  }
+    accessor score = 0;
 }
 
+const [players$, registerPlayer] = RegisterModelSync<Player>({ name: 'player', type: Player });
+players$.subscribe(players => console.log(players.map(p => `${p.id}: ${p.score}`)));
+
+const me = new Player(`player-${Date.now()}`); // the id must be unique across clients
+registerPlayer(me);
+me.score = 10; // sent to the other clients
 ```
 
-Any property or field marked with `@Synced()` will be synchronized across all network clients. *Note: Synchronization of fields (e.g., `@Synced() private age = 0;` does not work on some frameworks such as React for some reason.*
+- Create the `Colibri` instance first, as in the quick start.
+- Always pass `name`. Without it, the channel is the class name in lower case, which minification changes.
+- To sync with a Unity `SyncBehaviour<T>`, set `name` to the Unity class name in lower case, followed by `_<ModelId>`
+  if the component's `ModelId` is set ([details](docs/guide.md#syncmodel)).
 
-Lastly, we need to register the class with the Synchronization mechanism by calling `RegisterModelSync`:
+## Configuration
 
-```ts
-import { RegisterModelSync } from '@hcikn/colibri';
-const [ SampleClasses$, registerExampleClass ] = RegisterModelSync<SampleClass>({ type: SampleClass });
+| Argument | Default                         | Value                                                                                                                        |
+| -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `app`    | required                        | App name. Must match on all clients that exchange data.                                                                      |
+| `server` | Host of the page (browser only) | Host name or IP address, optionally with `http://`, `https://`, `ws://` or `wss://` and `:port`. No path, query or fragment. |
+| `port`   | `9211`                          | Used when `server` has no port. If both have one, they must match.                                                           |
+
+A second `new Colibri()` throws. Use `Colibri.getInstance()`. All options: [guide](docs/guide.md#configuration).
+
+## Troubleshooting
+
+| Symptom                                                                | Cause                                                                                                                                      | Fix                                                                        |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `new Colibri()` throws a `ColibriError`                                | Path such as `/log`, query or fragment in the address, another scheme, a port that conflicts with the third argument, or a second instance | Pass only scheme, host and port. Use `Colibri.getInstance()`.              |
+| Clients do not see each other                                          | Different app names or servers, or the listener was not registered and connected at send time                                              | Use the same app name and server. Register listeners first.                |
+| Nothing connects from an `https://` page                               | The browser blocks `ws://` and `http://` (mixed content)                                                                                   | Use `https://` or `wss://` with [TLS](docs/guide.md#tls) or a TLS proxy    |
+| `Colibri: could not connect to ...` after upgrading from 1.x           | The address or `port` names 9011, 1.x's default port. 2.x servers default to 9211.                                                         | Use the server's port                                                      |
+| `colibri.protocolMismatch` emits with `fatal: true`                    | The server refused this client and closed the connection                                                                                   | Use 2.x on both sides ([Protocol version](docs/guide.md#protocol-version)) |
+| `colibri.protocolMismatch` emits with `fatal: false`                   | No version announcement within 5 s, typical of a pre-2.0.0 server. The connection stays up.                                                | Upgrade the server to 2.x                                                  |
+| `@Synced()` fails to compile or does not sync                          | `experimentalDecorators` is on, or a member lacks `accessor`                                                                               | Remove `experimentalDecorators`. Declare synced members with `accessor`.   |
+| Models sync in development but not in a production build or with Unity | No `name` in `RegisterModelSync`                                                                                                           | Pass `name`                                                                |
+| Unity never receives numbers from the web                              | colibri-web sends every number as `float`                                                                                                  | Receive with `Sync.Receive<float>` in Unity, not `Sync.Receive<int>`       |
+| Colors arrive as strings or arrays                                     | Unity sends `"#RRGGBBAA"`, colibri-web `[r, g, b, a]`                                                                                      | Normalize with `toHexColor()` or `toRgbaColor()`                           |
+| `Sync.send*` does nothing                                              | Called before `new Colibri()`, dropped with a console warning                                                                              | Create the `Colibri` instance first                                        |
+
+## Testing
+
+```sh
+npm test          # unit tests
+npm run test:e2e  # end-to-end, starts a colibri-server with Docker Compose unless COLIBRI_E2E_SERVER is set
 ```
 
-The first return value (e.g., `SampleClasses$`) is a [BehaviorSubject](https://www.learnrxjs.io/learn-rxjs/subjects/behaviorsubject) that will be updated whenever a new instance of SampleClass is added, updated, or deleted. The second return value (e.g., `registerExampleClass`) can be used to sync new instantiations:
+## License
 
-```ts
-const mySample = new SampleClass('myId'); // mySample is not synchronized across clients yet
-registerExampleClass(mySample); // mySample is sent out to all other clients and will be synchronized
-```
-
-See also [the model-sync sample](samples/model-sync.ts) (run sample with `npm run sample/model-sync`).
-
-### Remote Store
-
-Colibri offers persistent data storage on the server, so that data can be shared easily between connected clients. Each object is identified by it's individual `key`:
-
-```ts
-import { Colibri, GetRestApi, PutRestApi } from '@hcikn/colibri';
-
-const colibri = Colibri.getInstance();
-const key = 'sampleKey';
-const data = {...};
-
-// fetch data
-colibri.getRestObject(key); // or...
-GetRestApi(key);
-
-// update data
-colibri.setRestObject(key, data); // or...
-PutRestApi(key, data);
-```
-
-Each operation can be achieved by either directly interaction with the `Colibri` object or using the corresponding wrapper method.
-
-## Samples
-
-See [Sample folder](samples/) for more examples on how to use the Colibri web client.
+[MIT](LICENSE)

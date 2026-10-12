@@ -1,10 +1,15 @@
 import { Observable, Subject } from 'rxjs';
-import { LogMessage, LogLevel, Metadata } from './log-message';
+import { LogMessage, LogLevel, Metadata } from './log-message.js';
 
 export abstract class Service {
     public static readonly Current: Service[] = [];
 
-    protected outputStream$: Subject<LogMessage> = new Subject<LogMessage>();
+    // Every instance's log calls publish here directly, instead of a consumer (WebLog)
+    // snapshotting Service.Current at its own init() time and merging each instance's own
+    // output$ - that snapshot missed any service constructed after the consumer's init()
+    // ran. A single static bus makes coverage independent of construction order.
+    private static readonly logBus$ = new Subject<LogMessage>();
+    public static readonly output$: Observable<LogMessage> = Service.logBus$.asObservable();
 
     protected logDebug(msg: string, metadata: Metadata = {}): void {
         this.outputMsg(LogLevel.Debug, msg, metadata);
@@ -25,10 +30,6 @@ export abstract class Service {
         this.outputMsg(LogLevel.Error, msg, metadata);
     }
 
-    public get output$(): Observable<LogMessage> {
-        return this.outputStream$.asObservable();
-    }
-
     public abstract get serviceName(): string;
     public abstract get groupName(): string;
 
@@ -40,7 +41,7 @@ export abstract class Service {
     public async init() { }
 
     private outputMsg(lvl: LogLevel, msg: string, metadata: Metadata): void {
-        this.outputStream$.next({
+        Service.logBus$.next({
             origin: this.serviceName,
             group: this.groupName,
             level: lvl,

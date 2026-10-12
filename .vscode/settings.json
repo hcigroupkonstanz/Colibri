@@ -1,0 +1,7 @@
+{
+    "files.exclude": {
+        "colibri-server": true,
+        "colibri-web": true,
+        "colibri-unity": true
+    }
+}

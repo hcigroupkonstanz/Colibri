@@ -1,46 +1,42 @@
-using System.Collections.Generic;
-using UnityEngine;
+using System;
+using HCIKonstanz.Colibri.Networking.Protocol;
 
 public class Resampler
 {
     public int sourceRate { get; private set; }
     public int targetRate { get; private set; }
-    private float resampleRatio;
-    private float lastSample = 0f;
-    private float sourcePos = 0f;
+
+    // Null for a rate of zero or less, which resamples to nothing. AudioSettings.outputSampleRate,
+    // VoiceReceiver's target rate, can be that without an audio device, and the old implementation
+    // did not throw for it either.
+    private readonly StreamingResampler resampler;
+    private float[] output = Array.Empty<float>();
 
     public Resampler(int sourceRate, int targetRate)
     {
         this.sourceRate = sourceRate;
         this.targetRate = targetRate;
-        resampleRatio = (float)targetRate / sourceRate;
+        if (sourceRate > 0 && targetRate > 0)
+            resampler = new StreamingResampler(sourceRate, targetRate);
     }
 
+    /// <summary>
+    /// Resamples the next chunk of a stream. The chunks may have any length: the stream carries
+    /// on from one chunk to the next, and how many samples come out of a chunk varies by one so
+    /// that the output keeps exact pace with the input.
+    /// </summary>
     public float[] ResampleStream(float[] inputChunk)
     {
-        int inputLength = inputChunk.Length;
-        int outputLength = Mathf.CeilToInt(inputLength * resampleRatio);
+        if (resampler == null || inputChunk == null || inputChunk.Length == 0)
+            return Array.Empty<float>();
 
-        float[] output = new float[outputLength];
+        var max = resampler.MaxOutput(inputChunk.Length);
+        if (output.Length < max)
+            output = new float[max];
 
-        for (int i = 0; i < outputLength; i++)
-        {
-            int i0 = (int)Mathf.Floor(sourcePos);
-            int i1 = Mathf.Min(i0 + 1, inputLength - 1);
-
-            float s0 = (i0 < 0) ? lastSample : inputChunk[Mathf.Clamp(i0, 0, inputLength - 1)];
-            float s1 = inputChunk[i1];
-            float t = sourcePos - i0;
-
-            float interpolated = Mathf.Lerp(s0, s1, t);
-            output[i] = interpolated;
-
-            sourcePos += 1f / resampleRatio;
-        }
-
-        sourcePos -= inputLength;
-        lastSample = inputChunk[inputLength - 1];
-
-        return output;
+        var written = resampler.Process(inputChunk, inputChunk.Length, output);
+        var result = new float[written];
+        Array.Copy(output, result, written);
+        return result;
     }
 }

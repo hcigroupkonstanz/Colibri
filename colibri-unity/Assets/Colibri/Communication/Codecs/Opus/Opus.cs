@@ -13,6 +13,14 @@ public static class Opus
     const string DllName = "libopus";
     #endif
 
+    /// <summary>
+    /// Whether this platform has an Opus library. The package ships one for Windows, Linux and
+    /// Android; elsewhere the functions below are stubs that fail. Loading it can still fail
+    /// here, as in the macOS Editor with Android as the build target.
+    /// </summary>
+    // Not a const: a const would leave the callers' other branch unreachable, with a warning.
+    internal static readonly bool HasNativeLibrary = true;
+
     [DllImport(DllName)]
     public static extern IntPtr opus_encoder_create(int Fs, int channels, int application, out int error);
 
@@ -33,6 +41,8 @@ public static class Opus
 
 #else
     // Stub implementations for unsupported platforms
+
+    internal static readonly bool HasNativeLibrary = false;
 
     public static IntPtr opus_encoder_create(int Fs, int channels, int application, out int error)
     {

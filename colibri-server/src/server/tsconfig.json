@@ -1,15 +1,28 @@
 {
-  "extends": "../../tsconfig.json",
   "compileOnSave": false,
   "compilerOptions": {
     "outDir": "../../dist/server",
+    "rootDir": ".",
     "sourceMap": true,
     "declaration": false,
+    "skipLibCheck": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "experimentalDecorators": true,
-    "target": "es2022",
-    "lib": ["es2022"],
-    "types": ["node"]
+    "target": "es2023",
+    "lib": ["es2023"],
+    "types": ["node"],
+
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true
   }
 }

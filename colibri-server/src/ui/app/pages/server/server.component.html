@@ -1,0 +1,42 @@
+<app-offline-banner></app-offline-banner>
+
+<div class="page">
+  @if (sections().length > 0) {
+    <div class="cards">
+      @for (section of sections(); track section.id) {
+        <section class="card" [attr.aria-labelledby]="'server-' + section.id">
+          <div class="card-head">
+            <h2 [id]="'server-' + section.id">{{ section.title }}</h2>
+            @if (section.id === 'server') {
+              <app-live-status></app-live-status>
+            }
+          </div>
+          <dl class="facts">
+            @for (fact of section.facts; track fact.label) {
+              <div class="fact">
+                <dt>{{ fact.label }}</dt>
+                <dd>
+                  <span class="value {{ fact.tone ?? '' }}" [class.mono]="fact.mono" [attr.title]="fact.title ?? null">
+                    @if (fact.link) {
+                      <a [routerLink]="fact.link">{{ fact.value }}</a>
+                    } @else {
+                      {{ fact.value }}
+                    }
+                  </span>
+                  @if (fact.note) {
+                    <span class="note">{{ fact.note }}</span>
+                  }
+                  @if (fact.variable) {
+                    <code [title]="'Set by ' + fact.variable">{{ fact.variable }}</code>
+                  }
+                </dd>
+              </div>
+            }
+          </dl>
+        </section>
+      }
+    </div>
+  } @else {
+    <p class="empty-note">Loading the server info…</p>
+  }
+</div>

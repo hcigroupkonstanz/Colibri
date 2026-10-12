@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEngine;
 using System.Linq;
 using System;
+using HCIKonstanz.Colibri.Core;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
@@ -13,7 +14,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void CheckDuplicateIds()
         {
-            var transforms = FindObjectsOfType<SyncTransform>();
+            var transforms = UnityCompat.FindAll<SyncTransform>();
             var uniqueIds = transforms.Select(t => t.Id).Distinct();
 
             if (transforms.Length > uniqueIds.Count())

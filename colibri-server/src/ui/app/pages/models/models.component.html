@@ -1,0 +1,238 @@
+<div class="page-bar">
+  <p-select class="apps" size="small" [options]="appOptions()" optionLabel="name" optionValue="name" [ngModel]="app() || null"
+    [showClear]="true" placeholder="All apps" ariaLabel="App" (onChange)="setApp($event.value ?? '')">
+    <ng-template #item let-option>
+      <span class="option">
+        <span>{{ option.name }}</span>
+        <span class="muted">{{ option.models }} {{ option.models === 1 ? 'model' : 'models' }}</span>
+      </span>
+    </ng-template>
+  </p-select>
+
+  <p-select class="channels" size="small" [options]="channelOptions()" optionLabel="name" optionValue="name" [ngModel]="channel() || null"
+    [showClear]="true" placeholder="All channels" ariaLabel="Channel" (onChange)="setChannel($event.value ?? '')">
+    <ng-template #item let-option>
+      <span class="option">
+        <span>{{ option.name }}</span>
+        <span class="muted">{{ option.label }}</span>
+      </span>
+    </ng-template>
+  </p-select>
+
+  <div class="search" [class.typed]="filterText() !== ''">
+    <i class="pi pi-search" aria-hidden="true"></i>
+    <input #filterInput type="search" placeholder="Filter by id or channel" aria-label="Filter by id or channel" maxlength="200"
+      [value]="filterText()" (input)="onFilter(filterInput.value)" (keydown.escape)="clearFilter(); filterInput.blur()">
+    @if (filterText() !== '') {
+      <button type="button" class="clear-search" aria-label="Clear filter" title="Clear filter" (click)="clearFilter(); filterInput.focus()">
+        <i class="pi pi-times" aria-hidden="true"></i>
+      </button>
+    }
+  </div>
+
+  <div class="end">
+    <label class="switch" title="Update the list and the open model every second">
+      <p-toggleswitch [ngModel]="live()" (ngModelChange)="setLive($event)"></p-toggleswitch>
+      <span>Live</span>
+    </label>
+    @if (!live()) {
+      <button type="button" class="btn" (click)="refresh()" [disabled]="list.loading()">
+        <i class="pi pi-refresh" aria-hidden="true"></i>
+        <span>Refresh</span>
+      </button>
+      @if (list.data(); as data) {
+        <span class="muted as-of" [title]="'Taken at ' + (data.at | date:'yyyy-MM-dd HH:mm:ss')">As of {{ data.at | date:'HH:mm:ss' }}</span>
+      }
+    }
+  </div>
+</div>
+
+<app-offline-banner></app-offline-banner>
+
+<div class="page models" [class.open]="open() !== null">
+  <div class="list">
+    <section class="card" aria-labelledby="models-title">
+      <div class="card-head">
+        <h2 id="models-title">Models</h2>
+        <span class="hint">{{ summary() }}</span>
+      </div>
+
+      @if (empty(); as empty) {
+        <div class="empty">
+          <p class="empty-note">{{ empty }}</p>
+          @if (pastEnd()) {
+            <button type="button" class="btn" (click)="setPage(pages())">Last page</button>
+          } @else if (filter()) {
+            <button type="button" class="btn" (click)="clearFilter()">Clear filter</button>
+          }
+        </div>
+      } @else {
+        <div class="table-scroll">
+          <table class="data models-table">
+            <thead>
+              <tr>
+                <th class="c-id">Id</th>
+                @if (!oneChannel()) {
+                  <th class="c-channel">Channel</th>
+                }
+                <th class="c-fields num" title="Top-level fields besides the id">Fields</th>
+                <th class="c-size num" title="Size as compact JSON">Size</th>
+                <th class="c-updated num" title="How long ago it was last updated">Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.key) {
+                <tr [class.open]="row.open" [class.cut]="row.truncated" (click)="openModel(row)">
+                  <td class="c-id">
+                    <span class="id-line">
+                      @if (row.truncated) {
+                        <span class="id mono" [title]="row.id">{{ row.id }}</span>
+                        <span class="tag" title="Longer than 512 characters: cut, and the server cannot look it up">cut</span>
+                      } @else {
+                        <a class="id mono" [routerLink]="[]" [queryParams]="modelParams(row)" queryParamsHandling="merge" [title]="row.id" [attr.data-key]="row.key"
+                          [attr.aria-current]="row.open ? 'true' : null" (click)="$event.stopPropagation()">{{ row.id }}</a>
+                      }
+                    </span>
+                    @if (!oneChannel()) {
+                      <span class="where" [title]="row.app + ' / ' + row.channel">{{ row.app }} / {{ row.channel }}</span>
+                    }
+                  </td>
+                  @if (!oneChannel()) {
+                    <td class="c-channel" [title]="row.app + ' / ' + row.channel"><span class="muted">{{ row.app }} /</span> {{ row.channel }}</td>
+                  }
+                  <td class="c-fields num">{{ row.fields }}</td>
+                  <td class="c-size num">
+                    @if (row.size; as size) {
+                      {{ size }}
+                    } @else {
+                      <span class="muted" title="Not measured yet: the server measures a limited amount each time">…</span>
+                    }
+                  </td>
+                  <td class="c-updated num" [title]="row.updatedAt | date:'yyyy-MM-dd HH:mm:ss'">{{ row.age }} ago</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (pages() > 1) {
+          <nav class="pager" aria-label="Pages">
+            <button type="button" class="btn" [disabled]="page() <= 1" (click)="setPage(page() - 1)">
+              <i class="pi pi-chevron-left" aria-hidden="true"></i><span>Previous</span>
+            </button>
+            <span class="range">{{ range() }}</span>
+            <button type="button" class="btn" [disabled]="page() >= pages()" (click)="setPage(page() + 1)">
+              <span>Next</span><i class="pi pi-chevron-right" aria-hidden="true"></i>
+            </button>
+          </nav>
+        }
+      }
+    </section>
+
+    @if (list.data(); as data) {
+      <section class="card" aria-labelledby="deleted-title">
+        <div class="card-head">
+          <h2 id="deleted-title">Recently deleted</h2>
+          <span class="hint">
+            @if (data.tombstoneSeconds > 0) {
+              Ids deleted in the last {{ data.tombstoneSeconds }} s, newest first@if (data.deletedTotal > data.deleted.length) {, {{ data.deleted.length }} of {{ data.deletedTotal }}}
+            } @else {
+              The server does not keep deleted ids (MODEL_TOMBSTONE_SECONDS is 0)
+            }
+          </span>
+        </div>
+
+        @if (deleted().length > 0) {
+          <div class="table-scroll">
+            <table class="data deleted-table">
+              <thead>
+                <tr>
+                  <th class="c-id">Id</th>
+                  @if (!oneChannel()) {
+                    <th class="c-channel">Channel</th>
+                  }
+                  <th class="c-updated num">Deleted</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of deletedShown(); track row.key) {
+                  <tr>
+                    <td class="c-id">
+                      <span class="id-line">
+                        <span class="id mono" [title]="row.id">{{ row.id }}</span>
+                        @if (row.truncated) {
+                          <span class="tag" title="Longer than 512 characters: cut">cut</span>
+                        }
+                      </span>
+                      @if (!oneChannel()) {
+                        <span class="where" [title]="row.app + ' / ' + row.channel">{{ row.app }} / {{ row.channel }}</span>
+                      }
+                    </td>
+                    @if (!oneChannel()) {
+                      <td class="c-channel" [title]="row.app + ' / ' + row.channel"><span class="muted">{{ row.app }} /</span> {{ row.channel }}</td>
+                    }
+                    <td class="c-updated num" [title]="row.deletedAt | date:'yyyy-MM-dd HH:mm:ss'">{{ row.age }} ago</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          @if (deleted().length > DELETED_SHOWN) {
+            <button type="button" class="btn more-deleted" [attr.aria-expanded]="allDeleted()" (click)="allDeleted.set(!allDeleted())">
+              {{ allDeleted() ? 'Show the newest ' + DELETED_SHOWN : 'Show all ' + deleted().length }}
+            </button>
+          }
+        } @else if (data.tombstoneSeconds > 0) {
+          <p class="empty-note">None{{ filtered() ? ' that match' : '' }}.</p>
+        }
+      </section>
+    }
+  </div>
+
+  @if (open(); as open) {
+    <section class="card detail" aria-labelledby="model-title">
+      <div class="detail-head">
+        <button type="button" class="btn back" (click)="close()">
+          <i class="pi pi-arrow-left" aria-hidden="true"></i><span>Models</span>
+        </button>
+        <div class="title">
+          <h2 id="model-title" class="mono" tabindex="-1">{{ open.id }}</h2>
+          <span class="where">{{ open.app }} / {{ open.channel }}</span>
+        </div>
+        <button type="button" class="close" aria-label="Close" title="Close (Esc)" (click)="close()">
+          <i class="pi pi-times" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      @if (model(); as model) {
+        @if (model.found) {
+          <dl class="facts">
+            <div><dt>Fields</dt><dd>{{ model.fields }}</dd></div>
+            <div><dt>Size</dt><dd>{{ model.bytes !== undefined ? size(model.bytes) : '-' }}</dd></div>
+            <div><dt>Updated</dt><dd [title]="model.updatedAt | date:'yyyy-MM-dd HH:mm:ss.SSS'">{{ modelAge() }} ago, at {{ model.updatedAt | date:'HH:mm:ss' }}</dd></div>
+            <div class="actions">
+              <button type="button" class="btn" (click)="downloadModel()"
+                [title]="model.truncated ? 'The first 512 KiB, as text: cut off, it is not valid JSON' : 'The value as a JSON file'">
+                <i class="pi pi-download" aria-hidden="true"></i><span>{{ model.truncated ? 'Download start' : 'Download' }}</span>
+              </button>
+            </div>
+          </dl>
+          @if (model.truncated) {
+            <p class="note">The value is longer than 512 KiB: only its start is shown, and downloaded as text.</p>
+          }
+          <pre class="json" tabindex="0" aria-label="The model's value as JSON">@for (part of jsonParts(); track $index) {@if (part.kind) {<span class="{{ part.kind }}">{{ part.text }}</span>} @else {{{ part.text }}}}</pre>
+        } @else {
+          <p class="gone">
+            @if (model.deletedAt !== undefined) {
+              Deleted {{ modelAge() }} ago, at {{ model.deletedAt | date:'HH:mm:ss' }}.
+            } @else {
+              The server does not hold this model.
+            }
+          </p>
+        }
+      } @else {
+        <p class="empty-note">Loading the model…</p>
+      }
+    </section>
+  }
+</div>

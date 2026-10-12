@@ -1,49 +1,379 @@
-/* You can add global styles to this file, and also import other style files */
 @use 'sass/nord' as *;
+
+@import '@fontsource/roboto/400.css';
+@import '@fontsource/roboto/500.css';
+@import '@fontsource/roboto/700.css';
+@import '@fontsource/fira-mono/400.css';
+
+// The palette every page uses: Nord, with text colours checked for at least 4.5:1 against the
+// backgrounds they appear on.
+:root {
+    color-scheme: dark;
+
+    --bg: #{$nord0};
+    --surface-1: #{$nord1};
+    --surface-2: #{$nord2};
+    --surface-3: #{$nord3};
+    --border: #{$nord2};
+
+    --text: #{$nord5};
+    --text-strong: #{$nord6};
+    --text-muted: #aab3c4;
+    --accent: #{$nord8};
+
+    --ok: #{$nord14};
+    --err: #ec9aa1;
+    --err-mark: #{$nord11};
+    --err-row: #423a46;
+    --warn: #{$nord13};
+    --warn-row: #3a3d45;
+    --info: #{$nord8};
+    --debug: #aab3c4;
+
+    --mono: 'Fira Mono', monospace;
+    --sans: Roboto, 'Helvetica Neue', sans-serif;
+}
 
 html,
 body {
     height: 100%;
-
 }
+
 body {
     margin: 0;
-    font-family: Roboto, "Helvetica Neue", sans-serif;
-    background-color: $nord1;
-    color: white;
+    font-family: var(--sans);
+    background-color: var(--bg);
+    color: var(--text);
 
     overflow: hidden;
 }
 
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
 
 /** Nicer scroll bars **/
-::-webkit-scrollbar-track
-{
-	background-color: $nord0;
+::-webkit-scrollbar-track {
+    background-color: var(--bg);
 }
 
-::-webkit-scrollbar
-{
-	width: 10px;
-	background-color: $nord1;
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background-color: var(--bg);
 }
 
-::-webkit-scrollbar-thumb
-{
-	background-color: $nord4;
+::-webkit-scrollbar-thumb {
+    background-color: var(--surface-3);
     border-radius: 10px;
 }
 
-
 a {
-    color: $nord6;
+    color: var(--text-strong);
     text-decoration: none;
 
     &:hover {
-        color: $nord8;
+        color: var(--accent);
     }
+}
+
+button {
+    font-family: inherit;
 }
 
 .no-select {
     user-select: none;
+}
+
+// An app's name in its colour (--app, from appColor()), on the log and the statistics page alike.
+.app-chip {
+    display: inline-block;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 3px;
+
+    color: var(--app);
+    background: color-mix(in srgb, var(--app) 10%, transparent);
+    font: 500 12px/18px var(--sans);
+    white-space: nowrap;
+}
+
+// PrimeNG's popup menu at the size of the toolbars it opens from
+.p-menu.small-menu {
+    min-width: 9rem;
+    font-size: 13px;
+
+    .p-menu-item-link {
+        padding: 8px 12px;
+    }
+
+    .p-menu-item-icon {
+        font-size: 13px;
+    }
+}
+
+button.app-chip {
+    cursor: pointer;
+
+    &:hover {
+        background: color-mix(in srgb, var(--app) 20%, transparent);
+    }
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.mono {
+    font-family: var(--mono);
+}
+
+.muted {
+    color: var(--text-muted);
+}
+
+// The bar under the app bar with a page's own controls, as the log's toolbar.
+.page-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 8px max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+
+    .p-select {
+        flex: 0 1 240px;
+        min-width: 150px;
+        font-size: 13px;
+    }
+
+    .end {
+        display: flex;
+        align-items: center;
+        gap: 8px 12px;
+        margin-left: auto;
+    }
+}
+
+// The pages made of cards: Clients, Models and Server.
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 1400px;
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: 16px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+}
+
+.card {
+    min-width: 0;
+    padding: 16px;
+
+    background: var(--surface-1);
+    border: 1px solid var(--surface-2);
+    border-radius: 8px;
+}
+
+.card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin-bottom: 12px;
+
+    h2 {
+        margin: 0;
+        color: var(--text-strong);
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .hint {
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+}
+
+// A button with a border, as the log's Pause.
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    box-sizing: border-box;
+
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--surface-3);
+    border-radius: 6px;
+    font: 500 13px var(--sans);
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+        color: var(--text);
+        background: var(--surface-2);
+    }
+
+    &:disabled {
+        color: var(--text-muted);
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    .pi {
+        font-size: 12px;
+    }
+}
+
+// Updated every second: a dot in the colour of a working connection.
+.live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+    white-space: nowrap;
+
+    &::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--ok);
+    }
+
+    &.off::before {
+        background: var(--text-muted);
+    }
+}
+
+// A short status word on a row: a load limit, TLS, a cut name.
+.tag {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 3px;
+
+    color: var(--text);
+    background: var(--surface-2);
+    font: 500 11px/18px var(--sans);
+    white-space: nowrap;
+
+    &.warn {
+        color: var(--bg);
+        background: var(--warn);
+    }
+
+    &.err {
+        color: var(--bg);
+        background: var(--err);
+    }
+
+    &.ok {
+        color: var(--bg);
+        background: var(--ok);
+    }
+}
+
+// The tables of the card pages
+table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+
+    th,
+    td {
+        padding: 6px 12px 6px 0;
+        text-align: left;
+        white-space: nowrap;
+        vertical-align: top;
+
+        &:last-child {
+            padding-right: 0;
+        }
+    }
+
+    th {
+        color: var(--text-muted);
+        font-weight: 500;
+        border-bottom: 1px solid var(--surface-2);
+    }
+
+    tbody tr + tr td {
+        border-top: 1px solid var(--surface-2);
+    }
+
+    .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    // a header that sorts the table
+    .sort {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0;
+
+        color: inherit;
+        background: none;
+        border: 0;
+        font: inherit;
+        white-space: nowrap;
+        cursor: pointer;
+
+        &:hover,
+        &.on {
+            color: var(--text-strong);
+        }
+
+        .pi {
+            font-size: 10px;
+        }
+    }
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+.empty-note {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+@media (max-width: 599.98px) {
+    .page {
+        padding-top: 12px;
+        gap: 12px;
+    }
+
+    .card {
+        padding: 12px;
+    }
+}
+
+// Targets a finger can hit, as on the log.
+@media (pointer: coarse), (max-width: 699.98px) {
+    .btn {
+        height: 40px;
+    }
+
+    .page-bar .p-select-label {
+        padding-top: 11px;
+        padding-bottom: 11px;
+    }
 }

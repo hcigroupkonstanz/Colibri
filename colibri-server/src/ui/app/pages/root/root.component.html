@@ -1,22 +1,21 @@
-<div class="header no-select">
-  <div class="logo">
-    <img src="assets/logo_small.webp">
-    <h1>Colibri</h1>
-  </div>
+<header class="appbar no-select">
+  <a class="brand" routerLink="/log">
+    <img src="assets/logo_small.webp" alt="">
+    <span>Colibri</span>
+  </a>
 
-  <div class="tabs">
-    @for (tab of tabs; track tab) {
-      <a [routerLink]="tab.path" routerLinkActive="active">{{ tab.label }}</a>
+  <nav class="tabs" aria-label="Pages">
+    @for (tab of tabs; track tab.path) {
+      <a [routerLink]="tab.path" routerLinkActive="active" ariaCurrentWhenActive="page">{{ tab.label }}</a>
     }
+  </nav>
 
-    <div class="active-indicator" [style]="{ 'left': getIndicatorPosition() }"></div>
-  </div>
+  <span class="status {{ state() }}" role="status" [title]="statusTitle()">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="label">{{ statusLabel() }}</span>
+  </span>
+</header>
 
-  <div class="selector">
-    <app-filter-bar/>
-  </div>
-</div>
-
-<div class="content">
+<main class="content">
   <router-outlet></router-outlet>
-</div>
+</main>

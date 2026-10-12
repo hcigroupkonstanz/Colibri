@@ -1,0 +1,602 @@
+:host {
+    display: block;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+}
+
+// Wide screens: one row. Below 1500px the search, app and switches take a second row, and on a
+// phone, or a screen as short as a phone held sideways, they fold away behind the Filters button,
+// with the error navigation and the download.
+.bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 8px max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+}
+
+.levels {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 10px;
+
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--surface-3);
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+
+    .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        border: 1.5px solid currentColor;
+        box-sizing: border-box;
+    }
+
+    .tag {
+        display: none;
+    }
+
+    .n {
+        // not --text-muted: that is under 4.5:1 on the chip's own background when on
+        color: #c0c8d6;
+        font-weight: 400;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &:hover {
+        border-color: var(--text-muted);
+    }
+
+    &.on {
+        color: var(--text-strong);
+        background: var(--surface-2);
+        border-color: var(--surface-2);
+
+        .dot {
+            border: 0;
+        }
+
+        &.level-0 .dot { background: var(--err); }
+        &.level-1 .dot { background: var(--warn); }
+        &.level-2 .dot { background: var(--info); }
+        &.level-3 .dot { background: var(--debug); }
+
+        &:hover {
+            border-color: var(--surface-3);
+        }
+    }
+}
+
+.follow,
+.save,
+.more-toggle,
+.clear,
+.active-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--surface-3);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover {
+        background: var(--surface-2);
+    }
+
+    .pi {
+        font-size: 12px;
+    }
+}
+
+.levels {
+    order: 0;
+}
+
+.more {
+    order: 1;
+}
+
+.nav {
+    order: 2;
+    margin-left: auto;
+}
+
+.follow {
+    order: 4;
+
+    // as the "Jump to latest" button, which does the same: not the warning yellow
+    &.paused {
+        color: var(--bg);
+        background: var(--accent);
+        border-color: var(--accent);
+
+        &:hover {
+            background: #9fd0de;
+        }
+    }
+}
+
+// Previous, the position, Next and New errors in one bordered group
+.nav {
+    display: inline-flex;
+    align-items: stretch;
+    height: 32px;
+    box-sizing: border-box;
+
+    border: 1px solid var(--surface-3);
+    border-radius: 6px;
+    overflow: hidden;
+
+    button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+
+        color: var(--text);
+        background: transparent;
+        border: 0;
+        font: 500 13px var(--sans);
+        white-space: nowrap;
+        cursor: pointer;
+
+        &:hover:not(:disabled) {
+            background: var(--surface-2);
+        }
+
+        &:disabled {
+            color: var(--text-muted);
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        &:focus-visible {
+            outline-offset: -2px;
+        }
+    }
+
+    .step {
+        width: 30px;
+
+        .pi {
+            font-size: 12px;
+        }
+    }
+
+    .position {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 3.5ch;
+        padding: 0 4px;
+
+        color: var(--text-muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .first {
+        gap: 6px;
+        padding: 0 10px;
+        border-left: 1px solid var(--surface-3);
+
+        .n {
+            min-width: 18px;
+            padding: 0 5px;
+            box-sizing: border-box;
+
+            color: var(--bg);
+            background: var(--err);
+            border-radius: 9px;
+            font-size: 11px;
+            line-height: 18px;
+            text-align: center;
+        }
+
+        &:disabled .n {
+            color: var(--text-muted);
+            background: var(--surface-2);
+        }
+    }
+}
+
+// last of the filters: it saves what they leave
+.save {
+    margin-left: auto;
+}
+
+.more-toggle {
+    display: none;
+
+    .badge {
+        min-width: 18px;
+        padding: 0 5px;
+        box-sizing: border-box;
+
+        color: var(--bg);
+        background: var(--accent);
+        border-radius: 9px;
+        font-size: 11px;
+        line-height: 18px;
+        text-align: center;
+    }
+}
+
+.more {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 8px 16px;
+    min-width: 0;
+}
+
+.search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 1 280px;
+    min-width: 160px;
+
+    .pi-search {
+        position: absolute;
+        left: 10px;
+        color: var(--text-muted);
+        font-size: 13px;
+        pointer-events: none;
+    }
+
+    input {
+        width: 100%;
+        height: 32px;
+        box-sizing: border-box;
+        padding: 0 10px 0 30px;
+
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid #77839b;
+        border-radius: 6px;
+        font: 13px var(--sans);
+
+        &::placeholder {
+            color: var(--text-muted);
+        }
+
+        &:hover {
+            border-color: var(--text-muted);
+        }
+
+        &:focus-visible {
+            outline-offset: 0;
+            border-color: var(--accent);
+        }
+
+        // the page's own clear button, after the count, replaces the browser's
+        &::-webkit-search-cancel-button {
+            -webkit-appearance: none;
+            appearance: none;
+        }
+    }
+
+    .matches {
+        position: absolute;
+        right: 36px;
+        color: var(--text-muted);
+        font-size: 12px;
+        pointer-events: none;
+    }
+
+    .clear-search {
+        position: absolute;
+        right: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+
+        color: var(--text-muted);
+        background: none;
+        border: 0;
+        border-radius: 4px;
+        cursor: pointer;
+
+        &:hover {
+            color: var(--text);
+            background: var(--surface-2);
+        }
+
+        .pi {
+            font-size: 12px;
+        }
+    }
+
+    &.typed input {
+        padding-right: 32px;
+    }
+
+    &.counted input {
+        padding-right: 104px;
+    }
+}
+
+.apps {
+    flex: 0 1 240px;
+    min-width: 160px;
+    font-size: 13px;
+}
+
+.option {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+
+    .clients {
+        color: var(--text-muted);
+        font-size: 12px;
+    }
+}
+
+.switch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+
+    small {
+        display: none;
+    }
+}
+
+.clear {
+    border-color: transparent;
+    color: var(--accent);
+}
+
+.active {
+    display: none;
+}
+
+@media (max-width: 1499.98px) {
+    .more {
+        flex-basis: 100%;
+        order: 5;
+    }
+
+    .search {
+        flex-grow: 1;
+        max-width: 360px;
+    }
+}
+
+// the download's icon only, so that the filters fit on their row with Clear filters
+@media (min-width: 700px) and (max-width: 1099.98px) {
+    .save {
+        padding: 0 9px;
+
+        span {
+            display: none;
+        }
+    }
+}
+
+@media (max-width: 699.98px), (max-height: 499.98px) {
+    .bar {
+        gap: 6px;
+        padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
+    }
+
+    .levels {
+        flex: 1 1 0;
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    // ERR, WRN, INF, DBG in the level's colour, as the rows show them, instead of the dot
+    .chip {
+        gap: 5px;
+        padding: 0 8px;
+
+        .dot,
+        .name {
+            display: none;
+        }
+
+        .tag {
+            display: inline;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        // lighter than the level colours: those are under 4.5:1 on the chip's background
+        &.on {
+            &.level-0 .tag { color: #f2b4b9; }
+            &.level-1 .tag { color: var(--warn); }
+            &.level-2 .tag { color: #9fcfdc; }
+            &.level-3 .tag { color: #c0c8d6; }
+        }
+    }
+
+    // the "Jump to latest" button pauses and resumes on a phone
+    .follow {
+        display: none;
+    }
+
+    .more-toggle {
+        display: inline-flex;
+        order: 1;
+        margin-left: auto;
+        padding: 0 9px;
+    }
+
+    // in the folded panel, on a line of its own above the filters
+    .nav {
+        display: none;
+        order: 4;
+        margin-left: 0;
+    }
+
+    .bar.open {
+        .nav {
+            display: inline-flex;
+        }
+
+        // the end of the first line: the levels keep their room
+        &::after {
+            content: '';
+            flex-basis: 100%;
+            order: 3;
+        }
+    }
+
+    .save {
+        align-self: flex-start;
+        margin-left: 0;
+    }
+
+    .more {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 4px 0 6px;
+
+        &.open {
+            display: flex;
+        }
+    }
+
+    .search,
+    .apps {
+        flex: none;
+        max-width: none;
+    }
+
+    .switch {
+        min-height: 44px;
+
+        .switch-label {
+            display: flex;
+            flex-direction: column;
+        }
+
+        small {
+            display: block;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+    }
+
+    .clear {
+        align-self: flex-start;
+        padding: 0;
+        height: 36px;
+    }
+
+    .active {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 0 12px 8px;
+    }
+
+    .active-chip {
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 14px;
+        background: var(--surface-2);
+        border-color: var(--surface-2);
+        font-weight: 400;
+    }
+}
+
+// Targets a finger can hit: on a touch screen, and on any phone-sized one.
+@media (pointer: coarse), (max-width: 699.98px) {
+    .search input,
+    .chip,
+    .follow,
+    .save,
+    .nav,
+    .more-toggle {
+        height: 40px;
+    }
+
+    .nav .step {
+        width: 40px;
+    }
+
+    .apps ::ng-deep .p-select-label {
+        padding-top: 11px;
+        padding-bottom: 11px;
+    }
+
+    .search {
+        .clear-search {
+            width: 32px;
+            height: 32px;
+        }
+
+        .matches {
+            right: 40px;
+        }
+
+        &.typed input {
+            padding-right: 40px;
+        }
+
+        &.counted input {
+            padding-right: 108px;
+        }
+    }
+}
+
+// The four levels and their counts come first: they fit at 360px with four-digit counts, and
+// the Filters button keeps its width with filters active.
+@media (max-width: 424.98px) {
+    .chip {
+        padding: 0 7px;
+    }
+
+    .more-toggle {
+        position: relative;
+        justify-content: center;
+        width: 40px;
+        padding: 0;
+
+        span:not(.badge) {
+            display: none;
+        }
+
+        .badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            box-shadow: 0 0 0 2px var(--surface-1);
+        }
+    }
+}

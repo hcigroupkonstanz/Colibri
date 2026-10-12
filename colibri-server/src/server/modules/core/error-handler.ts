@@ -1,5 +1,11 @@
-import { Service } from './service';
+import { Service } from './service.js';
 
+/**
+ * @deprecated No current caller reaches these static methods - use a `Service` subclass's
+ * own `logError`/`logInfo`/etc. instead, which attaches the right `serviceName`/`groupName`
+ * to the log entry. Note `ErrorHandler.initialize()` below still self-registers a `Service`
+ * at import time regardless of whether any static method is ever called.
+ */
 export class ErrorHandler extends Service {
     private static _instance: ErrorHandler;
 

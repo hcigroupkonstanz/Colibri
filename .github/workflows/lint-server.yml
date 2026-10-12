@@ -1,0 +1,53 @@
+name: Lint colibri-server
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "colibri-server/**"
+      - ".github/workflows/lint-server.yml"
+      # The protocol vectors are checked from here, so editing them on the Unity side has to
+      # run this workflow too - that is the whole point of the check.
+      - "colibri-unity/Assets/Colibri/Tests/Editor/ProtocolVectorTests.cs"
+      # So is every client's copy of the protocol version (see versionLiterals in
+      # colibri-server/test/emit-protocol-vectors.ts), so bumping one alone fails here.
+      - "colibri-unity/Assets/Colibri/Networking/**"
+      - "colibri-web/src/Colibri.ts"
+  pull_request:
+    paths:
+      - "colibri-server/**"
+      - ".github/workflows/lint-server.yml"
+      # The protocol vectors are checked from here, so editing them on the Unity side has to
+      # run this workflow too - that is the whole point of the check.
+      - "colibri-unity/Assets/Colibri/Tests/Editor/ProtocolVectorTests.cs"
+      # So is every client's copy of the protocol version (see versionLiterals in
+      # colibri-server/test/emit-protocol-vectors.ts), so bumping one alone fails here.
+      - "colibri-unity/Assets/Colibri/Networking/**"
+      - "colibri-web/src/Colibri.ts"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: colibri-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: colibri-server/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm test
+      - run: npm run gui:test
+
+      # Guards the byte-for-byte agreement between this server's encoders and the hardcoded
+      # vectors in colibri-unity's ProtocolVectorTests.cs - the two implementations have no
+      # other way of noticing they have drifted apart. Also checks that colibri-web, the Unity
+      # package and the admin UI all announce this server's PROTOCOL_VERSION.
+      - run: npm run test:vectors

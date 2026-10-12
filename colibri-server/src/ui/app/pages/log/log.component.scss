@@ -1,25 +1,177 @@
-@use '../../../sass/nord' as *;
-
 :host {
+    display: flex;
+    flex-direction: column;
     height: 100%;
-    position: relative;
-    background: $nord0;
+    background: var(--bg);
 }
 
-#log {
+.viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+}
+
+.scroller {
     height: 100%;
     overflow-y: auto;
-    position: relative;
+    overflow-x: hidden;
+    padding-bottom: 12px;
+    box-sizing: border-box;
+    outline: none;
+    // a line scrolled into view stops below the date bar, not under it
+    scroll-padding-top: 22px;
+
+    // room to scroll the last line out from under "Jump to latest", and where an opened line
+    // scrolls to
+    &.paused {
+        padding-bottom: 72px;
+        scroll-padding-bottom: 72px;
+    }
 }
 
-.btn-autoscroll {
-    position: absolute;
-    right: 30px;
-    bottom: 30px;
+.day {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 16px;
 
-    ::ng-deep .p-button {
-        width: 3rem;
-        height: 3rem;
-        padding: 0;
+    color: var(--text-muted);
+    background: var(--bg);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+    font-size: 12px;
+
+    &::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--surface-2);
+    }
+}
+
+// a phone held sideways has few lines to spare for it
+@media (max-height: 499.98px) {
+    .day {
+        position: static;
+        box-shadow: none;
+    }
+}
+
+.older {
+    display: block;
+    margin: 8px auto;
+    padding: 6px 12px;
+
+    color: var(--accent);
+    background: transparent;
+    border: 1px solid var(--surface-3);
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover {
+        background: var(--surface-1);
+    }
+
+    .muted {
+        color: var(--text-muted);
+    }
+}
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 64px 16px;
+
+    color: var(--text-muted);
+    font-size: 14px;
+    text-align: center;
+
+    p {
+        margin: 0;
+    }
+
+    button {
+        padding: 6px 14px;
+        color: var(--text);
+        background: var(--surface-2);
+        border: 0;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--surface-3);
+        }
+    }
+}
+
+// "Jump to latest", and on a phone, while going through the errors and warnings, Previous and
+// Next beside it: the toolbar's are folded away there.
+.jump-bar {
+    position: absolute;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 2;
+
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.jump-step {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+
+    color: var(--text-strong);
+    background: var(--surface-2);
+    border: 0;
+    border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+
+    &:hover {
+        background: var(--surface-3);
+    }
+
+    .pi {
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 699.98px), (max-height: 499.98px) {
+    .jump-step {
+        display: flex;
+    }
+}
+
+.jump {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 18px;
+
+    color: var(--bg);
+    background: var(--accent);
+    border: 0;
+    border-radius: 20px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover {
+        background: #9fd0de;
     }
 }

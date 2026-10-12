@@ -1,13 +1,6 @@
-<div #latencyChart id="latency-chart"></div>
-
-<div class="client-stats">
-  @for (client of clients; track client) {
-    <div>
-      <div class="client" [style]="{ 'border-color': getColor(client) }">
-        <h3> {{ client.name }}</h3>
-        <div class="client-latency">Median: {{ getMedian(client.latency) | number }} ms</div>
-        <div class="client-latency">Stdev: {{ getStdDev(client.latency) | number }} ms</div>
-      </div>
-    </div>
-  }
-</div>
+<div #latencyChart class="chart" role="img" aria-label="Latency of each connected client over the last 120 seconds"></div>
+@if (message(); as message) {
+  <p class="message">{{ message }}</p>
+} @else if (boxesHidden() === 'count') {
+  <p class="note">Boxes hidden: too many clients for this width</p>
+}

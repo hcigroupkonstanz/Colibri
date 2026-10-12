@@ -1,13 +1,43 @@
-@if (isNewDay) {
-  <div class="new-day-line">
-    <span class="line left"></span>
-    <span class="date">{{ log.created | date:'yyyy-MM-dd' }}</span>
-    <span class="line right"></span>
+@if (log().reconnect) {
+  <div class="gap" role="separator">
+    <span class="rule"></span>
+    <span>Connection lost at {{ log().first | date:'HH:mm:ss' }}, back at {{ log().created | date:'HH:mm:ss' }}</span>
+    <span class="rule"></span>
+  </div>
+} @else {
+  <div class="row level-{{ log().level }}" [class.open]="expanded()" [class.current]="current()" (click)="onRowClick()">
+    <!-- opens the row by the row's click handler, and is what makes that reachable by keyboard -->
+    <button type="button" class="time" [attr.aria-expanded]="expanded()" [title]="utc()">{{ log().created | date:'HH:mm:ss.SSS' }}</button>
+    <!-- a label on a plain span is not read out: screen readers said "DBG" -->
+    <span class="level"><span aria-hidden="true">{{ tag() }}</span><span class="visually-hidden">{{ levelName() }}</span></span>
+    <span class="source">
+      @if (source().app; as app) {
+        <button type="button" class="app-chip" [style.--app]="appColor()" [title]="'Show only ' + app" (click)="filterApp($event, app)">{{ app }}</button>
+      }
+      @if (source().client) {
+        <span class="client" [class.id]="clientLabel().id" [title]="clientLabel().title">{{ clientLabel().text }}</span>
+      } @else if (!source().app) {
+        <span class="server" [title]="source().server">{{ source().server }}</span>
+      }
+    </span>
+    <div class="message" [class.clamped]="!expanded()">@for (part of parts(); track $index) {@if (part.match) {<mark>{{ part.text }}</mark>} @else {{{ part.text }}}}</div>
+    @if (log().count > 0) {
+      <span class="count" [title]="countTitle()">×{{ log().count + 1 }}</span>
+    }
+    @if (expanded()) {
+      <dl class="details">
+        <div><dt>Time</dt><dd>{{ log().created | date:'yyyy-MM-dd HH:mm:ss.SSS' }} ({{ utc() }})</dd></div>
+        @if (log().count > 0) {
+          <div><dt>First</dt><dd>{{ log().first | date:'yyyy-MM-dd HH:mm:ss.SSS' }}, {{ log().count + 1 }} times in all</dd></div>
+        }
+        @if (source().app; as app) {
+          <div><dt>App</dt><dd>{{ app }} <a class="link" routerLink="/clients" [queryParams]="{ app, client: clientId() }" (click)="$event.stopPropagation()">Show clients</a></dd></div>
+        }
+        @if (source().client; as client) {
+          <div><dt>Client</dt><dd>{{ client }}@if (clientId(); as id) { <span class="muted">({{ id }})</span>}</dd></div>
+        }
+        <div><dt>Logged by</dt><dd>{{ source().server }}</dd></div>
+      </dl>
+    }
   </div>
 }
-
-<div class="msg-container">
-  <div class="log-message">
-    <pre class="level-{{log.level}}">[{{log.created | date:'HH:mm:ss.SSS' }}]@if (log.count > 0) {<span> [{{ log.count + 1 }}]</span>} {{ log.message }}</pre>
-  </div>
-</div>

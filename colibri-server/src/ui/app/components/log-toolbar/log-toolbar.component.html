@@ -1,0 +1,112 @@
+<div class="bar" [class.open]="open()">
+  <div class="levels" role="group" aria-label="Levels">
+    @for (level of levelOptions; track level.value) {
+      <button type="button" class="chip level-{{ level.value }}" [class.on]="isOn(level.value)" [attr.aria-pressed]="isOn(level.value)"
+        [attr.aria-label]="level.label + (isOn(level.value) ? ', ' + log.levelCounts()[level.value] + ' lines' : '')" [title]="(isOn(level.value) ? 'Hide ' : 'Show ') + level.label + ' lines'" (click)="toggleLevel(level.value)">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="name" aria-hidden="true">{{ level.label }}</span>
+        <span class="tag" aria-hidden="true">{{ tags[level.value] }}</span>
+        @if (isOn(level.value)) {
+          <span class="n" aria-hidden="true">{{ shortCount(log.levelCounts()[level.value]) }}</span>
+        }
+      </button>
+    }
+  </div>
+
+  <div class="nav" role="group" aria-label="Errors and warnings">
+    <button type="button" class="step" [disabled]="nav().problems === 0" title="Previous error or warning (p)" aria-label="Previous error or warning"
+      (click)="step('previous')">
+      <i class="pi pi-chevron-up" aria-hidden="true"></i>
+    </button>
+    <span class="position" aria-hidden="true" [title]="nav().problems + ' errors and warnings in the lines shown'">{{ positionLabel() }}</span>
+    <button type="button" class="step" [disabled]="nav().problems === 0" title="Next error or warning (n)" aria-label="Next error or warning"
+      (click)="step('next')">
+      <i class="pi pi-chevron-down" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="first" [disabled]="nav().newErrors === 0" [title]="firstErrorTitle()" (click)="step('first-error')">
+      New errors <span class="n">{{ nav().newErrors }}</span>
+    </button>
+  </div>
+
+  <button type="button" class="follow" [class.paused]="!following()" (click)="followChange.emit(!following())"
+    [title]="following() ? 'Stop scrolling to new lines' : 'Scroll to new lines as they arrive'">
+    <i class="pi" [class.pi-pause]="following()" [class.pi-play]="!following()" aria-hidden="true"></i>
+    <span>{{ following() ? 'Pause' : 'Resume' }}</span>
+  </button>
+
+  <button type="button" class="more-toggle" [attr.aria-expanded]="open()" aria-controls="log-filters"
+    [attr.aria-label]="'Filters' + (activeFilters().length > 0 ? ', ' + activeFilters().length + ' active' : '')" title="Search, app, sync traffic, connections, error navigation and download"
+    (click)="open.set(!open())">
+    <i class="pi pi-sliders-h" aria-hidden="true"></i>
+    <span>Filters</span>
+    @if (activeFilters().length > 0) {
+      <span class="badge">{{ activeFilters().length }}</span>
+    }
+  </button>
+
+  <div class="more" id="log-filters" [class.open]="open()">
+    <div class="search" [class.typed]="typed()" [class.counted]="matches() !== null">
+      <i class="pi pi-search" aria-hidden="true"></i>
+      <input #searchInput type="search" placeholder="Search" aria-label="Search the loaded lines"
+        (input)="onSearch(searchInput.value)" (keydown.escape)="clearSearch(searchInput)">
+      @if (matches() !== null) {
+        <span class="matches">{{ matches() }} found</span>
+      }
+      @if (typed()) {
+        <button type="button" class="clear-search" aria-label="Clear search" title="Clear search" (click)="clearSearch(searchInput, true)">
+          <i class="pi pi-times" aria-hidden="true"></i>
+        </button>
+      }
+    </div>
+
+    <p-select class="apps" size="small" [options]="appOptions()" optionLabel="name" optionValue="name" [ngModel]="log.filter() || null"
+      [showClear]="true" placeholder="All apps" ariaLabel="App" (onChange)="log.filter.set($event.value ?? '')">
+      <ng-template #item let-option>
+        <span class="option">
+          <span>{{ option.name }}</span>
+          @if (option.clients > 0) {
+            <span class="clients">{{ option.clients }} connected</span>
+          }
+        </span>
+      </ng-template>
+    </p-select>
+
+    <label class="switch" title="Show the broadcast:: messages between an app's clients, such as state and position updates. Shown whatever the levels; hidden by default, since there are many.">
+      <p-toggleswitch [ngModel]="log.showBroadcastTraffic()" (ngModelChange)="log.showBroadcastTraffic.set($event)"></p-toggleswitch>
+      <span class="switch-label">
+        <span>Sync traffic</span>
+        <small>broadcast:: messages between clients</small>
+      </span>
+    </label>
+
+    <label class="switch" title="Show the routine lines about clients connecting and disconnecting. Warnings and errors about connections are shown either way.">
+      <p-toggleswitch [ngModel]="log.showConnections()" (ngModelChange)="log.showConnections.set($event)"></p-toggleswitch>
+      <span class="switch-label">
+        <span>Connections</span>
+        <small>connect and disconnect lines</small>
+      </span>
+    </label>
+
+    @if (activeFilters().length > 0 || !allLevels()) {
+      <button type="button" class="clear" (click)="log.clearFilters()">Clear filters</button>
+    }
+
+    <button type="button" class="save" aria-haspopup="menu" aria-label="Download" title="Download the lines that match the filters and the search, as text or JSON" (click)="saveMenu.toggle($event)">
+      <i class="pi pi-download" aria-hidden="true"></i>
+      <span>Download</span>
+    </button>
+  </div>
+</div>
+
+<!-- outside the bar: an empty item in the row would add a gap after Download -->
+<p-menu #saveMenu [model]="downloadItems" [popup]="true" appendTo="body" styleClass="small-menu" ariaLabel="Download as"></p-menu>
+
+@if (!open() && activeFilters().length > 0) {
+  <div class="active" role="group" aria-label="Active filters">
+    @for (active of activeFilters(); track active.label) {
+      <button type="button" class="active-chip" [attr.aria-label]="'Remove filter ' + active.label" (click)="active.clear()">
+        {{ active.label }} <i class="pi pi-times" aria-hidden="true"></i>
+      </button>
+    }
+  </div>
+}

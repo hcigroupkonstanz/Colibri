@@ -1,0 +1,126 @@
+<div class="page-bar">
+  <p-select class="apps" size="small" [options]="appOptions()" optionLabel="name" optionValue="name" [ngModel]="app() || null"
+    [showClear]="true" placeholder="All apps" ariaLabel="App" (onChange)="setApp($event.value ?? '')">
+    <ng-template #item let-option>
+      <span class="option">
+        <span>{{ option.name }}</span>
+        <span class="muted">{{ option.clients }} connected</span>
+      </span>
+    </ng-template>
+  </p-select>
+
+  <p-select class="sort-select" size="small" [options]="sortOptions" optionLabel="label" optionValue="value" [ngModel]="sortChoice()"
+    ariaLabel="Sort" (onChange)="setSort($event.value)"></p-select>
+
+  <div class="end">
+    @if (adminPages() > 0) {
+      <span class="muted pages">{{ adminPages() }} admin {{ adminPages() === 1 ? 'page' : 'pages' }} open</span>
+    }
+    <app-live-status></app-live-status>
+  </div>
+</div>
+
+<app-offline-banner></app-offline-banner>
+
+<div class="page">
+  <section class="card" aria-labelledby="clients-title">
+    <div class="card-head">
+      <h2 id="clients-title">Clients</h2>
+      <span class="hint">{{ summary() }}</span>
+    </div>
+
+    @if (rows().length > 0) {
+      <table class="data clients">
+        <thead>
+          <tr>
+            <th class="c-swatch"><span class="visually-hidden">Colour in the charts</span></th>
+            @for (column of columns; track column.key) {
+              <th [class]="column.class" [class.num]="column.num" [attr.aria-sort]="ariaSort(column.key)">
+                <button type="button" class="sort" [class.on]="ariaSort(column.key) !== null" [title]="column.title" (click)="sortBy(column.key)">
+                  {{ column.label }}
+                  @if (ariaSort(column.key); as order) {
+                    <i class="pi" [class.pi-arrow-up]="order === 'ascending'" [class.pi-arrow-down]="order === 'descending'" aria-hidden="true"></i>
+                  }
+                </button>
+              </th>
+            }
+            <th class="c-log"><span class="visually-hidden">Log</span></th>
+          </tr>
+        </thead>
+        <tbody (pointerenter)="holdOrder($event)" (pointerleave)="releaseOrder()">
+          @for (row of rows(); track row.id) {
+            <tr [attr.data-id]="row.id" [class.marked]="row.id === marked()" [class.held]="row.limit !== null">
+              <td class="c-swatch">
+                @if (row.color) {
+                  <span class="swatch" [style.background]="row.color" title="Its colour in the charts"></span>
+                }
+              </td>
+              <td class="c-app">
+                <button type="button" class="app-chip" [style.--app]="row.appColor" [title]="'Show only ' + row.app" (click)="setApp(row.app)">{{ row.app }}</button>
+              </td>
+              <td class="c-name">
+                <span class="label" [class.mono]="row.byId" [title]="row.labelTitle">{{ row.label }}</span>
+                <span class="address mono">{{ row.address }}</span>
+                @if (row.truncated) {
+                  <span class="tag" title="A name longer than 512 characters, cut">cut</span>
+                }
+              </td>
+              <td class="c-transport">
+                {{ row.transport }}
+                @if (row.tls) {
+                  <span class="tls" [title]="row.tlsTitle"><i class="pi pi-lock" aria-hidden="true"></i> TLS
+                    @if (row.tls === 'proxy') {
+                      <span class="by-proxy">(proxy)</span>
+                    }
+                  </span>
+                }
+                <span class="version" title="The protocol version it announced">v{{ row.version }}</span>
+              </td>
+              <td class="c-version">v{{ row.version }}</td>
+              <td class="c-connected num" [title]="'Since ' + (row.connectedAt | date:'yyyy-MM-dd HH:mm:ss')" data-label="Connected">{{ row.connected }}</td>
+              <td class="c-latency num" data-label="Latency">{{ row.latency }}</td>
+              <td class="c-in num" data-label="In/s">{{ row.in }}</td>
+              <td class="c-out num" data-label="Out/s">{{ row.out }}</td>
+              <td class="c-limit">
+                @if (row.limit) {
+                  <span class="tag warn" [title]="row.limitTitle">{{ row.limit }}</span>
+                  @if (row.held > 0) {
+                    <span class="held" [title]="row.held + ' objects with updates held back'">{{ row.held }} held</span>
+                  }
+                }
+              </td>
+              <td class="c-log">
+                <a routerLink="/log" [queryParams]="{ q: row.id }" title="The log, searched for this client">Log</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <p class="empty-note">{{ empty() }}</p>
+    }
+  </section>
+
+  <section class="card" aria-labelledby="latency-title">
+    <div class="card-head">
+      <h2 id="latency-title">Latency</h2>
+      <span class="hint">Round trip to each client over the last 120 s, in ms</span>
+    </div>
+    <app-latency-chart [app]="app()"></app-latency-chart>
+  </section>
+
+  <section class="card" aria-labelledby="throughput-title">
+    <div class="card-head">
+      <h2 id="throughput-title">Throughput</h2>
+      <!-- before the hint, whose width changes every second: after it, the buttons jumped between lines -->
+      <div class="direction" role="group" aria-label="Messages">
+        <button type="button" class="btn" [class.on]="direction() === 'in'" [attr.aria-pressed]="direction() === 'in'"
+          title="Messages the clients sent" (click)="setDirection('in')">In</button>
+        <button type="button" class="btn" [class.on]="direction() === 'out'" [attr.aria-pressed]="direction() === 'out'"
+          title="Messages sent to the clients" (click)="setDirection('out')">Out</button>
+      </div>
+      <span class="hint">{{ throughputHint() }}</span>
+    </div>
+    <app-throughput-chart #throughput [snapshot]="feed.data()" [app]="app()" [direction]="direction()"></app-throughput-chart>
+  </section>
+</div>

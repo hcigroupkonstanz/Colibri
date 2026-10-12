@@ -1,12 +1,32 @@
 services:
   colibri:
-    build: .
+    # COLIBRI_COMMIT=$(git rev-parse HEAD) docker compose build: the commit the admin UI shows.
+    build:
+      context: .
+      args:
+        COLIBRI_COMMIT: ${COLIBRI_COMMIT:-}
+        COLIBRI_COMMIT_DIRTY: ${COLIBRI_COMMIT_DIRTY:-}
     restart: unless-stopped
     container_name: colibri
-    tty: true
+    # The server logs to stdout/stderr, client log lines included, and Docker's default
+    # json-file log never rotates: cap it rather than let a long study fill the disk. And no
+    # `tty: true`: with a TTY, `docker logs` has no stderr, and the warnings and errors are
+    # mixed into stdout.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # TLS on the TCP port (Unity) and the web port: uncomment these lines and the certificates
+    # volume below, and put the certificate with its chain and its private key into ./certs/,
+    # readable for uid 1000. See TLS_CERT in .env.example.
+    # environment:
+    #   TLS_CERT: /srv/colibri/certs/fullchain.pem
+    #   TLS_KEY: /srv/colibri/certs/privkey.pem
     volumes:
         - ./data/:/srv/colibri/data
+    #     - ./certs/:/srv/colibri/certs:ro
     ports:
-      - 9011:9011 # web interface / web sockets
-      - 9012:9012 # tcp (unity)
-      - "9013:9013/udp" # voice
+      - 9211:9211 # web interface / web sockets
+      - 9212:9212 # tcp (unity)
+      - "9213:9213/udp" # voice

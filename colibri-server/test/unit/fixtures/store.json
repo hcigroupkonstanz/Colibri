@@ -1,0 +1,1 @@
+{"ExampleUnityApp":{"exampleObject":{"Id":1234,"Name":"Charly Sharp"},"highscores":[{"name":"ana","score":120},{"name":"ben","score":95}],"constructor":{"note":"stored as an own value name by the old object-backed store"}},"web-demo":{"sampleKey":{"position":{"x":0.5,"y":1.25,"z":-3},"color":"#ff8800","visible":true,"tags":["a","b"],"nothing":null}}}

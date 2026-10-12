@@ -15,7 +15,7 @@
       },
       "architect": {
         "build": {
-          "builder": "@angular-devkit/build-angular:application",
+          "builder": "@angular/build:application",
           "options": {
             "outputPath": {
               "base": "dist/ui",
@@ -64,6 +64,9 @@
                   "maximumError": "5mb"
                 }
               ]
+            },
+            "test": {
+              "polyfills": ["src/ui/polyfills.ts", "zone.js/testing"]
             }
           },
           "defaultConfiguration": ""
@@ -87,40 +90,11 @@
           }
         },
         "test": {
-          "builder": "@angular-devkit/build-angular:karma",
+          "builder": "@angular/build:unit-test",
           "options": {
-            "main": "src/ui/test.ts",
-            "polyfills": "src/ui/polyfills.ts",
-            "tsConfig": "src/ui/tsconfig.spec.json",
-            "karmaConfig": "src/ui/karma.conf.js",
-            "styles": [
-              "node_modules/primeicons/primeicons.css",
-              "src/ui/styles.scss"
-            ],
-            "scripts": [],
-            "assets": [
-              "src/ui/favicon.ico",
-              "src/ui/assets"
-            ]
-          }
-        }
-      }
-    },
-    "server-app-e2e": {
-      "root": "e2e/",
-      "projectType": "application",
-      "prefix": "",
-      "architect": {
-        "e2e": {
-          "builder": "@angular-devkit/build-angular:protractor",
-          "options": {
-            "protractorConfig": "e2e/protractor.conf.js",
-            "devServerTarget": "server-app:serve"
-          },
-          "configurations": {
-            "production": {
-              "devServerTarget": "server-app:serve:production"
-            }
+            "buildTarget": "server-app:build:test",
+            "runner": "vitest",
+            "tsConfig": "src/ui/tsconfig.spec.json"
           }
         }
       }

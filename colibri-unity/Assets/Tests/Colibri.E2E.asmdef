@@ -1,0 +1,23 @@
+{
+    "name": "HCIKonstanz.Colibri.E2E",
+    "rootNamespace": "HCIKonstanz.Colibri.E2E",
+    "references": [
+        "HCIKonstanz.Colibri",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

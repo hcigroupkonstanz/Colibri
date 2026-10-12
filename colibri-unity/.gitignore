@@ -2,6 +2,12 @@
 Assets/Resources/ColibriConfig*
 Assets/Resources.meta
 
+# NUnit XML and editor logs from run-tests.mjs
+/[Tt]est[Rr]esults/
+
+# Project Auditor's settings, which Unity 6 rewrites on every run. The project uses the defaults.
+/ProjectSettings/ProjectAuditorSettings.asset
+
 # This .gitignore file should be placed at the root of your Unity project directory
 #
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore

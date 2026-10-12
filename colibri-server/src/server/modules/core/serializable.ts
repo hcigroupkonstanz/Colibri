@@ -1,7 +1,11 @@
-import * as _ from 'lodash';
 import { Subject, merge } from 'rxjs';
 import { buffer, auditTime, share, map, filter } from 'rxjs/operators';
 
+/**
+ * @deprecated Not used by any current command-hook; retained for compatibility with older
+ * client integrations that may still model entities this way. Prefer `DataStore`'s plain
+ * `SyncModel` records for new synchronized state.
+ */
 export abstract class Serializable<T> {
     public id: string;
 
@@ -15,7 +19,7 @@ export abstract class Serializable<T> {
                 this.changeSource.asObservable()
             )
         ),
-        map(changes => _.uniq(changes)),
+        map(changes => [...new Set(changes)]),
         filter(changes => changes.length > 0),
         map(changes => ({ changes: changes, source: this.currentChangeSource })),
         share());
@@ -50,10 +54,10 @@ export abstract class Serializable<T> {
         const json: any = { id: this.id };
 
         if (attributes.length === 0) {
-            attributes = _
+            attributes = Object
                 .keys(this)
                 .filter(k => k[0] === '_')
-                .map(k => k.substr(1)); // remove leading _ to match original attributes
+                .map(k => k.slice(1)); // remove leading _ to match original attributes
         }
 
         for (const attribute of attributes) {
