@@ -260,7 +260,7 @@ namespace HCIKonstanz.Colibri.Tests
             var port = Port(Listen(IPAddress.IPv6Loopback));
 
             LogAssert.Expect(LogType.Log, new Regex(
-                $@"^Colibri: no (connection to 127\.0\.0\.1:{port} \(ConnectionRefused\)|answer from 127\.0\.0\.1:{port} within [0-9.]+ s), trying \[::1\]:{port}$"));
+                $@"^Colibri: no connection to 127\.0\.0\.1:{port} (\(ConnectionRefused\)|within [0-9.]+ s), trying \[::1\]:{port}$"));
 
             var clock = Stopwatch.StartNew();
             var (socket, address) = Wait(WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback, IPAddress.IPv6Loopback },
@@ -333,7 +333,7 @@ namespace HCIKonstanz.Colibri.Tests
             var port = ClosedIPv4Port();
 
             LogAssert.Expect(LogType.Log, new Regex(
-                $@"^Colibri: no (connection to 127\.0\.0\.1:{port} \(ConnectionRefused\)|answer from 127\.0\.0\.1:{port} within [0-9.]+ s), trying \[fe80::1\]:{port}$"));
+                $@"^Colibri: no connection to 127\.0\.0\.1:{port} (\(ConnectionRefused\)|within [0-9.]+ s), trying \[fe80::1\]:{port}$"));
 
             var e = Assert.Catch(() => Wait(WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback, IPAddress.Parse("fe80::1") },
                 "colibri.example.org", port, 3000, 3000, Attempting, CancellationToken.None)));
