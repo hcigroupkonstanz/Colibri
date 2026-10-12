@@ -6,20 +6,28 @@ import cors from 'cors';
 import { Subscription } from 'rxjs';
 
 import { Service, TlsCredentialSource, TlsCredentials } from '../core/index.js';
-import { MAX_FRAME_LENGTH } from '../networking/protocol.js';
+import { MAX_FRAME_LENGTH, REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
 
-// Requests whose application/json body was empty; see hasEmptyJsonBody.
+// Requests whose JSON body was empty; see hasEmptyJsonBody.
 const emptyJsonBodies = new WeakSet<http.IncomingMessage>();
 
 /**
- * Whether the request came with an application/json body of zero bytes. express.json() hands a
- * route such a body as `{}`, the same as the two bytes `{}`; this tells them apart however the
- * body was framed: `Content-Length: 0`, an empty chunked body, or a compressed one that
- * inflates to nothing.
+ * Whether the request came with a JSON body of zero bytes. express.json() hands a route such a
+ * body as `{}`, the same as the two bytes `{}`; this tells them apart however the body was framed:
+ * `Content-Length: 0`, an empty chunked body, or a compressed one that inflates to nothing.
  */
 export const hasEmptyJsonBody = function (req: http.IncomingMessage): boolean {
     return emptyJsonBodies.has(req);
+};
+
+/**
+ * Whether the request's Content-Type is the REST store's media type, parameters aside, which is
+ * the only body express.json() here parses.
+ */
+export const hasRestMediaType = function (req: http.IncomingMessage): boolean {
+    const contentType = req.headers['content-type'];
+    return typeof contentType === 'string' && contentType.split(';')[0]!.trim().toLowerCase() === REST_MEDIA_TYPE;
 };
 
 export class WebServer extends Service {
@@ -61,16 +69,31 @@ export class WebServer extends Service {
         // them, and a web client saw a bare network error instead of the 413 or 400.
         this.app.use(cors());
 
-        // handle POST data
-        this.app.use(express.urlencoded({ extended: false }));
+        // Every answer under /api, errors included, is in the REST store's media type. A request
+        // whose Accept rules that type out is refused with 406 before its body is read. Without an
+        // Accept, or with */* or application/* in it (curl, a browser, the Docker health check),
+        // the type is acceptable. CORS preflights never get here: cors() above answers them.
+        this.app.use('/api', (req, res, next) => {
+            res.type(REST_MEDIA_TYPE);
+            if (req.accepts(REST_MEDIA_TYPE)) {
+                next();
+                return;
+            }
+            next(Object.assign(new Error(`Not acceptable: the REST store answers in ${REST_MEDIA_TYPE} only, which Accept leaves out`),
+                { status: 406, expose: true }));
+        });
+
         // Any JSON value, not just an object or array: both clients send a bare value as its
         // JSON text (Unity's Store.Put(name, 42) sends `42`, web's setRestObject(key, 'text')
         // sends `"text"`), and the store hands it back the same way. The defaults (strict,
         // 100 kB) answered those with 400 and anything larger with 413, though the same data
         // fits through the TCP transport - hence its frame limit here too. `verify` sees the
         // raw body (decompressed, if it was sent compressed) before it is parsed, and is the
-        // only place that can still tell an empty body from `{}`.
+        // only place that can still tell an empty body from `{}`. Only a body in the REST
+        // store's media type is parsed: application/json and form data are left unread, and the
+        // store refuses them with 415.
         this.app.use(express.json({
+            type: REST_MEDIA_TYPE,
             strict: false,
             limit: MAX_FRAME_LENGTH,
             verify: (req, _res, body) => {

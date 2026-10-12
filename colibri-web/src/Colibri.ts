@@ -10,6 +10,12 @@ import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnect
  */
 export const PROTOCOL_VERSION = '2';
 
+// The media type of the server's REST store, with the protocol version in it: every request
+// accepts it, and setRestObject sends its value in it. colibri-server 2.x refuses a value sent as
+// plain application/json. A reverse proxy in front of servers of different versions on one host
+// name can route the store's requests by their Accept header.
+const REST_MEDIA_TYPE = `application/vnd.colibri.v${PROTOCOL_VERSION}+json`;
+
 const COLIBRI_CHANNEL = 'colibri';
 // The app name the server's admin UI connects with. Not the channel above, though spelt the same.
 const ADMIN_APP = 'colibri';
@@ -515,7 +521,7 @@ export class Colibri {
         const response = await fetch(uri, {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json'
+                Accept: REST_MEDIA_TYPE
             }
         });
 
@@ -542,7 +548,8 @@ export class Colibri {
         const response = await fetch(uri, {
             method: 'PUT',
             headers: {
-                'Content-Type': 'application/json'
+                Accept: REST_MEDIA_TYPE,
+                'Content-Type': REST_MEDIA_TYPE
             },
             body: JSON.stringify(data)
         });

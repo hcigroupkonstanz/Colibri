@@ -455,7 +455,7 @@ describe('Colibri REST API', () => {
         await expect(c.getRestObject('mykey')).resolves.toEqual({ a: 1 });
         expect(fetchMock).toHaveBeenCalledWith('http://localhost:9211/api/store/app/mykey', {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { Accept: `application/vnd.colibri.v${PROTOCOL_VERSION}+json` }
         });
     });
 
@@ -499,7 +499,10 @@ describe('Colibri REST API', () => {
         await expect(c.setRestObject('mykey', { a: 1 })).resolves.toBe(true);
         expect(fetchMock).toHaveBeenCalledWith('http://localhost:9211/api/store/app/mykey', {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                Accept: `application/vnd.colibri.v${PROTOCOL_VERSION}+json`,
+                'Content-Type': `application/vnd.colibri.v${PROTOCOL_VERSION}+json`
+            },
             body: JSON.stringify({ a: 1 })
         });
     });

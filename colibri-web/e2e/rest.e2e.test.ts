@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { HOST, PORT, createClient, createClientWithAddress, disconnectAll, uniqueApp } from './helpers';
+import { PROTOCOL_VERSION } from '../src/Colibri';
 
 afterEach(() => {
     disconnectAll();
@@ -54,7 +55,7 @@ describe('REST store', () => {
 
         const put = await fetch(`http://${HOST}:${PORT}/api/store/${app}/${key}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': `application/vnd.colibri.v${PROTOCOL_VERSION}+json` },
             body: JSON.stringify({ from: 'unencoded' })
         });
         expect(put.status).toBe(201);

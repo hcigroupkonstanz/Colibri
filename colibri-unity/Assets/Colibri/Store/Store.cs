@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Networking;
 using System.Threading.Tasks;
+using HCIKonstanz.Colibri.Networking;
 using HCIKonstanz.Colibri.Setup;
 using HCIKonstanz.Colibri.Synchronization;
 using Newtonsoft.Json;
@@ -24,6 +25,14 @@ namespace HCIKonstanz.Colibri.Store
         /// class converts - see <see cref="ColibriJson"/>.
         /// </summary>
         private static readonly JsonSerializerSettings JsonSettings = ColibriJson.CreateSettings();
+
+        /// <summary>
+        /// The media type of the server's REST store, with the protocol version in it: every
+        /// request accepts it, and a Put sends its value in it. colibri-server 2.x refuses a value
+        /// sent as plain application/json. A reverse proxy in front of servers of different
+        /// versions on one host name can route the store's requests by their Accept header.
+        /// </summary>
+        internal static string MediaType => $"application/vnd.colibri.v{WebServerConnection.ClientVersion}+json";
 
         /// <summary>
         /// Awaits a UnityWebRequest without pulling in a third-party awaiter.
@@ -70,7 +79,7 @@ namespace HCIKonstanz.Colibri.Store
                 request.method = UnityWebRequest.kHttpVerbGET;
                 request.timeout = TimeoutSeconds;
                 request.certificateHandler = ServerCertificateHandler.For(ColibriConfig.Load());
-                request.SetRequestHeader("Accept", "application/json");
+                request.SetRequestHeader("Accept", MediaType);
                 await SendAsync(request);
 
                 if (request.result == UnityWebRequest.Result.Success && request.responseCode == 200)
@@ -92,8 +101,8 @@ namespace HCIKonstanz.Colibri.Store
                 request.method = UnityWebRequest.kHttpVerbPUT;
                 request.timeout = TimeoutSeconds;
                 request.certificateHandler = ServerCertificateHandler.For(ColibriConfig.Load());
-                request.SetRequestHeader("Content-Type", "application/json");
-                request.SetRequestHeader("Accept", "application/json");
+                request.SetRequestHeader("Content-Type", MediaType);
+                request.SetRequestHeader("Accept", MediaType);
                 await SendAsync(request);
 
                 if (request.result == UnityWebRequest.Result.Success && (request.responseCode == 200 || request.responseCode == 201))
@@ -112,7 +121,7 @@ namespace HCIKonstanz.Colibri.Store
                 request.method = UnityWebRequest.kHttpVerbDELETE;
                 request.timeout = TimeoutSeconds;
                 request.certificateHandler = ServerCertificateHandler.For(ColibriConfig.Load());
-                request.SetRequestHeader("Content-Type", "application/json");
+                request.SetRequestHeader("Accept", MediaType);
                 await SendAsync(request);
 
                 if (request.result == UnityWebRequest.Result.Success && request.responseCode == 200)

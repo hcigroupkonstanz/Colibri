@@ -7,6 +7,7 @@ import type { Router, Request, RequestHandler, Response } from 'express';
 import { Subscription } from 'rxjs';
 import { LogLevel, LogMessage, Service } from '../../src/server/modules/core/index.js';
 import { RestAPI } from '../../src/server/modules/web/rest-api.js';
+import { REST_MEDIA_TYPE } from '../../src/server/modules/networking/protocol.js';
 import type { WebServer } from '../../src/server/modules/web/web-server.js';
 
 const SAVE_DEBOUNCE_MILLIS = 250;
@@ -39,9 +40,9 @@ interface Result {
     body: unknown;
 }
 
-const call = function (router: Router, method: string, url: string, body?: unknown): Promise<Result> {
+const call = function (router: Router, method: string, url: string, body?: unknown, headers: Record<string, string> = {}): Promise<Result> {
     return new Promise<Result>((resolve, reject) => {
-        const req = { method, url, body, headers: {} } as unknown as Request;
+        const req = { method, url, body, headers } as unknown as Request;
 
         let status = 200;
         const res = {
@@ -68,7 +69,9 @@ describe('RestAPI', () => {
     let webserver: FakeWebServer;
     let api: RestAPI;
 
-    const put = (url: string, body: unknown) => call(webserver.router!, 'PUT', url, body);
+    // As both clients send it: the value as JSON, in the store's media type.
+    const put = (url: string, body: unknown, contentType = REST_MEDIA_TYPE) =>
+        call(webserver.router!, 'PUT', url, body, { 'content-type': contentType });
     const get = (url: string) => call(webserver.router!, 'GET', url);
     const del = (url: string) => call(webserver.router!, 'DELETE', url);
 
@@ -186,6 +189,25 @@ describe('RestAPI', () => {
             await expect(del('/appA')).resolves.toMatchObject({ status: 200 });
             await expect(get('/appA')).resolves.toMatchObject({ status: 404 });
             await expect(del('/appA')).resolves.toMatchObject({ status: 404 });
+        });
+
+        // Only the store's media type, parameters aside: application/json and form data get
+        // 415, and so does a body without a Content-Type.
+        it.each([
+            [ 'application/json', 'application/json' ],
+            [ 'form data', 'application/x-www-form-urlencoded' ],
+            [ 'no Content-Type', '' ],
+        ])('refuses a value sent as %s with 415, and stores nothing', async (_, contentType) => {
+            await expect(put('/appA/key', { x: 1 }, contentType)).resolves.toEqual({
+                status: 415,
+                body: { error: `Value with name key not saved: send the value as JSON, with Content-Type: ${REST_MEDIA_TYPE}` },
+            });
+            await expect(get('/appA')).resolves.toMatchObject({ status: 404 });
+        });
+
+        it('takes the media type with parameters and in any case', async () => {
+            await expect(put('/appA/key', 1, `${REST_MEDIA_TYPE}; charset=utf-8`)).resolves.toMatchObject({ status: 201 });
+            await expect(put('/appA/key', 2, REST_MEDIA_TYPE.toUpperCase())).resolves.toMatchObject({ status: 200 });
         });
 
         // For the admin UI's server info.
