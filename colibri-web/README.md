@@ -3,6 +3,7 @@
 TypeScript client for [Colibri](../README.md) with pub/sub messages, synchronized models, a
 [key-value store](docs/guide.md#remote-store) and [remote logging](docs/guide.md#web-interface-for-logging). Exchanges
 data with web and [colibri-unity](../colibri-unity/README.md) clients through a [colibri-server](../colibri-server/README.md) 2.x.
+Voice chat is currently not supported on the web.
 
 Full documentation: [docs/guide.md](docs/guide.md). Upgrading from 1.x: [MIGRATION.md](../MIGRATION.md).
 Release notes: [CHANGELOG.md](CHANGELOG.md).

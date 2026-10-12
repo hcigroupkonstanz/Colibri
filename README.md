@@ -2,50 +2,53 @@
 
 <img src="img/colibri_header.png" alt="Colibri" width="800"/>
 
-Provides easy model synchronization and easy access to data for faster cross reality prototyping for research.
+Colibri synchronizes objects and data between apps for fast cross-reality prototyping in research.
+
+## Supported platforms
+
+| Platform | Client |
+| --- | --- |
+| Unity | [colibri-unity](colibri-unity/README.md), Unity 2022.3 or newer |
+| TypeScript | [colibri-web](colibri-web/README.md), [`@hcikn/colibri`](https://www.npmjs.com/package/@hcikn/colibri) on npm |
+
+More to follow.
 
 ## Features
 
 Colibri focuses on three key areas:
 
-- **Low Barrier:** Setup and Development is as simple as possible, with little to no configuration/code required.
-- **Multi-Platform:** Colibri (currently) supports synchronization between Unity and Web.
-- **Lab Conditions:** XR Research prototypes often benefit from ideal lab conditions, allowing Colibri to focus on low latency and high throughput (at the cost of potential bandwidth savings and some performance).
+- **Low Barrier:** Setup and development are as simple as possible, with little to no configuration or code required.
+- **Multi-Platform:** Colibri synchronizes data between different platforms.
+- **Lab Conditions:** XR research prototypes usually run under ideal lab conditions. Colibri therefore puts low
+  latency and high throughput first, at the cost of bandwidth and security.
+
+> [!WARNING]
+> Colibri has no authentication. Anyone who can reach a server can join any app on it and read and change its data.
+> Do not send sensitive data, and run your own server on a trusted network.
 
 Included:
 
-- Pub/sub messages on named channels
-- Synchronized objects: `SyncTransform` and `SyncBehaviour` in Unity, `SyncModel` on the web
-- Key-value store on the server
-- Admin UI: the log of the server and its clients, the connected clients with latency and throughput, the synchronized models and the server settings
-- Voice chat between Unity clients
-- TLS for Unity (TCP) and web (HTTPS, WSS) connections, not for voice
+- Messages between clients
+- Synchronized (3D) objects
+- Data store on the server (for small configuration data)
+- Monitoring in the browser: the server log, the connected clients with latency and throughput, the synchronized
+  objects and the server settings
+- Voice chat
 
-## Components
+## Getting started
 
-| Component | Description |
-| --- | --- |
-| [colibri-unity](colibri-unity/README.md) | Unity client, Unity 2022.3 or newer |
-| [colibri-web](colibri-web/README.md) | TypeScript client, [`@hcikn/colibri`](https://www.npmjs.com/package/@hcikn/colibri) on npm |
-| [colibri-server](colibri-server/README.md) | Server. Runs as a [Docker image](https://hub.docker.com/r/hcikn/colibri) or on Node.js 24 or newer |
+Follow the README of your platform:
 
-Clients and server must all be 2.x. Upgrading from 1.x: [MIGRATION.md](MIGRATION.md).
+- [Unity](colibri-unity/README.md#installation)
+- [TypeScript](colibri-web/README.md#installation)
 
-## Quick start
+You can start with the public test server
+`colibri.hci.uni-konstanz.de`. To run your own server, see [colibri-server](colibri-server/README.md).
 
-1. Start a server with [Docker Compose](colibri-server/README.md#docker) or [Node.js](colibri-server/README.md#nodejs).
-2. Install the [Unity package](colibri-unity/README.md#installation) or run `npm install @hcikn/colibri@2`.
-3. Follow the [tutorial](docs/getting-started.md).
+## Upgrading from Colibri 1
 
-## Testing
-
-`npm test` in `colibri-server/` and `colibri-web/` runs the unit tests. `node colibri-unity/run-tests.mjs`
-runs the Unity unit and end-to-end tests ([details](colibri-unity/docs/guide.md#running-the-tests)).
-
-## Security
-
-Colibri has no authentication. Any client that can reach a server can join any app on it and read
-and change its data. Run the server on a trusted network.
+Colibri 2 does not work with Colibri 1. Clients and server must all run Colibri 2. To upgrade a project, follow the
+[migration guide](MIGRATION.md).
 
 ## Citation
 
@@ -54,13 +57,13 @@ and change its data. Run the server on a trusted network.
 Published at the ISMAR'23 Adjunct "1st Joint Workshop on Cross Reality". Metadata: [CITATION.cff](CITATION.cff).
 Contact: [Sebastian Hubenschmid](https://hci.uni-konstanz.de/personen/wissenschaftliche-mitarbeiterinnen/sebastian-hubenschmid/) ([GitHub](https://github.com/SebiH)), [Daniel Fink](https://hci.uni-konstanz.de/personen/wissenschaftliche-mitarbeiterinnen/daniel-fink/) ([GitHub](https://github.com/dunifi91)).
 
-## Projects built with early Colibri versions
+## Projects built with Colibri
 
 | [ReLive](https://github.com/hcigroupkonstanz/ReLive) | [STREAM](https://github.com/hcigroupkonstanz/STREAM) |
 | --- | --- |
-| [![ReLive](http://img.youtube.com/vi/BaNZ02QkZ_k/0.jpg)](http://www.youtube.com/watch?v=BaNZ02QkZ_k "ReLive") | [![STREAM](http://img.youtube.com/vi/5tEgNzuehuM/0.jpg)](http://www.youtube.com/watch?v=5tEgNzuehuM "STREAM") |
+| [![ReLive](https://img.youtube.com/vi/BaNZ02QkZ_k/0.jpg)](https://www.youtube.com/watch?v=BaNZ02QkZ_k "ReLive") | [![STREAM](https://img.youtube.com/vi/5tEgNzuehuM/0.jpg)](https://www.youtube.com/watch?v=5tEgNzuehuM "STREAM") |
 | [**Re-Locations**](https://github.com/hcigroupkonstanz/Re-locations) | [**ARound the Smartphone**](https://github.com/hcigroupkonstanz/ARound-the-Smartphone) |
-| [![Re-Locations](http://img.youtube.com/vi/_D0_B4Rux1U/0.jpg)](http://www.youtube.com/watch?v=_D0_B4Rux1U "Re-Locations") | [![ARound the Smartphone](http://img.youtube.com/vi/p6cHwLxHWJg/0.jpg)](http://www.youtube.com/watch?v=p6cHwLxHWJg "ARound the Smartphone") |
+| [![Re-Locations](https://img.youtube.com/vi/_D0_B4Rux1U/0.jpg)](https://www.youtube.com/watch?v=_D0_B4Rux1U "Re-Locations") | [![ARound the Smartphone](https://img.youtube.com/vi/p6cHwLxHWJg/0.jpg)](https://www.youtube.com/watch?v=p6cHwLxHWJg "ARound the Smartphone") |
 
 ## License
 
