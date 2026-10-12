@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_DIR = path.resolve(__dirname, '../../colibri-server');
 
 const HOST = process.env.COLIBRI_E2E_SERVER ?? '127.0.0.1';
-const PORT = Number(process.env.COLIBRI_E2E_PORT ?? 9011);
+const PORT = Number(process.env.COLIBRI_E2E_PORT ?? 9211);
 
 async function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs;

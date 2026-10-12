@@ -46,10 +46,10 @@ namespace HCIKonstanz.Colibri.E2E
         public static string WebUrl => $"{(OverTls ? "https" : "http")}://{Host}:{WebPort}";
 
         /// <summary>The plain test server's web port, whether or not the suite runs over TLS.</summary>
-        public static int PlainWebPort => EnvPort("COLIBRI_E2E_PORT", 9011);
+        public static int PlainWebPort => EnvPort("COLIBRI_E2E_PORT", 9211);
 
         /// <summary>The plain test server's binary port, whether or not the suite runs over TLS.</summary>
-        public static int PlainTcpPort => EnvPort("COLIBRI_E2E_TCP_PORT", 9012);
+        public static int PlainTcpPort => EnvPort("COLIBRI_E2E_TCP_PORT", 9212);
 
         /// <summary>
         /// The binary port of a second server, with TLS turned on, for <see cref="TlsTests"/> and for

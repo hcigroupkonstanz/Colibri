@@ -13,5 +13,5 @@ services:
       - ./cert.pem:/certs/cert.pem:ro
       - ./key.pem:/certs/key.pem:ro
     ports:
-      - "${COLIBRI_E2E_TLS_PORT:-9111}:9011" # web interface, https
-      - "${COLIBRI_E2E_TLS_TCP_PORT:-9112}:9012" # tcp (unity), TLS
+      - "${COLIBRI_E2E_TLS_PORT:-9111}:9211" # web interface, https
+      - "${COLIBRI_E2E_TLS_TCP_PORT:-9112}:9212" # tcp (unity), TLS

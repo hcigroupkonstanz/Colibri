@@ -21,8 +21,8 @@
  * Environment (the same contract colibri-web's e2e suite uses):
  *   COLIBRI_E2E_SERVER     host of a server to use instead of starting one. Setting this means
  *                          the script never starts or stops anything.
- *   COLIBRI_E2E_PORT       web/Socket.IO port, default 9011
- *   COLIBRI_E2E_TCP_PORT   binary v3 port, default 9012
+ *   COLIBRI_E2E_PORT       web/Socket.IO port, default 9211
+ *   COLIBRI_E2E_TCP_PORT   binary v3 port, default 9212
  *   COLIBRI_E2E_NO_BUILD   skip `docker compose --build`
  *   UNITY_PATH             Unity executable to use, if it is not where Unity Hub puts it
  *
@@ -54,7 +54,7 @@ const SERVER_DIR = path.resolve(__dirname, '../colibri-server');
 const RESULTS_DIR = path.join(PROJECT_DIR, 'TestResults');
 
 const HOST = process.env.COLIBRI_E2E_SERVER ?? '127.0.0.1';
-const TCP_PORT = Number(process.env.COLIBRI_E2E_TCP_PORT ?? 9012);
+const TCP_PORT = Number(process.env.COLIBRI_E2E_TCP_PORT ?? 9212);
 
 const TLS_SERVER_DIR = path.join(PROJECT_DIR, 'tls-test-server');
 const TLS_WEB_PORT = Number(process.env.COLIBRI_E2E_TLS_PORT ?? 9111);

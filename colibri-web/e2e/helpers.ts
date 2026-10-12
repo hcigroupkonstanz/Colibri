@@ -5,7 +5,7 @@ import { connect, type Socket } from 'socket.io-client';
 import { Colibri, PROTOCOL_VERSION, type Message } from '../src/Colibri';
 
 export const HOST = process.env.COLIBRI_E2E_SERVER ?? '127.0.0.1';
-export const PORT = Number(process.env.COLIBRI_E2E_PORT ?? 9011);
+export const PORT = Number(process.env.COLIBRI_E2E_PORT ?? 9211);
 // Where startLinkProxy listens; 0, the default, is any free port.
 const PROXY_PORT = Number(process.env.COLIBRI_E2E_PROXY_PORT ?? 0);
 
