@@ -133,7 +133,7 @@ var scores = await Store.Get<ScoreTable>("highscores");
 ## Remote logging
 
 Add the **`[RemoteLogger]`** prefab from `Packages/Colibri/Prefabs/` to the scene. `Debug.Log`
-output then appears at `http://<your-server>:9011`.
+output then appears at `http://<your-server>:9211`.
 
 ## Meta Quest
 
@@ -209,7 +209,7 @@ Set `TLS_CERT` and `TLS_KEY` on the server to enable [TLS](../colibri-server/doc
 example on networks that block unencrypted TCP. In Unity, tick *Server supports SSL/TLS?* under
 *Optional Config* in *Window → Colibri Configuration*. For a self-signed certificate, also paste the
 fingerprint from the server log into *Server certificate SHA-256*. Web clients connect to
-`https://<your-server>:9011`. Voice chat stays unencrypted.
+`https://<your-server>:9211`. Voice chat stays unencrypted.
 
 ## Troubleshooting
 
