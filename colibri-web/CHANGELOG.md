@@ -73,6 +73,9 @@ Colibri component from 1.x.
 
 ### Added
 
+- **`deleteRestObject(key)` and the `DeleteRestApi` wrapper**, which delete a value from the
+  remote store, as Unity's `Store.Delete` does. They resolve to `true` if a value was deleted.
+  Before, deleting needed a hand-written `fetch`.
 - **`Colibri.protocolMismatch`, and `ProtocolMismatchError` (exported).** colibri-server
   2.0.0 checks the handshake `version`, and when it refuses a client it sends a `colibri` /
   `protocol::rejected` message before disconnecting. `Colibri` handles that itself: it turns
