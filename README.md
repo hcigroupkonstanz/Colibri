@@ -24,15 +24,18 @@ Colibri focuses on three key areas:
 
 > [!WARNING]
 > Colibri has no authentication. Anyone who can reach a server can join any app on it and read and change its data.
-> Do not send sensitive data, and run your own server on a trusted network.
+> Do not send sensitive data through the public test server. For sensitive data, run your own server on a trusted network.
 
 Included:
 
 - Messages between clients
 - Synchronized (3D) objects
 - Data store on the server (for small configuration data)
-- Monitoring in the browser: the server log, the connected clients with latency and throughput, the synchronized
-  objects and the server settings
+- Monitoring in the browser:
+  - The log of every client, so you can read the log of apps on smartphones and head-mounted displays without a
+    cable or debugger
+  - The connected clients with their latency and throughput
+  - The synchronized objects
 - Voice chat
 
 ## Getting started
