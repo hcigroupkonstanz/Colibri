@@ -107,16 +107,17 @@ project has no configuration. *Save Config* writes `Assets/Resources/ColibriConf
 ### Advanced configuration
 
 Ports, TLS and the voice sampling rate under *Optional Config* must match the server. Change them
-only if the server does not use the defaults.
+only if the server does not use the defaults. A configuration saved by 1.x keeps 1.x's ports 9011 to
+9013 ([default ports](../../MIGRATION.md#default-ports)).
 
 | Setting | Default | Description |
 |---|---|---|
 | Server supports SSL/TLS? | off | Use TLS. Tick when the server has `TLS_CERT` and `TLS_KEY` set, or its reverse proxy's TCP port uses TLS ([TLS](#tls)) |
 | Allow self-signed certificate | off | Accept a certificate the device does not trust. Only with TLS ([Certificates](#certificates)) |
 | Server certificate SHA-256 | empty | Accept only the certificate with this fingerprint. Only with TLS ([Certificates](#certificates)) |
-| Web server Port | `9011` | Server's `WEBSERVER_PORT`, used by the Store |
-| TCP server Port | `9012` | Server's `TCP_PORT` |
-| Voice server Port | `9013` | Server's `VOICE_PORT` |
+| Web server Port | `9211` | Server's `WEBSERVER_PORT`, used by the Store |
+| TCP server Port | `9212` | Server's `TCP_PORT` |
+| Voice server Port | `9213` | Server's `VOICE_PORT` |
 | Voice Sampling Rate | `48000` | Server's `VOICE_SAMPLING_RATE` |
 | Max Send Rate (Hz) | `30` | Updates per second per synced object, `0` for no limit ([Send rate](#send-rate)) |
 
@@ -254,14 +255,14 @@ Show [`LastConnectFailure`](#connection-and-outages) in your app.
 |---|---|---|
 | `Colibri: a float arrived on channel 'chat', but the listener registered there expects string. …` | Sender and listener use different types on the channel | Use the same type on both sides |
 | `Colibri is not configured yet. Open Window -> Colibri Configuration…` | No App Name set | Enter an App Name and click *Save Config* |
-| `Colibri: 192.168.0.10:9012 did not answer within 5 s. …` | Wrong IP, server on another network or subnet, Wi-Fi client isolation, or a firewall dropping packets | Fix the address or the network |
+| `Colibri: 192.168.0.10:9212 did not answer within 5 s. …` | Wrong IP, server on another network or subnet, Wi-Fi client isolation, or a firewall dropping packets | Fix the address or the network |
 | `Colibri: connection to 192.168.0.10 failed (ConnectionRefused), retrying...` | The machine is reachable, but nothing listens on the TCP port | Start colibri-server, or check *TCP server Port* |
 | `… failed (HostUnreachable) …`, `(NetworkUnreachable)` or another socket error | Wrong address or network | Fix the address or the network |
-| `Colibri: no connection to 192.0.2.10:9012 within 2.5 s, trying [2001:db8::1]:9012` or `Colibri: no connection to 192.0.2.10:9012 (…), trying …` | The server name has several addresses and this one does not work from here: no route, a firewall, or the server does not listen on it. The next address is tried. | None for TCP if the next one connects, but voice still goes to the first IPv4 address and is not heard ([Server addresses](#server-addresses)). Make the address reachable, or remove it from DNS |
+| `Colibri: no connection to 192.0.2.10:9212 within 2.5 s, trying [2001:db8::1]:9212` or `Colibri: no connection to 192.0.2.10:9212 (…), trying …` | The server name has several addresses and this one does not work from here: no route, a firewall, or the server does not listen on it. The next address is tried. | None for TCP if the next one connects, but voice still goes to the first IPv4 address and is not heard ([Server addresses](#server-addresses)). Make the address reachable, or remove it from DNS |
 | `Colibri: colibri.example.org could not be resolved within 5 s. …` | The device's DNS server does not answer | Check the network, or use the server's IP address |
 | `Colibri voice: the server address '…' has only IPv6 addresses (…), and this device has no route to them, …` or `Colibri voice: sending to … failed (NetworkUnreachable), dropping voice until a send works again` | No route to the server's voice address: a server name with only IPv6 addresses on a network without IPv6, or a network change | Use a network with IPv6, or give the server name an IPv4 address. After a network change, voice resumes with the first send that works |
 | `Colibri: invalid frame from server, dropping connection: …` if the server sends anything, then `Colibri: 3 connections in a row were accepted but ended before a single frame could be read. …` | A 1.x server, an address that is not a colibri-server, or [TLS](#tls) on the server only. With *Server supports SSL/TLS?* off, also a proxy or port forwarding whose backend is not running. | Use a 2.x server, correct the address, tick *Server supports SSL/TLS?*, or start the server behind the proxy |
-| `Colibri: 192.168.0.10:9012 accepted the connection but has not sent anything in 2 s, dropping it` (with TLS also `Colibri: server closed the connection`), then `Colibri: 3 connections in a row to 192.168.0.10:9012 were accepted, but nothing was received on any of them: …` | A proxy or port forwarding whose backend is down, a captive portal or a firewall accepts connections, then closes them or forwards nothing. Or the server does not answer or is not a colibri-server. | Check that colibri-server runs and is reachable at that address and port |
+| `Colibri: 192.168.0.10:9212 accepted the connection but has not sent anything in 2 s, dropping it` (with TLS also `Colibri: server closed the connection`), then `Colibri: 3 connections in a row to 192.168.0.10:9212 were accepted, but nothing was received on any of them: …` | A proxy or port forwarding whose backend is down, a captive portal or a firewall accepts connections, then closes them or forwards nothing. Or the server does not answer or is not a colibri-server. | Check that colibri-server runs and is reachable at that address and port |
 | `… did not answer the TLS handshake …` or `rejected the certificate of …` | TLS settings do not match the server | See [TLS errors](#tls-errors) |
 | `Colibri (Android build): …` or `Colibri (build): …` | A Player setting that fails only in the built app (Internet Access, Allow downloads over HTTP) | Click the fix button in *Window → Colibri Configuration* ([Build settings check](#build-settings-check)) |
 | `Colibri: cannot synchronize '<class>.<member>' …` at startup | A `[Sync]` member with an unsupported type, a property without both a getter and a setter, or a `readonly` field | Follow the message. Sync classes of your own as `JObject`. |
@@ -642,7 +643,7 @@ voice use the same IP version, as the server's voice check needs.
   because Windows takes a second or more to report a refusal, e.g. on `127.0.0.1` when the server
   listens on `::1` only.
 - Moving on is logged (`Colibri: no connection to …, trying …`). With a host name, the connect line
-  names the address used: `Colibri: connected to colibri.example.org:9012 (192.0.2.10) as app …`.
+  names the address used: `Colibri: connected to colibri.example.org:9212 (192.0.2.10) as app …`.
 
 An IPv6 address works with or without brackets. `Store` URLs get the brackets either way. With TLS,
 the certificate is checked against the server address as entered.
@@ -770,7 +771,7 @@ reconnecting. Queued and later messages are dropped with a one-time warning. `Se
 accessible console such as headsets and phones.
 
 Add the `[RemoteLogger]` prefab to the scene. The log then appears on the admin UI's *Log* page at
-`http://<your-server-ip>:9011` ([Admin UI](../../colibri-server/docs/guide.md#admin-ui)).
+`http://<your-server-ip>:9211` ([Admin UI](../../colibri-server/docs/guide.md#admin-ui)).
 
 <img src="../../colibri-server/img/admin-log.png" alt="Log page of the admin UI" width="600"/>
 
@@ -939,8 +940,8 @@ Windows, check manually that a client with an unreachable server address leaves 
 | Variable | Default | Description |
 |---|---|---|
 | `COLIBRI_E2E_SERVER` | unset | Host of a server to use instead of starting one. When set, the script never starts or stops anything. |
-| `COLIBRI_E2E_PORT` | `9011` | Web/Socket.IO port |
-| `COLIBRI_E2E_TCP_PORT` | `9012` | Binary v3 port |
+| `COLIBRI_E2E_PORT` | `9211` | Web/Socket.IO port |
+| `COLIBRI_E2E_TCP_PORT` | `9212` | Binary v3 port |
 | `COLIBRI_E2E_NO_BUILD` | unset | Skip `docker compose --build` |
 | `COLIBRI_E2E_TLS_PORT` | `9111` | TLS server's web port (https) |
 | `COLIBRI_E2E_TLS_TCP_PORT` | `9112` | TLS server's binary v3 port (TLS) |

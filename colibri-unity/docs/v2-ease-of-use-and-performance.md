@@ -185,7 +185,7 @@ and press Save Config. (Every client that should see each other has to use the s
 Get connected but see nobody, and the connect log already names the reason:
 
 ```
-Colibri: connected to 192.168.0.10:9012 as app 'my-ar-prototype'.
+Colibri: connected to 192.168.0.10:9212 as app 'my-ar-prototype'.
 Only clients using the same App Name can see each other.
 ```
 
@@ -781,7 +781,7 @@ produces a perfectly healthy connection on which no other client is ever seen, i
 from a working setup. It now reads:
 
 ```
-Colibri: connected to 192.168.0.10:9012 as app 'my-ar-prototype'.
+Colibri: connected to 192.168.0.10:9212 as app 'my-ar-prototype'.
 Only clients using the same App Name can see each other.
 ```
 

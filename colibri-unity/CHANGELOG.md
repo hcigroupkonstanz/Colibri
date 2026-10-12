@@ -22,6 +22,10 @@ rationale, migration steps, and what the Editor verification did and did not cov
   protocol](../colibri-server/docs/protocol.md) and **requires colibri-server ≥ 2.0.0**. It cannot
   talk to a 1.x server, and a 1.x client cannot talk to a 2.0.0 server. There is no version
   negotiation: both sides must be upgraded together.
+- **Default ports 9211, 9212 and 9213**, colibri-server 2.0's defaults, instead of 9011, 9012 and
+  9013, for the web (Store), TCP and voice ports of a new configuration. A configuration saved by
+  1.x keeps the ports it saved: set the new ones in *Window → Colibri Configuration*, unless the
+  server keeps the old ones. See [MIGRATION.md](../MIGRATION.md#default-ports).
 - **Voice packets carry an app id.** The voice header has a header version and an app id, the
   32-bit FNV-1a hash of the App Name as the TCP handshake sends it, and colibri-server 2.0.0
   passes a packet on only to the clients with the same app id. Voice ids only have to be unique
@@ -75,7 +79,7 @@ rationale, migration steps, and what the Editor verification did and did not cov
   SyncTransform](#syncbehaviour-and-synctransform).
 - **'Server supports SSL/TLS?' now switches the TCP connection to TLS too**, not only the Store's
   requests. A server whose web port is behind a TLS proxy but whose TCP port is plain needs TLS on
-  the TCP port as well: `TLS_CERT` and `TLS_KEY`, or TLS termination for 9012 in the proxy. See
+  the TCP port as well: `TLS_CERT` and `TLS_KEY`, or TLS termination for it in the proxy. See
   [TLS](#tls).
 
 ## v3 wire protocol

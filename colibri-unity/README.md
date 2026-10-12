@@ -97,7 +97,9 @@ Add `PlayerManager` to the scene and set its `Template` to a `Player` prefab ([d
 ## Configuration
 
 *Window → Colibri Configuration* saves to `Assets/Resources/ColibriConfig`. Ports, TLS and the voice sampling
-rate under *Optional Config* must match the server ([options](docs/guide.md#configuration)).
+rate under *Optional Config* must match the server ([options](docs/guide.md#configuration)). The default ports are
+9211 (web), 9212 (TCP) and 9213 (voice). A configuration saved by 1.x keeps 9011 to 9013
+([default ports](../MIGRATION.md#default-ports)).
 
 - For a server with [TLS](docs/guide.md#tls), tick *Server supports SSL/TLS?*. For a self-signed certificate,
   also paste the fingerprint from the server log into *Server certificate SHA-256*. Voice chat stays unencrypted.
@@ -140,7 +142,7 @@ node colibri-unity/run-tests.mjs             # from the repository root, EditMod
 node colibri-unity/run-tests.mjs --editmode  # unit tests only, no server
 ```
 
-PlayMode starts a colibri-server with Docker Compose unless one listens on port 9012 ([details](docs/guide.md#running-the-tests)).
+PlayMode starts a colibri-server with Docker Compose unless one listens on port 9212 ([details](docs/guide.md#running-the-tests)).
 
 ## License
 
