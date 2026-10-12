@@ -243,10 +243,10 @@ describe('TCPServerProxy', () => {
         const startMessages = () => sent.filter(m => m.channel === 'm:start');
 
         it('shares its counter and the limit with the worker in the start message', () => {
-            proxy.start(9012, '0.0.0.0', { inboundBacklogLimit: 1234 });
+            proxy.start(9212, '0.0.0.0', { inboundBacklogLimit: 1234 });
 
             const [start] = startMessages();
-            expect(start?.content).toMatchObject({ port: 9012, host: '0.0.0.0', options: { inboundBacklogLimit: 1234 } });
+            expect(start?.content).toMatchObject({ port: 9212, host: '0.0.0.0', options: { inboundBacklogLimit: 1234 } });
             const counter = (start?.content.options as { inboundBacklog: Int32Array }).inboundBacklog;
             expect(counter).toBe(internals().inboundBacklog);
             expect(counter.buffer).toBeInstanceOf(SharedArrayBuffer);
@@ -290,7 +290,7 @@ describe('TCPServerProxy', () => {
             vi.useFakeTimers();
             try {
                 vi.spyOn(WorkerServiceProxy.prototype as unknown as { restartWorker(): boolean }, 'restartWorker').mockReturnValue(true);
-                proxy.start(9012, '0.0.0.0', { inboundBacklogLimit: 77 });
+                proxy.start(9212, '0.0.0.0', { inboundBacklogLimit: 77 });
                 Atomics.store(internals().inboundBacklog, 0, 500);
 
                 internals().onWorkerExited();
@@ -325,7 +325,7 @@ describe('TCPServerProxy', () => {
             vi.useFakeTimers();
             try {
                 vi.spyOn(WorkerServiceProxy.prototype as unknown as { restartWorker(): boolean }, 'restartWorker').mockReturnValue(true);
-                proxy.start(9012, '0.0.0.0', { trustedProxies: ['loopback', '172.20.0.0/16'], proxyProtocol: true });
+                proxy.start(9212, '0.0.0.0', { trustedProxies: ['loopback', '172.20.0.0/16'], proxyProtocol: true });
 
                 (proxy as unknown as ProxyInternals).onWorkerExited();
                 vi.advanceTimersByTime(1000);
@@ -358,13 +358,13 @@ describe('TCPServerProxy', () => {
 
         it('goes to the worker with the start message', () => {
             const current = credentials('first');
-            proxy.start(9012, '0.0.0.0', { idleTimeoutMillis: 1 }, { credentials: current, changes$: new Subject<TlsCredentials>() });
+            proxy.start(9212, '0.0.0.0', { idleTimeoutMillis: 1 }, { credentials: current, changes$: new Subject<TlsCredentials>() });
 
             expect(startOptions()).toEqual([ expect.objectContaining({ idleTimeoutMillis: 1, tls: current }) ]);
         });
 
         it('is left out without TLS', () => {
-            proxy.start(9012, '0.0.0.0', {});
+            proxy.start(9212, '0.0.0.0', {});
 
             expect(startOptions()[0]).not.toHaveProperty('tls');
         });
@@ -374,7 +374,7 @@ describe('TCPServerProxy', () => {
             try {
                 vi.spyOn(WorkerServiceProxy.prototype as unknown as { restartWorker(): boolean }, 'restartWorker').mockReturnValue(true);
                 const changes = new Subject<TlsCredentials>();
-                proxy.start(9012, '0.0.0.0', {}, { credentials: credentials('first'), changes$: changes });
+                proxy.start(9212, '0.0.0.0', {}, { credentials: credentials('first'), changes$: changes });
 
                 const renewed = credentials('second');
                 changes.next(renewed);
@@ -391,7 +391,7 @@ describe('TCPServerProxy', () => {
         it('is not sent any more once stopped', async () => {
             vi.spyOn(WorkerServiceProxy.prototype as unknown as { terminateWorker(): Promise<void> }, 'terminateWorker').mockResolvedValue();
             const changes = new Subject<TlsCredentials>();
-            proxy.start(9012, '0.0.0.0', {}, { credentials: credentials('first'), changes$: changes });
+            proxy.start(9212, '0.0.0.0', {}, { credentials: credentials('first'), changes$: changes });
 
             await proxy.stop();
             changes.next(credentials('second'));

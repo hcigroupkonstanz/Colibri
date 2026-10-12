@@ -113,13 +113,13 @@ describe('ConsoleLog', () => {
         const subscription = log.attach(Service.output$);
         try {
             new RedirectConsole();
-            console.log('Web server listening on 0.0.0.0:9011');
+            console.log('Web server listening on 0.0.0.0:9211');
         } finally {
             Object.assign(console, original);
             subscription.unsubscribe();
         }
 
-        expect(printed).toEqual([ 'Web server listening on 0.0.0.0:9011' ]);
+        expect(printed).toEqual([ 'Web server listening on 0.0.0.0:9211' ]);
         expect(lines).toEqual({ out: [], err: [] });
     });
 

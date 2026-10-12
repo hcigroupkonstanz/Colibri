@@ -31,24 +31,24 @@ const ports = (source: number, destination: number): Buffer => {
     return bytes;
 };
 const inet = (source: number[], destination: number[]): Buffer =>
-    Buffer.concat([Buffer.from(source), Buffer.from(destination), ports(51234, 9012)]);
+    Buffer.concat([Buffer.from(source), Buffer.from(destination), ports(51234, 9212)]);
 const inet6 = (source: string, destination: string): Buffer =>
-    Buffer.concat([Buffer.from(source.replace(/:/g, ''), 'hex'), Buffer.from(destination.replace(/:/g, ''), 'hex'), ports(51234, 9012)]);
+    Buffer.concat([Buffer.from(source.replace(/:/g, ''), 'hex'), Buffer.from(destination.replace(/:/g, ''), 'hex'), ports(51234, 9212)]);
 
 const handshake = encodeHandshakeFrame(PROTOCOL_VERSION, 'appA', 'quest-1');
 
 describe('readProxyHeader', () => {
     describe('version 1', () => {
         it('reads the client\'s address from TCP4 and TCP6 headers', () => {
-            const tcp4 = v1('PROXY TCP4 198.51.100.7 172.20.0.2 51234 9012');
-            const tcp6 = v1('PROXY TCP6 2001:db8::7 2001:db8::1 51234 9012');
+            const tcp4 = v1('PROXY TCP4 198.51.100.7 172.20.0.2 51234 9212');
+            const tcp6 = v1('PROXY TCP6 2001:db8::7 2001:db8::1 51234 9212');
 
             expect(readProxyHeader(tcp4)).toEqual({ length: tcp4.length, sourceAddress: '198.51.100.7' });
             expect(readProxyHeader(tcp6)).toEqual({ length: tcp6.length, sourceAddress: '2001:db8::7' });
         });
 
         it('says how much of what follows is the header', () => {
-            const header = v1('PROXY TCP4 198.51.100.7 172.20.0.2 51234 9012');
+            const header = v1('PROXY TCP4 198.51.100.7 172.20.0.2 51234 9212');
 
             expect(readProxyHeader(Buffer.concat([header, handshake]))).toEqual({ length: header.length, sourceAddress: '198.51.100.7' });
         });
@@ -62,7 +62,7 @@ describe('readProxyHeader', () => {
         });
 
         it('waits for the rest of a header split anywhere', () => {
-            const header = v1('PROXY TCP4 198.51.100.7 172.20.0.2 51234 9012');
+            const header = v1('PROXY TCP4 198.51.100.7 172.20.0.2 51234 9212');
 
             for (let length = 1; length < header.length; length++) {
                 expect(readProxyHeader(header.subarray(0, length))).toBe('incomplete');
@@ -72,16 +72,16 @@ describe('readProxyHeader', () => {
 
         it.each([
             ['a missing port', 'PROXY TCP4 198.51.100.7 172.20.0.2 51234'],
-            ['an extra field', 'PROXY TCP4 198.51.100.7 172.20.0.2 51234 9012 x'],
-            ['a double space', 'PROXY TCP4  198.51.100.7 172.20.0.2 51234 9012'],
-            ['an IPv6 address in TCP4', 'PROXY TCP4 2001:db8::7 172.20.0.2 51234 9012'],
-            ['an IPv4 address in TCP6', 'PROXY TCP6 198.51.100.7 2001:db8::1 51234 9012'],
-            ['a host name', 'PROXY TCP4 client.example.org 172.20.0.2 51234 9012'],
-            ['a leading zero in an address', 'PROXY TCP4 198.51.100.007 172.20.0.2 51234 9012'],
-            ['a port over 65535', 'PROXY TCP4 198.51.100.7 172.20.0.2 65536 9012'],
-            ['a port with a leading zero', 'PROXY TCP4 198.51.100.7 172.20.0.2 051234 9012'],
-            ['an unknown protocol', 'PROXY UDP4 198.51.100.7 172.20.0.2 51234 9012'],
-            ['lower case', 'PROXY tcp4 198.51.100.7 172.20.0.2 51234 9012'],
+            ['an extra field', 'PROXY TCP4 198.51.100.7 172.20.0.2 51234 9212 x'],
+            ['a double space', 'PROXY TCP4  198.51.100.7 172.20.0.2 51234 9212'],
+            ['an IPv6 address in TCP4', 'PROXY TCP4 2001:db8::7 172.20.0.2 51234 9212'],
+            ['an IPv4 address in TCP6', 'PROXY TCP6 198.51.100.7 2001:db8::1 51234 9212'],
+            ['a host name', 'PROXY TCP4 client.example.org 172.20.0.2 51234 9212'],
+            ['a leading zero in an address', 'PROXY TCP4 198.51.100.007 172.20.0.2 51234 9212'],
+            ['a port over 65535', 'PROXY TCP4 198.51.100.7 172.20.0.2 65536 9212'],
+            ['a port with a leading zero', 'PROXY TCP4 198.51.100.7 172.20.0.2 051234 9212'],
+            ['an unknown protocol', 'PROXY UDP4 198.51.100.7 172.20.0.2 51234 9212'],
+            ['lower case', 'PROXY tcp4 198.51.100.7 172.20.0.2 51234 9212'],
         ])('refuses a header with %s', (_what, line) => {
             expect(() => readProxyHeader(v1(line))).toThrow(ProxyHeaderError);
         });
@@ -97,7 +97,7 @@ describe('readProxyHeader', () => {
         });
 
         it('refuses a header ended by LF alone', () => {
-            expect(() => readProxyHeader(Buffer.from(`PROXY TCP4 198.51.100.7 172.20.0.2 51234 9012\n${'x'.repeat(100)}`, 'latin1')))
+            expect(() => readProxyHeader(Buffer.from(`PROXY TCP4 198.51.100.7 172.20.0.2 51234 9212\n${'x'.repeat(100)}`, 'latin1')))
                 .toThrow(ProxyHeaderError);
         });
     });

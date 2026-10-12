@@ -69,7 +69,7 @@ const sleep = (millis: number) => new Promise(resolve => setTimeout(resolve, mil
 const V2_SIGNATURE = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x0d, 0x0a, 0x51, 0x55, 0x49, 0x54, 0x0a]);
 
 const v1 = (source: string, destination = '127.0.0.1'): Buffer =>
-    Buffer.from(`PROXY ${net.isIPv6(source) ? 'TCP6' : 'TCP4'} ${source} ${destination} 51234 9012\r\n`, 'latin1');
+    Buffer.from(`PROXY ${net.isIPv6(source) ? 'TCP6' : 'TCP4'} ${source} ${destination} 51234 9212\r\n`, 'latin1');
 
 const v2 = function (versionCommand: number, familyProtocol: number, addresses: Buffer): Buffer {
     const length = Buffer.alloc(2);
