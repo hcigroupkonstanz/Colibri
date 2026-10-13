@@ -461,8 +461,6 @@ When a client instantiates an object with a `SyncTransform` and this `ModelId`, 
 other clients creates it from the prefab and syncs it. The `Template` can also be an inactive scene
 object ([SyncBehaviour](#syncbehaviour)).
 
-<img src="../img/synctransformmanager.png" alt="SyncTransformManager" width=400/>
-
 ### Limitations
 
 These apply to every `SyncBehaviour`.
