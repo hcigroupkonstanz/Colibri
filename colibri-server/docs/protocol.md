@@ -784,28 +784,39 @@ A key-value store over HTTP on the web port, separate from the model store. Valu
 `store.json` in the data directory (`DATA_ROOT`) and survive restarts. colibri-unity's `Store` and
 colibri-web's `getRestObject` / `setRestObject` use it.
 
+Values travel as JSON in the media type `application/vnd.colibri.v2+json` (`REST_MEDIA_TYPE` in
+[`protocol.ts`](../src/server/modules/networking/protocol.ts)), which names the protocol version like the
+handshake's `version`:
+
+- **Request bodies:** a `PUT` must send its value with `Content-Type: application/vnd.colibri.v2+json`.
+  Any other `Content-Type`, `application/json` and form data included, gets `415` and stores nothing.
+- **Responses:** every answer under `/api`, errors included, is `application/vnd.colibri.v2+json`
+  (Express adds `; charset=utf-8`).
+- **`Accept`:** a request whose `Accept` leaves that type out, e.g. `Accept: application/json`, gets
+  `406`. No `Accept`, `*/*` and `application/*` take it, so curl and a browser can read the store. Both
+  clients send `Accept: application/vnd.colibri.v2+json`.
+
+```sh
+curl -X PUT -H 'Content-Type: application/vnd.colibri.v2+json' -d '{"x":1}' http://localhost:9211/api/store/app/name
+curl http://localhost:9211/api/store/app/name
+```
+
 | Request | Response |
 | --- | --- |
 | `GET /api/store` | `200` with the app names, `["app1", …]` |
 | `GET /api/store/:app` | `200` with the value names of that app. `404` if the app is unknown. |
 | `GET /api/store/:app/:name` | `200` with the stored JSON value. `404` if there is none. |
-| `PUT /api/store/:app/:name` | Stores the request body, any JSON value (object, array, number, string, `true`, `null`), sent as `Content-Type: application/json`, up to 5 MiB. `201` if new, `200` if it replaced a value, each with `{ "result": "…", "data": <the value> }`. `400`, storing nothing, for malformed JSON or no JSON body: none, an empty one, or one sent as `text/plain` or any other `Content-Type` except form data. `413` for a body over 5 MiB. |
+| `PUT /api/store/:app/:name` | Stores the request body, any JSON value (object, array, number, string, `true`, `null`), sent as `Content-Type: application/vnd.colibri.v2+json`, up to 5 MiB. `201` if new, `200` if it replaced a value, each with `{ "result": "…", "data": <the value> }`. `400`, storing nothing, for malformed JSON, no body or an empty one. `415` for any other `Content-Type`. `413` for a body over 5 MiB. |
 | `DELETE /api/store/:app` | `200`, and every value of the app is gone. `404` if the app is unknown. |
 | `DELETE /api/store/:app/:name` | `200`. `404` if there is no such value. |
 
 Any other request under `/api`, e.g. a `POST`, or a `PUT` without a value name, returns `404`. Errors
-are JSON, `{ "error": "…" }`, never with a stack trace. Any app or value name is allowed, `__proto__`
+are `{ "error": "…" }`, never with a stack trace. Any app or value name is allowed, `__proto__`
 and `constructor` included. Each name is one path segment, so a name with `/`, `#`, `?`, `%` or a space
 must be percent-encoded, as `encodeURIComponent` does. colibri-web and colibri-unity's `Store` encode
 both names, so the two address the same values. Only `.` and `..` cannot be reached, since a URL
 resolves them as a path step, encoded or not. Every response allows any origin (CORS), so a page served
 from elsewhere can use the store too.
-
-Form data, `Content-Type: application/x-www-form-urlencoded`, is the exception. It is accepted up to
-100 kB (`413` above), parsed into an object of its fields with string values (an array for a field
-given twice), and stored. Neither client sends form data, but `curl -d` does unless you add
-`-H 'Content-Type: application/json'`. `curl -X PUT -d '{"x":1}' …/api/store/app/name` therefore returns
-`201` and stores `{"{\"x\":1}": ""}`, not `{"x": 1}`.
 
 Writes reach `store.json` within 250 ms, together with any made meanwhile. The file is replaced
 atomically: written to `store.json.tmp`, then renamed. A failed save is logged and retried with the

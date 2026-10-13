@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { HOST, PORT, createClient, createClientWithAddress, disconnectAll, uniqueApp } from './helpers';
+import { PROTOCOL_VERSION } from '../src/Colibri';
 
 afterEach(() => {
     disconnectAll();
@@ -13,6 +14,16 @@ describe('REST store', () => {
 
         await expect(client.setRestObject(key, data)).resolves.toBe(true);
         await expect(client.getRestObject(key)).resolves.toEqual(data);
+    });
+
+    it('deletes a value with deleteRestObject, and says false for one that is not there', async () => {
+        const client = await createClient(uniqueApp('rest-app'));
+        const key = `${uniqueApp('rest-key')} a#b`;
+
+        await expect(client.setRestObject(key, { n: 1 })).resolves.toBe(true);
+        await expect(client.deleteRestObject(key)).resolves.toBe(true);
+        await expect(client.getRestObject(key)).resolves.toBeNull();
+        await expect(client.deleteRestObject(key)).resolves.toBe(false);
     });
 
     it('returns null for a key that was never set', async () => {
@@ -54,7 +65,7 @@ describe('REST store', () => {
 
         const put = await fetch(`http://${HOST}:${PORT}/api/store/${app}/${key}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': `application/vnd.colibri.v${PROTOCOL_VERSION}+json` },
             body: JSON.stringify({ from: 'unencoded' })
         });
         expect(put.status).toBe(201);

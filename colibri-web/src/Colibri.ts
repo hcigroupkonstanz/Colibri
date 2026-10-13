@@ -10,6 +10,12 @@ import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnect
  */
 export const PROTOCOL_VERSION = '2';
 
+// The media type of the server's REST store, with the protocol version in it: every request
+// accepts it, and setRestObject sends its value in it. colibri-server 2.x refuses a value sent as
+// plain application/json. A reverse proxy in front of servers of different versions on one host
+// name can route the store's requests by their Accept header.
+const REST_MEDIA_TYPE = `application/vnd.colibri.v${PROTOCOL_VERSION}+json`;
+
 const COLIBRI_CHANNEL = 'colibri';
 // The app name the server's admin UI connects with. Not the channel above, though spelt the same.
 const ADMIN_APP = 'colibri';
@@ -515,7 +521,7 @@ export class Colibri {
         const response = await fetch(uri, {
             method: 'GET',
             headers: {
-                'Content-Type': 'application/json'
+                Accept: REST_MEDIA_TYPE
             }
         });
 
@@ -542,9 +548,34 @@ export class Colibri {
         const response = await fetch(uri, {
             method: 'PUT',
             headers: {
-                'Content-Type': 'application/json'
+                Accept: REST_MEDIA_TYPE,
+                'Content-Type': REST_MEDIA_TYPE
             },
             body: JSON.stringify(data)
+        });
+
+        return response.status >= 200 && response.status < 300;
+    }
+
+    /**
+     * Deletes the object identified by `key` from the REST API.
+     *
+     * Not every failure resolves to false: when the server cannot be reached at all (a wrong
+     * address, the server down, no network), `fetch` rejects, and so does this - typically with a
+     * `TypeError`. Catch it where that matters.
+     * @param key REST API storage key
+     * @returns true if the server deleted the value; false if `key` is empty or the server answered
+     *   with any other status, such as 404 for a key that holds no value
+     */
+    public async deleteRestObject(key: string): Promise<boolean> {
+        const uri = this.getRestUri(key);
+        if (!uri) return false;
+
+        const response = await fetch(uri, {
+            method: 'DELETE',
+            headers: {
+                Accept: REST_MEDIA_TYPE
+            }
         });
 
         return response.status >= 200 && response.status < 300;
@@ -617,3 +648,9 @@ export const GetRestApi = (key: string) => Colibri.getInstance()?.getRestObject(
  * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
  */
 export const PutRestApi = (key: string, data: unknown) => Colibri.getInstance()?.setRestObject(key, data);
+
+/**
+ * @see {@link Colibri.deleteRestObject `Colibri.deleteRestObject()`}
+ * @returns undefined if {@link Colibri `Colibri`} has not been initialized yet
+ */
+export const DeleteRestApi = (key: string) => Colibri.getInstance()?.deleteRestObject(key);

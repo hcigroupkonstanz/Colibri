@@ -14,9 +14,12 @@ import { ConsoleLog, LogLevel, LogMessage, Service, TlsCredentials } from '../..
 import { WebServer } from '../../src/server/modules/web/web-server.js';
 import { RestAPI } from '../../src/server/modules/web/rest-api.js';
 import { SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
-import { MAX_FRAME_LENGTH, PROTOCOL_VERSION } from '../../src/server/modules/networking/protocol.js';
+import { MAX_FRAME_LENGTH, PROTOCOL_VERSION, REST_MEDIA_TYPE } from '../../src/server/modules/networking/protocol.js';
 import { TrustProxy, compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
 import { TestCertificate, createTestCertificate } from '../tls-test-certificate.js';
+
+// The store's media type in a Content-Type header, with or without the charset express adds.
+const MEDIA_TYPE_HEADER = new RegExp(`^${REST_MEDIA_TYPE.replace(/[.+]/g, '\\$&')}(;|$)`);
 
 // Unlike rest-api.test.ts, which drives the router directly, these go through the real
 // express app over HTTP - body parser, middleware order and error handling included.
@@ -66,28 +69,28 @@ describe('WebServer over HTTP', () => {
     const storeUrl = (app: string, name: string) => `${baseUrl}/api/store/${app}/${name}`;
 
     // Store.cs: UnityWebRequest.Put(url, JsonConvert.SerializeObject(value)) with
-    // Content-Type and Accept set to application/json; Get hands the response text to
+    // Content-Type and Accept set to the store's media type; Get hands the response text to
     // JsonConvert.DeserializeObject<T>. For these values Json.NET writes the same text as
     // JSON.stringify.
     const unityPut = (name: string, json: string) => fetch(storeUrl('UnityApp', name), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        headers: { 'Content-Type': REST_MEDIA_TYPE, 'Accept': REST_MEDIA_TYPE },
         body: json,
     });
     const unityGet = async (name: string) => {
-        const response = await fetch(storeUrl('UnityApp', name), { headers: { 'Accept': 'application/json' } });
+        const response = await fetch(storeUrl('UnityApp', name), { headers: { 'Accept': REST_MEDIA_TYPE } });
         return { status: response.status, text: await response.text() };
     };
 
-    // Colibri.ts: setRestObject PUTs JSON.stringify(data) as application/json, and
+    // Colibri.ts: setRestObject PUTs JSON.stringify(data) in the store's media type, and
     // getRestObject returns response.json().
     const webPut = (key: string, data: unknown) => fetch(storeUrl('WebApp', key), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': REST_MEDIA_TYPE, 'Accept': REST_MEDIA_TYPE },
         body: JSON.stringify(data),
     });
     const webGet = async (key: string) => {
-        const response = await fetch(storeUrl('WebApp', key), { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+        const response = await fetch(storeUrl('WebApp', key), { method: 'GET', headers: { 'Accept': REST_MEDIA_TYPE } });
         return { status: response.status, value: response.status >= 400 ? null : await response.json() as unknown };
     };
 
@@ -126,38 +129,51 @@ describe('WebServer over HTTP', () => {
         });
     });
 
-    // express.json() only parses a body sent as application/json, and leaves req.body
-    // undefined otherwise. That undefined used to be stored: the name was listed under its
-    // app, while GET and DELETE of it answered 404. Both clients send JSON (see above).
-    describe('a PUT without a JSON body', () => {
+    // express.json() only parses a body in the store's media type. Anything else used to be
+    // parsed by whatever parser took it, or left undefined and stored: form data made an object
+    // of curl -d's JSON text, and an undefined value was listed under its app while GET and
+    // DELETE of it answered 404. Both clients send the media type (see above).
+    describe('a PUT not in the store\'s media type', () => {
         const putRaw = (name: string, init: { headers?: Record<string, string>; body?: string }) =>
             fetch(storeUrl('RawApp', name), { method: 'PUT', ...init });
 
-        const expectRefused = async (response: Response) => {
-            expect(response.status).toBe(400);
-            expect(response.headers.get('content-type')).toMatch(/^application\/json/);
-            expect(await response.json()).toEqual({ error: expect.stringMatching(/JSON body.*Content-Type: application\/json/) });
-        };
-
         it.each([
             [ 'no body and no Content-Type', {} ],
-            [ 'a text/plain body', { headers: { 'Content-Type': 'text/plain' }, body: '"text"' } ],
             [ 'a body without a Content-Type of its own', { body: '42' } ],
-            [ 'an empty application/json body', { headers: { 'Content-Type': 'application/json' }, body: '' } ],
-        ])('answers 400 for %s, and stores nothing', async (_, init) => {
-            await expectRefused(await putRaw('value', init));
+            [ 'a text/plain body', { headers: { 'Content-Type': 'text/plain' }, body: '"text"' } ],
+            [ 'an application/json body', { headers: { 'Content-Type': 'application/json' }, body: '42' } ],
+            [ 'form data, as curl -d sends it', { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: '{"x":1}' } ],
+        ])('answers 415 for %s, and stores nothing', async (_, init) => {
+            const response = await putRaw('value', init);
 
+            expect(response.status).toBe(415);
+            expect(response.headers.get('content-type')).toMatch(MEDIA_TYPE_HEADER);
+            expect(await response.json()).toEqual({ error: `Value with name value not saved: send the value as JSON, with Content-Type: ${REST_MEDIA_TYPE}` });
             expect((await fetch(`${baseUrl}/api/store/RawApp`)).status).toBe(404);
-            expect((await fetch(storeUrl('RawApp', 'value'))).status).toBe(404);
             expect(logs.filter(l => l.origin === 'RestAPI' && l.level === LogLevel.Warn)).toHaveLength(1);
         });
 
         it('leaves a value that is already stored as it was', async () => {
             expect((await unityPut('value', '42')).status).toBe(201);
 
-            await expectRefused(await putRaw('value', { headers: { 'Content-Type': 'text/plain' }, body: '43' }));
+            expect((await putRaw('value', { headers: { 'Content-Type': 'application/json' }, body: '43' })).status).toBe(415);
 
             await expect(unityGet('value')).resolves.toEqual({ status: 200, text: '42' });
+        });
+    });
+
+    describe('a PUT without a JSON body', () => {
+        const expectRefused = async (response: Response) => {
+            expect(response.status).toBe(400);
+            expect(response.headers.get('content-type')).toMatch(MEDIA_TYPE_HEADER);
+            expect(await response.json()).toEqual({ error: 'Value with name value not saved: send the value as a JSON body' });
+        };
+
+        it('answers 400 for an empty body, and stores nothing', async () => {
+            await expectRefused(await fetch(storeUrl('RawApp', 'value'), { method: 'PUT', headers: { 'Content-Type': REST_MEDIA_TYPE }, body: '' }));
+
+            expect((await fetch(`${baseUrl}/api/store/RawApp`)).status).toBe(404);
+            expect(logs.filter(l => l.origin === 'RestAPI' && l.level === LogLevel.Warn)).toHaveLength(1);
         });
 
         // body-parser makes {} of an empty application/json body. The check for that looked
@@ -178,14 +194,14 @@ describe('WebServer over HTTP', () => {
                     for (const chunk of chunks) request.write(chunk);
                     request.end();
                 });
-            const chunked = { 'Content-Type': 'application/json', 'Transfer-Encoding': 'chunked' };
+            const chunked = { 'Content-Type': REST_MEDIA_TYPE, 'Transfer-Encoding': 'chunked' };
 
-            it('answers 400 for an empty chunked application/json body, and stores nothing', async () => {
+            it('answers 400 for an empty chunked body, and stores nothing', async () => {
                 const response = await putFramed('value', chunked, []);
 
                 expect(response.status).toBe(400);
-                expect(response.headers['content-type']).toMatch(/^application\/json/);
-                expect(response.body).toEqual({ error: expect.stringMatching(/JSON body.*Content-Type: application\/json/) });
+                expect(response.headers['content-type']).toMatch(MEDIA_TYPE_HEADER);
+                expect(response.body).toEqual({ error: 'Value with name value not saved: send the value as a JSON body' });
                 expect((await fetch(`${baseUrl}/api/store/RawApp`)).status).toBe(404);
                 expect(logs.filter(l => l.origin === 'RestAPI' && l.level === LogLevel.Warn)).toHaveLength(1);
             });
@@ -210,7 +226,7 @@ describe('WebServer over HTTP', () => {
                 [ 'chunked', [ '{', '}' ] ],
                 [ 'with a Content-Length', [ '{}' ] ],
             ])('stores an explicit {} sent %s', async (framing, chunks) => {
-                const headers = framing === 'chunked' ? chunked : { 'Content-Type': 'application/json', 'Content-Length': '2' };
+                const headers = framing === 'chunked' ? chunked : { 'Content-Type': REST_MEDIA_TYPE, 'Content-Length': '2' };
 
                 const response = await putFramed('empty', headers, chunks);
 
@@ -226,7 +242,7 @@ describe('WebServer over HTTP', () => {
         it('answers 400 to the web client for an undefined value, so setRestObject returns false', async () => {
             const response = await fetch(storeUrl('WebApp', 'value'), {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': REST_MEDIA_TYPE },
                 body: JSON.stringify(undefined),
             });
 
@@ -258,6 +274,67 @@ describe('WebServer over HTTP', () => {
         });
     });
 
+    // The store answers in its media type only. Accept is negotiated as HTTP does it: a
+    // wildcard or no Accept at all takes the media type, and only an Accept that leaves it out
+    // is refused, before a PUT's body is read.
+    describe('the store\'s media type', () => {
+        const BROWSER_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+
+        it.each([
+            [ 'the media type', { 'Accept': REST_MEDIA_TYPE } ],
+            [ 'no Accept', {} ],
+            [ '*/*, as curl sends it', { 'Accept': '*/*' } ],
+            [ 'application/*', { 'Accept': 'application/*' } ],
+            [ 'a browser\'s Accept', { 'Accept': BROWSER_ACCEPT } ],
+        ])('answers a GET with Accept %s in the media type', async (_, headers) => {
+            expect((await unityPut('value', '42')).status).toBe(201);
+
+            const response = await fetch(storeUrl('UnityApp', 'value'), { headers });
+
+            expect(response.status).toBe(200);
+            expect(response.headers.get('content-type')).toMatch(MEDIA_TYPE_HEADER);
+            expect(await response.text()).toBe('42');
+        });
+
+        it.each([ 'application/json', 'text/html', 'application/vnd.colibri.v1+json' ])('answers Accept: %s with 406 in the media type, and logs a warning', async (accept) => {
+            const response = await fetch(`${baseUrl}/api/store`, { headers: { 'Accept': accept, 'Origin': 'http://dev-laptop.local:5173' } });
+
+            expect(response.status).toBe(406);
+            expect(response.headers.get('content-type')).toMatch(MEDIA_TYPE_HEADER);
+            expect(response.headers.get('access-control-allow-origin')).toBe('*');
+            expect(await response.json()).toEqual({ error: `Not acceptable: the REST store answers in ${REST_MEDIA_TYPE} only, which Accept leaves out` });
+            const warnings = logs.filter(l => l.origin === 'WebServer' && l.level === LogLevel.Warn);
+            expect(warnings.map(l => l.message)).toEqual([ expect.stringContaining('GET /api/store answered 406') ]);
+        });
+
+        it('refuses a PUT whose Accept leaves the media type out, and stores nothing', async () => {
+            const response = await fetch(storeUrl('UnityApp', 'value'), {
+                method: 'PUT',
+                headers: { 'Content-Type': REST_MEDIA_TYPE, 'Accept': 'application/json' },
+                body: '42',
+            });
+
+            expect(response.status).toBe(406);
+            expect((await unityGet('value')).status).toBe(404);
+        });
+
+        // What a browser sends before a web client's PUT: cors() answers it, whatever its Accept.
+        it('answers a CORS preflight', async () => {
+            const response = await fetch(storeUrl('WebApp', 'value'), {
+                method: 'OPTIONS',
+                headers: {
+                    'Origin': 'http://dev-laptop.local:5173',
+                    'Access-Control-Request-Method': 'PUT',
+                    'Access-Control-Request-Headers': 'accept, content-type',
+                },
+            });
+
+            expect(response.status).toBe(204);
+            expect(response.headers.get('access-control-allow-origin')).toBe('*');
+            expect(response.headers.get('access-control-allow-headers')).toBe('accept, content-type');
+        });
+    });
+
     // Express's default error handler wrote the stack trace, with absolute paths into the
     // install, into the response whenever NODE_ENV wasn't "production" - as it isn't for a
     // server started from a checkout, and wasn't in the Docker image either until it set it.
@@ -269,9 +346,10 @@ describe('WebServer over HTTP', () => {
             expect(text).not.toContain('node_modules');
         };
 
-        const read = async (response: Response) => {
+        // Under /api in the store's media type, elsewhere application/json.
+        const read = async (response: Response, type = MEDIA_TYPE_HEADER) => {
             const text = await response.text();
-            expect(response.headers.get('content-type')).toMatch(/^application\/json/);
+            expect(response.headers.get('content-type')).toMatch(type);
             return { status: response.status, text, body: JSON.parse(text) as unknown };
         };
 
@@ -292,7 +370,7 @@ describe('WebServer over HTTP', () => {
         it('keeps the status of a client error, with only the message meant for the client', async () => {
             const malformed = await read(await fetch(storeUrl('UnityApp', 'x'), {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': REST_MEDIA_TYPE },
                 body: '{not json',
             }));
             expect(malformed.status).toBe(400);
@@ -301,7 +379,7 @@ describe('WebServer over HTTP', () => {
 
             const tooLarge = await read(await fetch(storeUrl('UnityApp', 'x'), {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': REST_MEDIA_TYPE },
                 body: JSON.stringify('x'.repeat(MAX_FRAME_LENGTH)),
             }));
             expect(tooLarge.status).toBe(413);
@@ -322,7 +400,7 @@ describe('WebServer over HTTP', () => {
 
             const tooLarge = await fetch(storeUrl('WebApp', 'x'), {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Origin': origin },
+                headers: { 'Content-Type': REST_MEDIA_TYPE, 'Origin': origin },
                 body: JSON.stringify('x'.repeat(MAX_FRAME_LENGTH)),
             });
             expect(tooLarge.status).toBe(413);
@@ -330,7 +408,7 @@ describe('WebServer over HTTP', () => {
 
             const malformed = await fetch(storeUrl('WebApp', 'x'), {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Origin': origin },
+                headers: { 'Content-Type': REST_MEDIA_TYPE, 'Origin': origin },
                 body: '{not json',
             });
             expect(malformed.status).toBe(400);
@@ -344,7 +422,7 @@ describe('WebServer over HTTP', () => {
         it('does not name the path on disk when the admin UI files are missing', async () => {
             await rm(path.join(webRoot, 'index.html'));
 
-            const { status, text, body } = await read(await fetch(`${baseUrl}/log`));
+            const { status, text, body } = await read(await fetch(`${baseUrl}/log`), /^application\/json/);
 
             expect(status).toBe(404);
             expect(body).toEqual({ error: 'Not Found' });
@@ -358,7 +436,7 @@ describe('WebServer over HTTP', () => {
     describe('a request no API route answers', () => {
         const expectNoRoute = async (response: Response, method: string, url: string) => {
             expect(response.status).toBe(404);
-            expect(response.headers.get('content-type')).toMatch(/^application\/json/);
+            expect(response.headers.get('content-type')).toMatch(MEDIA_TYPE_HEADER);
             expect(await response.json()).toEqual({ error: `No API route for ${method} ${url}` });
         };
 
@@ -377,7 +455,7 @@ describe('WebServer over HTTP', () => {
         it('answers a store write without a value name 404', async () => {
             const put = await fetch(`${baseUrl}/api/store/app1`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': REST_MEDIA_TYPE },
                 body: '42',
             });
 
