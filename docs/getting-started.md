@@ -40,8 +40,15 @@ using HCIKonstanz.Colibri.Synchronization;
 Sync.Send("Temperature", 21.5f);
 
 // Receiver
-private void Start() => Sync.Receive<float>("Temperature", OnTemperature);
-private void OnTemperature(float value) => Debug.Log($"Temperature: {value}");
+private void Start()
+{
+    Sync.Receive<float>("Temperature", OnTemperature);
+}
+
+private void OnTemperature(float value)
+{
+    Debug.Log($"Temperature: {value}");
+}
 ```
 
 - Channel and type must match. The console logs a type mismatch.
@@ -64,7 +71,10 @@ using Newtonsoft.Json.Linq;
 Sync.Send("Readings", JToken.FromObject(new Reading { Sensor = "left", Value = 7 }));
 
 Sync.Receive<JToken>("Readings", OnReading);
-private void OnReading(JToken token) => Debug.Log(token.ToObject<Reading>().Sensor);
+private void OnReading(JToken token)
+{
+    Debug.Log(token.ToObject<Reading>().Sensor);
+}
 ```
 
 ## Synchronizing transforms

@@ -333,12 +333,19 @@ There is no replacement. `SyncBehaviour<T>.ModelCreated()` and `ModelDestroyed()
 ```csharp
 // 1.x
 SyncBehaviour<Player>.ModelCreated()
-    .Subscribe(model => Register(model))
+    .Subscribe(Register)
     .AddTo(this);
 
 // 2.0
-private void OnEnable() => SyncBehaviour<Player>.ModelCreated += Register;
-private void OnDisable() => SyncBehaviour<Player>.ModelCreated -= Register;
+private void OnEnable()
+{
+    SyncBehaviour<Player>.ModelCreated += Register;
+}
+
+private void OnDisable()
+{
+    SyncBehaviour<Player>.ModelCreated -= Register;
+}
 ```
 
 **Unsubscribe yourself.** A UniRx subscription with `AddTo(this)` ended with the component. A static
@@ -357,7 +364,7 @@ dependency.
 await WebServerConnection.Instance.Connected;
 
 // 1.x only
-WebServerConnection.Instance.Connected.Subscribe(isConnected => ...);
+WebServerConnection.Instance.Connected.Subscribe(OnConnectionChanged);
 ```
 
 Replace the subscription with the `OnConnected` and `OnDisconnected` events. `OnDisconnected` is

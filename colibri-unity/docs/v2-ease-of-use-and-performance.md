@@ -110,13 +110,26 @@ using UnityEngine;
 
 public class Ping : MonoBehaviour
 {
-    void OnEnable()  => Sync.Receive<Vector3>("ping", OnPing);
-    void OnDisable() => Sync.Unregister<Vector3>("ping", OnPing);
+    void OnEnable()
+    {
+        Sync.Receive<Vector3>("ping", OnPing);
+    }
+
+    void OnDisable()
+    {
+        Sync.Unregister<Vector3>("ping", OnPing);
+    }
 
     // Hook this up to a UI Button.
-    public void SendPing() => Sync.Send("ping", transform.position);
+    public void SendPing()
+    {
+        Sync.Send("ping", transform.position);
+    }
 
-    void OnPing(Vector3 where) => Debug.Log($"Someone pinged at {where}");
+    void OnPing(Vector3 where)
+    {
+        Debug.Log($"Someone pinged at {where}");
+    }
 }
 ```
 
@@ -970,8 +983,15 @@ the v3 wire protocol.
    SyncBehaviour<MyModel>.ModelCreated().Where(m => …).Subscribe(OnCreated).AddTo(this);
 
    // after
-   private void Start()     => SyncBehaviour<MyModel>.ModelCreated += OnCreated;
-   private void OnDestroy() => SyncBehaviour<MyModel>.ModelCreated -= OnCreated;   // required
+   private void Start()
+   {
+       SyncBehaviour<MyModel>.ModelCreated += OnCreated;
+   }
+
+   private void OnDestroy()
+   {
+       SyncBehaviour<MyModel>.ModelCreated -= OnCreated; // required
+   }
    ```
 
    > ⚠ A static event does **not** unsubscribe itself. Forgetting the `-=` leaks the handler, and
