@@ -61,6 +61,9 @@ Or import the 2.0.0 `.unitypackage`, not a 1.x one, from the [Releases
 page](https://github.com/hcigroupkonstanz/Colibri/releases). A `.unitypackage` cannot declare
 dependencies. Add `com.unity.nuget.newtonsoft-json` in the Package Manager.
 
+The `.unitypackage` contains the samples in `Assets/Samples/Colibri/<version>/`, where the Package
+Manager's *Import* puts them too. Delete the samples you do not need.
+
 ## Quickstart
 
 1. Install Colibri. The configuration window opens automatically.
@@ -966,3 +969,18 @@ address choice, failed sends, the socket and its receive thread over the IPv6 lo
 format with its app id, the queue that hands received packets to the main thread, how recorded audio
 is resampled and cut into frames, with the fallback to PCM, and how received packets are decoded and
 handed to the audio thread.
+
+### Exporting the .unitypackage
+
+*Tools → Colibri → Export .unitypackage* exports `Assets/Colibri` and the samples for the releases
+page. The samples are in `Assets/Colibri/Samples~`, which Unity does not import, so a plain *Export
+Package* leaves them out. The export copies them with their `.meta` files to
+`Assets/Samples/Colibri/<version>/<sample name>`, exports them with the package and deletes the
+copies afterwards. If `Assets/Samples` already exists, the export stops without changing anything.
+
+From the command line, with an absolute output path, since Unity runs in the project folder:
+
+```sh
+COLIBRI_UNITYPACKAGE="$PWD/Colibri-2.0.0.unitypackage" <Unity> -batchmode -nographics -projectPath colibri-unity \
+  -executeMethod HCIKonstanz.Colibri.Release.Editor.UnityPackageExport.Export
+```
