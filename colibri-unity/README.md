@@ -37,8 +37,7 @@ https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibr
    - Set **App Name** to a unique name that is not used on the server. Clients exchange data only if their app names match.
    - Set **Server Address** to the address of the Colibri server you want to use. The address is a host name or IP address without `http://`. A public test server is available: `colibri.hci.uni-konstanz.de`.
    - Click *Save Config*.  
-
-   <img src="img/config.png" alt="Config Screen" width=400/>  
+   <img src="img/config.png" alt="Config Screen" width=400/>
 2. Enable *Project Settings → Player → Resolution and Presentation → **Run In Background/Run Without Focus***. Otherwise a
    Unity Editor not in focus sends nothing and calls no listeners.
 
@@ -53,11 +52,31 @@ To try out the samples you have the following options:
 
 ## Usage
 
-### Sync.Send Messages
+### Send/Receive Messages
 
-`Sync.Send` messages are for simple data transmission of events and commands. They tell the other clients that
-something happened or what they should do, e.g. that a user pressed a button or that a new game round
-starts. Each message has a channel name. A client receives the messages of every channel it listens to.
+For sending simple messages of events and commands you can use `Sync.Send`. Each message has a channel name.
+
+```c#
+float myNumber = 5f;
+Sync.Send("myChannel", myNumber);
+```
+
+A client receives the messages of every channel it listens to:
+
+```c#
+void Start()
+{
+    Sync.Receive<float>("myChannel", OnMyChannel);
+}
+
+private void OnMyChannel(float myNumber)
+{
+    // This code is executed whenever
+    // a float is received on "myChannel"
+}
+```
+
+A full example:
 
 ```c#
 using HCIKonstanz.Colibri.Synchronization;
