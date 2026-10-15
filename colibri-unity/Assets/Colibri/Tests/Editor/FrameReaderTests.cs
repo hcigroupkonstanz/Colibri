@@ -241,7 +241,7 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var reader = new FrameReader(MaxFrameLength);
 
-            // '::' is the field separator and docs/protocol.md forbids it inside a field; a
+            // '::' is the field separator and docs/dev/protocol.md forbids it inside a field; a
             // lenient parser would silently truncate the name at the extra separator.
             Assert.Throws<FrameException>(() => reader.Append(HandshakeFrameWithBody("2::app::na::me")));
         }

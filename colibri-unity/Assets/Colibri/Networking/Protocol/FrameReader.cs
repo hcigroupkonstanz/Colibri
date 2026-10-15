@@ -115,7 +115,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 case FrameType.Handshake:
                 {
                     var text = Utf8.GetString(_buffer, bodyStart, bodyEnd - bodyStart);
-                    // Exactly three fields. '::' is the field separator and docs/protocol.md
+                    // Exactly three fields. '::' is the field separator and docs/dev/protocol.md
                     // forbids it inside a field, so a name containing one is a malformed frame.
                     var parts = text.Split(new[] { FrameCodec.FieldSeparator }, StringSplitOptions.None);
                     if (parts.Length != 3)

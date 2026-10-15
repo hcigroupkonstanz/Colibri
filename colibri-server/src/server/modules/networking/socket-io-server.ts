@@ -336,7 +336,7 @@ export class SocketIOServer extends Service implements NetworkServer {
     private handleNewClient(socket: SocketIoSocket): void {
         // engine.io builds the query from the URL's search params, so a value is a string or
         // absent. An absent version becomes '' rather than undefined: the refusal below
-        // promises a string clientVersion (docs/protocol.md), and JSON drops an undefined
+        // promises a string clientVersion (docs/dev/protocol.md), and JSON drops an undefined
         // field altogether.
         const version = socket.handshake.query.version;
         // Behind a trusted proxy, the client's own address, from the X-Forwarded-For of the

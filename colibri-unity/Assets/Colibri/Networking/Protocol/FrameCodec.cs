@@ -14,7 +14,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
     /// </code>
     /// The authority for this format is
     /// <c>colibri-server/src/server/modules/networking/protocol.ts</c> and
-    /// <c>colibri-server/docs/protocol.md</c>; every constant below comes from there.
+    /// <c>colibri-server/docs/dev/protocol.md</c>; every constant below comes from there.
     ///
     /// Deliberately free of any <c>UnityEngine</c> dependency so it can be exercised by plain
     /// NUnit EditMode tests.

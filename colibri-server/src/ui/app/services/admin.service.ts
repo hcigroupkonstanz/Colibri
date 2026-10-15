@@ -1,7 +1,7 @@
 import { DestroyRef, Injectable, Signal, effect, inject, signal, untracked } from '@angular/core';
 import { SocketIOService } from './socketio.service';
 
-/** The channel the pages read server data on. See docs/protocol.md, Admin UI channel. */
+/** The channel the pages read server data on. See docs/dev/protocol.md, Admin UI channel. */
 export const ADMIN_CHANNEL = 'colibri::admin';
 
 /** The topics a page subscribes to. ClientService asks for 'latency', which is request only, itself. */

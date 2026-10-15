@@ -23,7 +23,7 @@ import {
 import { ModelMeasures } from './model-measures.js';
 
 // The channel the admin UI's pages ask for read-only server data on, and get it on. See
-// docs/protocol.md, Admin UI channel.
+// docs/dev/protocol.md, Admin UI channel.
 export const ADMIN_CHANNEL = 'colibri::admin';
 
 // How often a subscribed topic is sent again.

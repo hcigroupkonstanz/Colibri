@@ -18,7 +18,7 @@ Overview and quick start: [README](../README.md). Release notes and breaking cha
     - [Remote store](#remote-store)
     - [Web interface for logging](#web-interface-for-logging)
 - [Samples](#samples)
-- [Development](#development)
+- [Development](dev/development.md)
 
 ## Installation
 
@@ -207,7 +207,7 @@ Sync.receiveColor('myChannel', color => {
 ```
 
 For a payload that is not a colour, both functions warn and return opaque black instead of throwing. Wire format:
-[Payload shapes](../../colibri-server/docs/protocol.md#payload-shapes).
+[Payload shapes](../../colibri-server/docs/dev/protocol.md#payload-shapes).
 
 #### Broadcast limitations
 
@@ -317,7 +317,7 @@ syncing, with a console warning if this client registered it. Registering the sa
   client registered it and the delete is at most `MODEL_TOMBSTONE_SECONDS` old (default 10 minutes). Other instances
   stay listed.
 
-Details: [After a reconnect](../../colibri-server/docs/protocol.md#after-a-reconnect).
+Details: [After a reconnect](../../colibri-server/docs/dev/protocol.md#after-a-reconnect).
 
 #### Changes lost in a dropped connection
 
@@ -461,17 +461,3 @@ sends one value of every type, for testing against a Unity client.
 | [remote-logging](../samples/remote-logging.ts)       | `npm run samples/remote-logging`                     |
 | [rest-api](../samples/rest-api.ts)                   | `npm run samples/rest-api`                           |
 | [verification-peer](../samples/verification-peer.ts) | `npm run samples/verification-peer -- [host] [port]` |
-
-## Development
-
-| Command                | Description                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `npm test`             | Unit tests                                                                                       |
-| `npm run typecheck`    | Type-checks sources, samples and tests                                                           |
-| `npm run lint`         | Style check (ESLint)                                                                             |
-| `npm run format:check` | Formatting check (Prettier)                                                                      |
-| `npm run test:e2e`     | End-to-end tests against a real colibri-server                                                   |
-| `npm run release`      | Builds and publishes to npm. `npm publish` also builds first. Replaces the 1.x `publish` script. |
-
-`npm run test:e2e` starts a server from `../colibri-server` with Docker Compose on port 9211, unless
-`COLIBRI_E2E_SERVER` names a running server (port: `COLIBRI_E2E_PORT`, default 9211).

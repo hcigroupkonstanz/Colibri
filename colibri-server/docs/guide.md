@@ -1,7 +1,7 @@
 # colibri-server guide
 
 Full reference for colibri-server. Overview: [README](../README.md). Wire protocol:
-[protocol.md](protocol.md). Changes since 1.x: [CHANGELOG.md](../CHANGELOG.md).
+[protocol.md](dev/protocol.md). Changes since 1.x: [CHANGELOG.md](../CHANGELOG.md).
 
 ## Security
 
@@ -146,7 +146,7 @@ with its default.
 | `TCP_HOST`, `TCP_PORT` | `0.0.0.0`, `9212` | Unity clients |
 | `VOICE_HOST`, `VOICE_PORT` | `0.0.0.0`, `9213` | Voice relay (UDP) |
 | `VOICE_SAMPLING_RATE` | `48000` | Sampling rate of voice recordings, in Hz |
-| `VOICE_RECORDING` | `false` | `true` saves each voice client's PCM audio as a `.wav` file in the data directory, named as in [Voice packets](protocol.md#voice-packets-udp) |
+| `VOICE_RECORDING` | `false` | `true` saves each voice client's PCM audio as a `.wav` file in the data directory, named as in [Voice packets](dev/protocol.md#voice-packets-udp) |
 | `DATA_ROOT` | `../../data` | Data directory: `store.json` and voice recordings |
 | `WEBSERVER_ROOT` | `../ui/` | Admin UI build output |
 | `BASE_URL` | empty | Path of the admin UI, e.g. `/colibri` behind a reverse proxy. `/api/store` and Socket.IO stay at the root. |
@@ -157,7 +157,7 @@ with its default.
 | `CLIENT_MESSAGE_RATE_LIMIT`, `CLIENT_MESSAGE_RATE_BURST` | `1000`, `2000` | `model::update` and `broadcast::` messages per second one Unity or web client may send, and the burst after a quieter period. Beyond that, [load limiting](#load-limits) applies. Catches runaway send loops. `0`: no limit. The burst must be at least 1. |
 | `TCP_IDLE_TIMEOUT_SECONDS` | `10` | Seconds a Unity client may send nothing, heartbeat echoes included, before it is disconnected ([Idle timeout](#idle-timeout)). `0`: never. |
 | `APP_CLIENT_WARNING_THRESHOLD` | `8` | Warn when one app has more clients than this, Unity and web together, admin UI excluded. Common cause: separate projects using the same app name. `0`: never. |
-| `MODEL_TOMBSTONE_SECONDS` | `600` | Seconds a deleted synced object (model) is remembered. Meanwhile updates for it are ignored, so they cannot re-create it, and a re-request after a reconnect is answered with a delete. A client with the object in its scene again ends this early. Cleared with the app's models when its last client leaves. `0`: off. See [Deleted models](protocol.md#deleted-models). |
+| `MODEL_TOMBSTONE_SECONDS` | `600` | Seconds a deleted synced object (model) is remembered. Meanwhile updates for it are ignored, so they cannot re-create it, and a re-request after a reconnect is answered with a delete. A client with the object in its scene again ends this early. Cleared with the app's models when its last client leaves. `0`: off. See [Deleted models](dev/protocol.md#deleted-models). |
 | `TLS_CERT`, `TLS_KEY` | empty | PEM files of the certificate with its chain, and of its private key. With both set, the TCP and web ports serve [TLS](#tls) only. |
 | `TRUSTED_PROXIES` | empty | Reverse proxies trusted to report the client's address, and on the web port whether it used HTTPS: IP addresses, CIDR ranges and `loopback`, `linklocal`, `uniquelocal`, separated by commas, as in Express's `trust proxy`. Voice from them is relayed unchecked ([Voice relay](#voice-relay)). Empty: none. See [Behind a reverse proxy](#behind-a-reverse-proxy). |
 | `TCP_PROXY_PROTOCOL` | `false` | `true`: a connection to the TCP port from a `TRUSTED_PROXIES` address must start with a PROXY protocol header, which names the Unity client. Requires `TRUSTED_PROXIES`. |
@@ -213,7 +213,7 @@ used HTTPS:
   address it got the request from, so the entries left of that are ignored. A peer that is not
   trusted is shown at its own address. Express's `req.ip` follows the same rule. As without a proxy,
   the address is also the client's `name` in `colibri::clients`, which every client of its app
-  receives ([Server messages](protocol.md#server-messages)).
+  receives ([Server messages](dev/protocol.md#server-messages)).
   From a trusted peer, the client used TLS to the proxy if the right-most `X-Forwarded-Proto` entry
   is `https` or `wss`, in any case. The admin UI then shows TLS terminated by proxy, *TLS (proxy)* on
   the Clients page ([Admin UI](#admin-ui)).
@@ -222,7 +222,7 @@ used HTTPS:
   HTTP can then claim TLS. Only the admin UI's display depends on it.
 - **TCP port:** with `TCP_PROXY_PROTOCOL=true`, a connection from a trusted peer must start with a
   PROXY protocol header, version 1 or 2, which names the Unity client
-  ([PROXY protocol](protocol.md#proxy-protocol)). Other peers connect as before. nginx's header,
+  ([PROXY protocol](dev/protocol.md#proxy-protocol)). Other peers connect as before. nginx's header,
   version 1, does not say whether the proxy terminated TLS, and the server skips the TLS details a
   version 2 header can carry. If the proxy terminates TLS, set `TCP_TLS_AT_PROXY=true`: without a
   certificate, the Clients page then shows these clients as *TLS (proxy)*, and the Server page's
@@ -326,7 +326,7 @@ unencrypted. There is no mixed mode. Every client must use TLS:
   ([web guide](../../colibri-web/docs/guide.md#tls)). `http://<host>:9211` is closed without an
   answer, not redirected.
 
-Frames and protocol version are unchanged inside TLS ([protocol](protocol.md#tls)). TLS does not
+Frames and protocol version are unchanged inside TLS ([protocol](dev/protocol.md#tls)). TLS does not
 authenticate clients. Anyone who can reach the ports can still join any app. Voice (UDP) stays
 unencrypted.
 
@@ -472,9 +472,9 @@ The cost of TLS on a headset was not measured.
   settings in effect ([Admin UI](#admin-ui)).
 - **Model synchronization** and **broadcasts** between the Unity (TCP) and web (Socket.IO) clients of
   an app. The server keeps a copy of each app's models. Only `broadcast::` messages and model changes
-  are relayed to other clients ([Relayed messages](protocol.md#relayed-messages)).
+  are relayed to other clients ([Relayed messages](dev/protocol.md#relayed-messages)).
 - **REST store** at `/api/store` on the web port, saved to `store.json` in the data directory
-  ([REST store](protocol.md#rest-store)).
+  ([REST store](dev/protocol.md#rest-store)).
 - **Voice relay** on UDP port 9213. A voice packet goes to the other clients of the sender's app that
   send voice to this server, if a Unity client of that app is connected from the sender's address
   ([Voice relay](#voice-relay)). Voice is not encrypted.
@@ -496,10 +496,10 @@ Server messages, and lines clients send through colibri-unity's `RemoteLogging` 
 ### Admin UI
 
 Four pages, all read only: nothing on them changes, deletes or disconnects anything. They read from
-the server over the Socket.IO channel `colibri::admin` ([Admin UI channel](protocol.md#admin-ui-channel)).
+the server over the Socket.IO channel `colibri::admin` ([Admin UI channel](dev/protocol.md#admin-ui-channel)).
 The server refreshes a subscribed page every second, with bounded sizes. While no page is open, it
 keeps each client's latency samples and message rates of the last 2 minutes, which a page shows as
-soon as it opens. `npm run demo` fills the pages with synthetic clients ([Development](#development)).
+soon as it opens. `npm run demo` fills the pages with synthetic clients ([Development](dev/development.md)).
 
 - **Log:** the [log](#logs), filtered by app and level, with a search over the loaded lines. *Sync
   traffic* shows the `broadcast::` messages between clients; *Connections* off leaves out the routine
@@ -578,7 +578,7 @@ other clients only when it changes again.
 An overload lasting a second logs a warning naming `TCP_INBOUND_BACKLOG_LIMIT`, or
 `CLIENT_MESSAGE_RATE_LIMIT` and the client, and another at its end with the numbers held back and
 dropped. A shorter one logs a debug line, or a warning if it lost updates.
-[Inbound limits](protocol.md#inbound-limits) lists the warnings and their effect on clients.
+[Inbound limits](dev/protocol.md#inbound-limits) lists the warnings and their effect on clients.
 
 - **Backlog warning:** the server as a whole receives more than it can process. Sync fewer objects,
   less often, or with fewer clients per app.
@@ -603,7 +603,7 @@ extended by one `TCP_IDLE_TIMEOUT_SECONDS` per 64 KiB of the message, at most 6 
 default). A 4 MiB message therefore needs about 60 KB/s or more. A slower client is disconnected, and
 the warning names the message size. Smaller messages need no extra time. A headset that is gone when
 such a message is sent, or goes while reading it, is detected within 7 timeouts (70 s) at worst
-([Heartbeat / latency](protocol.md#heartbeat--latency)).
+([Heartbeat / latency](dev/protocol.md#heartbeat--latency)).
 
 colibri-unity echoes heartbeats off Unity's main thread, so a long scene load does not trigger the
 timeout. A debugger stopped at a breakpoint usually pauses all threads and does trigger it. For long
@@ -613,7 +613,7 @@ are not affected. Socket.IO's own ping detects a lost web client within about 45
 ### Voice relay
 
 Each voice packet carries its app as an app id, the hash of the app name
-([Voice packets](protocol.md#voice-packets-udp)). The server relays a packet, and relays voice to its
+([Voice packets](dev/protocol.md#voice-packets-udp)). The server relays a packet, and relays voice to its
 sender, only if a Unity client of that app is connected on the TCP port from the packet's source
 address. Anyone can compute an app id and forge a UDP source address and port. Without the check, one
 forged packet every 2 s would have the server send an app's voice to any address.
@@ -655,7 +655,7 @@ encrypted, with [TLS](#tls) on too.
 ## Protocol version
 
 Web clients use Socket.IO, Unity clients a custom binary protocol over TCP
-([protocol.md](protocol.md)).
+([protocol.md](dev/protocol.md)).
 
 **Breaking change:** v2.0.0 introduces the v3 framing. colibri-unity 1.x cannot connect. colibri-web
 1.x is refused too, although the Socket.IO envelope is unchanged. Update both to 2.x.
@@ -664,75 +664,4 @@ Both transports send a protocol version in the handshake, and the server refuses
 own, without negotiation. A refused client receives the reason on the `colibri` channel, is
 disconnected and never appears in the admin UI. The log names both versions. colibri-unity 1.x cannot
 read the refusal, so the server detects its 1.x framing and logs a warning naming the address and the
-package to upgrade, at most once a minute per address ([Version checking](protocol.md#version-checking)).
-
-## Development
-
-- `npm ci`: install the dependencies.
-- `npm run watch`: development server, recompiles and reloads on changes. Records no commit: it
-  removes `dist/server/build-info.json`, and the *Server* page shows the commit as unknown.
-- `npm run build`: compile. Records the commit in `dist/server/build-info.json`, from
-  `COLIBRI_COMMIT` and `COLIBRI_COMMIT_DIRTY` (`true`) if set, else from git.
-- `npm start`: start the server. Compile first.
-- `npm run publish`: maintainers only. Builds the image with the commit, then pushes
-  `hcikn/colibri:<version>` and `hcikn/colibri:latest`.
-- `npm run lint`: lint the server and admin UI sources.
-- `npm test`: vitest unit tests. The TLS tests need `openssl` on `PATH` (Git for Windows ships it in
-  `usr/bin`). In a test,
-  `createTestCertificate(dir, name, { commonName, keyType: 'ec' | 'rsa', signedBy, serverOnly })`
-  from [`test/tls-test-certificate.ts`](../test/tls-test-certificate.ts) creates a certificate valid
-  for 2 days, self-signed or signed by another test certificate.
-- `npm run gui:test`: admin UI unit tests.
-- `npm run bench`: vitest benchmarks. Results depend on machine and runtime, so report them in the pull
-  request that claims them instead of committing them. Always compare before and after on the same
-  machine and Node version.
-- `npm run test:vectors`: checks that colibri-unity's protocol test vectors match this server's
-  encoder, and that colibri-web, colibri-unity and the admin UI announce this server's protocol
-  version. Runs in CI. `npm run test:vectors -- --emit` prints the C# vector table.
-- `npm run test:tcpclient`: manual smoke test against a server on this machine on `TCP_PORT`. Sends a
-  v3 handshake, then echoes heartbeats.
-  - `-- 1`: announce protocol version 1 to provoke a refusal.
-  - `TCP_PORT=<port> npm run test:tcpclient -- --tls`: connect over TLS and print the SHA-256
-    fingerprint of the server's certificate. Add `--insecure` for an untrusted certificate, e.g. a
-    self-signed one, and `--host <name>` for another machine.
-  - Exit codes: `0` connected and heartbeats received, `2` refused (prints the server's reason), `1` no
-    heartbeat, or an undecodable frame (prints `Malformed frame from server` and ends the run).
-  - `tsx test/tcp-crosstalk-check.ts [app] [ms] --tls [--insecure] [--host <name>]`: manual probe with
-    the same TLS options.
-- `npm run test:stressecho`: raw TCP client that answers the probes of colibri-unity's Network Stress
-  sample, so one Unity editor can measure round trips (`npm run test:stressecho -- [app] [seconds]`).
-- `npm run demo`: synthetic clients against a running server, so the admin UI has data to show without
-  headsets. Two apps: `ArchViz` (a Unity editor, Quest 3, Quest 2 and a web dashboard) and `MuseumGuide`
-  (Quest Pro and a web kiosk), with avatars synced at 30 Hz, log lines of every level including an
-  exception, annotations added and deleted, and a headset that leaves and rejoins. The scene repeats
-  every 3 minutes, and clients reconnect after a server restart, so it can run for hours. The server
-  receives up to about 250 messages a second from them and sends up to about 550.
-  - `-- --minutes <n>`: stop after n minutes, at most 35791 (about 24.8 days). Default: run until Ctrl+C.
-  - `-- --apps <n>`: n copies of both apps, the others named `ArchViz-2`, `MuseumGuide-2` and so on,
-    each with the same load.
-  - `--web-port <port>`, `--tcp-port <port>`: default `WEBSERVER_PORT` and `TCP_PORT`. `--host <name>`:
-    default `localhost`, which reaches a server on `127.0.0.1` or `::1`. `--tls` and `--insecure` as for
-    `test:tcpclient`.
-- `npm run test:docker`: requires Docker. Builds the image, or uses `COLIBRI_DOCKER_IMAGE`, and runs
-  it in each deployment in the table. Pass deployment names to run only those.
-
-  | Deployment | Setup |
-  | --- | --- |
-  | `bind-missing-dir` | Bind mount of a directory Docker creates |
-  | `bind-root-owned-1x` | Root-owned 1.x data directory |
-  | `named-volume` | Named volume |
-  | `user-1000-named-volume` | `--user 1000:1000` on a named volume |
-  | `user-1000-root-owned-dir` | `--user 1000:1000` on a root-owned directory |
-  | `bind-read-only` | 1.x data mounted read-only |
-  | `bind-world-writable-no-chown` | 1.x data without `CAP_CHOWN` |
-  | `web-port-9111` | `WEBSERVER_PORT` in the environment |
-  | `web-host-localhost` | `WEBSERVER_HOST=localhost` |
-  | `web-port-from-env-file` | `WEBSERVER_PORT` in a mounted `.env` |
-  | `tls-self-signed` | TLS on both ports |
-
-  Each run must become healthy, stop cleanly and keep saved data across a restart, or, where it cannot
-  save, report that with advice for the cause. With TLS, it also checks the served certificate, the
-  refusal of a client without TLS, and renewal without a restart, which needs `openssl` on `PATH`.
-  Each container is removed after its deployment, everything else at the end.
-  `COLIBRI_DOCKER_PREFIX`, `COLIBRI_DOCKER_PORT` and `COLIBRI_DOCKER_TMPDIR` are described at the top
-  of [`test/docker-image-check.ts`](../test/docker-image-check.ts).
+package to upgrade, at most once a minute per address ([Version checking](dev/protocol.md#version-checking)).

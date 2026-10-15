@@ -15,14 +15,14 @@ what other clients receive without failing to compile.
 
 The ease-of-use and sync-loop pass that closes the release is written up in more depth (mechanism,
 rationale, migration steps, and what the Editor verification did and did not cover) in
-[`docs/v2-ease-of-use-and-performance.md`](../v2-ease-of-use-and-performance.md).
+[`docs/v2-ease-of-use-and-performance.md`](v2-ease-of-use-and-performance.md).
 
 ---
 
 ## Breaking changes
 
 - **Protocol.** colibri-unity 2.0.0 speaks the [v3 binary TCP
-  protocol](../../../colibri-server/docs/protocol.md) and **requires colibri-server ≥ 2.0.0**. It cannot
+  protocol](../../../colibri-server/docs/dev/protocol.md) and **requires colibri-server ≥ 2.0.0**. It cannot
   talk to a 1.x server, and a 1.x client cannot talk to a 2.0.0 server. There is no version
   negotiation: both sides must be upgraded together.
 - **Default ports 9211, 9212 and 9213**, colibri-server 2.0's defaults, instead of 9011, 9012 and
@@ -36,7 +36,7 @@ rationale, migration steps, and what the Editor verification did and did not cov
   from the address of a client connected with the same App Name, so voice needs
   `WebServerConnection` connected too, and after an App Name change it resumes only once that
   reconnects. See
-  [Voice packets](../../../colibri-server/docs/protocol.md#voice-packets-udp).
+  [Voice packets](../../../colibri-server/docs/dev/protocol.md#voice-packets-udp).
 - **Minimum Unity is 2022.3 LTS** (the package manifest previously claimed 2019.4 while using APIs
   that were never available there).
 - **No more third-party runtime dependencies.** UniRx is gone and was not replaced;
@@ -326,7 +326,7 @@ rationale, migration steps, and what the Editor verification did and did not cov
   has rather than spawning duplicates. A request sent again for an object carries `"again": true`,
   so the server can tell an object this client held before the outage from one being created now,
   and answers `model::delete` for one another client deleted meanwhile (model tombstones, see the
-  server's [protocol docs](../../../colibri-server/docs/protocol.md#deleted-models)).
+  server's [protocol docs](../../../colibri-server/docs/dev/protocol.md#deleted-models)).
 - **A change made as the Wi-Fi drops is no longer undone after the reconnect.** It went into a
   connection that was already dead, which the client noticed only 2 s later. The server's answer
   then held the old value, and applying it put the object back on the client that had changed it,
@@ -887,7 +887,7 @@ otherwise spend on their prototype, so:
   *Connecting* after 5 s.
 - `node colibri-unity/run-tests.mjs` runs both suites, starting and stopping a server with
   `docker compose`, unless one is already listening, which it uses as it stands. See
-  [README.md](../../README.md#testing).
+  [README.md](development.md#running-the-tests).
 - The cross-implementation protocol vectors are checked automatically: `npm run test:vectors` in
   colibri-server re-encodes each one and fails if `ProtocolVectorTests.cs` no longer expects the
   same bytes. It also fails when `WebServerConnection`'s `CLIENT_VERSION` differs from the server's
@@ -932,7 +932,7 @@ last fix below. The headline performance claim was measured rather than argued: 
 `[Colibri SyncTicker]` object (0.335 ms of a 0.786 ms `PlayerLoop`), so the idle poll allocates
 nothing but is not free of time. All ten criteria are addressed; what the pass did not touch is voice
 chat and the visual half of Unity ↔ Unity. Item-by-item results are in §8 of
-[`docs/v2-ease-of-use-and-performance.md`](../v2-ease-of-use-and-performance.md).
+[`docs/v2-ease-of-use-and-performance.md`](v2-ease-of-use-and-performance.md).
 
 The fixes it produced:
 

@@ -23,14 +23,14 @@ Reference for the Colibri Unity package. Installation and first run: [README](..
   - [Web interface for logging](#web-interface-for-logging)
   - [Voice chat](#voice-chat)
 - [Related documents](#related-documents)
-- [Development](#development)
+- [Development](dev/development.md)
 
 ## Requirements
 
 - Unity 2022.3 LTS or newer
 - colibri-server 2.0.0 or newer
 
-Colibri Unity 2.x uses the [v3 binary TCP protocol](../../colibri-server/docs/protocol.md). It does
+Colibri Unity 2.x uses the [v3 binary TCP protocol](../../colibri-server/docs/dev/protocol.md). It does
 not interoperate with 1.x in either direction, and there is no version negotiation. Upgrade server
 and clients together.
 
@@ -68,7 +68,7 @@ Manager's *Import* puts them too. Delete the samples you do not need.
 
 1. Install Colibri. The configuration window opens automatically.
 2. Enter an **App Name** and the **Server Address** of a shared or
-   [own](../../colibri-server/README.md#docker) colibri-server 2.x, then click *Save Config*
+   [own](../../colibri-server/README.md#docker-recommended) colibri-server 2.x, then click *Save Config*
    ([Configuration](#configuration)).
 3. Enable *Project Settings → Player → Resolution and Presentation → **Run In Background***. It is
    off by default. Without it, a background Editor pauses the game and sends and delivers nothing
@@ -756,7 +756,7 @@ the deletes made since the client last heard from the server or in the second be
 The server remembers deletes for `MODEL_TOMBSTONE_SECONDS`, 10 minutes by default. For an object
 another client deleted longer ago while this client was away, the server answers with nothing, and
 this client recreates it. See [After a
-reconnect](../../colibri-server/docs/protocol.md#after-a-reconnect) in the protocol documentation.
+reconnect](../../colibri-server/docs/dev/protocol.md#after-a-reconnect) in the protocol documentation.
 
 ### Protocol mismatch
 
@@ -849,7 +849,7 @@ and instantiates `VoiceReceiver` prefabs.
 - The server forwards voice only to clients with the same App Name, so voice ids must be unique only
   within an app. Each voice packet carries an app id, a hash of the App Name as the TCP handshake
   sends it, with `::` and a `:` at either end replaced by `_` ([Voice
-  packets](../../colibri-server/docs/protocol.md#voice-packets-udp)). Without an App Name, no voice
+  packets](../../colibri-server/docs/dev/protocol.md#voice-packets-udp)). Without an App Name, no voice
   is sent, and Colibri logs an error once.
 - The server relays voice only from the address of a client connected with the same App Name, so
   voice needs `WebServerConnection` connected too, from the same address. The voice components do
@@ -884,100 +884,6 @@ and instantiates `VoiceReceiver` prefabs.
 
 - [MIGRATION.md](../../MIGRATION.md): upgrading a Colibri 1.x project, for all three components.
 - [CHANGELOG.md](../CHANGELOG.md): what changed from `1.3.1` to `2.0.0`
-- [v2-ease-of-use-and-performance.md](v2-ease-of-use-and-performance.md): design of the sync loop
+- [v2-ease-of-use-and-performance.md](dev/v2-ease-of-use-and-performance.md): design of the sync loop
   and the diagnostics, and migrating an existing project
-- [colibri-server/docs/protocol.md](../../colibri-server/docs/protocol.md): the v3 wire protocol
-
-## Development
-
-### Running the tests
-
-```sh
-node colibri-unity/run-tests.mjs              # both suites
-node colibri-unity/run-tests.mjs --editmode   # unit tests only, no server needed
-node colibri-unity/run-tests.mjs --playmode   # end-to-end only
-node colibri-unity/run-tests.mjs --editmode --stripping   # plus the code-stripping check
-node colibri-unity/run-tests.mjs --tls        # plus the PlayMode suite again, over TLS
-```
-
-| Suite | Location | Description |
-|---|---|---|
-| EditMode | `Assets/Colibri/Tests/Editor/` | NUnit tests of the framing, JSON conversions, diagnostics, outage queue, message dispatch, `[Sync]` accessors (including the IL2CPP path), send-rate limit, connect timeout, server address lookup with IPv6, Store URLs, build settings check, app-name warning, and the voice server address, sends, socket, packet format, packet queue, resampling, framing, decoding and playback buffer. Needs no server and runs wherever Unity runs. |
-| PlayMode | `Assets/Tests/` | A Unity client and a raw v3 peer against a running `colibri-server`. Reconnects go through a proxy the test can cut. Mismatch detection runs against a scripted stand-in server. |
-
-For PlayMode, the script starts colibri-server with `docker compose` and stops it afterwards. A
-server already listening on the port is used and left running. The script also starts a TLS server
-from `tls-test-server/compose.yml` ([README](../tls-test-server/README.md)) on ports 9111 (https)
-and 9112 (TLS) for `TlsTests` and `StoreOverTlsTests`. Without it, these tests are skipped, and the
-script reports this. The certificate files in `tls-test-server/` (`cert.pem`, `key.pem`, `cert.pfx`)
-are public and for tests only.
-
-Results go to `TestResults/` as NUnit XML plus the Editor log. Without a reachable server, the
-end-to-end tests are skipped and name the command that fixes it. A suite whose tests were all
-skipped counts as failed.
-
-`--tls` runs the PlayMode suite again with every connection over TLS, including the tests' own fake
-server and proxy, into `TestResults/PlayMode-TLS.xml` and `.log`. `ProtocolMismatchDetectionTests`
-skip themselves in that run. Without the TLS server, `--tls` fails.
-
-`--stripping` checks that `[Sync]` members survive managed code stripping, which the Editor never
-applies. It builds and runs a Release IL2CPP player of `Assets/StrippingCheck/` for the Editor's
-desktop platform with *Managed Stripping Level* High. The player checks that every `[Sync]` member
-of `SyncTransform` and of a test model (a private serialized field, public value and reference
-fields, a property) keeps its `[Sync]`, applies an update to each and checks the values. It prints
-the results and exits with 1 on any failure. The check takes a few minutes and needs the platform's
-IL2CPP module but no server. Without the module, it is skipped with a notice. `ProjectSettings` are
-restored exactly after the build.
-
-These connect-timeout tests are skipped on Windows, which refuses connections to a full listen
-backlog instead of leaving them unanswered:
-`ConnectTimeoutTests.AnAttemptNothingAnswersIsGivenUpAfterTheTimeout`,
-`ConnectTimeoutTests.CancellingGivesUpTheAttemptAtOnce` and
-`ProtocolMismatchDetectionTests.AnAttemptNothingAnswersIsGivenUpAfterFiveSecondsAndRetried`. On
-Windows, check manually that a client with an unreachable server address leaves *Connecting* after
-5 s.
-
-| Variable | Default | Description |
-|---|---|---|
-| `COLIBRI_E2E_SERVER` | unset | Host of a server to use instead of starting one. When set, the script never starts or stops anything. |
-| `COLIBRI_E2E_PORT` | `9211` | Web/Socket.IO port |
-| `COLIBRI_E2E_TCP_PORT` | `9212` | Binary v3 port |
-| `COLIBRI_E2E_NO_BUILD` | unset | Skip `docker compose --build` |
-| `COLIBRI_E2E_TLS_PORT` | `9111` | TLS server's web port (https) |
-| `COLIBRI_E2E_TLS_TCP_PORT` | `9112` | TLS server's binary v3 port (TLS) |
-| `COLIBRI_E2E_TLS_CERT` | `tls-test-server/cert.pem` | TLS server's certificate |
-| `COLIBRI_E2E_TLS` | unset | `1` runs the PlayMode suite over TLS. `--tls` sets it. |
-| `COLIBRI_E2E_TLS_PFX` | `tls-test-server/cert.pfx` | Certificate the tests' own fake server and proxy serve over TLS |
-| `UNITY_PATH` | Unity Hub's location | Editor to use |
-
-Unless `UNITY_PATH` is set, the script requires the exact Editor version in
-`ProjectSettings/ProjectVersion.txt`. Another version would upgrade the project in place and change
-the manifest and half of `ProjectSettings`. If that version is not installed, the script lists the
-installed ones and the `UNITY_PATH` to use. Commit such an upgrade on its own. The package supports
-Unity 2022.3 LTS and newer. The pinned version applies only to the development project.
-
-Both suites also run in *Window → General → Test Runner*. The end-to-end tests enable *Run In
-Background* themselves. For the TLS tests, start the TLS server with
-`docker compose -f colibri-unity/tls-test-server/compose.yml up -d --build`. For a run over TLS,
-also set `COLIBRI_E2E_TLS=1` in the Editor's environment.
-
-Voice chat has no end-to-end tests, because they need a microphone. Unit tests cover only the server
-address choice, failed sends, the socket and its receive thread over the IPv6 loopback, the packet
-format with its app id, the queue that hands received packets to the main thread, how recorded audio
-is resampled and cut into frames, with the fallback to PCM, and how received packets are decoded and
-handed to the audio thread.
-
-### Exporting the .unitypackage
-
-*Tools → Colibri → Export .unitypackage* exports `Assets/Colibri` and the samples for the releases
-page. The samples are in `Assets/Colibri/Samples~`, which Unity does not import, so a plain *Export
-Package* leaves them out. The export copies them with their `.meta` files to
-`Assets/Samples/Colibri/<version>/<sample name>`, exports them with the package and deletes the
-copies afterwards. If `Assets/Samples` already exists, the export stops without changing anything.
-
-From the command line, with an absolute output path, since Unity runs in the project folder:
-
-```sh
-COLIBRI_UNITYPACKAGE="$PWD/Colibri-2.0.0.unitypackage" <Unity> -batchmode -nographics -projectPath colibri-unity \
-  -executeMethod HCIKonstanz.Colibri.Release.Editor.UnityPackageExport.Export
-```
+- [colibri-server/docs/dev/protocol.md](../../colibri-server/docs/dev/protocol.md): the v3 wire protocol

@@ -22,7 +22,7 @@ namespace HCIKonstanz.Colibri.Networking
     /// </code>
     /// The server passes a packet on only to the voice clients with the same app id. The
     /// authority for this format is <c>colibri-server/src/server/modules/web/voice-packet.ts</c>
-    /// and <c>colibri-server/docs/protocol.md</c>.
+    /// and <c>colibri-server/docs/dev/protocol.md</c>.
     ///
     /// Free of any <c>UnityEngine</c> dependency, so plain NUnit EditMode tests exercise it.
     /// </summary>

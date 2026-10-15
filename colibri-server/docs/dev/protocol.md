@@ -90,7 +90,7 @@ app keeps its models.
 ### Version checking
 
 The server compares `version` with `PROTOCOL_VERSION` in
-[`protocol.ts`](../src/server/modules/networking/protocol.ts), currently `2`. It supports one version
+[`protocol.ts`](../../src/server/modules/networking/protocol.ts), currently `2`. It supports one version
 at a time and **refuses** every other one. There is no negotiation or downgrade, since v1 and v3 share
 no subset.
 
@@ -125,7 +125,7 @@ Known gaps (all deliberate):
   This is the only diagnostic. The 1.x client keeps reconnecting.
 - **colibri-web 1.x does not handle `protocol::rejected`.** It receives the refusal as an ordinary
   message, logs nothing, and stays disconnected, since Socket.IO does not reconnect after a
-  server-side `disconnect()`. The server log is the only diagnostic ([MIGRATION.md](../../MIGRATION.md)).
+  server-side `disconnect()`. The server log is the only diagnostic ([MIGRATION.md](../../../MIGRATION.md)).
   It is refused because it announces `1`, although the Socket.IO envelope did not change and its
   messages would still work. Upgrade it together with the server.
 - **The admin UI exemption goes by app name.** Any Socket.IO client with the app name `colibri` skips
@@ -325,7 +325,7 @@ as a length of at least 16 MiB. The 1.x handshake starts with `\0\0\0h`, which r
 
 ### TLS
 
-With `TLS_CERT` and `TLS_KEY` set ([TLS](guide.md#tls) in the guide), the TCP port accepts only TLS.
+With `TLS_CERT` and `TLS_KEY` set ([TLS](../guide.md#tls) in the guide), the TCP port accepts only TLS.
 TLS wraps the v3 framing unchanged. The protocol version stays `2`.
 
 On the TLS port, the server reads the first 2 bytes of each connection. `0x16 0x03` starts a TLS
@@ -341,7 +341,7 @@ For web clients only the transport changes. With TLS on, the web port serves onl
 
 ### PROXY protocol
 
-With `TCP_PROXY_PROTOCOL=true` ([Behind a reverse proxy](guide.md#behind-a-reverse-proxy)), a
+With `TCP_PROXY_PROTOCOL=true` ([Behind a reverse proxy](../guide.md#behind-a-reverse-proxy)), a
 connection from an address in `TRUSTED_PROXIES` starts with a
 [PROXY protocol](https://github.com/haproxy/haproxy/blob/master/doc/proxy-protocol.txt) header, sent
 by the proxy, never by a Unity client: version 1, a line of text of at most 107 bytes ending in CRLF,
@@ -489,7 +489,7 @@ names, or the app name `colibri`.
 | `log` | `debug`, `info`, `warn` / `warning`, `error` | by a client, to write to the server log at that level (any other command: debug) | text |
 
 `name` is the handshake name for a TCP client and the IP address for a Socket.IO client, taken from
-`X-Forwarded-For` behind a trusted proxy ([Behind a reverse proxy](guide.md#behind-a-reverse-proxy)).
+`X-Forwarded-For` behind a trusted proxy ([Behind a reverse proxy](../guide.md#behind-a-reverse-proxy)).
 The admin UI also uses `colibri::log` and `colibri::admin` ([Admin UI channel](#admin-ui-channel)),
 and draws its latency chart from `colibri::latency`.
 
@@ -497,7 +497,7 @@ and draws its latency chart from `colibri::latency`.
 
 The admin UI reads server data over Socket.IO on the channel `colibri::admin`, as a client of the app
 `colibri`. Clients of other apps are ignored. Everything on this channel is read only. There is no
-authentication, so anyone who can reach the web port can read it ([Security](guide.md#security)).
+authentication, so anyone who can reach the web port can read it ([Security](../guide.md#security)).
 
 A page sends one of three commands, each with a `topic`:
 
@@ -785,7 +785,7 @@ A key-value store over HTTP on the web port, separate from the model store. Valu
 colibri-web's `getRestObject` / `setRestObject` use it.
 
 Values travel as JSON in the media type `application/vnd.colibri.v2+json` (`REST_MEDIA_TYPE` in
-[`protocol.ts`](../src/server/modules/networking/protocol.ts)), which names the protocol version like the
+[`protocol.ts`](../../src/server/modules/networking/protocol.ts)), which names the protocol version like the
 handshake's `version`:
 
 - **Request bodies:** a `PUT` must send its value with `Content-Type: application/vnd.colibri.v2+json`.
@@ -861,7 +861,7 @@ It registers at most as many voice clients of an app from one address as there a
 that app connected from it. A new sender beyond that takes the place of the voice client that has
 gone the longest without a packet, if that is 500 ms or more, and is dropped otherwise. From an
 address in `TRUSTED_PROXIES` it accepts every valid packet, without that limit: through a proxy, all
-of them come from the proxy's address ([guide](guide.md#voice-relay)).
+of them come from the proxy's address ([guide](../guide.md#voice-relay)).
 
 The server registers the sender of an accepted packet as a voice client, by address and port, and
 passes the packet on unchanged to every other voice client with the same `appId`. A client sending

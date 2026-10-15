@@ -68,6 +68,11 @@ Contact: [Sebastian Hubenschmid](https://hci.uni-konstanz.de/personen/wissenscha
 | [**Re-Locations**](https://github.com/hcigroupkonstanz/Re-locations) | [**ARound the Smartphone**](https://github.com/hcigroupkonstanz/ARound-the-Smartphone) |
 | [![Re-Locations](https://img.youtube.com/vi/_D0_B4Rux1U/0.jpg)](https://www.youtube.com/watch?v=_D0_B4Rux1U "Re-Locations") | [![ARound the Smartphone](https://img.youtube.com/vi/p6cHwLxHWJg/0.jpg)](https://www.youtube.com/watch?v=p6cHwLxHWJg "ARound the Smartphone") |
 
+## Development
+
+For developers working on Colibri itself: developer documentation of the [server](colibri-server/docs/dev/README.md),
+[Unity](colibri-unity/docs/dev/README.md) and [web](colibri-web/docs/dev/README.md) parts.
+
 ## License
 
 [MIT](LICENSE)

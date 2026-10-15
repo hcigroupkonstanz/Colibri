@@ -1,6 +1,6 @@
 # colibri-unity 2.0.0: ease of use and the sync loop
 
-Companion to [`v2-changes.md`](dev/v2-changes.md), covering the last pass over colibri-unity 2.0.0 in
+Companion to [`v2-changes.md`](v2-changes.md), covering the last pass over colibri-unity 2.0.0 in
 the depth a change log cannot carry: what changed, why, how the replacements work, and what the
 Editor verification showed, including the two numbers that were only ever argued before it.
 
@@ -1064,7 +1064,7 @@ alongside the Editor, so the two-Unity-clients configuration itself is covered t
 not cover is the visual half; see the subsection after the ten.
 
 Ten of the problems the run turned up were fixed; they are listed in
-[`v2-changes.md`](dev/v2-changes.md) under *End-to-end verification, and what it fixed*. Two more were
+[`v2-changes.md`](v2-changes.md) under *End-to-end verification, and what it fixed*. Two more were
 diagnoses rather than defects, and both are worth knowing before building on Colibri:
 
 - Unity 6's *Insecure HTTP Option* defaults to *Not allowed*, and the `Store` round trip over

@@ -319,7 +319,7 @@ export class FrameReader {
 
             case FrameType.Handshake: {
                 const text = this.buffer.toString('utf8', bodyStart, bodyEnd);
-                // Exactly three fields. '::' is the field separator and docs/protocol.md
+                // Exactly three fields. '::' is the field separator and docs/dev/protocol.md
                 // forbids it inside a field, so a name containing one is a malformed
                 // frame - previously it was silently truncated at the first extra '::'.
                 //

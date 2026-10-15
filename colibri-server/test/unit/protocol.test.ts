@@ -292,7 +292,7 @@ describe('protocol v3 framing', () => {
             expect(() => readAll(reader, frame)).toThrow(FrameError);
         });
 
-        // '::' is the field separator and docs/protocol.md forbids it inside a field; the
+        // '::' is the field separator and docs/dev/protocol.md forbids it inside a field; the
         // parser used to silently keep the first three parts and drop the rest of the name.
         it('rejects a handshake whose name contains the field separator', () => {
             const reader = new FrameReader(MAX_FRAME_LENGTH);

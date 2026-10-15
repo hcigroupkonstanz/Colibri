@@ -31,7 +31,7 @@ them as described under [Unity](#unity).
    ports instead, publish them on the new container ports, e.g. `"9011:9211"`, or set `WEBSERVER_PORT`, `TCP_PORT`
    and `VOICE_PORT`.
 3. **Compose file from the Colibri 1 README:** remove `tty: true`. Otherwise warnings and errors are mixed into the
-   normal log output. The new [compose file](colibri-server/README.md#docker) also limits the log size.
+   normal log output. The new [compose file](colibri-server/README.md#docker-recommended) also limits the log size.
 4. **Data directory:** your data in `./data` keeps working. The server now runs as user `node` (uid 1000) and takes
    over the data directory on startup. If you start the container with `--user` (or `user:` in compose), give the
    directory to that user first, e.g. `sudo chown -R 1001:1001 ./data` for `--user 1001:1001`.

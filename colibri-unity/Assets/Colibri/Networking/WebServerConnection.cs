@@ -29,7 +29,7 @@ namespace HCIKonstanz.Colibri.Networking
 
     /// <summary>
     /// TCP connection to a colibri-server, speaking the v3 binary protocol
-    /// (see <see cref="Protocol.FrameCodec"/> and <c>colibri-server/docs/protocol.md</c>).
+    /// (see <see cref="Protocol.FrameCodec"/> and <c>colibri-server/docs/dev/protocol.md</c>).
     ///
     /// Requires colibri-server >= 2.0.0. There is no version negotiation: the server accepts
     /// exactly one protocol version and refuses anything else, so both sides have to be
