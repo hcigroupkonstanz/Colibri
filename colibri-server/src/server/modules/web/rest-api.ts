@@ -1,5 +1,6 @@
 import { Service } from '../core/index.js';
-import { hasEmptyJsonBody, WebServer } from './web-server.js';
+import { hasEmptyJsonBody, hasRestMediaType, WebServer } from './web-server.js';
+import { REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { Router } from 'express';
 import { lstat, mkdir, readFile, rename, writeFile } from 'fs/promises';
 import * as path from 'path';
@@ -78,14 +79,23 @@ export class RestAPI extends Service {
                 }
             })
             .put('/:app/:value', (req, res) => {
-                // express.json() leaves req.body undefined for a body that isn't
-                // application/json, or no body at all, and makes {} of an empty JSON body.
-                // The undefined used to be stored: a name listed under its app that GET and
-                // DELETE then answered 404 for. Both clients always send a JSON body.
-                // An empty body is told from `{}` by its raw length, not by Content-Length: a
-                // chunked request has none, and its empty body used to be stored as {}.
+                // Only a body in the store's media type is parsed. application/json, form data
+                // and a body without a Content-Type are refused, rather than stored as whatever
+                // they parse to: form data made an object of `curl -d`'s JSON text.
+                if (!hasRestMediaType(req)) {
+                    const error = `Value with name ${req.params.value} not saved: send the value as JSON, with Content-Type: ${REST_MEDIA_TYPE}`;
+                    this.logWarning(`PUT /api/store/${req.params.app}/${req.params.value} answered 415: ${error}`);
+                    res.status(415).json({ error });
+                    return;
+                }
+                // express.json() leaves req.body undefined for no body at all, and makes {} of
+                // an empty JSON body. The undefined used to be stored: a name listed under its
+                // app that GET and DELETE then answered 404 for. Both clients always send a JSON
+                // body. An empty body is told from `{}` by its raw length, not by
+                // Content-Length: a chunked request has none, and its empty body used to be
+                // stored as {}.
                 if (req.body === undefined || hasEmptyJsonBody(req)) {
-                    const error = `Value with name ${req.params.value} not saved: send the value as a JSON body, with Content-Type: application/json`;
+                    const error = `Value with name ${req.params.value} not saved: send the value as a JSON body`;
                     this.logWarning(`PUT /api/store/${req.params.app}/${req.params.value} answered 400: ${error}`);
                     res.status(400).json({ error });
                     return;

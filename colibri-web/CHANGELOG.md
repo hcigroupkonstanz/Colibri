@@ -32,6 +32,10 @@ Colibri component from 1.x.
   For a server that keeps 9011, pass the port. colibri-server 2.0 moved its defaults so that a
   1.x and a 2.0 server can run side by side, and a client of one version does not reach a
   server of the other by its defaults.
+- **Breaking:** `getRestObject` and `setRestObject` send `Accept: application/vnd.colibri.v2+json`,
+  and `setRestObject` sends its value with that `Content-Type`: colibri-server 2.0 takes and
+  answers only this media type. `getRestObject` no longer sends a `Content-Type`, since a `GET`
+  has no body, so a browser sends it without a CORS preflight.
 - **Breaking:** `Sync.receiveColor`/`receiveColorArray` callbacks get a `ColorValue` instead
   of a `string`. Unity puts the HTML string `"#RRGGBBAA"` on the wire for a colour and this
   library puts `[r, g, b, a]`, so a colour sent by another web client arrived as an array
@@ -74,6 +78,9 @@ Colibri component from 1.x.
   with their `active`, `position`, `rotation` and `scale`, and moves them when one of these is
   assigned. Pass a `ModelId` for objects that have one. `Vector3` and `Quaternion` are
   exported as the array types Unity sends.
+- **`deleteRestObject(key)` and the `DeleteRestApi` wrapper**, which delete a value from the
+  remote store, as Unity's `Store.Delete` does. They resolve to `true` if a value was deleted.
+  Before, deleting needed a hand-written `fetch`.
 - **`Colibri.protocolMismatch`, and `ProtocolMismatchError` (exported).** colibri-server
   2.0.0 checks the handshake `version`, and when it refuses a client it sends a `colibri` /
   `protocol::rejected` message before disconnecting. `Colibri` handles that itself: it turns

@@ -395,7 +395,7 @@ transform.position = [1, 0, 2];
 The server stores data persistently under a `key`, per app name. All clients of the app can read and write it.
 
 ```ts
-import { Colibri, GetRestApi, PutRestApi } from '@hcikn/colibri';
+import { Colibri, DeleteRestApi, GetRestApi, PutRestApi } from '@hcikn/colibri';
 
 const key = 'sampleKey';
 const data = { name: 'Test', age: 32 };
@@ -405,17 +405,20 @@ const colibri = Colibri.getInstance();
 if (colibri) {
     await colibri.setRestObject(key, data); // true if stored
     const stored = await colibri.getRestObject(key); // null if nothing is stored under key
+    await colibri.deleteRestObject(key); // true if deleted
 }
 
 // or through the wrapper functions, which return undefined without a Colibri instance
 await PutRestApi(key, data);
 const stored = await GetRestApi(key);
+await DeleteRestApi(key);
 ```
 
 - A value is any JSON value up to 5 MiB, `null` included. `undefined` is not JSON, so `setRestObject(key, undefined)`
   stores nothing.
-- `setRestObject` resolves to `false` if the server did not store the value. `getRestObject` resolves to `null` if
-  there is no such key or the server answered with an error. Both reject if the server cannot be reached.
+- `setRestObject` resolves to `false` if the server did not store the value, and `deleteRestObject` if there was no
+  value to delete. `getRestObject` resolves to `null` if there is no such key or the server answered with an error. All
+  three reject if the server cannot be reached.
 - Keys are URL-encoded. Any key works, including `/`, `#`, `?`, `%` and spaces. A key addresses the same value as in
   Unity's `Store`.
 - Whitespace around a key and leading slashes are stripped. An empty key, `.` or `..` stores and finds nothing

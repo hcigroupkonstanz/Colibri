@@ -26,7 +26,7 @@ import * as path from 'node:path';
 import * as tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import { io } from 'socket.io-client';
-import { PROTOCOL_VERSION, encodeHandshakeFrame } from '../src/server/modules/networking/protocol.js';
+import { PROTOCOL_VERSION, REST_MEDIA_TYPE, encodeHandshakeFrame } from '../src/server/modules/networking/protocol.js';
 import { TestCertificate, createTestCertificate } from './tls-test-certificate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -323,7 +323,7 @@ const runDeployment = async function (image: string, deployment: Deployment): Pr
 
     const malformed = await fetch(`${web}/api/store/image-check/malformed`, {
         method: 'PUT',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': REST_MEDIA_TYPE },
         body: '{"unterminated',
     });
     const malformedBody = await malformed.text();
@@ -339,7 +339,7 @@ const runDeployment = async function (image: string, deployment: Deployment): Pr
     const value = { saved: deployment.name };
     const put = await fetch(`${web}/api/store/image-check/value`, {
         method: 'PUT',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': REST_MEDIA_TYPE },
         body: JSON.stringify(value),
     });
     check('PUT /api/store answers 201', put.status === 201, `HTTP ${put.status}`);

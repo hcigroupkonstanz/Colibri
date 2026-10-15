@@ -1,3 +1,4 @@
+using HCIKonstanz.Colibri.Networking;
 using HCIKonstanz.Colibri.Setup;
 using NUnit.Framework;
 using ColibriStore = HCIKonstanz.Colibri.Store.Store;
@@ -30,6 +31,16 @@ namespace HCIKonstanz.Colibri.Tests
         public void TheAppNameIsEscapedTheSameWay()
         {
             Assert.That(ColibriStore.StorePath("my app/1", "key"), Is.EqualTo("api/store/my%20app%2F1/key"));
+        }
+
+        /// <summary>
+        /// The server's REST_MEDIA_TYPE, which it builds from the same protocol version: a value
+        /// sent as anything else is refused with 415.
+        /// </summary>
+        [Test]
+        public void RequestsUseTheServersMediaTypeForThisProtocolVersion()
+        {
+            Assert.That(ColibriStore.MediaType, Is.EqualTo($"application/vnd.colibri.v{WebServerConnection.ClientVersion}+json"));
         }
 
         /// <summary>"http://2001:db8::1:9211/" is no URL: an IPv6 server address needs brackets there.</summary>

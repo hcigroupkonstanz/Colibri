@@ -46,6 +46,12 @@ export const MAX_FRAME_LENGTH = 1024 * 1024 * 5;
 // and the entire point.
 export const PROTOCOL_VERSION = '2';
 
+// The media type of the REST store, for the bodies of its requests and answers. It carries the
+// protocol version, so that a reverse proxy in front of servers of different versions on one host
+// name can route the store's requests by their Accept header, as it routes Socket.IO by the
+// handshake's version query.
+export const REST_MEDIA_TYPE = `application/vnd.colibri.v${PROTOCOL_VERSION}+json`;
+
 // The channel and command a refusal is delivered on. A plain message frame rather than a
 // server->client handshake frame, so the same notification works over Socket.IO, and so it
 // can carry a reason. Safe against older clients: Unity's Sync command switch has no

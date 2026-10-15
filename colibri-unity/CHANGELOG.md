@@ -457,6 +457,10 @@ rationale, migration steps, and what the Editor verification did and did not cov
 - **`Store` escapes the app name and the key in its URLs** the way colibri-web does
   (`encodeURIComponent`), so keys with `/`, `#`, `?`, `%` or spaces address the same entries from
   Unity and the web client.
+- **`Store` sends the REST store's media type**, `application/vnd.colibri.v2+json`: as `Accept` on
+  every request, and as the `Content-Type` of `Put`. colibri-server 2.0 takes and answers only
+  this type, and refuses a value sent as `application/json` with 415. `Delete` sent a
+  `Content-Type` without a body and now sends only `Accept`.
 
 ## SyncBehaviour and SyncTransform
 
