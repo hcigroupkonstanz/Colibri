@@ -1,0 +1,29 @@
+/* Colibri's teal, from the hummingbird in the logo. */
+:root {
+  --ifm-color-primary: #1f8a78;
+  --ifm-color-primary-dark: #1c7c6c;
+  --ifm-color-primary-darker: #1a7566;
+  --ifm-color-primary-darkest: #156054;
+  --ifm-color-primary-light: #229884;
+  --ifm-color-primary-lighter: #249f8a;
+  --ifm-color-primary-lightest: #29b49c;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #3cc4a8;
+  --ifm-color-primary-dark: #33b398;
+  --ifm-color-primary-darker: #30a98f;
+  --ifm-color-primary-darkest: #278b76;
+  --ifm-color-primary-light: #55ccb4;
+  --ifm-color-primary-lighter: #61d0b9;
+  --ifm-color-primary-lightest: #83dac9;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* Tables with many columns scroll instead of squeezing their text. */
+.markdown table {
+  display: block;
+  overflow-x: auto;
+}

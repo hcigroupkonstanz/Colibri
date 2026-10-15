@@ -1,0 +1,33 @@
+.hero {
+  padding: 3rem 0 2rem;
+  text-align: center;
+}
+
+.heroImage {
+  width: 100%;
+  max-width: 640px;
+}
+
+.title {
+  font-size: 3rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.tagline {
+  font-size: 1.25rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.card {
+  display: block;
+  height: 100%;
+  color: inherit;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  transition: border-color 0.2s;
+}
+
+.card:hover {
+  color: inherit;
+  text-decoration: none;
+  border-color: var(--ifm-color-primary);
+}
