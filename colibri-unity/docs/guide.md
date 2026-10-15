@@ -883,8 +883,7 @@ and instantiates `VoiceReceiver` prefabs.
 ## Related documents
 
 - [MIGRATION.md](../../MIGRATION.md): upgrading a Colibri 1.x project, for all three components.
-  Read it with the changelog's [Breaking changes](../CHANGELOG.md#breaking-changes).
-- [CHANGELOG.md](../CHANGELOG.md): all changes from `1.3.1` to `2.0.0`
+- [CHANGELOG.md](../CHANGELOG.md): what changed from `1.3.1` to `2.0.0`
 - [v2-ease-of-use-and-performance.md](v2-ease-of-use-and-performance.md): design of the sync loop
   and the diagnostics, and migrating an existing project
 - [colibri-server/docs/protocol.md](../../colibri-server/docs/protocol.md): the v3 wire protocol

@@ -1,7 +1,7 @@
 # colibri-server guide
 
 Full reference for colibri-server. Overview: [README](../README.md). Wire protocol:
-[protocol.md](protocol.md). Changes since 1.x: [v2-changelog.md](v2-changelog.md).
+[protocol.md](protocol.md). Changes since 1.x: [CHANGELOG.md](../CHANGELOG.md).
 
 ## Security
 

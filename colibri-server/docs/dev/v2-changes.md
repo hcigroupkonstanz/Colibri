@@ -1,7 +1,10 @@
-# colibri-server v2.0.0: Change Log
+# colibri-server 2.0: detailed changes
+
+Developer notes on every change in colibri-server 2.0.0, with the reasons behind them. The user-facing summary is in
+[CHANGELOG.md](../../CHANGELOG.md).
 
 Everything that changed in colibri-server from `1.3.1` to `2.0.0`. To upgrade a project built on
-Colibri 1.x, start with [MIGRATION.md](../../MIGRATION.md), which covers all three components;
+Colibri 1.x, start with [MIGRATION.md](../../../MIGRATION.md), which covers all three components;
 this is the server's full detail.
 
 ---
@@ -27,7 +30,7 @@ this is the server's full detail.
   still set them. The image exposes the new ports, its health check defaults to 9211, and the
   bundled compose file publishes them. To keep the old ports, set the three variables, or with
   Docker publish 9011 to 9013 on the new container ports. See
-  [MIGRATION.md](../../MIGRATION.md#default-ports).
+  [MIGRATION.md](../../../MIGRATION.md#default-ports).
 - **REST store media type.** The store takes and answers only `application/vnd.colibri.v2+json`.
   A `PUT` sent as `application/json` or form data gets 415, and an `Accept` that leaves the type
   out gets 406. See [REST store](#rest-store).
@@ -43,7 +46,7 @@ this is the server's full detail.
 ### Protocol version checking
 
 - **Both transports check the protocol version.** `PROTOCOL_VERSION` in
-  [`protocol.ts`](../src/server/modules/networking/protocol.ts) is the single source of truth
+  [`protocol.ts`](../../src/server/modules/networking/protocol.ts) is the single source of truth
   for the TCP handshake and the Socket.IO query. Until now the version was parsed, stored and
   logged, but compared against nothing, so a client built against the wrong protocol reconnected
   forever against a server that said nothing unusual.
@@ -55,7 +58,7 @@ this is the server's full detail.
   ships with the server, and a check that can lock you out of your own console is worse than the
   mismatch it detects. Its own query was bumped from the stale `'1'` to `'2'`. `clientVersion`
   is always a string: `''` when a Socket.IO client sent no version, with a reason that says
-  `'(none)'`. Documented under [Version checking](./protocol.md#version-checking).
+  `'(none)'`. Documented under [Version checking](../protocol.md#version-checking).
 
 - **A refused TCP client is dropped at once.** The refusal frame is queued ahead of the FIN, and
   the client leaves every index straight away. Before, the next heartbeat logged a
@@ -80,7 +83,7 @@ this is the server's full detail.
   protocol. Checked against the published `hcikn/colibri:1.1.1` and `hcikn/colibri:1.3.1` images
   rather than assumed, after the repo's own `v1.1.2` tag turned out to predate both. Nothing else a
   web client can observe separates them. Written up under
-  [Detecting an out-of-date server](./protocol.md#detecting-an-out-of-date-server).
+  [Detecting an out-of-date server](../protocol.md#detecting-an-out-of-date-server).
 
   TCP clients are sent no announcement and need none: the framing changed incompatibly in 2.0.0, so
   an old server is already unmistakable to them.
@@ -107,7 +110,7 @@ this is the server's full detail.
 - **Optional TLS.** With `TLS_CERT` and `TLS_KEY` set to PEM files, the Unity TCP port accepts only
   TLS, and the web port serves only HTTPS and WSS, both with the same certificate. RSA and EC
   certificates both work. The v3 framing inside TLS is unchanged, so the protocol version stays the
-  same. With both unset, nothing changes. See [TLS](./guide.md#tls) in the guide.
+  same. With both unset, nothing changes. See [TLS](../guide.md#tls) in the guide.
 - **The certificate's SHA-256 fingerprint is logged at startup**, for pinning in Unity, and for a
   self-signed certificate the line says how a Unity app and a browser come to accept it. A renewed
   certificate in the same files is used within about 20 s, without a restart; open connections
@@ -130,7 +133,7 @@ this is the server's full detail.
   to report the client's address: IP addresses, CIDR ranges and `loopback`, `linklocal` and
   `uniquelocal`, as in Express's `trust proxy`. Empty, the default, trusts nobody and changes
   nothing. An invalid entry stops the server at startup, naming it. See
-  [Behind a reverse proxy](./guide.md#behind-a-reverse-proxy).
+  [Behind a reverse proxy](../guide.md#behind-a-reverse-proxy).
 - **Web port:** from a trusted peer, a Socket.IO client's address is the right-most
   `X-Forwarded-For` entry that is not itself a trusted proxy, so a client cannot choose it by
   sending the header itself. It names the client in the log and the admin UI, and is its `name` in
@@ -142,7 +145,7 @@ this is the server's full detail.
   (proxy)*. Without a certificate, and while such a client or admin page is connected, the Server
   page shows the web port as *HTTP and WS, TLS terminated by proxy* and TLS as *Off* with
   *terminated by proxy (HTTPS)*. The admin topics carry it as `tlsAtProxy` ([Admin UI
-  channel](./protocol.md#admin-ui-channel)). nginx's PROXY protocol header, version 1, does not say
+  channel](../protocol.md#admin-ui-channel)). nginx's PROXY protocol header, version 1, does not say
   whether the proxy terminated TLS, and the server skips the TLS details a version 2 header can
   carry, so new `TCP_TLS_AT_PROXY=true` declares that the proxy's TCP port terminates TLS. With it
   and `TCP_PROXY_PROTOCOL`, and without a certificate, a Unity client through a trusted proxy shows
@@ -157,7 +160,7 @@ this is the server's full detail.
   and per-address warning limit. A trusted peer without a valid header within 10 s, and a header
   from any other peer, are refused with a warning at most once a minute per address. The setting
   takes only `true` or `false`, and needs `TRUSTED_PROXIES`. See
-  [PROXY protocol](./protocol.md#proxy-protocol).
+  [PROXY protocol](../protocol.md#proxy-protocol).
 - Voice (UDP) still shows the proxy's address: nginx's PROXY protocol covers TCP only. Voice from
   an address in `TRUSTED_PROXIES` is relayed without the check that its sender is a Unity client's
   address ([Voice relay](#voice-relay-breaking-change)).
@@ -262,7 +265,7 @@ this is the server's full detail.
 - Version bumped `1.3.1` → `2.0.0`; dropped the blanket `eslint-disable no-unused-vars` in `main.ts`
   and cleaned up its unused imports.
 - `npm run demo` runs synthetic Unity and web clients in two apps against a server, so the admin UI has
-  data to show without headsets ([Development](guide.md#development)).
+  data to show without headsets ([Development](../guide.md#development)).
 
 ### Hot-path performance
 
@@ -359,7 +362,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   listen to any app, and two apps using the same fixed voice id heard each other.
 - The header is 11 bytes: the 7 bytes 1.x had, with a header version (`2`) in the high 4 bits of
   the codec byte, then the app id, the 32-bit FNV-1a hash of the app name. See
-  [Voice packets](protocol.md#voice-packets-udp). `voice-packet.ts` holds the format and the hash.
+  [Voice packets](../protocol.md#voice-packets-udp). `voice-packet.ts` holds the format and the hash.
 - A packet from a colibri-unity 1.x client, whose codec byte reads as header version 0, is dropped
   and logged as a warning that says to upgrade the Unity package. A packet with another header
   version is dropped as malformed. Each source is reported at most once every 10 s, as for the
@@ -385,7 +388,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   packets have been dropped for 3 s, at most once every 10 s, and its first dropped packet is a debug
   line. Voice from an address in `TRUSTED_PROXIES` is relayed unchecked and unlimited, also while a
   Unity client is connected from the proxy's machine; the server logs this once per address. See
-  [Voice relay](./guide.md#voice-relay).
+  [Voice relay](../guide.md#voice-relay).
 - An address with n Unity clients of an app can still be sent n copies of the app's voice: a
   forged sender can take the place of one of them that sends no voice.
 - The app id keeps apps apart but is not access control: anyone who knows an app's name and can
@@ -398,7 +401,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   serves clients that reach the server over IPv6, such as colibri-unity 2.0.0 with a server name
   that has only an AAAA record. With an A record as well, colibri-unity 2.0.0 connects and sends
   voice over IPv4, so TCP and voice come from the same address, as the voice check needs. See
-  [Configuration](./guide.md#configuration).
+  [Configuration](../guide.md#configuration).
 
 ### Load and lost connections
 
@@ -420,7 +423,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   dropped. A shorter one is summed up in one line at debug level, unless it lost model updates:
   one client can have updates for at most 1000 objects held back at once, and an update for a
   further object is lost for good. Then the summary is a warning, however short the burst, and
-  says `lost N model::update(s) for good`. See [Inbound limits](./protocol.md#inbound-limits).
+  says `lost N model::update(s) for good`. See [Inbound limits](../protocol.md#inbound-limits).
 - **A warning when one app has more clients than a typical app has.** Every message is
   relayed to every other client of the same app, so the server's work grows with the square of an
   app's size, and separate projects that all kept the same app name become one big app with
@@ -470,7 +473,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   reconnect. A re-request after a reconnect, `{ id, again: true }`, is answered with
   `model::delete`, to the requester only, for a model that was deleted while the client was away,
   and the tombstone stays. colibri-unity and colibri-web 2.0.0 send the re-request form. See
-  [Deleted models](./protocol.md#deleted-models).
+  [Deleted models](../protocol.md#deleted-models).
 - **Answers keep their order.** After their re-requests, colibri-unity and colibri-web 2.0.0 send
   one more, `{ id, again: true }` for a fresh id on the channel `colibri::reconnect`, and take its
   bare answer as the end of the others. colibri-unity sends it after every reconnect and also takes
@@ -480,7 +483,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   time it asks for one of its models once more, and after the first update with fields that follows
   a fresh request for one of its models when it does neither. The server needs no code for this,
   but has to keep handling one client's messages in order and writing its answers to it in that
-  order. See [Requests](./protocol.md#requests).
+  order. See [Requests](../protocol.md#requests).
 
 ### Correctness & robustness
 
@@ -568,7 +571,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   before it has loaded. A `store.json` whose top level, or one of whose apps, is not a JSON
   object is skipped with an error instead of breaking every request.
 
-The endpoints are documented under [REST store](./protocol.md#rest-store).
+The endpoints are documented under [REST store](../protocol.md#rest-store).
 
 ### Admin UI
 
@@ -624,7 +627,7 @@ The endpoints are documented under [REST store](./protocol.md#rest-store).
   up. A page's first client list carries each client's message rates of the last 122 s, and the
   request-only topic `latency` its latency samples of that time, as per-second medians past 200,000
   samples. The server keeps both per client whether or not a page is open: 125 s of latency samples
-  (1000 samples before) and the last 125 rates. See [Admin UI channel](./protocol.md#admin-ui-channel).
+  (1000 samples before) and the last 125 rates. See [Admin UI channel](../protocol.md#admin-ui-channel).
 - The model store records each model's last update time and counts its updates. Sizes are measured
   only when the admin UI asks, at most 2 MiB a second; a model that changes keeps its last size for
   up to 10 s, from 1 MiB up to a minute. A model's JSON is formatted only as far as the 512 KiB cut,
@@ -719,13 +722,13 @@ The endpoints are documented under [REST store](./protocol.md#rest-store).
   of that partial frame), rather than only past a threshold, and it never shrinks: a connection
   that once received a large frame keeps a buffer of up to 8 MiB until it closes.
 - A client that falls more than 1 MB behind on TCP misses messages relayed from other clients
-  without being told; see [Backpressure](./protocol.md#backpressure).
+  without being told; see [Backpressure](../protocol.md#backpressure).
 - A client over an inbound limit is not told either that its updates were held back or its
   broadcasts dropped; only the server's log says so. See
-  [Inbound limits](./protocol.md#inbound-limits).
+  [Inbound limits](../protocol.md#inbound-limits).
 - After a reconnect, clients catch up on deletions only within `MODEL_TOMBSTONE_SECONDS` of the
   delete, and colibri-web only for the models it registered itself; see
-  [Known limits](./protocol.md#known-limits) in the protocol docs.
+  [Known limits](../protocol.md#known-limits) in the protocol docs.
 
 ### Deferred work
 

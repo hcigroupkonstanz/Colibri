@@ -4,7 +4,7 @@ Server for [Colibri](../README.md). Relays messages and synchronized-object upda
 clients of each app and keeps the current object state. Provides a REST key-value store, a UDP voice relay and an
 admin UI with the log, the connected clients, the synchronized models and the server settings.
 
-Full documentation: [docs/guide.md](docs/guide.md). Changes since 1.x: [docs/v2-changelog.md](docs/v2-changelog.md).
+Full documentation: [docs/guide.md](docs/guide.md). Changes since 1.x: [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
