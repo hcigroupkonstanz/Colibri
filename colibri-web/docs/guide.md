@@ -363,6 +363,13 @@ marker.position = [0, 1, 0];
 registerTransform(marker);
 ```
 
+To move an object, listed from the server or registered here, assign a new value to one of its members. Colibri
+sends it to all other clients, web and Unity:
+
+```ts
+transform.position = [1, 0, 2];
+```
+
 | Member      | Type                         | Default        | Unity                                                         |
 | ----------- | ---------------------------- | -------------- | ------------------------------------------------------------- |
 | `active`    | `boolean`                    | `true`         | `activeSelf`                                                  |

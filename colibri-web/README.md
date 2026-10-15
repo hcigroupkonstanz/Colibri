@@ -1,47 +1,174 @@
 # Colibri Web
 
-TypeScript client for [Colibri](../README.md) with pub/sub messages, synchronized models, a
-[key-value store](docs/guide.md#remote-store) and [remote logging](docs/guide.md#web-interface-for-logging). Exchanges
-data with web and [colibri-unity](../colibri-unity/README.md) clients through a [colibri-server](../colibri-server/README.md) 2.x.
+TypeScript client for Colibri supporting messages between clients, synchronized objects, data store and monitoring.
 Voice chat is currently not supported on the web.
 
-Full documentation: [docs/guide.md](docs/guide.md). Upgrading from 1.x: [MIGRATION.md](../MIGRATION.md).
-Release notes: [CHANGELOG.md](CHANGELOG.md).
+[Full documentation](docs/guide.md)
+
+Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 
 ## Requirements
 
-- A browser, or Node.js 18 or newer. In Node.js, pass the server address to `new Colibri()`.
-- colibri-server 2.x. 1.x and 2.x [do not interoperate](docs/guide.md#protocol-version).
-- TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false`. Plain
-  JavaScript: [unsupported workaround](docs/js-workaround/README.md).
-- Peer dependency rxjs `^7.8.1`, installed by npm 7 and newer.
+- Node.js 18 or newer
+- TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false` in
+  `tsconfig.json`.
+- [colibri-server](../colibri-server/README.md#installation) 2.0.0 or newer
 
 ## Installation
+
+### npm (recommended)
 
 ```sh
 npm install @hcikn/colibri@2
 ```
 
-Keep the `@2` to avoid installing a 1.x release. If npm reports `No matching version found for @hcikn/colibri@2`,
-[build the package from source](docs/guide.md#building-from-source).
+Keep the `@2`. Without it, npm may install a 1.x release. The peer dependency `rxjs` is installed automatically.
 
-## Quick start
+### Building from source
 
-```ts
-import { Colibri, Sync } from '@hcikn/colibri';
+To build the package from the repository:
 
-new Colibri('your-app-name', 'http://<your-server>:9211'); // 9211 is the default port
-
-Sync.receiveNumber('temperature', value => console.log('temperature', value));
-Sync.sendNumber('temperature', 21.5); // reaches other clients only, e.g. a second browser tab
+```sh
+cd colibri-web
+npm ci
+npm run build
+npm pack
 ```
 
-Web and Unity clients exchange data only if their app names match. Use a name no other project on the server uses.
-Do not use `colibri`, which the admin UI uses.
+Copy the resulting `hcikn-colibri-<version>.tgz` into your project and install it with
+`npm install ./hcikn-colibri-<version>.tgz`.
+
+## Configuration
+
+Create the Colibri client once, when your app starts:
+
+```ts
+import { Colibri } from '@hcikn/colibri';
+
+new Colibri('your-app-name', 'colibri.hci.uni-konstanz.de');
+```
+
+- The first argument is the **app name**. Set it to a unique name that is not used on the server. Clients exchange
+  data only if their app names match, web and Unity alike. Do not use `colibri`, which the server's web page uses.
+- The second argument is the **server address**: a host name or IP address, optionally with `http://` or
+  `https://`. A public test server is available: `colibri.hci.uni-konstanz.de`. In a browser, you can leave it out
+  to use the host that served the page.
+- A second `new Colibri()` throws. Elsewhere in your app, use `Colibri.getInstance()`.
+
+## Samples
+
+The [samples](samples/) are in the `colibri-web` folder of the repository. They run in a terminal with Node.js:
+
+```sh
+cd colibri-web
+npm ci
+npm run samples/broadcast
+```
+
+Each sample asks for the server address and port. Press Enter twice for the public test server. To see two clients
+exchange data, start the same sample in a second terminal, or run it next to a Unity client whose app name is
+`myAppName`, which the samples use.
+
+| Sample                                      | Shows                                       |
+| ------------------------------------------- | ------------------------------------------- |
+| [broadcast](samples/broadcast.ts)           | Sending and receiving messages              |
+| [model-sync](samples/model-sync.ts)         | Synchronized objects with `SyncModel`       |
+| [remote-logging](samples/remote-logging.ts) | Sending the console log to the server       |
+| [rest-api](samples/rest-api.ts)             | Saving and loading values in the data store |
 
 ## Usage
 
+### Send/Receive Messages
+
+For sending simple messages of events and commands you can use `Sync.send*`. Each message has a channel name.
+
+```ts
+const myNumber = 5;
+Sync.sendNumber('myChannel', myNumber);
+```
+
+A client receives the messages of every channel it listens to:
+
+```ts
+function onMyChannel(myNumber: number) {
+    // This code is executed whenever
+    // a number is received on 'myChannel'
+}
+
+Sync.receiveNumber('myChannel', onMyChannel);
+```
+
+A full example:
+
+```ts
+import { Sync } from '@hcikn/colibri';
+
+function onStartRound(round: number) {
+    console.log(`Round ${round} starts`);
+    // reset the scores, start the timer, ...
+}
+
+// Register before anything is sent. Messages without a listener are dropped.
+Sync.receiveNumber('startRound', onStartRound);
+
+// Reaches all other clients with the same app name, not this one.
+export function startRound(round: number) {
+    Sync.sendNumber('startRound', round);
+    onStartRound(round);
+}
+```
+
+The script listens on the channel `startRound` for numbers. One player calls `startRound`, e.g. from a button,
+which sends the round number to all other clients, web and Unity. On each of them, Colibri calls `onStartRound`,
+which starts the round. A client does not receive its own messages, so `startRound` also calls `onStartRound`
+directly to start the round on the sending client too.
+
+- Channel and type must match on both sides.
+- Supported types: `sendBool`, `sendNumber`, `sendString`, `sendVector2`, `sendVector3`, `sendQuaternion`,
+  `sendColor`, their array forms such as `sendVector3Array`, and `sendJson` for anything else. Each has a matching
+  `receive*` ([details](docs/guide.md#sending-data-between-clients)).
+- JavaScript has only one number type, so every number is sent as `float`. Unity must receive it with
+  `Sync.Receive<float>`, not `Sync.Receive<int>`.
+- A listener stays registered until `Sync.unregister`.
+
+### SyncTransform
+
+`SyncTransform` gives the web the objects of Unity's `SyncTransform` component: their position, rotation, scale
+and visibility, e.g. to show a shared 3D object on a web page or to move it from there.
+
+```ts
+import { RegisterSyncTransforms } from '@hcikn/colibri';
+
+const [transforms$] = RegisterSyncTransforms();
+
+transforms$.subscribe(transforms => {
+    for (const transform of transforms) {
+        console.log(transform.id, transform.position, transform.rotation, transform.scale, transform.active);
+    }
+});
+```
+
+`RegisterSyncTransforms` returns `transforms$`, an Observable of all `SyncTransform` objects of the app. It emits
+the list whenever an object is added, moved, shown, hidden or deleted on any client.
+
+To move an object, assign a new position to it, e.g. when the user drags it in a 3D view. Colibri sends it to all
+other clients, web and Unity:
+
+```ts
+transform.position = [1, 0, 2];
+```
+
+- Positions and scales are `[x, y, z]`, rotations `[x, y, z, w]`, in Unity's coordinates: left-handed with Y up.
+  For three.js and most other web 3D libraries, which are right-handed, negate `z`.
+- Assign a new array to change a value. Changing an array in place, e.g. `position[0] = 1`, is not sent.
+- Unity objects with a `ModelId` sync on a channel of their own. Pass it: `RegisterSyncTransforms('<ModelId>')`.
+- Call `RegisterSyncTransforms` once per `ModelId` and share what it returns.
+- Move an object from one client at a time. Concurrent updates make it jitter.
+
 ### SyncModel
+
+`SyncModel` synchronizes the properties of your own classes between clients, e.g. a score, a selection or the state
+of an experiment. It is the web counterpart of Unity's `SyncBehaviour`, and both sync with each other.
 
 ```ts
 import { RegisterModelSync, SyncModel, Synced } from '@hcikn/colibri';
@@ -52,27 +179,98 @@ class Player extends SyncModel<Player> {
 }
 
 const [players$, registerPlayer] = RegisterModelSync<Player>({ name: 'player', type: Player });
-players$.subscribe(players => console.log(players.map(p => `${p.id}: ${p.score}`)));
 
-const me = new Player(`player-${Date.now()}`); // the id must be unique across clients
+players$.subscribe(players => {
+    console.log(players.map(p => `${p.id}: ${p.score}`));
+});
+
+const me = new Player(`player-${Date.now()}`);
 registerPlayer(me);
-me.score = 10; // sent to the other clients
+me.score = 10;
 ```
 
-- Create the `Colibri` instance first, as in the quick start.
-- Always pass `name`. Without it, the channel is the class name in lower case, which minification changes.
-- To sync with a Unity `SyncBehaviour<T>`, set `name` to the Unity class name in lower case, followed by `_<ModelId>`
-  if the component's `ModelId` is set ([details](docs/guide.md#syncmodel)).
+`Player` inherits from `SyncModel<Player>`. `@Synced()` marks `score` for syncing: when one client changes it, it
+changes on all other clients. `RegisterModelSync` returns `players$`, an [RxJS](https://rxjs.dev/guide/observable)
+Observable of all players, and `registerPlayer`. `players$` emits the list whenever a player is added, changed or
+deleted, also by another client. `registerPlayer` starts syncing a new player. Its id must be unique across all
+clients.
 
-## Configuration
+- Declare each synced property with `accessor`. Without it, `@Synced()` does not compile.
+- Always pass `name`. Without it, the channel is the class name in lower case, which a minified production build
+  changes.
+- To sync with a Unity `SyncBehaviour`, set `name` to the Unity class name in lower case, e.g. `'player'` for the
+  `Player` in the [Unity README](../colibri-unity/README.md#syncbehaviour). Property names are compared in lower
+  case, so `score` matches Unity's `Score` ([details](docs/guide.md#syncmodel)).
+- The web client cannot delete an object for the other clients. `delete()` only stops syncing it on this client.
 
-| Argument | Default                         | Value                                                                                                                        |
-| -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `app`    | required                        | App name. Must match on all clients that exchange data.                                                                      |
-| `server` | Host of the page (browser only) | Host name or IP address, optionally with `http://`, `https://`, `ws://` or `wss://` and `:port`. No path, query or fragment. |
-| `port`   | `9211`                          | Used when `server` has no port. If both have one, they must match.                                                           |
+### Monitoring
 
-A second `new Colibri()` throws. Use `Colibri.getInstance()`. All options: [guide](docs/guide.md#configuration).
+The server's web page at `http://<server-address>:9211` shows the connected clients with their latency and
+throughput, and the synchronized objects. To also see a client's console log there, create a `RemoteLogger` when
+your app starts:
+
+```ts
+import { RemoteLogger } from '@hcikn/colibri';
+
+new RemoteLogger();
+```
+
+From then on, everything logged with `console` also appears on the server's web page. This is the easiest way to
+read the log of a web app on a smartphone or head-mounted display ([details](docs/guide.md#web-interface-for-logging)).
+
+### Data store
+
+The data store keeps small amounts of data on the server, e.g. the color a player selected, the settings of a game
+or the condition of a study. Unlike messages and synchronized objects, the data stays saved after all clients
+disconnect.
+
+```ts
+import { GetRestApi, PutRestApi, toHexColor, toRgbaColor } from '@hcikn/colibri';
+
+const playerName = 'Alex';
+const avatar = document.getElementById('avatar')!;
+
+async function loadColor() {
+    const color = await GetRestApi(`color-${playerName}`);
+    if (color) {
+        avatar.style.backgroundColor = toHexColor(color);
+    }
+}
+
+// Call this when the player selects a color, e.g. '#ff0000ff'.
+async function selectColor(color: string) {
+    avatar.style.backgroundColor = color;
+    await PutRestApi(`color-${playerName}`, toRgbaColor(color));
+}
+```
+
+`selectColor` colors the player's avatar and saves the color on the server under the name `color-<player name>`.
+`loadColor` loads the saved color, so the player gets their color back in the next session. `GetRestApi` returns
+`null` if the player has not selected a color yet. The color is saved as `[r, g, b, a]`, the format Unity uses, so
+the same value also works in the [Unity README's](../colibri-unity/README.md#data-store) `PlayerColor` sample. Other
+clients see a new value the next time they call `GetRestApi`. It is not sent to them automatically.
+
+- Values are saved per app name. Each value can be up to 5 MiB.
+- Any JSON value works, e.g. an object, an array, a number or a string.
+- Create the `Colibri` instance first. Without it, both functions return `undefined`.
+
+### Voice chat
+
+Voice chat is currently not supported on the web. It is available in [colibri-unity](../colibri-unity/README.md#voice-chat).
+
+## Advanced Configuration
+
+`new Colibri(app, server, port)` takes these arguments:
+
+| Argument | Default                                | Description                                                                                                                  |
+| -------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `app`    | required                               | App name. Must match on all clients that exchange data.                                                                      |
+| `server` | Host of the page. Required in Node.js. | Host name or IP address, optionally with `http://`, `https://`, `ws://` or `wss://` and `:port`. No path, query or fragment. |
+| `port`   | `9211`                                 | The server's web port. Used when `server` has no port. If both have one, they must match.                                    |
+
+- For a server with [TLS](docs/guide.md#tls), use `https://` or `wss://`. A page served over `https://` can only
+  connect this way, because browsers block `http://` and `ws://` there.
+- A server that still uses Colibri 1.x's port 9011 needs the port in the address or as the third argument.
 
 ## Troubleshooting
 
@@ -89,13 +287,6 @@ A second `new Colibri()` throws. Use `Colibri.getInstance()`. All options: [guid
 | Unity never receives numbers from the web                              | colibri-web sends every number as `float`                                                                                                  | Receive with `Sync.Receive<float>` in Unity, not `Sync.Receive<int>`       |
 | Colors arrive as strings or arrays                                     | Unity sends `"#RRGGBBAA"`, colibri-web `[r, g, b, a]`                                                                                      | Normalize with `toHexColor()` or `toRgbaColor()`                           |
 | `Sync.send*` does nothing                                              | Called before `new Colibri()`, dropped with a console warning                                                                              | Create the `Colibri` instance first                                        |
-
-## Testing
-
-```sh
-npm test          # unit tests
-npm run test:e2e  # end-to-end, starts a colibri-server with Docker Compose unless COLIBRI_E2E_SERVER is set
-```
 
 ## License
 
