@@ -14,6 +14,7 @@ Overview and quick start: [README](../README.md). Release notes and breaking cha
 - [Usage](#usage)
     - [Sending data between clients](#sending-data-between-clients)
     - [SyncModel](#syncmodel)
+    - [SyncTransform](#synctransform)
     - [Remote store](#remote-store)
     - [Web interface for logging](#web-interface-for-logging)
 - [Samples](#samples)
@@ -342,6 +343,45 @@ and is applied. This also holds if the connection dies again before the answer o
 - Two `RegisterModelSync` calls on one channel in one page do not receive each other's updates. They share the page's
   connection, and the server relays an update to every client except the sender. Call `RegisterModelSync` once per
   channel and share what it returns.
+
+### SyncTransform
+
+`SyncTransform` is a ready-made `SyncModel` for colibri-unity's
+[SyncTransform](../../colibri-unity/docs/guide.md#synctransform) component. `RegisterSyncTransforms()` registers it
+on the channel the component uses and returns what `RegisterModelSync` returns:
+
+```ts
+import { RegisterSyncTransforms, SyncTransform } from '@hcikn/colibri';
+
+const [transforms$, registerTransform] = RegisterSyncTransforms(); // channel 'synctransform'
+const [cubes$] = RegisterSyncTransforms('Cube'); // objects with ModelId 'Cube': 'synctransform_Cube'
+
+transforms$.subscribe(transforms => console.log(transforms.map(t => t.position)));
+
+const marker = new SyncTransform('marker-1');
+marker.position = [0, 1, 0];
+registerTransform(marker);
+```
+
+| Member      | Type                         | Default        | Unity                                                         |
+| ----------- | ---------------------------- | -------------- | ------------------------------------------------------------- |
+| `active`    | `boolean`                    | `true`         | `activeSelf`                                                  |
+| `position`  | `Vector3`, `[x, y, z]`       | `[0, 0, 0]`    | `position`, or `localPosition` with _Use Local Transform_     |
+| `rotation`  | `Quaternion`, `[x, y, z, w]` | `[0, 0, 0, 1]` | `rotation`, or `localRotation` with _Use Local Transform_     |
+| `scale`     | `Vector3`, `[x, y, z]`       | `[1, 1, 1]`    | `localScale`                                                  |
+| `physicsId` | `string`                     | `''`           | The client with `PhysicsAuthority`. Do not set it on the web. |
+
+- The values are in Unity's coordinates: left-handed, Y up. For a right-handed library such as three.js, negate `z`
+  of positions and `x` and `y` of rotations.
+- A member is sent when a new value is assigned. Changing an array in place, e.g. `position[0] = 1`, is not noticed.
+- A change to an object listed from the server sends the changed members only, so moving a Unity object never
+  touches its `physicsId`.
+- A Unity object whose _Sync Position_, _Sync Rotation_, _Sync Scale_ or _Sync Active_ box is unticked never sends
+  that member. It keeps its default here.
+- A `SyncTransform` registered on the web is sent in full. A Unity client shows it only if it has a
+  `SyncTransformManager` whose `Template` has the matching `ModelId`.
+- What [SyncModel limitations](#syncmodel-limitations) says applies here too: call `RegisterSyncTransforms` once per
+  channel, and the web cannot delete an object for the other clients.
 
 ### Remote store
 

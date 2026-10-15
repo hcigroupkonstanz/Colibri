@@ -69,6 +69,11 @@ Colibri component from 1.x.
 
 ### Added
 
+- **`SyncTransform` and `RegisterSyncTransforms()`.** The web side of colibri-unity's
+  `SyncTransform` component: `RegisterSyncTransforms()` lists the app's synced Unity objects
+  with their `active`, `position`, `rotation` and `scale`, and moves them when one of these is
+  assigned. Pass a `ModelId` for objects that have one. `Vector3` and `Quaternion` are
+  exported as the array types Unity sends.
 - **`Colibri.protocolMismatch`, and `ProtocolMismatchError` (exported).** colibri-server
   2.0.0 checks the handshake `version`, and when it refuses a client it sends a `colibri` /
   `protocol::rejected` message before disconnecting. `Colibri` handles that itself: it turns

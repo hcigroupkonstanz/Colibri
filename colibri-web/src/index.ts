@@ -8,3 +8,4 @@ export * from './RemoteLogger';
 export * from './ModelSynchronization';
 export * from './Synced';
 export * from './SyncModel';
+export * from './SyncTransform';
