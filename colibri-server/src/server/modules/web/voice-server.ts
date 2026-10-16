@@ -12,7 +12,7 @@ import {
     VoiceCodec,
 } from './voice-packet.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
-import { normalizeAddress } from '../networking/addresses.js';
+import { hostPort, normalizeAddress } from '../networking/addresses.js';
 import { UnityClientAddresses, UnityClientSource } from './unity-client-addresses.js';
 
 // Recordings can run for minutes at 48kHz, so a plain number[] would mean millions of
@@ -90,7 +90,7 @@ interface Rejection {
 // A voice source as the log names it, and its key in `clients`. An IPv4 sender is named by its IPv4
 // address, also on a dual-stack VOICE_HOST, where the socket reports it as ::ffff:<IPv4 address>.
 // The packets to it still go to the address the socket reported (VoiceClient.ip).
-const voiceClientKey = (address: string, port: number): string => `${normalizeAddress(address)}:${port}`;
+const voiceClientKey = (address: string, port: number): string => hostPort(normalizeAddress(address), port);
 const groupKey = (address: string, appId: number): string => `${address} ${appId}`;
 
 // A voice client sends a packet every 20 ms while it broadcasts (VoiceBroadcast's default frame).
@@ -248,7 +248,7 @@ export class VoiceServer extends Service {
         this.udpSocket.on('listening', () => {
             this.listening = true;
             const address = this.udpSocket.address() as AddressInfo;
-            this.logInfo(`Voice server listening on ${address.address}:${address.port}`);
+            this.logInfo(`Voice server listening on ${hostPort(address.address, address.port)}`);
             this.logInfo(`Voice server Sampling Rate: ${this.samplingRate} Hz`);
             if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
         });
@@ -385,14 +385,14 @@ export class VoiceServer extends Service {
         this.udpSocket.on('error', (err: NodeJS.ErrnoException) => {
             if (!this.listening) {
                 const inUse = err.code === 'EADDRINUSE' ? ', which another process is already using' : '';
-                this.logError(`Voice server could not listen on UDP ${hostname}:${voicePort}${inUse}: ${err.message}. `
+                this.logError(`Voice server could not listen on UDP ${hostPort(hostname, voicePort)}${inUse}: ${err.message}. `
                     + 'Voice is disabled until the server is restarted with a VOICE_HOST and VOICE_PORT it can listen on; '
                     + 'everything else keeps running.', false);
                 return;
             }
             // Once it listens, this is a failed receive, which a peer could cause at packet rate.
             if (!this.claimReport('socket error', Date.now())) return;
-            this.logError(`Voice server socket error on UDP ${hostname}:${voicePort}: ${err.message}`
+            this.logError(`Voice server socket error on UDP ${hostPort(hostname, voicePort)}: ${err.message}`
                 + ` (further ones are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
         });
         this.udpSocket.bind(voicePort, hostname);

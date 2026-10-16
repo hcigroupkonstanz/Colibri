@@ -41,7 +41,7 @@ import {
     warnsAtEnd,
 } from './inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
-import { normalizeAddress } from './addresses.js';
+import { hostPort, normalizeAddress } from './addresses.js';
 import { ClientActivity, RATE_WINDOW_MILLIS, TrafficMeter } from './client-activity.js';
 import { readProxyHeader } from './proxy-protocol.js';
 import { TrustProxy, compileTrustedProxies, trustNoProxy } from './trusted-proxies.js';
@@ -546,7 +546,7 @@ export class TCPServerWorker extends WorkerService {
             ? `, PROXY protocol header required from TRUSTED_PROXIES (${this.trustedProxies.join(', ')})` +
                 (this.tlsAtProxy ? ', TLS terminated by proxy (TCP_TLS_AT_PROXY)' : '')
             : '';
-        this.logInfo(`Starting Colibri TCP server on ${host}:${port}${credentials ? ', TLS only' : ''}${proxyProtocol}`);
+        this.logInfo(`Starting Colibri TCP server on ${hostPort(host, port)}${credentials ? ', TLS only' : ''}${proxyProtocol}`);
         this.heartbeatInterval = setInterval(() => this.tick(), 100);
     }
 

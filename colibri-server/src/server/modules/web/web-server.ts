@@ -8,6 +8,7 @@ import { Subscription } from 'rxjs';
 import { Service, TlsCredentialSource, TlsCredentials } from '../core/index.js';
 import { MAX_FRAME_LENGTH, REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
+import { hostPort } from '../networking/addresses.js';
 
 // Requests whose JSON body was empty; see hasEmptyJsonBody.
 const emptyJsonBodies = new WeakSet<http.IncomingMessage>();
@@ -139,7 +140,7 @@ export class WebServer extends Service {
         this.server = this.tls ? this.createHttpsServer(this.tls) : http.createServer(this.app);
         this.server.listen(this.webPort, this.hostname, () => {
             this.logInfo(
-                `Web server listening on ${this.hostname}:${this.webPort}${this.tls ? ', HTTPS and WSS only' : ''}`
+                `Web server listening on ${hostPort(this.hostname, this.webPort)}${this.tls ? ', HTTPS and WSS only' : ''}`
             );
         });
 

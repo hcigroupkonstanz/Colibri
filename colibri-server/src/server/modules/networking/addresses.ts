@@ -15,3 +15,8 @@ export const normalizeAddress = function (address: string): string {
     const ipv4 = address.slice(IPV4_MAPPED_PREFIX.length);
     return net.isIPv4(ipv4) ? ipv4 : address;
 };
+
+/** `host:port`, with an IPv6 host in brackets as in a URL: `[::]:9211`, not `:::9211`. */
+export const hostPort = function (host: string, port: number | string): string {
+    return `${net.isIPv6(host) ? `[${host}]` : host}:${port}`;
+};
