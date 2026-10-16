@@ -20,6 +20,8 @@ Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log na
 - The data store accepts any JSON value up to 5 MiB, not only objects and arrays up to 100 kB.
 - The server forgets a deleted object only after `MODEL_TOMBSTONE_SECONDS` (10 minutes), so an old update from
   another client can no longer bring it back.
+- The web, Unity and voice ports listen on IPv6 and IPv4 (`::`) instead of IPv4 only (`0.0.0.0`). Without IPv6, the
+  server listens on IPv4. `WEBSERVER_HOST`, `TCP_HOST` and `VOICE_HOST` set to `0.0.0.0` keep IPv4 only.
 
 ### Added
 
