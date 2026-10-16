@@ -80,6 +80,21 @@ describe('Config', () => {
         });
     });
 
+    describe('hosts', () => {
+        // :: listens on IPv6 and IPv4. 1.x listened on IPv4 only.
+        it('default to :: for web, TCP and voice', async () => {
+            const config = await loadConfig({ WEBSERVER_HOST: undefined, TCP_HOST: undefined, VOICE_HOST: undefined });
+
+            expect([ config.WEBSERVER_HOST, config.TCP_HOST, config.VOICE_HOST ]).toEqual([ '::', '::', '::' ]);
+        });
+
+        it('take 0.0.0.0 for IPv4 only when set', async () => {
+            const config = await loadConfig({ WEBSERVER_HOST: '0.0.0.0', TCP_HOST: '0.0.0.0', VOICE_HOST: '0.0.0.0' });
+
+            expect([ config.WEBSERVER_HOST, config.TCP_HOST, config.VOICE_HOST ]).toEqual([ '0.0.0.0', '0.0.0.0', '0.0.0.0' ]);
+        });
+    });
+
     describe('inbound limits', () => {
         it('default to dropping past a backlog of 2000 TCP messages', async () => {
             const config = await loadConfig({ TCP_INBOUND_BACKLOG_LIMIT: undefined });

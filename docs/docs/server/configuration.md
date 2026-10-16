@@ -53,11 +53,11 @@ The message names the variable. `docker logs colibri` shows it.
 | `WEBSERVER_PORT` | `9211`    | Port for the monitoring page, web clients and the data store (TCP)    |
 | `TCP_PORT`       | `9212`    | Port for Unity clients (TCP)                                           |
 | `VOICE_PORT`     | `9213`    | Port for voice chat (UDP)                                              |
-| `WEBSERVER_HOST` | `0.0.0.0` | Address the web port listens on                                        |
-| `TCP_HOST`       | `0.0.0.0` | Address the Unity port listens on                                      |
-| `VOICE_HOST`     | `0.0.0.0` | Address the voice port listens on                                      |
+| `WEBSERVER_HOST` | `::`      | Address the web port listens on                                        |
+| `TCP_HOST`       | `::`      | Address the Unity port listens on                                      |
+| `VOICE_HOST`     | `::`      | Address the voice port listens on                                      |
 
-`0.0.0.0` listens on every IPv4 address of the server. See [IPv6](#ipv6) for IPv6.
+`::` listens on every IPv6 and IPv4 address of the server, `0.0.0.0` on every IPv4 address only. See [IPv6](#ipv6).
 
 ### Data variables
 
@@ -144,18 +144,17 @@ After a change, enter the new ports in the clients: in Unity's Colibri configura
 
 ## IPv6
 
-The server listens on IPv4 only by default. For clients that reach the server over IPv6, for example because its DNS
-name has only an IPv6 address, set:
+The server listens on IPv6 and IPv4 by default. On a server without IPv6, it listens on IPv4 only, and the log says
+so. To listen on IPv4 only, for example because the firewall covers only IPv4, set:
 
 ```sh
-WEBSERVER_HOST=::
-TCP_HOST=::
-VOICE_HOST=::
+WEBSERVER_HOST=0.0.0.0
+TCP_HOST=0.0.0.0
+VOICE_HOST=0.0.0.0
 ```
 
-`::` listens on IPv6 and IPv4. Another IPv6 address listens on that address only, without IPv4. Behind Docker's
-published ports or a reverse proxy, Docker or the proxy has to listen on IPv6 instead, and these settings can stay at
-their defaults.
+Another IPv6 address listens on that address only, without IPv4. Behind Docker's published ports or a reverse proxy,
+Docker or the proxy has to listen on IPv6 as well.
 
 :::note
 Unity clients connect over IPv4 if the server's name has an IPv4 address, and over IPv6 only if it has none. If the
@@ -352,7 +351,7 @@ done, every Unity connection through the proxy fails. In this order, the log say
 At startup, the log then shows:
 
 ```
-Starting Colibri TCP server on 0.0.0.0:9212, PROXY protocol header required from TRUSTED_PROXIES (loopback, uniquelocal)
+Starting Colibri TCP server on [::]:9212, PROXY protocol header required from TRUSTED_PROXIES (loopback, uniquelocal)
 ```
 
 ### Proxy messages in the log

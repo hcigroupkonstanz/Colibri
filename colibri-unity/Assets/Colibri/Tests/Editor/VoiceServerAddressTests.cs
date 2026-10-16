@@ -14,8 +14,8 @@ using Object = UnityEngine.Object;
 namespace HCIKonstanz.Colibri.Tests
 {
     /// <summary>
-    /// The server's voice socket is IPv4 unless VOICE_HOST is an IPv6 address, so out of everything
-    /// the server name resolves to, voice goes to an IPv4 address when there is one. It used to take
+    /// Every server takes voice over IPv4, but not every one over IPv6, so out of everything the
+    /// server name resolves to, voice goes to an IPv4 address when there is one. It used to take
     /// whichever came first, and on Windows "localhost" usually resolves to ::1 first. A name with
     /// IPv6 addresses only gets its voice sent over IPv6, when the device has a route there.
     /// </summary>
