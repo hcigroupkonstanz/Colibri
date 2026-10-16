@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
-import { StoreDatabase } from '../../src/server/modules/web/store-database.js';
+import { PassThrough } from 'stream';
+import { StoreDatabase, writeStoreJson } from '../../src/server/modules/web/store-database.js';
 
 describe('StoreDatabase', () => {
     const open: StoreDatabase[] = [];
@@ -141,6 +142,44 @@ describe('StoreDatabase', () => {
         open.push(reader);
 
         expect([ ...reader.entries() ]).toEqual([ [ 'a', 'k', '"v"' ] ]);
+    });
+
+    // The output of store-export.js: store.json's shape, which a new data folder imports again.
+    describe('writeStoreJson', () => {
+        const exported = async (db: StoreDatabase): Promise<string> => {
+            const out = new PassThrough();
+            const chunks: Buffer[] = [];
+            out.on('data', (chunk: Buffer) => chunks.push(chunk));
+            await writeStoreJson(db, out);
+            out.end();
+            return Buffer.concat(chunks).toString('utf8');
+        };
+
+        it('writes {} for an empty store', async () => {
+            await expect(exported(memory())).resolves.toBe('{}\n');
+        });
+
+        it('writes every app and value as store.json had them, names that need escaping included', async () => {
+            const store = { appA: { one: 1, two: { x: [ 1, 'ü' ] } }, 'quote"app': { '__proto__': null, 'back\\slash': 'v' } };
+            const db = memory(Object.entries(store).flatMap(([ app, values ]) =>
+                Object.entries(values).map(([ name, value ]): [ string, string, string ] => [ app, name, JSON.stringify(value) ])));
+
+            const json = await exported(db);
+
+            expect(JSON.parse(json)).toEqual(JSON.parse(JSON.stringify(store)));
+            const imported = memory(Object.entries(JSON.parse(json) as Record<string, Record<string, unknown>>).flatMap(([ app, values ]) =>
+                Object.entries(values).map(([ name, value ]): [ string, string, string ] => [ app, name, JSON.stringify(value) ])));
+            expect([ ...imported.entries() ]).toEqual([ ...db.entries() ]);
+        });
+
+        it('writes a store larger than one chunk in pieces that join up', async () => {
+            const db = memory();
+            for (let i = 0; i < 300; i++) db.put(`app${i % 7}`, `key${i}`, JSON.stringify('x'.repeat(1000)));
+
+            const parsed = JSON.parse(await exported(db)) as Record<string, Record<string, string>>;
+
+            expect(Object.values(parsed).reduce((n, values) => n + Object.keys(values).length, 0)).toBe(300);
+        });
     });
 
     it('refuses to read a file that holds no data store', async () => {

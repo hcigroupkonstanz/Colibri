@@ -1,3 +1,4 @@
+import { once } from 'events';
 import { DatabaseSync } from 'node:sqlite';
 
 // The data store's file in DATA_ROOT.
@@ -258,6 +259,34 @@ export class StoreDatabase {
         else this.perApp.delete(app);
     }
 }
+
+// Written in pieces of about this size, so that neither a large store nor a slow pipe has the whole
+// export in memory.
+const EXPORT_CHUNK_CHARS = 64 * 1024;
+
+/**
+ * Writes the store to `out` as JSON in the shape store.json had, { "<app>": { "<name>": <value> } },
+ * for store-export.js. The values go out as stored, without being parsed.
+ */
+export const writeStoreJson = async function (store: StoreDatabase, out: NodeJS.WritableStream): Promise<void> {
+    let chunk = '{';
+    let app: string | undefined;
+    for (const [ entryApp, name, json ] of store.entries()) {
+        if (entryApp !== app) {
+            chunk += `${app === undefined ? '' : '},'}${JSON.stringify(entryApp)}:{`;
+            app = entryApp;
+        } else {
+            chunk += ',';
+        }
+        chunk += `${JSON.stringify(name)}:${json}`;
+        if (chunk.length >= EXPORT_CHUNK_CHARS) {
+            if (!out.write(chunk)) await once(out, 'drain');
+            chunk = '';
+        }
+    }
+    chunk += app === undefined ? '}\n' : '}}\n';
+    if (!out.write(chunk)) await once(out, 'drain');
+};
 
 // SQLite's own order for TEXT (BINARY collation: byte by byte in UTF-8), so that apps() lists the
 // apps in the order names() lists names. localeCompare and < both differ from it for some names.
