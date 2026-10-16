@@ -454,6 +454,9 @@ describe('TCPServerWorker with TLS', () => {
 
             expect(posted.filter(p => p.channel === 'clientConnected$').map(p => p.content.name))
                 .toEqual([ 'over-ipv6', 'over-ipv4' ]);
+            // The IPv4 client by its IPv4 address, not the socket's ::ffff:127.0.0.1.
+            expect(posted.filter(p => p.channel === 'clientConnected$').map(p => p.content.address))
+                .toEqual([ '::1', '127.0.0.1' ]);
         });
 
         it('refuses a TLS client cleanly, saying what to change on either side', async () => {

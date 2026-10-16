@@ -958,7 +958,31 @@ describe('VoiceServer', () => {
 
             unity.disconnect(mapped);
             await settled();
-            expect([ ...internals.clients.keys() ]).toEqual([ '::ffff:192.0.2.2:5002' ]);
+            expect([ ...internals.clients.keys() ]).toEqual([ '192.0.2.2:5002' ]);
+        });
+
+        // A dual-stack VOICE_HOST reports an IPv4 sender as ::ffff:192.0.2.9. The log names it by its
+        // IPv4 address, while the packets to it still go to the address the socket reported.
+        it('names an IPv4-mapped sender by its IPv4 address in the log', async () => {
+            const sent = relays(internals.udpSocket);
+            unity.connect('lab', '192.0.2.1');
+            unity.connect('lab', '192.0.2.2');
+            withClock(at => {
+                deliver(internals.udpSocket, '::ffff:192.0.2.1', 5001, voicePacket(1, 0, [], LAB));
+                deliver(internals.udpSocket, '::ffff:192.0.2.2', 5002, voicePacket(2, 0, [], LAB));
+                for (const offset of [ 0, 3000 ]) {
+                    at(offset);
+                    deliver(internals.udpSocket, '::ffff:192.0.2.9', 5009, voicePacket(9, offset, [], LAB));
+                }
+            });
+
+            expect(sent).toEqual([ '::ffff:192.0.2.1:5001' ]);
+            expect([ ...internals.clients.keys() ].sort()).toEqual([ '192.0.2.1:5001', '192.0.2.2:5002' ]);
+            expect(logs.filter(l => l.origin === 'VoiceServer' && /New voice client/.test(l.message)).map(l => l.message.replace(/ ID: .*$/, '')))
+                .toEqual([ 'New voice client connected from 192.0.2.1:5001', 'New voice client connected from 192.0.2.2:5002' ]);
+            expect(ignoredReports().map(l => l.message.replace(/ \(further .*$/, ''))).toEqual([
+                `Ignoring voice packet from 192.0.2.9:5009 for app ${appHex(LAB)}: no Unity client of that app is connected from 192.0.2.9`,
+            ]);
         });
     });
 });

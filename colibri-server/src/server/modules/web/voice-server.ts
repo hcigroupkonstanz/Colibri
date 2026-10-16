@@ -12,7 +12,8 @@ import {
     VoiceCodec,
 } from './voice-packet.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
-import { UnityClientAddresses, UnityClientSource, normalizeAddress } from './unity-client-addresses.js';
+import { normalizeAddress } from '../networking/addresses.js';
+import { UnityClientAddresses, UnityClientSource } from './unity-client-addresses.js';
 
 // Recordings can run for minutes at 48kHz, so a plain number[] would mean millions of
 // boxed-double pushes. This keeps samples in a flat Int16Array, growing (doubling) only
@@ -86,7 +87,10 @@ interface Rejection {
     last: number;
 }
 
-const voiceClientKey = (address: string, port: number): string => `${address}:${port}`;
+// A voice source as the log names it, and its key in `clients`. An IPv4 sender is named by its IPv4
+// address, also on a dual-stack VOICE_HOST, where the socket reports it as ::ffff:<IPv4 address>.
+// The packets to it still go to the address the socket reported (VoiceClient.ip).
+const voiceClientKey = (address: string, port: number): string => `${normalizeAddress(address)}:${port}`;
 const groupKey = (address: string, appId: number): string => `${address} ${appId}`;
 
 // A voice client sends a packet every 20 ms while it broadcasts (VoiceBroadcast's default frame).
@@ -327,7 +331,7 @@ export class VoiceServer extends Service {
                 if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
                 this.appClients = undefined;
                 this.logDebug(
-                    `New voice client connected from ${remote.address}:${remote.port} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
+                    `New voice client connected from ${clientKey} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
                         + (admission === 'proxy' ? ' (through a trusted proxy, unchecked)' : ''),
                     CONNECTION_LINE
                 );
@@ -337,7 +341,7 @@ export class VoiceServer extends Service {
                 }
             } else if (voiceClient.appId !== appId) {
                 // Its app name changed: from now on it hears, and is heard by, the new app.
-                this.logDebug(`Voice client ${remote.address}:${remote.port} ID: ${voiceClient.userId} moved from app ${formatAppId(voiceClient.appId)} to app ${formatAppId(appId)}`);
+                this.logDebug(`Voice client ${clientKey} ID: ${voiceClient.userId} moved from app ${formatAppId(voiceClient.appId)} to app ${formatAppId(appId)}`);
                 this.leaveGroup(voiceClient);
                 voiceClient.appId = appId;
                 if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
@@ -446,21 +450,21 @@ export class VoiceServer extends Service {
         // about who sent it: nothing can be checked, or counted, there. Asked first, so that a
         // Unity client on the proxy's machine does not have the voice of everyone behind the proxy
         // taken for its own, and dropped when it leaves.
+        const normalized = normalizeAddress(address);
         if (this.trustProxy(address, 0)) {
-            this.reportUncheckedProxy(address);
+            this.reportUncheckedProxy(normalized);
             return 'proxy';
         }
 
-        const normalized = normalizeAddress(address);
         const unityClients = this.unityClients.count(normalized, appId);
         if (unityClients === 0) {
-            this.reportNoUnityClient(source, address, appId, nowMillis);
+            this.reportNoUnityClient(source, normalized, appId, nowMillis);
             return undefined;
         }
 
         const group = this.groups.get(groupKey(normalized, appId));
         if (group && group.clients.size >= unityClients && !this.dropGoneVoiceClient(group, source, nowMillis)) {
-            this.reportNoRoom(source, address, appId, unityClients, nowMillis);
+            this.reportNoRoom(source, normalized, appId, unityClients, nowMillis);
             return undefined;
         }
         return 'unity';
@@ -520,7 +524,7 @@ export class VoiceServer extends Service {
         this.clients.delete(voiceClientKey(client.ip, client.port));
         this.leaveGroup(client);
         this.appClients = undefined;
-        this.logDebug(`Voice client ${client.ip}:${client.port} disconnected ID: ${client.userId}` + (why ? `: ${why}` : ''), CONNECTION_LINE);
+        this.logDebug(`Voice client ${voiceClientKey(client.ip, client.port)} disconnected ID: ${client.userId}` + (why ? `: ${why}` : ''), CONNECTION_LINE);
         if (client.recordingData.length > 0) this.droppedRecordings.push(client);
     }
 
@@ -607,7 +611,7 @@ export class VoiceServer extends Service {
     }
 
     private reportRelayFailure(peer: VoiceClient, err: unknown, nowMillis: number): void {
-        const target = `${peer.ip}:${peer.port}`;
+        const target = voiceClientKey(peer.ip, peer.port);
         // Keyed apart from the peer's own malformed packets, so neither report hides the other.
         if (!this.claimReport(`relay to ${target}`, nowMillis)) return;
 
@@ -702,10 +706,10 @@ export class VoiceServer extends Service {
         try {
             await mkdir(this.voiceRecordingPath, { recursive: true });
             await writeFile(filename, [ wavHeader(this.samplingRate, samples.byteLength), littleEndianBytes(samples) ]);
-            this.logInfo(`Voice recording of client ID ${client.userId} (${client.ip}:${client.port}, ${seconds} s) saved to ${filename}`);
+            this.logInfo(`Voice recording of client ID ${client.userId} (${voiceClientKey(client.ip, client.port)}, ${seconds} s) saved to ${filename}`);
         } catch (err) {
             // An fs error names the file itself.
-            this.logError(`Failed to save the voice recording of client ID ${client.userId} (${client.ip}:${client.port}, ${seconds} s): `
+            this.logError(`Failed to save the voice recording of client ID ${client.userId} (${voiceClientKey(client.ip, client.port)}, ${seconds} s): `
                 + `${err instanceof Error ? err.message : String(err)}`, false);
         }
     }

@@ -1,5 +1,5 @@
-import * as net from 'net';
 import { Observable, Subject } from 'rxjs';
+import { normalizeAddress } from '../networking/addresses.js';
 import { voiceAppId } from './voice-packet.js';
 
 // A Unity (TCP) client as the voice server needs to know it. TCPServerProxy's clients are these.
@@ -21,20 +21,6 @@ export interface UnityClientLeft {
     address: string;
     appId: number;
 }
-
-const IPV4_MAPPED_PREFIX = '::ffff:';
-
-/**
- * `address` without the `::ffff:` of an IPv4-mapped IPv6 address. A dual-stack TCP socket reports an
- * IPv4 client as `::ffff:192.0.2.1`, the IPv4-only voice socket as `192.0.2.1`.
- */
-export const normalizeAddress = function (address: string): string {
-    if (address.length <= IPV4_MAPPED_PREFIX.length || address.slice(0, IPV4_MAPPED_PREFIX.length).toLowerCase() !== IPV4_MAPPED_PREFIX) {
-        return address;
-    }
-    const ipv4 = address.slice(IPV4_MAPPED_PREFIX.length);
-    return net.isIPv4(ipv4) ? ipv4 : address;
-};
 
 /**
  * The addresses the Unity clients of each app are connected from, by voice app id. Voice is relayed
