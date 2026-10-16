@@ -73,7 +73,7 @@ port.
 
 ## Monitoring
 
-The server's web page at `http://<server-address>:9211` shows what happens on the server. It works on phones too.
+The server's web page at `http://<server-address>:9211` shows what happens on the server.
 
 - **Log:** the log of the server and of every client, filtered by app and level. Unity clients send their log with the
   `[RemoteLogger]` prefab, web clients with `RemoteLogger`.

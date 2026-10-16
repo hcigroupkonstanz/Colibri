@@ -12,7 +12,7 @@ connected clients, the synchronized objects and the server's settings. Open it i
 http://<server-address>:9211
 ```
 
-With [TLS](./configuration.md#tls), use `https://` instead. The page works on phones too.
+With [TLS](./configuration.md#tls), use `https://` instead.
 
 The monitoring page only shows information. Nothing on it changes, deletes or disconnects anything.
 
@@ -98,12 +98,6 @@ The _Server_ page shows:
 - the number of clients, apps, synchronized objects and data store values
 
 Use it to check that a change of the configuration took effect. The page never shows certificate files or keys.
-
-## On a phone
-
-On a phone, the log's search, app filter and switches are behind the button at the top right.
-
-![Log page on a phone](/img/server/admin-log-phone.png)
 
 ## Log in the console
 
