@@ -21,6 +21,7 @@ const snapshot = (overrides: Partial<ServerSnapshot> = {}): ServerSnapshot => ({
         VOICE_HOST: '0.0.0.0', VOICE_PORT: 9213, VOICE_SAMPLING_RATE: 48000, VOICE_RECORDING: false,
         TCP_IDLE_TIMEOUT_SECONDS: 10, TCP_INBOUND_BACKLOG_LIMIT: 2000, CLIENT_MESSAGE_RATE_LIMIT: 1000,
         CLIENT_MESSAGE_RATE_BURST: 2000, APP_CLIENT_WARNING_THRESHOLD: 8, MODEL_TOMBSTONE_SECONDS: 600,
+        STORE_EXPIRY_DAYS: 30, STORE_MAX_MB: 0,
         TRUSTED_PROXIES: [], TCP_PROXY_PROTOCOL: false
     },
     tls: null,
@@ -28,7 +29,7 @@ const snapshot = (overrides: Partial<ServerSnapshot> = {}): ServerSnapshot => ({
     voice: { listening: true, recording: false, samplingRate: 48000, clients: 0 },
     counts: {
         tcpClients: 3, webClients: 2, adminPages: 1, apps: 2, models: 1234, modelApps: 2, modelChannels: 3,
-        deletedModels: 4, storeApps: 1, storeKeys: 7
+        deletedModels: 4, storeApps: 1, storeKeys: 7, storeBytes: 1536
     },
     ...overrides
 });
@@ -41,7 +42,7 @@ describe('serverSections', () => {
         const s = snapshot();
         expect(fact(s, 'server', 'Uptime')?.value).toBe('1 h 2 min');
         expect(fact(s, 'counts', 'Synced models')).toEqual(expect.objectContaining({ value: '1,234', note: 'in 3 channels of 2 apps', link: '/models' }));
-        expect(fact(s, 'counts', 'REST store')).toEqual(expect.objectContaining({ value: '7 values', note: 'in 1 app' }));
+        expect(fact(s, 'counts', 'REST store')).toEqual(expect.objectContaining({ value: '7 values', note: 'in 1 app, 1.5 KiB' }));
     });
 
     it('shows the commit after the version, short, with the full hash and the build time on hover', () => {
@@ -71,6 +72,10 @@ describe('serverSections', () => {
         expect(fact(s, 'limits', 'Burst')?.value).toBe('Off');
         expect(fact(s, 'limits', 'TCP idle timeout')?.value).toBe('Off');
         expect(fact(s, 'limits', 'TCP inbound backlog')?.value).toBe('2,000 messages');
+        expect(fact(s, 'limits', 'REST store values kept')).toEqual(expect.objectContaining({ value: '30 days after their last write', variable: 'STORE_EXPIRY_DAYS' }));
+        expect(fact(s, 'limits', 'REST store size')).toEqual(expect.objectContaining({ value: 'Off', variable: 'STORE_MAX_MB' }));
+        expect(fact(snapshot({ settings: { ...s.settings, STORE_EXPIRY_DAYS: 0, STORE_MAX_MB: 512 } }), 'limits', 'REST store values kept')?.value).toBe('Off');
+        expect(fact(snapshot({ settings: { ...s.settings, STORE_MAX_MB: 512 } }), 'limits', 'REST store size')?.value).toBe('512 MiB');
         expect(fact(s, 'network', 'Trusted proxies')?.value).toBe('None');
         expect(fact(s, 'network', 'TLS')?.value).toBe('Off');
     });

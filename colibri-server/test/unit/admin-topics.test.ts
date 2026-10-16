@@ -495,7 +495,7 @@ describe('admin UI topics', () => {
             tcpTlsAtProxy: false,
             voice: { listening: true, recording: false, samplingRate: 48000, clients: 2 },
             store: new DataStore(),
-            restStore: { apps: 2, keys: 5 },
+            restStore: { apps: 2, keys: 5, bytes: 300 },
             tcpClients: [],
             webClients: [],
             ...overrides,
@@ -579,6 +579,7 @@ describe('admin UI topics', () => {
                 deletedModels: 1,
                 storeApps: 2,
                 storeKeys: 5,
+                storeBytes: 300,
             });
         });
     });
