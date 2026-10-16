@@ -7,7 +7,8 @@ title: Data Store
 
 The data store keeps small amounts of data on the server, e.g. the color a player selected, the settings of a game
 or the condition of a study. Unlike [messages](./messages.md) and synchronized objects, the data stays saved after
-all clients disconnect and after the server restarts.
+all clients disconnect and after the server restarts. A value that is not saved again for 30 days is deleted
+([server configuration](../server/configuration.md#data-store)).
 
 The Remote Store sample saves and loads an object of its own class.
 

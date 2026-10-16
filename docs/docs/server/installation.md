@@ -91,7 +91,7 @@ line of every client ends up there.
 
 The server saves its data in `/srv/colibri/data` inside the container:
 
-- `store.json`: the values of the [data store](./protocol.md#data-store)
+- `store.db`: the values of the [data store](./protocol.md#data-store)
 - `.wav` files of [voice recordings](./configuration.md#voice-recording), if you turned them on
 
 The compose file above keeps this data in the Docker volume `colibri-data`. It needs no setup and survives updates of
@@ -104,8 +104,8 @@ replace the volume line:
 ```
 
 You can then remove the `volumes:` section at the end of the file. Docker creates the `data` folder on the first
-start if it does not exist. A `data` folder from a Colibri 1 server works too, because the format of `store.json` has
-not changed.
+start if it does not exist. A `data` folder from a Colibri 1 server works too: on the first start, the server imports
+its `store.json` into `store.db` and renames it to `store.json.imported-<date>`.
 
 :::note
 Leave `DATA_ROOT` unset with Docker, and mount the data at `/srv/colibri/data`.
@@ -133,8 +133,8 @@ folder that belongs to that user, or remove `--user`.
 
 If the server cannot write to its data directory, it prints `DATA_ROOT is not writable: <path>` at startup, with the
 error, its user id and a fix. The monitoring page's log shows the error too. The server keeps running but saves
-nothing: data store values and voice recordings stay in memory and are lost when it stops. Fix the cause and restart
-the server.
+nothing: data store values and voice recordings stay in memory and are lost when it stops. Values that are already in
+`store.db` are still served, as long as the file can be read. Fix the cause and restart the server.
 
 | Error               | Cause                                         | Fix                                                                                   |
 | ------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -216,11 +216,11 @@ To stay on one version, check out its release tag instead of pulling (`git tag` 
 
 | Kept                                        | Lost                                                                         |
 | ------------------------------------------- | ---------------------------------------------------------------------------- |
-| Data store values (`store.json`)            | Synchronized objects. Connected clients send theirs again when they reconnect. |
+| Data store values (`store.db`)              | Synchronized objects. Connected clients send theirs again when they reconnect. |
 | Voice recordings                            | The log on the monitoring page. `docker logs colibri` still has it.            |
 
-On `docker stop` or Ctrl+C, the server first writes pending data store changes and finishes voice recordings in
-progress. Clients reconnect on their own when the server is back.
+On `docker stop` or Ctrl+C, the server finishes voice recordings in progress. Data store changes are already saved:
+the server saves each change before it answers. Clients reconnect on their own when the server is back.
 
 ## Next steps
 
