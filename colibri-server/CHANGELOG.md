@@ -14,7 +14,7 @@ Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log na
   a UDP proxy needs the proxy in `TRUSTED_PROXIES`.
 - **Breaking:** the data store accepts only the media type `application/vnd.colibri.v2+json`. Both Colibri 2 clients
   send it.
-- **Breaking:** running without Docker needs Node.js 24 or newer.
+- **Breaking:** running without Docker needs Node.js 24.15 or newer.
 - **Breaking:** a data store value that is not written again for 30 days is deleted. `STORE_EXPIRY_DAYS` sets the
   days, `0` keeps values for good.
 - The Docker image runs the server as the non-root user `node` (uid 1000) and takes over the data directory on

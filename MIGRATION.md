@@ -39,7 +39,7 @@ them as described under [Unity](#unity).
    data folder as `store.json`. The server now runs as user `node` (uid 1000) and takes
    over the data directory on startup. If you start the container with `--user` (or `user:` in compose), give the
    directory to that user first, e.g. `sudo chown -R 1001:1001 ./data` for `--user 1001:1001`.
-5. **Without Docker:** the server needs Node.js 24 or newer.
+5. **Without Docker:** the server needs Node.js 24.15 or newer.
 
 If you use voice chat through a UDP proxy, add the proxy to `TRUSTED_PROXIES`, or publish 9213/udp directly.
 Otherwise the server drops the voice.

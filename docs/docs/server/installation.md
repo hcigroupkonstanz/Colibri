@@ -17,7 +17,7 @@ VPN.
 
 ## Requirements
 
-- Docker, or Node.js 24 or newer
+- Docker, or Node.js 24.15 or newer
 - Open ports 9211/tcp, 9212/tcp and 9213/udp (see below)
 - Colibri 2 clients. The server refuses Colibri 1 clients. To upgrade an existing project, see the
   [Migration Guide](https://github.com/hcigroupkonstanz/Colibri/blob/develop/MIGRATION.md).
@@ -168,7 +168,7 @@ In your own compose file, replace the `image:` line with a `build:` section:
 
 ## Node.js
 
-Without Docker, the server needs Node.js 24 or newer:
+Without Docker, the server needs Node.js 24.15 or newer:
 
 ```sh
 git clone https://github.com/hcigroupkonstanz/Colibri.git
