@@ -41,7 +41,7 @@ The _Log_ page shows the log of the server and of every client that sends its lo
 - **Download:** saves the lines that match the filters and the search, as text or as JSON.
 
 The filters are part of the page's address, so a reload or a copied link keeps them, e.g.
-`/log?levels=error,warn&q=timeout#MyApp`.
+`/log?levels=error,warn&q=timeout#myAppName`.
 
 Times are in the browser's local time. Hover over a time to see it in UTC, as `docker logs` shows it.
 
@@ -64,7 +64,7 @@ The _Clients_ page lists every connected Unity and web client with:
 - whether a [load limit](./configuration.md#load-limits) holds back its updates: _Rate limit_ or _Backlog_, with the
   number of objects held
 
-Click a column to sort by it. Show only one app with `/clients?app=MyApp`, and open a client's lines in the log. While
+Click a column to sort by it. Show only one app with `/clients?app=myAppName`, and open a client's lines in the log. While
 the mouse is over the list, its order stays fixed.
 
 Below the list, two charts show the last 2 minutes: the latency of each client, and the messages per second of all
@@ -145,7 +145,7 @@ Each line appears in the log with the client's name and app.
 | `Refusing client '<name>' ...: Unsupported protocol version '1' ...`        | A web client with Colibri 1                                                             | Update the client to Colibri 2                                                                              |
 | `Refusing a connection from <address> ...` about TLS                        | _Server supports SSL/TLS?_ in Unity does not match the server                           | Fix the TLS setting ([TLS errors](./configuration.md#tls-errors))                                           |
 | A Unity client disconnects while stopped at a breakpoint                    | The debugger also pauses the client's answers to the server                             | Raise `TCP_IDLE_TIMEOUT_SECONDS` or set it to `0` ([Idle timeout](./configuration.md#idle-timeout))         |
-| `App 'MyApp' now has 9 clients, more than 8 ...`                            | Several projects use the same app name                                                  | Give each project its own app name                                                                          |
+| `App 'myAppName' now has 9 clients, more than 8 ...`                            | Several projects use the same app name                                                  | Give each project its own app name                                                                          |
 | A warning naming `CLIENT_MESSAGE_RATE_LIMIT`                                | The named client sends too much, usually in every frame                                 | Send less often from that client ([Load limits](./configuration.md#load-limits))                            |
 | A warning naming `TCP_INBOUND_BACKLOG_LIMIT`                                | The server receives more than it can handle                                             | Synchronize fewer objects, less often, or with fewer clients per app                                        |
 | `Client '<name>' ... sent '<command>' on channel '<channel>', which the server does not handle ...` | The client sent a message the server does not pass on              | Send messages with Colibri's functions for messages ([Unity](../unity/messages.md), [web](../web/messages.md)) |

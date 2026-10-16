@@ -100,7 +100,7 @@ To see Colibri at work, you need two clients with the same configuration. You ha
 
 For example, with the SendData sample:
 
-1. [Configure](./configuration.md) Colibri with an app name and a server address, and enable *Run In
+1. [Configure](./configuration.md) Colibri with the app name `myAppName` and a server address, and enable *Run In
    Background/Run Without Focus*.
 2. Import the SendData sample.
 3. Copy the project as described above and open the copy in a second Editor.

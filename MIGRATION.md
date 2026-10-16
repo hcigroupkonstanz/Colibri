@@ -43,7 +43,7 @@ Otherwise the server drops the voice.
 If your own scripts write to the data store over HTTP, send `Content-Type: application/vnd.colibri.v2+json`:
 
 ```sh
-curl -X PUT -H 'Content-Type: application/vnd.colibri.v2+json' -d '{"x":1}' http://localhost:9211/api/store/myApp/myKey
+curl -X PUT -H 'Content-Type: application/vnd.colibri.v2+json' -d '{"x":1}' http://localhost:9211/api/store/myAppName/myKey
 ```
 
 ## Unity

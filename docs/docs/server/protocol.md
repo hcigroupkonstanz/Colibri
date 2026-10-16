@@ -74,10 +74,10 @@ the sender. The server does not store it, so a client that connects later does n
 
 ```mermaid
 sequenceDiagram
-    participant A as Client A (app MyApp)
+    participant A as Client A (app myAppName)
     participant S as Server
-    participant B as Client B (app MyApp)
-    participant C as Client C (app MyApp)
+    participant B as Client B (app myAppName)
+    participant C as Client C (app myAppName)
     participant X as Client X (app Other)
     A->>S: channel "position", broadcast::vector3 [1, 2, 3]
     S->>B: channel "position", broadcast::vector3 [1, 2, 3]
@@ -167,8 +167,8 @@ Values are JSON with the media type `application/vnd.colibri.v2+json`. A `PUT` m
 gets `415` and stores nothing. With curl:
 
 ```sh
-curl -X PUT -H 'Content-Type: application/vnd.colibri.v2+json' -d '{"x":1}' http://localhost:9211/api/store/myApp/myKey
-curl http://localhost:9211/api/store/myApp/myKey
+curl -X PUT -H 'Content-Type: application/vnd.colibri.v2+json' -d '{"x":1}' http://localhost:9211/api/store/myAppName/myKey
+curl http://localhost:9211/api/store/myAppName/myKey
 ```
 
 - A value may be up to 5 MiB.
@@ -186,9 +186,9 @@ passes each packet to every other client of the same app that sends voice.
 
 ```mermaid
 flowchart LR
-    A["Unity client A<br/>app MyApp"] -->|"voice"| S(("Server"))
-    S -->|"voice"| B["Unity client B<br/>app MyApp"]
-    S -->|"voice"| C["Unity client C<br/>app MyApp"]
+    A["Unity client A<br/>app myAppName"] -->|"voice"| S(("Server"))
+    S -->|"voice"| B["Unity client B<br/>app myAppName"]
+    S -->|"voice"| C["Unity client C<br/>app myAppName"]
     S -.-x|"nothing"| D["Unity client D<br/>app Other"]
 ```
 

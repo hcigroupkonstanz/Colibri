@@ -15,7 +15,7 @@ Create the Colibri client once, when your app starts:
 ```ts
 import { Colibri } from '@hcikn/colibri';
 
-new Colibri('your-app-name', 'colibri.hci.uni-konstanz.de');
+new Colibri('myAppName', 'colibri.hci.uni-konstanz.de');
 ```
 
 - The first argument is the **app name**. Set it to a unique name that is not used on the server. Clients exchange
@@ -38,18 +38,18 @@ All of these connect to the same server:
 
 ```ts
 // the address of the monitoring page, without a page path such as '/log'
-new Colibri('your-app-name', 'http://<server-address>:9211');
+new Colibri('myAppName', 'http://<server-address>:9211');
 
 // the host, with an optional port
-new Colibri('your-app-name', '<server-address>');
-new Colibri('your-app-name', '<server-address>', 9211);
+new Colibri('myAppName', '<server-address>');
+new Colibri('myAppName', '<server-address>', 9211);
 ```
 
 ## App name
 
 - All clients of your app, web and Unity, must use the same app name.
-- Anyone else who uses the name joins your app and sees its messages and synchronized objects. Choose a unique name,
-  not a placeholder like `app_name` or `test`.
+- Anyone else who uses the name joins your app and sees its messages and synchronized objects. The examples and
+  samples use `myAppName`. For your own project, choose a unique name.
 - `colibri` is reserved for the server's monitoring page. The server treats a client with this name as a monitoring
   page: it sends it the server's log and skips the protocol version check. Colibri warns if you use it.
 
@@ -71,7 +71,7 @@ new Colibri('your-app-name', '<server-address>', 9211);
 
   ```ts
   const params = new URLSearchParams(window.location.search);
-  new Colibri('your-app-name', params.get('server') ?? undefined, Number(params.get('port') ?? 9211));
+  new Colibri('myAppName', params.get('server') ?? undefined, Number(params.get('port') ?? 9211));
   ```
 
 `new Colibri()` throws a `ColibriError` for an address it cannot connect to:
@@ -152,7 +152,7 @@ Colibri 1 and Colibri 2 cannot talk to each other. Colibri checks this when it c
 ```ts
 import { Colibri } from '@hcikn/colibri';
 
-const colibri = new Colibri('your-app-name', 'http://<server-address>:9211');
+const colibri = new Colibri('myAppName', 'http://<server-address>:9211');
 colibri.protocolMismatch.subscribe(error => {
     if (error.fatal) {
         // disconnected, no reconnect: install matching colibri-web and colibri-server versions

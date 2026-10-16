@@ -380,7 +380,7 @@ Every message and every object update goes to every other client of the app. So 
 square of an app's size: twice the clients means four times the work.
 
 - **Give each project its own app name.** When an app has more than `APP_CLIENT_WARNING_THRESHOLD` (8) clients, the
-  log warns, e.g. `App 'MyApp' now has 9 clients, more than 8 (APP_CLIENT_WARNING_THRESHOLD) ...`. Usually, several
+  log warns, e.g. `App 'myAppName' now has 9 clients, more than 8 (APP_CLIENT_WARNING_THRESHOLD) ...`. Usually, several
   projects on the same server use the same app name.
 - **One client sends too much.** Above `CLIENT_MESSAGE_RATE_LIMIT` (1000 per second), the log warns with the
   client's name. Normal clients stay far below it: 10 objects synchronized 72 times a second are 720 updates a second.
