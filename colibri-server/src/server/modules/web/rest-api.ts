@@ -1,80 +1,99 @@
 import { Service } from '../core/index.js';
 import { hasEmptyJsonBody, hasRestMediaType, WebServer } from './web-server.js';
 import { REST_MEDIA_TYPE } from '../networking/protocol.js';
+import { StoreCheckpointer } from './store-checkpoint.js';
+import { STORE_DATABASE_FILENAME, StoreDatabase, StoreEntry } from './store-database.js';
 import { Router } from 'express';
-import { lstat, mkdir, readFile, rename, writeFile } from 'fs/promises';
+import { lstat, mkdir, readFile, rename } from 'fs/promises';
 import * as path from 'path';
 
-const STORE_FILENAME = 'store.json';
-const SAVE_DEBOUNCE_MILLIS = 250;
+// What Colibri 1.x and the 2.0 development versions kept the store in. Imported once, into a new
+// store.db, then renamed.
+const STORE_JSON_FILENAME = 'store.json';
+
+const DAY_MILLIS = 24 * 60 * 60 * 1000;
+const EXPIRY_INTERVAL_MILLIS = 60 * 60 * 1000;
+// A full store refuses every PUT that would grow it; the warning that says so is logged at most
+// this often.
+const FULL_WARNING_INTERVAL_MILLIS = 60_000;
+// How often the write-ahead log is copied into store.db (see StoreCheckpointer), and how often a
+// checkpoint that keeps failing is logged.
+const CHECKPOINT_INTERVAL_MILLIS = 1000;
+const CHECKPOINT_WARNING_INTERVAL_MILLIS = 60_000;
 
 const errorMessage = function (err: unknown): string {
     return err instanceof Error ? err.message : String(err);
 };
 
-// App name -> value name -> value, both names straight from the URL. Maps rather than plain
-// objects: `this.data[req.params.app]` resolved any name that is also an Object.prototype
-// member to that member, so DELETE /api/store/constructor/keys deleted Object.keys from the
-// whole process (every later request answered 500 until a restart) and
-// PUT /api/store/__proto__/x wrote onto Object.prototype. A Map has no inherited keys, so
-// '__proto__', 'constructor' and the like are ordinary names.
-type StoreData = Map<string, Map<string, unknown>>;
+export interface RestStoreOptions {
+    // Values not written for this many days are deleted. 0 keeps them for good.
+    expiryDays?: number;
+    // A PUT that would take the store above this many bytes of JSON is refused with 507. 0 never.
+    maxBytes?: number;
+    // Date.now(), for the tests.
+    now?: () => number;
+}
+
+// What store.json held, as far as it could be loaded.
+interface LoadedStoreJson {
+    // Whether there was a store.json at all.
+    present: boolean;
+    entries: StoreEntry[];
+    apps: number;
+    // Why it was not loaded, or only in part (unreadable, not JSON, not an object of objects).
+    unloadedReason?: string;
+}
 
 export class RestAPI extends Service {
     public serviceName = 'RestAPI';
     public groupName = 'web';
 
-    private data: StoreData = new Map();
-    private readonly storeFilePath: string;
-    private readonly storeTempFilePath: string;
+    private db: StoreDatabase | undefined;
+    private readonly databasePath: string;
+    private readonly storeJsonPath: string;
+    private readonly expiryDays: number;
+    private readonly maxBytes: number;
+    private readonly now: () => number;
+    private expiryTimer: NodeJS.Timeout | undefined;
+    private checkpointer: StoreCheckpointer | undefined;
+    private checkpointWarnedAt = -Infinity;
+    private fullWarnedAt = -Infinity;
 
-    private saveTimeout: NodeJS.Timeout | undefined;
-    private savePromise: Promise<void> = Promise.resolve();
-    // Whether `data` holds a change store.json does not have yet - set by every change,
-    // cleared when a write takes its snapshot, and set again if that write fails.
-    private dirty = false;
-    // Why store.json was not loaded, or only in part (unreadable, not JSON, not an object of
-    // objects), until it has been moved aside. The store starts without whatever was left out,
-    // and its first save used to overwrite the file with only what was loaded - one PUT after
-    // a restart and the rest of it was gone. See moveUnloadedStoreAside.
-    private unloadedReason: string | undefined;
-
-    public constructor(dataPath: string, webserver: WebServer) {
+    public constructor(dataPath: string, webserver: WebServer, options: RestStoreOptions = {}) {
         super();
 
-        this.storeFilePath = path.join(dataPath, STORE_FILENAME);
-        this.storeTempFilePath = `${this.storeFilePath}.tmp`;
+        this.databasePath = path.join(dataPath, STORE_DATABASE_FILENAME);
+        this.storeJsonPath = path.join(dataPath, STORE_JSON_FILENAME);
+        this.expiryDays = options.expiryDays ?? 0;
+        this.maxBytes = options.maxBytes ?? 0;
+        this.now = options.now ?? Date.now;
 
         webserver.addApi('/store', Router()
             .get('/', (req, res) => {
                 // Return all available apps
-                const keys = Array.from(this.data.keys());
-                res.status(200).json(keys);
+                res.status(200).json(this.store.apps());
             })
             .get('/:app', (req, res) => {
-                const app = this.data.get(req.params.app);
                 // If app not exist return an error
-                if (!app) {
+                if (!this.store.hasApp(req.params.app)) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
                 } else {
                     // Return all available values of the app
-                    const keys = Array.from(app.keys());
-                    res.status(200).json(keys);
+                    res.status(200).json(this.store.names(req.params.app));
                 }
             })
             .get('/:app/:value', (req, res) => {
-                const app = this.data.get(req.params.app);
                 // If app not exist return an error
-                if (!app) {
+                if (!this.store.hasApp(req.params.app)) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
                 } else {
-                    const value = app.get(req.params.value);
+                    const json = this.store.get(req.params.app, req.params.value);
                     // If value not exist return an error
-                    if (value === undefined) {
+                    if (json === undefined) {
                         res.status(404).json({ error: 'Value with name ' + req.params.value + ' not found' });
                     } else {
                         // Return data of value
-                        res.status(200).json(value);
+                        res.status(200).json(JSON.parse(json));
                     }
                 }
             })
@@ -101,194 +120,269 @@ export class RestAPI extends Service {
                     return;
                 }
 
-                let statusCode = 200;
-                // If app name not exist create app name
-                let app = this.data.get(req.params.app);
-                if (!app) {
-                    app = new Map();
-                    this.data.set(req.params.app, app);
-                    statusCode = 201;
-                } else if (!app.has(req.params.value)) {
-                    statusCode = 201;
+                const json = JSON.stringify(req.body);
+                if (this.wouldExceedMaxBytes(req.params.app, req.params.value, json)) {
+                    const error = `Value with name ${req.params.value} not saved: the data store is full `
+                        + `(STORE_MAX_MB ${this.maxBytes / (1024 * 1024)})`;
+                    this.warnFull(error);
+                    res.status(507).json({ error });
+                    return;
                 }
-                // Set data to the corresponding value
-                app.set(req.params.value, req.body);
+
+                // 201 for a value, or an app, that was not there before
+                const created = this.store.put(req.params.app, req.params.value, json, this.now()) === 'created';
                 // Return successful result with the sended data
-                res.status(statusCode).json({ result: 'Value with name ' + req.params.value + ' saved successfully', data: req.body });
-                // Save data in data store file
-                this.scheduleSave();
+                res.status(created ? 201 : 200).json({ result: 'Value with name ' + req.params.value + ' saved successfully', data: req.body });
             })
             .delete('/:app', (req, res) => {
-                const app = this.data.get(req.params.app);
                 // If app not exist return an error
-                if (!app) {
+                if (!this.store.hasApp(req.params.app)) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
                 } else {
                     // Delete the app
-                    this.data.delete(req.params.app);
+                    this.store.deleteApp(req.params.app);
                     // Return successful result
                     res.status(200).json({ result: 'App with name ' + req.params.app + ' deleted successfully' });
-                    // Save data in data store file
-                    this.scheduleSave();
                 }
             })
             .delete('/:app/:value', (req, res) => {
-                const app = this.data.get(req.params.app);
                 // If app not exist return an error
-                if (!app) {
+                if (!this.store.hasApp(req.params.app)) {
                     res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
-                } else {
-                    const value = app.get(req.params.value);
+                } else if (!this.store.delete(req.params.app, req.params.value)) {
                     // If value not exist return an error
-                    if (value === undefined) {
-                        res.status(404).json({ error: 'Value with name ' + req.params.value + ' not found' });
-                    } else {
-                        // Delete the value
-                        app.delete(req.params.value);
-                        // Return successful result
-                        res.status(200).json({ result: 'Value with name ' + req.params.value + ' deleted successfully' });
-                        // Save data in data store file
-                        this.scheduleSave();
-                    }
+                    res.status(404).json({ error: 'Value with name ' + req.params.value + ' not found' });
+                } else {
+                    // Return successful result
+                    res.status(200).json({ result: 'Value with name ' + req.params.value + ' deleted successfully' });
                 }
             }));
     }
 
-    // How many apps the store holds values for, and how many values, for the admin UI.
-    public counts(): { apps: number; keys: number } {
-        let keys = 0;
-        for (const values of this.data.values()) keys += values.size;
-        return { apps: this.data.size, keys };
+    private get store(): StoreDatabase {
+        if (!this.db) throw new Error('The data store is used before init()');
+        return this.db;
     }
 
-    // Runs before the web server starts serving requests, so a request can never observe
-    // the empty default `data` instead of what was actually persisted.
+    // How many apps the store holds values for, how many values, and how many bytes of JSON they
+    // take, for the admin UI.
+    public counts(): { apps: number; keys: number; bytes: number } {
+        return this.db?.counts() ?? { apps: 0, keys: 0, bytes: 0 };
+    }
+
+    // Runs before the web server starts serving requests, so a request can never find the store
+    // before store.db is open, or before store.json has been imported into it.
     public override async init(): Promise<void> {
+        await this.open();
+
+        if (this.expiryDays > 0) {
+            this.expire();
+            this.expiryTimer = setInterval(() => this.expire(), EXPIRY_INTERVAL_MILLIS);
+            this.expiryTimer.unref();
+        }
+    }
+
+    // Opens store.db, importing store.json into it if store.db is new. A store.db that cannot be
+    // opened, created or written (a DATA_ROOT or a store.db the server cannot write, a full disk, a
+    // damaged file) leaves the store in memory, with the values store.db holds if it can still be
+    // read, or else store.json's, as the store used to run when it could not save: answering, but
+    // forgetting every change at the next restart.
+    private async open(): Promise<void> {
+        let db: StoreDatabase | undefined;
+        let loaded: LoadedStoreJson | undefined;
         try {
-            const raw = await readFile(this.storeFilePath, 'utf8');
-            this.data = this.parseStore(raw);
+            await mkdir(path.dirname(this.databasePath), { recursive: true });
+            db = StoreDatabase.open(this.databasePath);
+            if (db.initialized) {
+                db.initialize();
+            } else {
+                loaded = await this.loadStoreJson();
+                db.initialize(loaded.entries, this.now());
+            }
+            db.assertWritable();
+            this.db = db;
         } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
-            this.unloadedReason = errorMessage(err);
-            this.logError(`Could not load ${this.storeFilePath}: ${this.unloadedReason}. The store starts empty.`, false);
+            db?.close();
+            await this.openInMemory(err, loaded);
+            return;
         }
 
-        if (this.unloadedReason !== undefined) {
-            this.logError(`${this.storeFilePath} is moved aside, to ${STORE_FILENAME}.corrupt-<date and time>, before the store `
-                + 'is next saved, instead of being overwritten with only what could be loaded.', false);
+        this.startCheckpointer(this.db);
+        if (loaded?.present) await this.retireStoreJson(loaded);
+        else await this.reportStoreJsonLeftBehind();
+    }
+
+    private async openInMemory(err: unknown, loaded: LoadedStoreJson | undefined): Promise<void> {
+        let entries: StoreEntry[];
+        let source: string | undefined = STORE_DATABASE_FILENAME;
+        try {
+            const readOnly = StoreDatabase.openReadOnly(this.databasePath);
+            try {
+                entries = Array.from(readOnly.entries());
+            } finally {
+                readOnly.close();
+            }
+        } catch {
+            loaded ??= await this.loadStoreJson();
+            entries = loaded.entries;
+            source = loaded.present ? STORE_JSON_FILENAME : undefined;
         }
+
+        this.db = StoreDatabase.open(':memory:');
+        this.db.initialize(entries, this.now());
+        this.logError(`Could not open ${this.databasePath} for writing: ${errorMessage(err)}. The data store keeps its values `
+            + `in memory${source ? `, starting with the ${entries.length} value(s) in ${source}` : ''}, and saves nothing `
+            + 'until the server can write it.', false);
+    }
+
+    // Automatic checkpoints off, and a worker thread doing them instead (see StoreCheckpointer). If
+    // the worker ends, they are turned back on, so that the write-ahead log cannot grow for good.
+    private startCheckpointer(db: StoreDatabase): void {
+        this.checkpointer = StoreCheckpointer.start(this.databasePath, CHECKPOINT_INTERVAL_MILLIS, (error, workerGone) => {
+            if (workerGone) {
+                if (db === this.db) db.setAutoCheckpoint(1000);
+                this.logError(`Data store: ${error.message}. store.db is checkpointed by the server's own writes from now on.`, false);
+                return;
+            }
+            const now = this.now();
+            if (now - this.checkpointWarnedAt < CHECKPOINT_WARNING_INTERVAL_MILLIS) return;
+            this.checkpointWarnedAt = now;
+            this.logWarning(`Data store: a checkpoint of ${this.databasePath} failed: ${error.message}. `
+                + 'This is logged at most once a minute.');
+        });
+        db.setAutoCheckpoint(0);
     }
 
     // store.json is an object of objects. A store file that parses to null, an array, or a
     // scalar (hand-edited, truncated by an older version, restored from the wrong place) is
-    // ignored instead of becoming a store the routes can't serve. JSON.parse defines every
-    // key as an own property, '__proto__' included, so Object.entries sees all of them.
-    private parseStore(raw: string): StoreData {
-        const parsed: unknown = JSON.parse(raw);
-        const store: StoreData = new Map();
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            this.unloadedReason = 'expected a JSON object at the top level';
-            this.logError(`Ignoring ${STORE_FILENAME}: ${this.unloadedReason}`, false);
-            return store;
+    // ignored, and so is an app whose values are not an object. JSON.parse defines every key as
+    // an own property, '__proto__' included, so Object.entries sees all of them.
+    private async loadStoreJson(): Promise<LoadedStoreJson> {
+        let raw: string;
+        try {
+            raw = await readFile(this.storeJsonPath, 'utf8');
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { present: false, entries: [], apps: 0 };
+            const unloadedReason = errorMessage(err);
+            this.logError(`Could not load ${this.storeJsonPath}: ${unloadedReason}. The store starts without it.`, false);
+            return { present: true, entries: [], apps: 0, unloadedReason };
         }
 
-        for (const [app, values] of Object.entries(parsed)) {
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (err) {
+            const unloadedReason = errorMessage(err);
+            this.logError(`Could not load ${this.storeJsonPath}: ${unloadedReason}. The store starts without it.`, false);
+            return { present: true, entries: [], apps: 0, unloadedReason };
+        }
+
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            const unloadedReason = 'expected a JSON object at the top level';
+            this.logError(`Ignoring ${STORE_JSON_FILENAME}: ${unloadedReason}`, false);
+            return { present: true, entries: [], apps: 0, unloadedReason };
+        }
+
+        const entries: StoreEntry[] = [];
+        let apps = 0;
+        let unloadedReason: string | undefined;
+        for (const [ app, values ] of Object.entries(parsed)) {
             if (values === null || typeof values !== 'object' || Array.isArray(values)) {
-                this.unloadedReason ??= `expected an object of values for app '${app}'`;
-                this.logError(`Ignoring app '${app}' in ${STORE_FILENAME}: expected an object of values`, false);
+                unloadedReason ??= `expected an object of values for app '${app}'`;
+                this.logError(`Ignoring app '${app}' in ${STORE_JSON_FILENAME}: expected an object of values`, false);
                 continue;
             }
-            store.set(app, new Map(Object.entries(values)));
-        }
-        return store;
-    }
-
-    // The inverse of parseStore, in the `{ app: { value: ... } }` shape store.json has always
-    // had. Object.fromEntries defines own properties (it never runs the __proto__ setter), so
-    // even a name like '__proto__' is written out as an ordinary key.
-    private serializeStore(): string {
-        return JSON.stringify(Object.fromEntries(
-            Array.from(this.data, ([app, values]) => [app, Object.fromEntries(values)])
-        ));
-    }
-
-    // Cancels any pending debounce and writes the current data immediately - used at
-    // shutdown so the last update before the process exits isn't lost to an unflushed timer.
-    // Writes only what is unsaved: it used to rewrite store.json at every shutdown, which on
-    // a DATA_ROOT the server cannot write logged an EACCES even when nothing had changed.
-    public async flush(): Promise<void> {
-        if (this.saveTimeout) {
-            clearTimeout(this.saveTimeout);
-            this.saveTimeout = undefined;
-        }
-        await this.savePromise;
-        if (!this.dirty) return;
-        this.savePromise = this.writeStoreFile();
-        await this.savePromise;
-    }
-
-    // A burst of PUT/DELETE calls (e.g. many models saved in a loop) coalesces into a
-    // single write instead of one fs write per request.
-    private scheduleSave(): void {
-        this.dirty = true;
-        if (this.saveTimeout) return;
-        this.saveTimeout = setTimeout(() => {
-            this.saveTimeout = undefined;
-            // Chained onto whatever write is still in flight rather than started alongside
-            // it: two concurrent writeStoreFile() calls share one store.json.tmp, and
-            // interleaved writes followed by two renames can publish a partial file -
-            // defeating the whole point of the temp-file-then-rename swap.
-            this.savePromise = this.savePromise.then(() => this.writeStoreFile());
-        }, SAVE_DEBOUNCE_MILLIS);
-    }
-
-    // Write to a temp file, then rename over the real one - a crash mid-write can never
-    // truncate store.json, since the rename only ever swaps in a fully-written file.
-    private async writeStoreFile(): Promise<void> {
-        try {
-            // Snapshot and flag together: a change made while this write is in flight sets
-            // `dirty` again, and the save that change schedules writes it.
-            const json = this.serializeStore();
-            this.dirty = false;
-            await mkdir(path.dirname(this.storeFilePath), { recursive: true });
-            if (this.unloadedReason !== undefined) {
-                await this.moveUnloadedStoreAside(this.unloadedReason);
-                this.unloadedReason = undefined;
+            apps++;
+            for (const [ name, value ] of Object.entries(values)) {
+                entries.push([ app, name, JSON.stringify(value) ]);
             }
-            await writeFile(this.storeTempFilePath, json, 'utf8');
-            await rename(this.storeTempFilePath, this.storeFilePath);
+        }
+        return { present: true, entries, apps, unloadedReason };
+    }
+
+    // Renames the store.json that has just been imported, so that nothing reads it again and a
+    // look at the data folder shows what happened: store.json.imported-<date and time>, or
+    // store.json.corrupt-<date and time> if it could not be loaded, or only in part, with its
+    // contents kept there unchanged. Never over an existing file: a name that is taken gets a
+    // counter. Logs, rather than throws, when it cannot: store.db is fine either way.
+    private async retireStoreJson(loaded: LoadedStoreJson): Promise<void> {
+        const corrupt = loaded.unloadedReason !== undefined;
+        // No colons, which a Windows file name cannot have.
+        const base = `${this.storeJsonPath}.${corrupt ? 'corrupt' : 'imported'}-${new Date(this.now()).toISOString().replace(/:/g, '-')}`;
+        try {
+            let target = base;
+            for (let n = 2; await RestAPI.exists(target); n++) {
+                target = `${base}-${n}`;
+            }
+            await rename(this.storeJsonPath, target);
+
+            if (corrupt) {
+                this.logError(`Moved ${this.storeJsonPath} to ${target}: it could not be loaded, or only in part `
+                    + `(${loaded.unloadedReason}). ${loaded.entries.length} value(s) of ${loaded.apps} app(s) were imported `
+                    + `into ${STORE_DATABASE_FILENAME}. Its contents are kept there, unchanged.`, false);
+            } else {
+                this.logInfo(`Imported ${loaded.entries.length} value(s) of ${loaded.apps} app(s) from ${STORE_JSON_FILENAME} `
+                    + `into ${STORE_DATABASE_FILENAME}, and renamed it to ${path.basename(target)}`);
+            }
         } catch (err) {
-            // Still unsaved, so the next save - at the latest flush() at shutdown - tries again.
-            this.dirty = true;
-            this.logError(errorMessage(err), false);
+            // Removed since it was read: there is nothing left to rename.
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+            this.logError(`Imported ${STORE_JSON_FILENAME} into ${STORE_DATABASE_FILENAME}, but could not rename `
+                + `${this.storeJsonPath} to ${base}: ${errorMessage(err)}. It is not read again.`, false);
         }
     }
 
-    // Moves the store.json that init() could not load, or only in part, to
-    // store.json.corrupt-<date and time> next to it, before the first save replaces it. Never
-    // over an existing file: a name that is taken (an earlier run's, in the same millisecond)
-    // gets a counter. Throws if the file is there but cannot be moved, so that writeStoreFile
-    // saves nothing rather than overwrite it, and tries again with the next save.
-    private async moveUnloadedStoreAside(reason: string): Promise<void> {
-        // No colons, which a Windows file name cannot have.
-        const base = `${this.storeFilePath}.corrupt-${new Date().toISOString().replace(/:/g, '-')}`;
-        let target = base;
-        for (let n = 2; await RestAPI.exists(target); n++) {
-            target = `${base}-${n}`;
-        }
+    // A store.json next to a store.db that already holds the store is not imported: it would
+    // overwrite newer values with older ones. Most likely it is a copy put there to restore the
+    // store, which works in a data folder without store.db.
+    private async reportStoreJsonLeftBehind(): Promise<void> {
+        if (!await RestAPI.exists(this.storeJsonPath)) return;
+        this.logWarning(`Not importing ${this.storeJsonPath}: ${STORE_DATABASE_FILENAME} already holds the data store. `
+            + `To restore the store from it, stop the server and remove ${STORE_DATABASE_FILENAME} `
+            + `(and ${STORE_DATABASE_FILENAME}-wal and -shm next to it) first.`);
+    }
 
+    // Deletes the values not written for expiryDays. Never throws: at startup that would stop the
+    // server, and in the timer it would be an uncaught exception, both for a store.db that another
+    // program has locked for a moment, or a full disk.
+    private expire(): void {
+        if (!this.db) return;
         try {
-            await rename(this.storeFilePath, target);
+            const removed = this.db.expire(this.now() - this.expiryDays * DAY_MILLIS);
+            if (removed > 0) {
+                this.logInfo(`Data store: removed ${removed} value(s) not written for ${this.expiryDays} days (STORE_EXPIRY_DAYS)`);
+            }
         } catch (err) {
-            // Removed since startup: there is nothing left that the save could overwrite.
-            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
-            throw new Error(`Not saving the store: ${this.storeFilePath}, which could not be loaded at startup, `
-                + `would be overwritten, and moving it aside to ${target} failed: ${errorMessage(err)}`);
+            this.logError(`Data store: could not remove the values not written for ${this.expiryDays} days: `
+                + `${errorMessage(err)}. Tried again in an hour.`, false);
         }
+    }
 
-        this.logError(`Moved ${this.storeFilePath} to ${target} before saving the store: it could not be loaded `
-            + `at startup (${reason}), and saving would have overwritten it with only what was loaded. `
-            + 'Its contents are kept there, unchanged.', false);
+    // Whether storing `json` would take the store above maxBytes. A replaced value counts only by
+    // how much it grows, so that a full store still takes a value that does not grow.
+    private wouldExceedMaxBytes(app: string, name: string, json: string): boolean {
+        if (this.maxBytes <= 0) return false;
+        const previous = this.store.sizeOf(app, name) ?? 0;
+        const growth = Buffer.byteLength(json, 'utf8') - previous;
+        return growth > 0 && this.store.counts().bytes + growth > this.maxBytes;
+    }
+
+    private warnFull(error: string): void {
+        const now = this.now();
+        if (now - this.fullWarnedAt < FULL_WARNING_INTERVAL_MILLIS) return;
+        this.fullWarnedAt = now;
+        this.logWarning(`PUT answered 507: ${error}. Delete values or raise STORE_MAX_MB. `
+            + 'This is logged at most once a minute.');
+    }
+
+    // At shutdown. Every write is committed when its request is answered, so there is nothing to
+    // save; closing checkpoints the write-ahead log into store.db.
+    public async close(): Promise<void> {
+        if (this.expiryTimer) clearInterval(this.expiryTimer);
+        this.expiryTimer = undefined;
+        await this.checkpointer?.stop();
+        this.checkpointer = undefined;
+        this.db?.close();
     }
 
     private static async exists(file: string): Promise<boolean> {

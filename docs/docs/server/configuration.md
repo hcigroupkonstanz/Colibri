@@ -61,13 +61,16 @@ The message names the variable. `docker logs colibri` shows it.
 
 ### Data variables
 
-| Variable         | Default      | Description                                                                                                         |
-| ---------------- | ------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `DATA_ROOT`      | `../../data` | Data directory with `store.json` and voice recordings. Leave it unset with Docker.                                  |
-| `WEBSERVER_ROOT` | `../ui/`     | Files of the monitoring page. You do not need to change it.                                                         |
+| Variable            | Default      | Description                                                                                                      |
+| ------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `DATA_ROOT`         | `../../data` | Data directory with `store.db` and voice recordings. Leave it unset with Docker.                                 |
+| `WEBSERVER_ROOT`    | `../ui/`     | Files of the monitoring page. You do not need to change it.                                                      |
+| `STORE_EXPIRY_DAYS` | `30`         | Days after which a data store value that was not written again is deleted. `0`: never                            |
+| `STORE_MAX_MB`      | `0`          | MiB that all data store values may take together. `0`: no limit                                                  |
 
-Both may be absolute paths, e.g. `DATA_ROOT=/var/lib/colibri`. A relative path starts from the server's
-`dist/server` folder, so the default data directory is `colibri-server/data`.
+`DATA_ROOT` and `WEBSERVER_ROOT` may be absolute paths, e.g. `DATA_ROOT=/var/lib/colibri`. A relative path starts
+from the server's `dist/server` folder, so the default data directory is `colibri-server/data`. See
+[Data store](#data-store) for `STORE_EXPIRY_DAYS` and `STORE_MAX_MB`.
 
 ### Logging variables
 
@@ -422,6 +425,29 @@ that reconnects within this time learns that the object was deleted and removes 
 in its scene again, for example after loading the scene again, may create it again.
 
 The server forgets all objects of an app, deleted or not, when the app's last client leaves.
+
+## Data store
+
+The server keeps the values of the [data store](./protocol.md#data-store) in `store.db` in the data directory, an
+SQLite database. A value that is not written again for `STORE_EXPIRY_DAYS` (30 days) is deleted. Reading it does not
+count. Set `STORE_EXPIRY_DAYS=0` to keep values for good, for example study data that stays on the server for months.
+
+`STORE_MAX_MB` limits how much all values may take together. A `PUT` that would go above it gets `507` and stores
+nothing. Without a limit, the data store grows until the disk is full: anyone who can reach the server can store values.
+
+### Backup
+
+`store-export.js` prints the data store as JSON, also while the server runs:
+
+```sh
+docker exec colibri node dist/server/store-export.js > store.json
+```
+
+**Node.js:** run `node dist/server/store-export.js > store.json` in the `colibri-server` folder.
+
+To restore it, put this `store.json` into a data directory without `store.db`. The server imports it on the next start
+and renames it to `store.json.imported-<date>`. A `store.json` next to a `store.db` is not imported, and the log says
+so.
 
 ## Voice chat
 

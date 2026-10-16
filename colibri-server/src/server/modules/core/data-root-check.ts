@@ -12,8 +12,8 @@ const IMAGE_UID = 1000;
  * Checks once, at startup, that the server can write to DATA_ROOT, and says so loudly on stderr
  * when it cannot.
  *
- * Nothing else would: the REST store answers `PUT` with 201 from memory and only fails when the
- * debounced save runs, and a voice recording only fails when it is saved. In Docker this is the
+ * Nothing else would say it as plainly: the REST store falls back to memory with one log line,
+ * and a voice recording only fails when it is saved. In Docker this is the
  * normal way to get it wrong - the server runs as uid 1000, while a host directory that Docker
  * creates for a bind mount, or the data/ that colibri-server 1.x left behind, belongs to root.
  * The server keeps running either way; it just cannot keep anything past a restart.
@@ -43,7 +43,7 @@ export class DataRootCheck extends Service {
         // console sink is told to leave it out rather than print the same news twice.
         this.logError(
             `DATA_ROOT is not writable: ${this.dataRoot} (${error.message}). Nothing will be saved: ` +
-            'store.json and voice recordings stay in memory until the server stops.',
+            'the data store and voice recordings stay in memory until the server stops.',
             false,
             { [PRINTED_TO_CONSOLE]: true }
         );
@@ -74,13 +74,13 @@ export class DataRootCheck extends Service {
 
         if (uid === undefined) {
             lines.push(
-                'This server cannot save anything there: store.json and voice recordings stay in',
-                'memory and are lost when it stops. It keeps running anyway.',
+                'This server cannot save anything there: the data store and voice recordings stay',
+                'in memory and are lost when it stops. It keeps running anyway.',
             );
         } else {
             lines.push(
                 `This server runs as uid ${uid} (gid ${gid ?? '?'}) and cannot save anything there:`,
-                'store.json and voice recordings stay in memory and are lost when it stops.',
+                'the data store and voice recordings stay in memory and are lost when it stops.',
                 'It keeps running anyway.',
             );
         }

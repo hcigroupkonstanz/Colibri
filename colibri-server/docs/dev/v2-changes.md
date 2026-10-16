@@ -211,7 +211,7 @@ this is the server's full detail.
 
 - **Service log messages are printed to stdout and stderr**, one line each
   (`<ISO time> <LEVEL> [group/service] message`, errors and warnings on stderr), so they appear
-  in `docker logs`: refused clients, `store.json` write failures, TCP worker crashes and restarts,
+  in `docker logs`: refused clients, data store errors, TCP worker crashes and restarts,
   and client log lines at their level. Before, they reached only the admin UI's in-memory log. New
   `CONSOLE_LOG_LEVEL` (`error`, `warn`, `info` or `debug`; default `info`, and an invalid value
   stops startup) and `CONSOLE_LOG_BROADCAST_TRAFFIC` (default `false`). Control characters are
@@ -546,7 +546,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
 - **Any name is an ordinary name.** The store is keyed by `Map`s, so app and value names like
   `__proto__`, `constructor` or `toString` are stored like any other. Before,
   `DELETE /api/store/constructor/keys` broke every HTTP route until a restart, and
-  `PUT /api/store/__proto__/x` wrote onto `Object.prototype`. The `store.json` format is unchanged.
+  `PUT /api/store/__proto__/x` wrote onto `Object.prototype`.
 - **Errors are JSON**, `{ "error": … }`, with no stack trace or file path, and are logged. `400`
   (malformed JSON) and `413` (too large) keep their status, and every response, errors included,
   carries the CORS headers, so a browser client sees the error rather than a network failure.
@@ -561,15 +561,34 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   `{}`. colibri-unity's `Store` and colibri-web's `setRestObject` send a JSON body for every value,
   `null` included, except that `setRestObject(key, undefined)` sends none: it now gets `false` back
   and stores nothing, where it used to store `{}`. Store `null` instead.
-- Saving `store.json` is debounced (~250 ms) and atomic (write `store.json.tmp`, then rename), and
-  a save waits for the one still in flight, so two quick writes cannot interleave into a partial
-  file. The store is flushed on crash paths as well as on a clean shutdown, but only when it holds
-  something `store.json` does not, so stopping a server that cannot write its `DATA_ROOT` no
-  longer logs an `EACCES` when nothing changed. A save that failed is tried again at the latest
-  at shutdown.
-- The store is loaded in `Service.init()` via `fs/promises`, so requests can no longer be served
-  before it has loaded. A `store.json` whose top level, or one of whose apps, is not a JSON
-  object is skipped with an error instead of breaking every request.
+- The store is opened in `Service.init()`, so requests can no longer be served before it has
+  loaded. A `store.json` whose top level, or one of whose apps, is not a JSON object is skipped with
+  an error instead of breaking every request.
+
+- **Kept in SQLite.** The store moved from `store.json` to `store.db` (`node:sqlite`, built into
+  Node 24, no dependency). store.json held every value in memory and was rewritten as a whole after
+  every change, on the main thread: 26 ms per save for 5 MB of JSON, 640 ms for 95 MB, during which no
+  realtime message was relayed. With 100 MB stored and a PUT every 50 ms, a small GET took 682 ms at
+  p99 with store.json, 4.4 ms with SQLite. `store_values` is a rowid table with a unique index on
+  `(app, name)` and one on `updated_at` for expiry. A `WITHOUT ROWID` table keyed by `(app, name)`
+  keeps each row in the key's B-tree, which made listing 450 names next to 100 MB of values take
+  28 ms instead of 0.2 ms. A `store.json` is imported once, into a new `store.db`, then renamed to
+  `store.json.imported-<date>` (or `.corrupt-<date>` if it could not be loaded in full). Imported
+  values count as written at the import. A `store.db` that cannot be opened or written (SQLite opens
+  a file it may not write read-only, without a word) leaves the store in memory, starting with the
+  values in `store.db` if it can still be read, or else `store.json`'s. Apps and names are listed
+  in key order, no longer in creation order, and an app exists while it holds a value: `GET` and
+  `DELETE /api/store/:app` answer 404 once its last value is gone. The server's connection has
+  automatic checkpoints off; a worker thread with its own connection checkpoints every second
+  (`StoreCheckpointer`), since an automatic checkpoint synced to disk inside a PUT, on the main
+  thread: 16 to 79 ms about every 500 small PUTs.
+- **Expiry and a size limit.** Values not written for `STORE_EXPIRY_DAYS` (default 30, `0` never)
+  are deleted at startup and every hour. `STORE_MAX_MB` (default `0`, off) answers 507 to a `PUT`
+  that would take the store above it; a replaced value counts only by how much it grows. Without
+  either, anyone who can reach the server could grow the store until the disk is full. A failing
+  sweep is logged and tried again an hour later.
+- `node dist/server/store-export.js > store.json` prints the store in the `store.json` shape, also
+  while the server runs. Such a file in a data directory without `store.db` is imported on start.
 
 The endpoints are documented under [REST store](protocol.md#rest-store).
 

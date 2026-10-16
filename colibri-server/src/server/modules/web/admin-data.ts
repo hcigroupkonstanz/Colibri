@@ -59,7 +59,7 @@ export interface AdminSources {
     // Whether TCP_TLS_AT_PROXY applies: it is on, and so is TCP_PROXY_PROTOCOL. Off if left out.
     tcpTlsAtProxy?: boolean;
     voice?: { readonly status: VoiceStatus };
-    restStore?: { counts(): { apps: number; keys: number } };
+    restStore?: { counts(): { apps: number; keys: number; bytes: number } };
 }
 
 // What one page asked for: a topic, with its query for the two that take one.

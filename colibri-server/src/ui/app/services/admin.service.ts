@@ -71,6 +71,7 @@ export interface ServerSnapshot extends Snapshot {
         deletedModels: number;
         storeApps: number;
         storeKeys: number;
+        storeBytes: number;
     };
 }
 
