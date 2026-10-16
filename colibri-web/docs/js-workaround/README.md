@@ -1,6 +1,6 @@
 # JavaScript Workaround
 
-Colibri targets TypeScript. See the [web client guide](../guide.md#syncmodel) for
+Colibri targets TypeScript. See the [web client guide](https://colibri.hci.uni-konstanz.de/web/syncmodel) for
 the regular way to use `SyncModel`. For projects that are tied to plain JavaScript, this folder
 documents a workaround.
 

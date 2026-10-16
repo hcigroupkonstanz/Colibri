@@ -2,7 +2,7 @@
 
 Unity client for Colibri supporting messages between clients, synchronized objects, data store, monitoring, and voice chat.
 
-[Full documentation](docs/guide.md)
+[Full documentation](https://colibri.hci.uni-konstanz.de/unity/installation)
 
 Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 
@@ -112,7 +112,7 @@ Colibri calls `OnStartRound`, which starts the round. A client does not receive 
 
 - Channel and type must match on both sides.
 - Supported types: `bool`, `int`, `float`, `string`, `Vector2`, `Vector3`, `Quaternion`, `Color` and arrays
-  of these. Send other types as [`JToken`](docs/guide.md#sending-data-between-clients).
+  of these. Send other types as [`JToken`](https://colibri.hci.uni-konstanz.de/unity/messages#sending-other-types-as-json).
 - Listeners that are methods of a `MonoBehaviour` script are removed when it is destroyed. Remove other listeners
   with `Sync.Unregister`.
 
@@ -167,7 +167,7 @@ public class PlayerManager : SyncBehaviourManager<Player> { }
 syncing: when one client changes it, it changes on all other clients. `PlayerManager` needs no code. When
 another client creates a `Player`, the manager creates the copy on this client from its `Template`.
 
-- Add `PlayerManager` to the scene and set its `Template` to a `Player` prefab ([details](docs/guide.md#syncbehaviour)).
+- Add `PlayerManager` to the scene and set its `Template` to a `Player` prefab ([details](https://colibri.hci.uni-konstanz.de/unity/syncbehaviour)).
 - By the way: `SyncTransform` is also a `SyncBehaviour`.
 
 ### Monitoring
@@ -305,7 +305,7 @@ with listeners and the last 20 messages.
 | `… failed (ConnectionRefused), retrying...` | No process listens on the TCP port | Start colibri-server or correct *TCP server Port* |
 | `… This usually means a protocol mismatch…` | 1.x server, not a colibri-server, TLS on the server only, or (TLS off) a proxy or port forwarding whose backend is down | Use a 2.x server, correct the address, tick *Server supports SSL/TLS?* or start the server behind the proxy |
 | `… nothing was received on any of them…` | A proxy, port forwarding, captive portal or firewall that closes connections or forwards nothing, or a server that does not answer or is not a colibri-server | Check that colibri-server is running and reachable at that address and port |
-| `… did not answer the TLS handshake` or `rejected the certificate of …` | TLS settings do not match the server | See [TLS errors](docs/guide.md#tls-errors) |
+| `… did not answer the TLS handshake` or `rejected the certificate of …` | TLS settings do not match the server | See [TLS errors](https://colibri.hci.uni-konstanz.de/unity/troubleshooting#tls-errors) |
 | A `SyncBehaviour` object never syncs | `void Awake()` hides the base method (warning CS0114) | Declare it `protected override` and call `base.Awake()` |
 | `Store.Get` or `Store.Put` fails | Wrong server address, or plain HTTP blocked ("Insecure connection not allowed") | Check the URL in the log. Allow HTTP or enable TLS. |
 | `NullReferenceException` in `TMP_Settings` in a sample scene | TMP Essential Resources missing | *Window → TextMeshPro → Import TMP Essential Resources* |

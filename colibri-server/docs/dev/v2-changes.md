@@ -110,7 +110,7 @@ this is the server's full detail.
 - **Optional TLS.** With `TLS_CERT` and `TLS_KEY` set to PEM files, the Unity TCP port accepts only
   TLS, and the web port serves only HTTPS and WSS, both with the same certificate. RSA and EC
   certificates both work. The v3 framing inside TLS is unchanged, so the protocol version stays the
-  same. With both unset, nothing changes. See [TLS](../guide.md#tls) in the guide.
+  same. With both unset, nothing changes. See [TLS](https://colibri.hci.uni-konstanz.de/server/configuration#tls) in the guide.
 - **The certificate's SHA-256 fingerprint is logged at startup**, for pinning in Unity, and for a
   self-signed certificate the line says how a Unity app and a browser come to accept it. A renewed
   certificate in the same files is used within about 20 s, without a restart; open connections
@@ -133,7 +133,7 @@ this is the server's full detail.
   to report the client's address: IP addresses, CIDR ranges and `loopback`, `linklocal` and
   `uniquelocal`, as in Express's `trust proxy`. Empty, the default, trusts nobody and changes
   nothing. An invalid entry stops the server at startup, naming it. See
-  [Behind a reverse proxy](../guide.md#behind-a-reverse-proxy).
+  [Behind a reverse proxy](https://colibri.hci.uni-konstanz.de/server/configuration#running-behind-a-reverse-proxy).
 - **Web port:** from a trusted peer, a Socket.IO client's address is the right-most
   `X-Forwarded-For` entry that is not itself a trusted proxy, so a client cannot choose it by
   sending the header itself. It names the client in the log and the admin UI, and is its `name` in
@@ -388,7 +388,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   packets have been dropped for 3 s, at most once every 10 s, and its first dropped packet is a debug
   line. Voice from an address in `TRUSTED_PROXIES` is relayed unchecked and unlimited, also while a
   Unity client is connected from the proxy's machine; the server logs this once per address. See
-  [Voice relay](../guide.md#voice-relay).
+  [Voice relay](https://colibri.hci.uni-konstanz.de/server/configuration#voice-chat).
 - An address with n Unity clients of an app can still be sent n copies of the app's voice: a
   forged sender can take the place of one of them that sends no voice.
 - The app id keeps apps apart but is not access control: anyone who knows an app's name and can
@@ -401,7 +401,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   serves clients that reach the server over IPv6, such as colibri-unity 2.0.0 with a server name
   that has only an AAAA record. With an A record as well, colibri-unity 2.0.0 connects and sends
   voice over IPv4, so TCP and voice come from the same address, as the voice check needs. See
-  [Configuration](../guide.md#configuration).
+  [Configuration](https://colibri.hci.uni-konstanz.de/server/configuration#all-variables).
 
 ### Load and lost connections
 

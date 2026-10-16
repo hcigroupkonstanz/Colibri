@@ -63,7 +63,7 @@ Colibri component from 1.x.
   (within `MODEL_TOMBSTONE_SECONDS`) is dropped here instead of being sent back to everyone.
   This needs colibri-server 2.0.0 with its model tombstones.
 - The README is now a short page: requirements, install, a minimal example and the most common
-  problems. The full reference moved to [docs/guide.md](../guide.md), which says that
+  problems. The full reference moved to [the documentation](https://colibri.hci.uni-konstanz.de/web/installation), which says that
   `registerModel` takes the server's copy of an existing id, that registered models are sent
   again after a reconnect, and that REST keys are URL-encoded.
 - For maintainers: the `publish` npm script is now `release`. Under its old name npm also ran
@@ -154,7 +154,7 @@ Colibri component from 1.x.
   `RegisterModelSync` sends one more `model::request` after them, on the channel
   `colibri::reconnect`; the server needs no change. A field changed more than about 8 times right
   at the moment the connection died may still not be recognised. See
-  [docs/guide.md](../guide.md#syncmodel).
+  [the documentation](https://colibri.hci.uni-konstanz.de/web/syncmodel).
 - A change sent within a round trip of asking the server for every model, on connecting or after
   a reconnect, is no longer undone by the answer. The server made that answer before it had the
   change, and never sends a client's own update back to it, so this page showed the old value

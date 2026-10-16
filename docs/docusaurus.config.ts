@@ -16,8 +16,7 @@ const config: Config = {
     v4: true,
   },
 
-  // Set once the site has a host.
-  url: 'https://colibri.example.com',
+  url: 'https://colibri.hci.uni-konstanz.de',
   baseUrl: '/',
 
   onBrokenLinks: 'throw',

@@ -165,7 +165,7 @@ rationale, migration steps, and what the Editor verification did and did not cov
   the connection to colibri-server is now encrypted too, not only the Store's `https`; the server
   needs `TLS_CERT` and `TLS_KEY`. The frames inside are the same v3 frames. The handshake has to
   finish within the 5 s connect timeout, the client sends the server address as SNI and checks the
-  certificate against it, and Unity's TLS backend uses TLS 1.2. See [TLS](../guide.md#tls) in
+  certificate against it, and Unity's TLS backend uses TLS 1.2. See [TLS](https://colibri.hci.uni-konstanz.de/unity/configuration#tls) in
   the guide.
 - **`ColibriConfig.AllowSelfSignedCertificate`** (*Allow self-signed certificate*) **and
   `ColibriConfig.ServerCertificateSha256`** (*Server certificate SHA-256*, which pins one
@@ -347,7 +347,7 @@ rationale, migration steps, and what the Editor verification did and did not cov
   the answer's value. After every reconnect, `Sync` sends one more `model::request` after the
   others, on the channel `colibri::reconnect`, whose answer tells when the answers are over; the
   server needs no change. Objects that never sent anything are not affected. See
-  [Connection and outages](../guide.md#connection-and-outages).
+  [Connection and outages](https://colibri.hci.uni-konstanz.de/unity/messages#connection-and-outages).
 - **An object destroyed as the Wi-Fi drops is now deleted for everyone after the reconnect.** Its
   `model::delete` went into the dead connection, and nothing sent it again, so the server and every
   other client kept the object. When the outage is noticed, the deletes made since the client last
@@ -549,7 +549,7 @@ rationale, migration steps, and what the Editor verification did and did not cov
   as a change of its own. One instantiated with an empty `Id` is simulated at once. Without a
   connection for 5 s (the connect timeout), the object stops waiting as soon as no connect attempt
   is under way, and a warning says so once per session; when a server answers later, the position
-  it reached replaces the shared one. See [SyncTransform](../guide.md#synctransform).
+  it reached replaces the shared one. See [SyncTransform](https://colibri.hci.uni-konstanz.de/unity/synctransform).
 - **Objects built from a disabled `Template` come to life.** A copy starts out as its template is,
   and a manager's template is often kept switched off in the scene. A copy that is switched off
   never runs `Awake`, so it never registered for its own updates or with the ticker: it stayed as

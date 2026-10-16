@@ -325,7 +325,7 @@ as a length of at least 16 MiB. The 1.x handshake starts with `\0\0\0h`, which r
 
 ### TLS
 
-With `TLS_CERT` and `TLS_KEY` set ([TLS](../guide.md#tls) in the guide), the TCP port accepts only TLS.
+With `TLS_CERT` and `TLS_KEY` set ([TLS](https://colibri.hci.uni-konstanz.de/server/configuration#tls) in the guide), the TCP port accepts only TLS.
 TLS wraps the v3 framing unchanged. The protocol version stays `2`.
 
 On the TLS port, the server reads the first 2 bytes of each connection. `0x16 0x03` starts a TLS
@@ -341,7 +341,7 @@ For web clients only the transport changes. With TLS on, the web port serves onl
 
 ### PROXY protocol
 
-With `TCP_PROXY_PROTOCOL=true` ([Behind a reverse proxy](../guide.md#behind-a-reverse-proxy)), a
+With `TCP_PROXY_PROTOCOL=true` ([Behind a reverse proxy](https://colibri.hci.uni-konstanz.de/server/configuration#running-behind-a-reverse-proxy)), a
 connection from an address in `TRUSTED_PROXIES` starts with a
 [PROXY protocol](https://github.com/haproxy/haproxy/blob/master/doc/proxy-protocol.txt) header, sent
 by the proxy, never by a Unity client: version 1, a line of text of at most 107 bytes ending in CRLF,
@@ -489,7 +489,7 @@ names, or the app name `colibri`.
 | `log` | `debug`, `info`, `warn` / `warning`, `error` | by a client, to write to the server log at that level (any other command: debug) | text |
 
 `name` is the handshake name for a TCP client and the IP address for a Socket.IO client, taken from
-`X-Forwarded-For` behind a trusted proxy ([Behind a reverse proxy](../guide.md#behind-a-reverse-proxy)).
+`X-Forwarded-For` behind a trusted proxy ([Behind a reverse proxy](https://colibri.hci.uni-konstanz.de/server/configuration#running-behind-a-reverse-proxy)).
 The admin UI also uses `colibri::log` and `colibri::admin` ([Admin UI channel](#admin-ui-channel)),
 and draws its latency chart from `colibri::latency`.
 
@@ -497,7 +497,7 @@ and draws its latency chart from `colibri::latency`.
 
 The admin UI reads server data over Socket.IO on the channel `colibri::admin`, as a client of the app
 `colibri`. Clients of other apps are ignored. Everything on this channel is read only. There is no
-authentication, so anyone who can reach the web port can read it ([Security](../guide.md#security)).
+authentication, so anyone who can reach the web port can read it ([Security](https://colibri.hci.uni-konstanz.de/server/installation)).
 
 A page sends one of three commands, each with a `topic`:
 
@@ -861,7 +861,7 @@ It registers at most as many voice clients of an app from one address as there a
 that app connected from it. A new sender beyond that takes the place of the voice client that has
 gone the longest without a packet, if that is 500 ms or more, and is dropped otherwise. From an
 address in `TRUSTED_PROXIES` it accepts every valid packet, without that limit: through a proxy, all
-of them come from the proxy's address ([guide](../guide.md#voice-relay)).
+of them come from the proxy's address ([guide](https://colibri.hci.uni-konstanz.de/server/configuration#voice-chat)).
 
 The server registers the sender of an accepted packet as a voice client, by address and port, and
 passes the packet on unchanged to every other voice client with the same `appId`. A client sending

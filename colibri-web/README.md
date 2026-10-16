@@ -3,7 +3,7 @@
 TypeScript client for Colibri supporting messages between clients, synchronized objects, data store and monitoring.
 Voice chat is currently not supported on the web.
 
-[Full documentation](docs/guide.md)
+[Full documentation](https://colibri.hci.uni-konstanz.de/web/installation)
 
 Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 
@@ -126,7 +126,7 @@ directly to start the round on the sending client too.
 - Channel and type must match on both sides.
 - Supported types: `sendBool`, `sendNumber`, `sendString`, `sendVector2`, `sendVector3`, `sendQuaternion`,
   `sendColor`, their array forms such as `sendVector3Array`, and `sendJson` for anything else. Each has a matching
-  `receive*` ([details](docs/guide.md#sending-data-between-clients)).
+  `receive*` ([details](https://colibri.hci.uni-konstanz.de/web/messages#types)).
 - JavaScript has only one number type, so every number is sent as `float`. Unity must receive it with
   `Sync.Receive<float>`, not `Sync.Receive<int>`.
 - A listener stays registered until `Sync.unregister`.
@@ -200,7 +200,7 @@ clients.
   changes.
 - To sync with a Unity `SyncBehaviour`, set `name` to the Unity class name in lower case, e.g. `'player'` for the
   `Player` in the [Unity README](../colibri-unity/README.md#syncbehaviour). Property names are compared in lower
-  case, so `score` matches Unity's `Score` ([details](docs/guide.md#syncmodel)).
+  case, so `score` matches Unity's `Score` ([details](https://colibri.hci.uni-konstanz.de/web/syncmodel)).
 - The web client cannot delete an object for the other clients. `delete()` only stops syncing it on this client.
 
 ### Monitoring
@@ -216,7 +216,7 @@ new RemoteLogger();
 ```
 
 From then on, everything logged with `console` also appears on the server's web page. This is the easiest way to
-read the log of a web app on a smartphone or head-mounted display ([details](docs/guide.md#web-interface-for-logging)).
+read the log of a web app on a smartphone or head-mounted display ([details](https://colibri.hci.uni-konstanz.de/web/monitoring)).
 
 ### Data store
 
@@ -268,7 +268,7 @@ Voice chat is currently not supported on the web. It is available in [colibri-un
 | `server` | Host of the page. Required in Node.js. | Host name or IP address, optionally with `http://`, `https://`, `ws://` or `wss://` and `:port`. No path, query or fragment. |
 | `port`   | `9211`                                 | The server's web port. Used when `server` has no port. If both have one, they must match.                                    |
 
-- For a server with [TLS](docs/guide.md#tls), use `https://` or `wss://`. A page served over `https://` can only
+- For a server with [TLS](https://colibri.hci.uni-konstanz.de/web/configuration#tls), use `https://` or `wss://`. A page served over `https://` can only
   connect this way, because browsers block `http://` and `ws://` there.
 - A server that still uses Colibri 1.x's port 9011 needs the port in the address or as the third argument.
 
@@ -278,9 +278,9 @@ Voice chat is currently not supported on the web. It is available in [colibri-un
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
 | `new Colibri()` throws a `ColibriError`                                | Path such as `/log`, query or fragment in the address, another scheme, a port that conflicts with the third argument, or a second instance | Pass only scheme, host and port. Use `Colibri.getInstance()`.              |
 | Clients do not see each other                                          | Different app names or servers, or the listener was not registered and connected at send time                                              | Use the same app name and server. Register listeners first.                |
-| Nothing connects from an `https://` page                               | The browser blocks `ws://` and `http://` (mixed content)                                                                                   | Use `https://` or `wss://` with [TLS](docs/guide.md#tls) or a TLS proxy    |
+| Nothing connects from an `https://` page                               | The browser blocks `ws://` and `http://` (mixed content)                                                                                   | Use `https://` or `wss://` with [TLS](https://colibri.hci.uni-konstanz.de/web/configuration#tls) or a TLS proxy    |
 | `Colibri: could not connect to ...` after upgrading from 1.x           | The address or `port` names 9011, 1.x's default port. 2.x servers default to 9211.                                                         | Use the server's port                                                      |
-| `colibri.protocolMismatch` emits with `fatal: true`                    | The server refused this client and closed the connection                                                                                   | Use 2.x on both sides ([Protocol version](docs/guide.md#protocol-version)) |
+| `colibri.protocolMismatch` emits with `fatal: true`                    | The server refused this client and closed the connection                                                                                   | Use 2.x on both sides ([Protocol version](https://colibri.hci.uni-konstanz.de/web/configuration#protocol-version)) |
 | `colibri.protocolMismatch` emits with `fatal: false`                   | No version announcement within 5 s, typical of a pre-2.0.0 server. The connection stays up.                                                | Upgrade the server to 2.x                                                  |
 | `@Synced()` fails to compile or does not sync                          | `experimentalDecorators` is on, or a member lacks `accessor`                                                                               | Remove `experimentalDecorators`. Declare synced members with `accessor`.   |
 | Models sync in development but not in a production build or with Unity | No `name` in `RegisterModelSync`                                                                                                           | Pass `name`                                                                |

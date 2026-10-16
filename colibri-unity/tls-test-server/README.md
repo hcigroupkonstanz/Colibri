@@ -7,7 +7,7 @@ next to the plain test server and stops it again afterwards.
 **`cert.pem`, `key.pem` and `cert.pfx` are for these tests only.** The private key is public, here
 in the repository, so anything encrypted with it is readable by anyone. Never use them for a server
 that other people connect to; make your own as described in
-[Self-signed certificate](../../colibri-server/docs/guide.md#self-signed-certificate) in the
+[Self-signed certificate](https://colibri.hci.uni-konstanz.de/server/configuration#self-signed-certificate) in the
 colibri-server guide.
 
 - Self-signed, issued for `localhost`, `127.0.0.1` and `::1`, valid for 100 years.
