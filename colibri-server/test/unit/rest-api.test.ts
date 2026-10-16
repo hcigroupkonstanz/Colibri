@@ -11,6 +11,8 @@ import { StoreDatabase } from '../../src/server/modules/web/store-database.js';
 import { REST_MEDIA_TYPE } from '../../src/server/modules/networking/protocol.js';
 import type { WebServer } from '../../src/server/modules/web/web-server.js';
 
+const DAY = 24 * 60 * 60 * 1000;
+
 // A store.json in the format every earlier version wrote, including a value name
 // ('constructor') that the old object-backed store could persist as an own key.
 const FIXTURE_STORE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'store.json');
@@ -511,6 +513,96 @@ describe('RestAPI', () => {
 
             await expect(get('/appA/key')).resolves.toEqual({ status: 200, body: 1 });
             expect(await dataFiles()).toEqual([ `store.json.imported-${stamp}` ]);
+        });
+    });
+
+    describe('expiry', () => {
+        let now: number;
+        const clock = () => now;
+
+        beforeEach(() => {
+            now = Date.UTC(2026, 9, 1);
+            api = create({ expiryDays: 30, now: clock }, webserver);
+        });
+
+        it('deletes values not written for STORE_EXPIRY_DAYS at startup, and keeps the others', async () => {
+            await api.init();
+            await put('/appA/old', 1);
+            await put('/appB/old', 1);
+            now += 20 * DAY;
+            await put('/appA/fresh', 2);
+            // Read, but not written: reading does not keep a value.
+            await get('/appB/old');
+
+            now += 11 * DAY;
+            await restart({ expiryDays: 30, now: clock });
+
+            await expect(get('/')).resolves.toEqual({ status: 200, body: [ 'appA' ] });
+            await expect(get('/appA')).resolves.toEqual({ status: 200, body: [ 'fresh' ] });
+            expect(logged(LogLevel.Info)).toContain('Data store: removed 2 value(s) not written for 30 days (STORE_EXPIRY_DAYS)');
+            expect(api.counts()).toEqual({ apps: 1, keys: 1, bytes: 1 });
+        });
+
+        it('keeps a value that is written again', async () => {
+            await api.init();
+            await put('/appA/key', 1);
+            now += 29 * DAY;
+            await put('/appA/key', 2);
+
+            now += 29 * DAY;
+            await restart({ expiryDays: 30, now: clock });
+
+            await expect(get('/appA/key')).resolves.toEqual({ status: 200, body: 2 });
+        });
+
+        it('deletes them every hour while it runs', async () => {
+            vi.useFakeTimers({ toFake: [ 'setInterval', 'clearInterval' ] });
+            await api.init();
+            await put('/appA/key', 1);
+
+            now += 30 * DAY + 1;
+            vi.advanceTimersByTime(60 * 60 * 1000);
+
+            await expect(get('/appA')).resolves.toMatchObject({ status: 404 });
+        });
+
+        // An upgrade from store.json must not delete everything that has sat there for a month.
+        it('counts an imported value as written at the import', async () => {
+            await writeFile(storePath, JSON.stringify({ appA: { key: 1 } }), 'utf8');
+            await api.init();
+
+            now += 29 * DAY;
+            await restart({ expiryDays: 30, now: clock });
+
+            await expect(get('/appA/key')).resolves.toEqual({ status: 200, body: 1 });
+        });
+
+        // At startup it would stop the server, and in the hourly timer it would be an uncaught
+        // exception: a store.db another program has locked for a moment, or a full disk.
+        it('logs a sweep that fails, rather than throwing', async () => {
+            const failure = vi.spyOn(StoreDatabase.prototype, 'expire').mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            try {
+                await expect(api.init()).resolves.toBeUndefined();
+            } finally {
+                failure.mockRestore();
+            }
+
+            expect(logged(LogLevel.Error)).toEqual([
+                'Data store: could not remove the values not written for 30 days: database is locked. Tried again in an hour.',
+            ]);
+            await expect(put('/appA/key', 1)).resolves.toMatchObject({ status: 201 });
+        });
+
+        it('keeps everything with STORE_EXPIRY_DAYS 0', async () => {
+            await api.init();
+            await put('/appA/key', 1);
+
+            now += 3650 * DAY;
+            await restart({ expiryDays: 0, now: clock });
+
+            await expect(get('/appA/key')).resolves.toEqual({ status: 200, body: 1 });
         });
     });
 });

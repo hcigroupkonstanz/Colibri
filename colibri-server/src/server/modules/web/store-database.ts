@@ -15,8 +15,9 @@ const SCHEMA_VERSION = 1;
 // app's names then read its large values as well (28 ms for 450 names next to 100 MB of values).
 // The index holds only app and name: a value is one index lookup, an app's names are one range of
 // the index alone. value is the last column, so that reading bytes or updated_at never walks the
-// overflow pages of a large value. Every further index would cost a B-tree write on each PUT and
-// DELETE.
+// overflow pages of a large value. updated_at is indexed for the expiry sweep alone, which then
+// reads only the rows past its cutoff. Every further index would cost a B-tree write on each PUT
+// and DELETE.
 const SCHEMA = `
     CREATE TABLE IF NOT EXISTS store_values (
         app TEXT NOT NULL,
@@ -26,6 +27,7 @@ const SCHEMA = `
         value TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS store_values_key ON store_values (app, name);
+    CREATE INDEX IF NOT EXISTS store_values_updated_at ON store_values (updated_at);
 `;
 
 /**
@@ -162,6 +164,7 @@ export class StoreDatabase {
             ),
             delete: db.prepare('DELETE FROM store_values WHERE app = ? AND name = ? RETURNING bytes'),
             deleteApp: db.prepare('DELETE FROM store_values WHERE app = ? RETURNING bytes'),
+            expire: db.prepare('DELETE FROM store_values WHERE updated_at < ? RETURNING app, bytes'),
             entries: db.prepare('SELECT app, name, value FROM store_values ORDER BY app, name'),
         };
     }
@@ -215,6 +218,13 @@ export class StoreDatabase {
     public deleteApp(app: string): number {
         const removed = this.statement.deleteApp.all(app) as Array<{ bytes: number }>;
         for (const row of removed) this.account(app, -1, -row.bytes);
+        return removed.length;
+    }
+
+    /** Deletes every value last written before `cutoff` (a Date.now() reading), returning how many. */
+    public expire(cutoff: number): number {
+        const removed = this.statement.expire.all(cutoff) as Array<{ app: string; bytes: number }>;
+        for (const row of removed) this.account(row.app, -1, -row.bytes);
         return removed.length;
     }
 

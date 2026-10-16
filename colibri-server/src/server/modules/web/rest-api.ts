@@ -11,6 +11,8 @@ import * as path from 'path';
 // store.db, then renamed.
 const STORE_JSON_FILENAME = 'store.json';
 
+const DAY_MILLIS = 24 * 60 * 60 * 1000;
+const EXPIRY_INTERVAL_MILLIS = 60 * 60 * 1000;
 // How often the write-ahead log is copied into store.db (see StoreCheckpointer), and how often a
 // checkpoint that keeps failing is logged.
 const CHECKPOINT_INTERVAL_MILLIS = 1000;
@@ -21,6 +23,8 @@ const errorMessage = function (err: unknown): string {
 };
 
 export interface RestStoreOptions {
+    // Values not written for this many days are deleted. 0 keeps them for good.
+    expiryDays?: number;
     // Date.now(), for the tests.
     now?: () => number;
 }
@@ -42,7 +46,9 @@ export class RestAPI extends Service {
     private db: StoreDatabase | undefined;
     private readonly databasePath: string;
     private readonly storeJsonPath: string;
+    private readonly expiryDays: number;
     private readonly now: () => number;
+    private expiryTimer: NodeJS.Timeout | undefined;
     private checkpointer: StoreCheckpointer | undefined;
     private checkpointWarnedAt = -Infinity;
 
@@ -51,6 +57,7 @@ export class RestAPI extends Service {
 
         this.databasePath = path.join(dataPath, STORE_DATABASE_FILENAME);
         this.storeJsonPath = path.join(dataPath, STORE_JSON_FILENAME);
+        this.expiryDays = options.expiryDays ?? 0;
         this.now = options.now ?? Date.now;
 
         webserver.addApi('/store', Router()
@@ -152,6 +159,12 @@ export class RestAPI extends Service {
     // before store.db is open, or before store.json has been imported into it.
     public override async init(): Promise<void> {
         await this.open();
+
+        if (this.expiryDays > 0) {
+            this.expire();
+            this.expiryTimer = setInterval(() => this.expire(), EXPIRY_INTERVAL_MILLIS);
+            this.expiryTimer.unref();
+        }
     }
 
     // Opens store.db, importing store.json into it if store.db is new. A store.db that cannot be
@@ -314,9 +327,27 @@ export class RestAPI extends Service {
             + `(and ${STORE_DATABASE_FILENAME}-wal and -shm next to it) first.`);
     }
 
+    // Deletes the values not written for expiryDays. Never throws: at startup that would stop the
+    // server, and in the timer it would be an uncaught exception, both for a store.db that another
+    // program has locked for a moment, or a full disk.
+    private expire(): void {
+        if (!this.db) return;
+        try {
+            const removed = this.db.expire(this.now() - this.expiryDays * DAY_MILLIS);
+            if (removed > 0) {
+                this.logInfo(`Data store: removed ${removed} value(s) not written for ${this.expiryDays} days (STORE_EXPIRY_DAYS)`);
+            }
+        } catch (err) {
+            this.logError(`Data store: could not remove the values not written for ${this.expiryDays} days: `
+                + `${errorMessage(err)}. Tried again in an hour.`, false);
+        }
+    }
+
     // At shutdown. Every write is committed when its request is answered, so there is nothing to
     // save; closing checkpoints the write-ahead log into store.db.
     public async close(): Promise<void> {
+        if (this.expiryTimer) clearInterval(this.expiryTimer);
+        this.expiryTimer = undefined;
         await this.checkpointer?.stop();
         this.checkpointer = undefined;
         this.db?.close();

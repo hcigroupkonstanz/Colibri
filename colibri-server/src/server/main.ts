@@ -57,7 +57,9 @@ connectionPool.appClientWarningThreshold = Config.APP_CLIENT_WARNING_THRESHOLD;
 /**
  *    APIs
  */
-const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer);
+const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer, {
+    expiryDays: Config.STORE_EXPIRY_DAYS,
+});
 const dataRootCheck = new colibri.DataRootCheck(Config.DATA_ROOT);
 
 /**
@@ -100,6 +102,7 @@ const adminData = new colibri.AdminData({
         CLIENT_MESSAGE_RATE_BURST: Config.CLIENT_MESSAGE_RATE_BURST,
         APP_CLIENT_WARNING_THRESHOLD: Config.APP_CLIENT_WARNING_THRESHOLD,
         MODEL_TOMBSTONE_SECONDS: Config.MODEL_TOMBSTONE_SECONDS,
+        STORE_EXPIRY_DAYS: Config.STORE_EXPIRY_DAYS,
         TRUSTED_PROXIES: Config.TRUSTED_PROXIES,
         TCP_PROXY_PROTOCOL: Config.TCP_PROXY_PROTOCOL,
         TCP_TLS_AT_PROXY: Config.TCP_TLS_AT_PROXY,

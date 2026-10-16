@@ -119,6 +119,10 @@ export const Config = {
         process.env.DATA_ROOT || '../../data/'
     ),
 
+    // Days after which a data store value that has not been written since is deleted (see
+    // RestAPI.expire); 0: never.
+    STORE_EXPIRY_DAYS: parseNonNegativeInt('STORE_EXPIRY_DAYS', process.env.STORE_EXPIRY_DAYS, 30),
+
     // Default of 30 (was Error.stackTraceLimit = Infinity) caps the cost of every stack
     // capture - each logError call with printStacktrace on walks this many frames - while
     // still being enough to see past RxJS's internal call chain into application code.

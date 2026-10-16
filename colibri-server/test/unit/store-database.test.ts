@@ -68,14 +68,29 @@ describe('StoreDatabase', () => {
         expect(db.names('app')).toEqual([ 'B', '_x', 'a', 'b', 'ä' ]);
     });
 
-    // A value is one lookup in the (app, name) index, and an app's names one range of that index
-    // alone. None of them scans the table, or sorts.
+    it('expires what was last written before the cutoff, and nothing else', () => {
+        const db = memory([ [ 'a', 'old', '1' ] ], 1000);
+        db.put('a', 'new', '2', 5000);
+        db.put('b', 'old', '3', 2000);
+
+        expect(db.expire(3000)).toBe(2);
+        expect([ ...db.entries() ]).toEqual([ [ 'a', 'new', '2' ] ]);
+        expect(db.counts()).toEqual({ apps: 1, keys: 1, bytes: 1 });
+
+        // A write moves a value's time on.
+        db.put('a', 'new', '2', 9000);
+        expect(db.expire(6000)).toBe(0);
+    });
+
+    // A value is one lookup in the (app, name) index, an app's names one range of that index alone,
+    // and the expiry sweep reads only the rows past its cutoff. None of them scans the table, or sorts.
     it.each([
         [ 'names', 'SELECT name FROM store_values WHERE app = ? ORDER BY name', 'USING COVERING INDEX store_values_key (app=?)' ],
         [ 'get', 'SELECT value FROM store_values WHERE app = ? AND name = ?', 'USING INDEX store_values_key (app=? AND name=?)' ],
         [ 'bytes', 'SELECT bytes FROM store_values WHERE app = ? AND name = ?', 'USING INDEX store_values_key (app=? AND name=?)' ],
         [ 'delete', 'DELETE FROM store_values WHERE app = ? AND name = ? RETURNING bytes', 'USING INDEX store_values_key (app=? AND name=?)' ],
         [ 'deleteApp', 'DELETE FROM store_values WHERE app = ? RETURNING bytes', 'USING COVERING INDEX store_values_key (app=?)' ],
+        [ 'expire', 'DELETE FROM store_values WHERE updated_at < ? RETURNING app, bytes', 'USING COVERING INDEX store_values_updated_at (updated_at<?)' ],
     ])('looks %s up by an index', (_, sql, index) => {
         const plan = memory().queryPlan(sql);
 
