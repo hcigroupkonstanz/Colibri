@@ -93,7 +93,7 @@ const [players$, registerPlayer] = RegisterModelSync<Player>({ name: 'player', t
 `name` is the channel the objects sync on. All clients that sync these objects, web and Unity, must use the same
 name.
 
-:::warning Always pass name
+:::warning[Always pass name]
 Without `name`, the channel is the class name in lower case. A minified production build renames your classes, so
 two builds of your app, or a minified build and Unity, stop syncing without an error. Colibri warns only if the class
 name looks minified (two characters or fewer, or with a `$` in it).
