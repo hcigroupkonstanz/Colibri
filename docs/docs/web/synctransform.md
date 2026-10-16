@@ -11,14 +11,20 @@ position, rotation, scale and visibility, e.g. to show a shared 3D object on a w
 ## Reading the objects
 
 ```ts
-import { RegisterSyncTransforms } from '@hcikn/colibri';
+import { RegisterSyncTransforms } from "@hcikn/colibri";
 
 const [transforms$] = RegisterSyncTransforms();
 
-transforms$.subscribe(transforms => {
-    for (const transform of transforms) {
-        console.log(transform.id, transform.position, transform.rotation, transform.scale, transform.active);
-    }
+transforms$.subscribe((transforms) => {
+  for (const transform of transforms) {
+    console.log(
+      transform.id,
+      transform.position,
+      transform.rotation,
+      transform.scale,
+      transform.active,
+    );
+  }
 });
 ```
 
@@ -44,14 +50,14 @@ clients.
 
 ## Members
 
-| Member      | Type                         | Default        | In Unity                                                         |
-| ----------- | ---------------------------- | -------------- | ---------------------------------------------------------------- |
-| `id`        | `string`                     | set on creation | The object's id. Read only.                                     |
-| `active`    | `boolean`                    | `true`         | `activeSelf`                                                     |
-| `position`  | `Vector3`, `[x, y, z]`       | `[0, 0, 0]`    | `position`, or `localPosition` with _Use Local Transform_         |
-| `rotation`  | `Quaternion`, `[x, y, z, w]` | `[0, 0, 0, 1]` | `rotation`, or `localRotation` with _Use Local Transform_         |
-| `scale`     | `Vector3`, `[x, y, z]`       | `[1, 1, 1]`    | `localScale`                                                     |
-| `physicsId` | `string`                     | `''`           | The client with `PhysicsAuthority`. Do not set it on the web.    |
+| Member      | Type                         | Default         | In Unity                                                      |
+| ----------- | ---------------------------- | --------------- | ------------------------------------------------------------- |
+| `id`        | `string`                     | set on creation | The object's id. Read only.                                   |
+| `active`    | `boolean`                    | `true`          | `activeSelf`                                                  |
+| `position`  | `Vector3`, `[x, y, z]`       | `[0, 0, 0]`     | `position`, or `localPosition` with _Use Local Transform_     |
+| `rotation`  | `Quaternion`, `[x, y, z, w]` | `[0, 0, 0, 1]`  | `rotation`, or `localRotation` with _Use Local Transform_     |
+| `scale`     | `Vector3`, `[x, y, z]`       | `[1, 1, 1]`     | `localScale`                                                  |
+| `physicsId` | `string`                     | `''`            | The client with `PhysicsAuthority`. Do not set it on the web. |
 
 `Vector3` and `Quaternion` are types exported by the package.
 
@@ -66,23 +72,28 @@ right-handed. To convert, negate `z` of positions, and `x` and `y` of rotations.
 For three.js:
 
 ```ts
-import * as THREE from 'three';
-import { SyncTransform } from '@hcikn/colibri';
+import * as THREE from "three";
+import { SyncTransform } from "@hcikn/colibri";
 
 // Unity -> three.js
 function applyToMesh(transform: SyncTransform, mesh: THREE.Object3D) {
-    const [px, py, pz] = transform.position;
-    const [rx, ry, rz, rw] = transform.rotation;
-    mesh.position.set(px, py, -pz);
-    mesh.quaternion.set(-rx, -ry, rz, rw);
-    mesh.scale.set(...transform.scale);
-    mesh.visible = transform.active;
+  const [px, py, pz] = transform.position;
+  const [rx, ry, rz, rw] = transform.rotation;
+  mesh.position.set(px, py, -pz);
+  mesh.quaternion.set(-rx, -ry, rz, rw);
+  mesh.scale.set(...transform.scale);
+  mesh.visible = transform.active;
 }
 
 // three.js -> Unity, e.g. after the user dragged the mesh
 function applyToTransform(mesh: THREE.Object3D, transform: SyncTransform) {
-    transform.position = [mesh.position.x, mesh.position.y, -mesh.position.z];
-    transform.rotation = [-mesh.quaternion.x, -mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w];
+  transform.position = [mesh.position.x, mesh.position.y, -mesh.position.z];
+  transform.rotation = [
+    -mesh.quaternion.x,
+    -mesh.quaternion.y,
+    mesh.quaternion.z,
+    mesh.quaternion.w,
+  ];
 }
 ```
 
@@ -91,7 +102,7 @@ function applyToTransform(mesh: THREE.Object3D, transform: SyncTransform) {
 Unity objects with a `ModelId` sync on a channel of their own. To see them, pass the `ModelId`:
 
 ```ts
-const [cubes$] = RegisterSyncTransforms('Cube'); // the objects with ModelId 'Cube'
+const [cubes$] = RegisterSyncTransforms("Cube"); // the objects with ModelId 'Cube'
 ```
 
 `RegisterSyncTransforms()` without an argument returns only the objects without a `ModelId`. For several
@@ -102,11 +113,11 @@ const [cubes$] = RegisterSyncTransforms('Cube'); // the objects with ModelId 'Cu
 `RegisterSyncTransforms` also returns a function that registers a new `SyncTransform`:
 
 ```ts
-import { RegisterSyncTransforms, SyncTransform } from '@hcikn/colibri';
+import { RegisterSyncTransforms, SyncTransform } from "@hcikn/colibri";
 
 const [transforms$, registerTransform] = RegisterSyncTransforms();
 
-const marker = new SyncTransform('marker-1');
+const marker = new SyncTransform("marker-1");
 marker.position = [0, 1, 0];
 registerTransform(marker);
 ```
@@ -116,6 +127,19 @@ registerTransform(marker);
 - A Unity client shows the new object only if its scene has a `SyncTransformManager` whose `Template` has the same
   `ModelId` as the channel you registered it on. For a template with the `ModelId` `Cube`, register the object with
   `RegisterSyncTransforms('Cube')` ([Unity SyncTransform](../unity/synctransform.md)).
+
+## Sample
+
+The [sync-transform](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/sync-transform.ts) sample lists the objects of Unity's SyncTransform sample and moves, scales, hides and shows
+them from a terminal. Start the SyncTransform sample in Unity with the app name `myAppName`, then run:
+
+```sh
+cd colibri-web
+npm ci
+npm run samples/sync-transform
+```
+
+Type `list` to see the objects, and e.g. `move <id> 0 1 0` to move one. The start of an id is enough.
 
 ## Limitations
 

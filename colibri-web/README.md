@@ -45,15 +45,14 @@ Create the Colibri client once, when your app starts:
 ```ts
 import { Colibri } from '@hcikn/colibri';
 
-new Colibri('your-app-name', 'colibri.hci.uni-konstanz.de');
+new Colibri('myAppName', 'colibri.hci.uni-konstanz.de');
 ```
 
 - The first argument is the **app name**. Set it to a unique name that is not used on the server. Clients exchange
   data only if their app names match, web and Unity alike. Do not use `colibri`, which the server's web page uses.
 - The second argument is the **server address**: a host name or IP address, optionally with `http://` or
-  `https://`. A public test server is available: `colibri.hci.uni-konstanz.de`. In a browser, you can leave it out
-  to use the host that served the page.
-- A second `new Colibri()` throws. Elsewhere in your app, use `Colibri.getInstance()`.
+  `https://`. A public test server is available: `colibri.hci.uni-konstanz.de`. You can leave it out when colibri-server runs on the server that served your page.
+- A second `new Colibri()` throws an error. Elsewhere in your app, use `Colibri.getInstance()`.
 
 ## Samples
 
@@ -69,12 +68,13 @@ Each sample asks for the server address and port. Press Enter twice for the publ
 exchange data, start the same sample in a second terminal, or run it next to a Unity client whose app name is
 `myAppName`, which the samples use.
 
-| Sample                                      | Shows                                       |
-| ------------------------------------------- | ------------------------------------------- |
-| [broadcast](samples/broadcast.ts)           | Sending and receiving messages              |
-| [model-sync](samples/model-sync.ts)         | Synchronized objects with `SyncModel`       |
-| [remote-logging](samples/remote-logging.ts) | Sending the console log to the server       |
-| [rest-api](samples/rest-api.ts)             | Saving and loading values in the data store |
+| Sample                                      | Shows                                              |
+| ------------------------------------------- | -------------------------------------------------- |
+| [broadcast](samples/broadcast.ts)           | Sending and receiving messages                     |
+| [model-sync](samples/model-sync.ts)         | Synchronized objects with `SyncModel`              |
+| [remote-logging](samples/remote-logging.ts) | Sending the console log to the server              |
+| [rest-api](samples/rest-api.ts)             | Saving and loading values in the data store        |
+| [sync-transform](samples/sync-transform.ts) | Showing and moving Unity's `SyncTransform` objects |
 
 ## Usage
 
@@ -270,23 +270,22 @@ Voice chat is currently not supported on the web. It is available in [colibri-un
 
 - For a server with [TLS](https://colibri.hci.uni-konstanz.de/web/configuration#tls), use `https://` or `wss://`. A page served over `https://` can only
   connect this way, because browsers block `http://` and `ws://` there.
-- A server that still uses Colibri 1.x's port 9011 needs the port in the address or as the third argument.
 
 ## Troubleshooting
 
-| Symptom                                                                | Cause                                                                                                                                      | Fix                                                                        |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `new Colibri()` throws a `ColibriError`                                | Path such as `/log`, query or fragment in the address, another scheme, a port that conflicts with the third argument, or a second instance | Pass only scheme, host and port. Use `Colibri.getInstance()`.              |
-| Clients do not see each other                                          | Different app names or servers, or the listener was not registered and connected at send time                                              | Use the same app name and server. Register listeners first.                |
+| Symptom                                                                | Cause                                                                                                                                      | Fix                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `new Colibri()` throws a `ColibriError`                                | Path such as `/log`, query or fragment in the address, another scheme, a port that conflicts with the third argument, or a second instance | Pass only scheme, host and port. Use `Colibri.getInstance()`.                                                      |
+| Clients do not see each other                                          | Different app names or servers, or the listener was not registered and connected at send time                                              | Use the same app name and server. Register listeners first.                                                        |
 | Nothing connects from an `https://` page                               | The browser blocks `ws://` and `http://` (mixed content)                                                                                   | Use `https://` or `wss://` with [TLS](https://colibri.hci.uni-konstanz.de/web/configuration#tls) or a TLS proxy    |
-| `Colibri: could not connect to ...` after upgrading from 1.x           | The address or `port` names 9011, 1.x's default port. 2.x servers default to 9211.                                                         | Use the server's port                                                      |
+| `Colibri: could not connect to ...` after upgrading from 1.x           | The address or `port` names 9011, 1.x's default port. 2.x servers default to 9211.                                                         | Use the server's port                                                                                              |
 | `colibri.protocolMismatch` emits with `fatal: true`                    | The server refused this client and closed the connection                                                                                   | Use 2.x on both sides ([Protocol version](https://colibri.hci.uni-konstanz.de/web/configuration#protocol-version)) |
-| `colibri.protocolMismatch` emits with `fatal: false`                   | No version announcement within 5 s, typical of a pre-2.0.0 server. The connection stays up.                                                | Upgrade the server to 2.x                                                  |
-| `@Synced()` fails to compile or does not sync                          | `experimentalDecorators` is on, or a member lacks `accessor`                                                                               | Remove `experimentalDecorators`. Declare synced members with `accessor`.   |
-| Models sync in development but not in a production build or with Unity | No `name` in `RegisterModelSync`                                                                                                           | Pass `name`                                                                |
-| Unity never receives numbers from the web                              | colibri-web sends every number as `float`                                                                                                  | Receive with `Sync.Receive<float>` in Unity, not `Sync.Receive<int>`       |
-| Colors arrive as strings or arrays                                     | Unity sends `"#RRGGBBAA"`, colibri-web `[r, g, b, a]`                                                                                      | Normalize with `toHexColor()` or `toRgbaColor()`                           |
-| `Sync.send*` does nothing                                              | Called before `new Colibri()`, dropped with a console warning                                                                              | Create the `Colibri` instance first                                        |
+| `colibri.protocolMismatch` emits with `fatal: false`                   | No version announcement within 5 s, typical of a pre-2.0.0 server. The connection stays up.                                                | Upgrade the server to 2.x                                                                                          |
+| `@Synced()` fails to compile or does not sync                          | `experimentalDecorators` is on, or a member lacks `accessor`                                                                               | Remove `experimentalDecorators`. Declare synced members with `accessor`.                                           |
+| Models sync in development but not in a production build or with Unity | No `name` in `RegisterModelSync`                                                                                                           | Pass `name`                                                                                                        |
+| Unity never receives numbers from the web                              | colibri-web sends every number as `float`                                                                                                  | Receive with `Sync.Receive<float>` in Unity, not `Sync.Receive<int>`                                               |
+| Colors arrive as strings or arrays                                     | Unity sends `"#RRGGBBAA"`, colibri-web `[r, g, b, a]`                                                                                      | Normalize with `toHexColor()` or `toRgbaColor()`                                                                   |
+| `Sync.send*` does nothing                                              | Called before `new Colibri()`, dropped with a console warning                                                                              | Create the `Colibri` instance first                                                                                |
 
 ## License
 

@@ -41,6 +41,7 @@
         "samples/model-sync": "tsx samples/model-sync.ts",
         "samples/remote-logging": "tsx samples/remote-logging.ts",
         "samples/rest-api": "tsx samples/rest-api.ts",
+        "samples/sync-transform": "tsx samples/sync-transform.ts",
         "samples/verification-peer": "tsx samples/verification-peer.ts",
         "test": "vitest run",
         "test:watch": "vitest",

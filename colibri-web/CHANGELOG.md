@@ -20,7 +20,8 @@ Works only with colibri-server 2.0.0 or newer.
 
 ### Added
 
-- `SyncTransform` and `RegisterSyncTransforms()`: read and move the objects of Unity's `SyncTransform` component.
+- `SyncTransform` and `RegisterSyncTransforms()`: read and move the objects of Unity's `SyncTransform` component, with
+  the `sync-transform` sample.
 - `deleteRestObject()` and `DeleteRestApi()`: delete a value from the data store.
 - `Sync.sendVector2()` and `Sync.receiveVector2()`, with their array forms.
 - `toHexColor()` and `toRgbaColor()`: convert a received colour.

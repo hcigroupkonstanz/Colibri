@@ -83,13 +83,14 @@ Each sample asks for the server address and port. Press Enter twice for the publ
 `colibri.hci.uni-konstanz.de` and port 9211. To see two clients exchange data, start the same sample in a second
 terminal, or run it next to a Unity client whose app name is `myAppName`, which all samples use.
 
-| Sample                                                                                                                         | Shows                                                    | Run with                                             |
-| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ---------------------------------------------------- |
-| [broadcast](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/broadcast.ts)                         | [Sending and receiving messages](./messages.md)          | `npm run samples/broadcast`                          |
-| [model-sync](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/model-sync.ts)                       | [Synchronized objects with `SyncModel`](./syncmodel.md)  | `npm run samples/model-sync`                         |
-| [remote-logging](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/remote-logging.ts)               | [Sending the console log to the server](./monitoring.md) | `npm run samples/remote-logging`                     |
-| [rest-api](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/rest-api.ts)                           | [Saving and loading values in the data store](./data-store.md) | `npm run samples/rest-api`                     |
-| [verification-peer](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/verification-peer.ts)         | Receiving and sending one value of every message type    | `npm run samples/verification-peer -- [host] [port]` |
+| Sample                                                                                                                 | Shows                                                                           | Run with                                             |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [broadcast](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/broadcast.ts)                 | [Sending and receiving messages](./messages.md)                                 | `npm run samples/broadcast`                          |
+| [model-sync](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/model-sync.ts)               | [Synchronized objects with `SyncModel`](./syncmodel.md)                         | `npm run samples/model-sync`                         |
+| [remote-logging](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/remote-logging.ts)       | [Sending the console log to the server](./monitoring.md)                        | `npm run samples/remote-logging`                     |
+| [rest-api](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/rest-api.ts)                   | [Saving and loading values in the data store](./data-store.md)                  | `npm run samples/rest-api`                           |
+| [sync-transform](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/sync-transform.ts)       | [Showing and moving the objects of Unity's `SyncTransform`](./synctransform.md) | `npm run samples/sync-transform`                     |
+| [verification-peer](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/verification-peer.ts) | Receiving and sending one value of every message type                           | `npm run samples/verification-peer -- [host] [port]` |
 
 `verification-peer` does not ask for anything. It takes the server address and port as arguments (default:
 `localhost` and 9211), logs every message it receives on `myChannel`, and after 5 seconds sends one value of every
