@@ -41,7 +41,7 @@ import {
     warnsAtEnd,
 } from './inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
-import { hostPort, normalizeAddress } from './addresses.js';
+import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from './addresses.js';
 import { ClientActivity, RATE_WINDOW_MILLIS, TrafficMeter } from './client-activity.js';
 import { readProxyHeader } from './proxy-protocol.js';
 import { TrustProxy, compileTrustedProxies, trustNoProxy } from './trusted-proxies.js';
@@ -540,7 +540,11 @@ export class TCPServerWorker extends WorkerService {
             if (this.proxyProtocol) this.handleProxyProtocolConnection(socket, handle);
             else handle(socket, NOTHING_READ);
         });
-        this.server.listen(port, host);
+        const server = this.server;
+        server.once('listening', () => {
+            if (fellBackToIPv4(host, server.address())) this.logWarning(ipv4OnlyWarning('TCP_HOST', 'Unity port'));
+        });
+        server.listen(port, listenHost(host));
 
         const proxyProtocol = this.proxyProtocol
             ? `, PROXY protocol header required from TRUSTED_PROXIES (${this.trustedProxies.join(', ')})` +

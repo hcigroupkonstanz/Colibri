@@ -1,6 +1,7 @@
 import { CONNECTION_LINE, Service } from '../core/index.js';
 import * as dgram from 'dgram';
 import { AddressInfo, isIPv6 } from 'net';
+import { readFileSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { endianness } from 'os';
 import * as path from 'path';
@@ -12,7 +13,7 @@ import {
     VoiceCodec,
 } from './voice-packet.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
-import { hostPort, normalizeAddress } from '../networking/addresses.js';
+import { hostPort, ipv4OnlyWarning, normalizeAddress } from '../networking/addresses.js';
 import { UnityClientAddresses, UnityClientSource } from './unity-client-addresses.js';
 
 // Recordings can run for minutes at 48kHz, so a plain number[] would mean millions of
@@ -155,6 +156,19 @@ export const voiceSocketOptions = function (hostname: string): dgram.SocketOptio
     return isIPv6(hostname) ? { type: 'udp6', ipv6Only: false } : { type: 'udp4' };
 };
 
+/**
+ * Whether a UDP socket on `::` takes IPv4 as well. For UDP, unlike TCP, libuv leaves IPV6_V6ONLY as
+ * the system has it, except on Windows, where it clears it. On Linux that is net.ipv6.bindv6only,
+ * 0 unless changed. Elsewhere, macOS included, IPv6 sockets take IPv4 by default.
+ */
+export const ipv6SocketsTakeIPv4 = function (read: (file: string) => string = file => readFileSync(file, 'utf8')): boolean {
+    try {
+        return read('/proc/sys/net/ipv6/bindv6only').trim() !== '1';
+    } catch {
+        return true;
+    }
+};
+
 const formatAppId = (appId: number): string => `0x${appId.toString(16).padStart(8, '0')}`;
 
 /** The samples as the little-endian bytes a .wav file holds, without copying them where it can. */
@@ -243,7 +257,25 @@ export class VoiceServer extends Service {
         return { listening: this.listening, recording: this.recordingVoiceData, samplingRate: this.samplingRate, clients: this.clients.size };
     }
 
-    public start(voicePort: number, hostname: string) {
+    // VOICE_HOST=::, the default, listens on IPv6 and IPv4. Where that is not possible, voice
+    // listens on IPv4 only, as Unity clients send voice over IPv4 whenever the server's name has an
+    // IPv4 address: on a system whose IPv6 sockets take no IPv4 (see ipv6SocketsTakeIPv4), and on
+    // one without IPv6, which fails the bind (see the error handler).
+    public start(voicePort: number, hostname: string, ipv6TakesIPv4: () => boolean = ipv6SocketsTakeIPv4) {
+        if (hostname === '::' && !ipv6TakesIPv4()) {
+            this.logWarning(ipv4OnlyWarning('VOICE_HOST', 'voice port', 'IPv6 sockets take no IPv4 on this system (net.ipv6.bindv6only=1)'));
+            hostname = '0.0.0.0';
+        }
+        this.openSocket(voicePort, hostname);
+
+        // Check if clients disconnected every second
+        this.disconnectCheckInterval = setInterval(() => {
+            this.pruneReports(Date.now());
+            void this.checkClientsDisconnected();
+        }, 1000);
+    }
+
+    private openSocket(voicePort: number, hostname: string): void {
         this.udpSocket = dgram.createSocket(voiceSocketOptions(hostname));
         this.udpSocket.on('listening', () => {
             this.listening = true;
@@ -383,6 +415,12 @@ export class VoiceServer extends Service {
         // only, never in the admin UI's log, and as nothing more than
         // 'bind EADDRINUSE 0.0.0.0:9013', without saying what had failed or what it meant.
         this.udpSocket.on('error', (err: NodeJS.ErrnoException) => {
+            if (!this.listening && hostname === '::' && err.code === 'EAFNOSUPPORT') {
+                this.logWarning(ipv4OnlyWarning('VOICE_HOST', 'voice port'));
+                this.closeSocket();
+                this.openSocket(voicePort, '0.0.0.0');
+                return;
+            }
             if (!this.listening) {
                 const inUse = err.code === 'EADDRINUSE' ? ', which another process is already using' : '';
                 this.logError(`Voice server could not listen on UDP ${hostPort(hostname, voicePort)}${inUse}: ${err.message}. `
@@ -396,12 +434,15 @@ export class VoiceServer extends Service {
                 + ` (further ones are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
         });
         this.udpSocket.bind(voicePort, hostname);
+    }
 
-        // Check if clients disconnected every second
-        this.disconnectCheckInterval = setInterval(() => {
-            this.pruneReports(Date.now());
-            void this.checkClientsDisconnected();
-        }, 1000);
+    private closeSocket(): void {
+        // Throws if the socket is closed already.
+        try {
+            this.udpSocket.close();
+        } catch {
+            // Nothing left to close.
+        }
     }
 
     // Tolerates never having been started, for the same reason as SocketIOServer.stop().
@@ -412,14 +453,8 @@ export class VoiceServer extends Service {
     // dropped their whole recording without a word.
     public async stop(): Promise<void> {
         if (this.disconnectCheckInterval) clearInterval(this.disconnectCheckInterval);
-        if (this.udpSocket) {
-            // Throws if the socket is closed already. That must not cost the recordings below.
-            try {
-                this.udpSocket.close();
-            } catch {
-                // Nothing left to close.
-            }
-        }
+        // A socket closed already must not cost the recordings below.
+        if (this.udpSocket) this.closeSocket();
 
         // A save the last disconnect check started may still be writing. Waiting for it keeps
         // the two from writing at once; the clients it is saving are no longer in the map.

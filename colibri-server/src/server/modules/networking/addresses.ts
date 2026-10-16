@@ -16,6 +16,25 @@ export const normalizeAddress = function (address: string): string {
     return net.isIPv4(ipv4) ? ipv4 : address;
 };
 
+/**
+ * The host to hand to listen() for a *_HOST setting. `::`, the default, becomes no host at all:
+ * Node then listens on :: and takes IPv4 as well, or on 0.0.0.0 on a system without IPv6, where
+ * an explicit :: would not listen at all.
+ */
+export const listenHost = function (host: string): string | undefined {
+    return host === '::' ? undefined : host;
+};
+
+/** Whether a server that was to listen on `::` listens on IPv4 only, for lack of IPv6. */
+export const fellBackToIPv4 = function (host: string, bound: net.AddressInfo | string | null): boolean {
+    return host === '::' && typeof bound === 'object' && bound?.family === 'IPv4';
+};
+
+/** The warning for a port that listens on IPv4 only although its *_HOST setting is `::`. */
+export const ipv4OnlyWarning = function (variable: string, port: string, reason = 'this system has no IPv6'): string {
+    return `${variable} is ::, but ${reason}: the ${port} listens on IPv4 only (0.0.0.0)`;
+};
+
 /** `host:port`, with an IPv6 host in brackets as in a URL: `[::]:9211`, not `:::9211`. */
 export const hostPort = function (host: string, port: number | string): string {
     return `${net.isIPv6(host) ? `[${host}]` : host}:${port}`;
