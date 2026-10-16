@@ -110,17 +110,17 @@ const adminData = new colibri.AdminData({
     restStore: restApi,
 });
 
-// Logs what happens to the process itself, and shuts it down, in this order. restApi.flush()
-// is the only thing standing between a crash and up to SAVE_DEBOUNCE_MILLIS of lost store
-// writes. The voice server goes last: it saves the voice recordings still in progress, which
-// can take a while for long ones, and must not leave the store's pending writes to the watchdog.
+// Logs what happens to the process itself, and shuts it down, in this order. restApi.close()
+// checkpoints the data store's write-ahead log into store.db. The voice server goes last: it
+// saves the voice recordings still in progress, which can take a while for long ones, and must
+// not leave the data store's close to the watchdog.
 const SHUTDOWN_TIMEOUT_MILLIS = 5000;
 const serverProcess = new colibri.ServerProcess([
     { name: 'AdminData', stop: () => adminData.stop() },
     { name: 'WebServer', stop: () => webServer.stop() },
     { name: 'SocketIOServer', stop: () => socketioServer.stop() },
     { name: 'TCPServer', stop: () => tcpServer.stop() },
-    { name: 'RestAPI', stop: () => restApi.flush() },
+    { name: 'RestAPI', stop: () => restApi.close() },
     { name: 'VoiceServer', stop: () => voiceServer.stop() },
 ], SHUTDOWN_TIMEOUT_MILLIS);
 
@@ -167,13 +167,13 @@ startup().catch((err) => {
  */
 
 // `docker stop` sends SIGTERM (then SIGKILL after a grace period) with no handler
-// installed for either, so the TCP worker thread was never terminated and an in-flight
-// store.json write could be lost.
+// installed for either, so the TCP worker thread was never terminated and the data store
+// was never closed.
 process.on('SIGTERM', (signal) => void serverProcess.shutdown(`Received ${signal}`, 0));
 process.on('SIGINT', (signal) => void serverProcess.shutdown(`Received ${signal}`, 0));
 
-// Both of these used to process.exit(1) directly, discarding whatever the debounced store
-// save still had pending - in exactly the situation where losing it hurts most.
+// Both of these used to process.exit(1) directly, skipping the orderly shutdown above, in
+// exactly the situation where it matters most.
 process.on('unhandledRejection', (reason) => {
     serverProcess.reportError('Unhandled rejection', reason);
     void serverProcess.shutdown('Unhandled rejection', 1);

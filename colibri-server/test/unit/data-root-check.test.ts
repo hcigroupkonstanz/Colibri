@@ -192,7 +192,7 @@ describe('DataRootCheck', () => {
             for (const code of [ 'EACCES', 'EROFS', 'ENOTDIR', 'ENOSPC', 'EIO' ]) {
                 const text = describeCode(code);
                 expect(text).toContain(`DATA_ROOT is not writable: ${DIR}`);
-                expect(text).toContain('store.json and voice recordings stay in memory');
+                expect(text).toContain('the data store and voice recordings stay in memory');
                 expect(text).toContain('It keeps running anyway.');
             }
         });

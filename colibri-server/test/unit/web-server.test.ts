@@ -60,8 +60,8 @@ describe('WebServer over HTTP', () => {
         webServer.stop();
         httpServer.closeAllConnections();
         await closed;
-        // A pending debounced save would otherwise recreate dataPath after it is removed.
-        await restApi.flush();
+        // Closes store.db before dataPath is removed.
+        await restApi.close();
         await rm(dataPath, { recursive: true, force: true });
         await rm(webRoot, { recursive: true, force: true });
     });
