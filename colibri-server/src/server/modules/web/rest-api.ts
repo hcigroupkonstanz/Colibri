@@ -13,6 +13,9 @@ const STORE_JSON_FILENAME = 'store.json';
 
 const DAY_MILLIS = 24 * 60 * 60 * 1000;
 const EXPIRY_INTERVAL_MILLIS = 60 * 60 * 1000;
+// A full store refuses every PUT that would grow it; the warning that says so is logged at most
+// this often.
+const FULL_WARNING_INTERVAL_MILLIS = 60_000;
 // How often the write-ahead log is copied into store.db (see StoreCheckpointer), and how often a
 // checkpoint that keeps failing is logged.
 const CHECKPOINT_INTERVAL_MILLIS = 1000;
@@ -25,6 +28,8 @@ const errorMessage = function (err: unknown): string {
 export interface RestStoreOptions {
     // Values not written for this many days are deleted. 0 keeps them for good.
     expiryDays?: number;
+    // A PUT that would take the store above this many bytes of JSON is refused with 507. 0 never.
+    maxBytes?: number;
     // Date.now(), for the tests.
     now?: () => number;
 }
@@ -47,10 +52,12 @@ export class RestAPI extends Service {
     private readonly databasePath: string;
     private readonly storeJsonPath: string;
     private readonly expiryDays: number;
+    private readonly maxBytes: number;
     private readonly now: () => number;
     private expiryTimer: NodeJS.Timeout | undefined;
     private checkpointer: StoreCheckpointer | undefined;
     private checkpointWarnedAt = -Infinity;
+    private fullWarnedAt = -Infinity;
 
     public constructor(dataPath: string, webserver: WebServer, options: RestStoreOptions = {}) {
         super();
@@ -58,6 +65,7 @@ export class RestAPI extends Service {
         this.databasePath = path.join(dataPath, STORE_DATABASE_FILENAME);
         this.storeJsonPath = path.join(dataPath, STORE_JSON_FILENAME);
         this.expiryDays = options.expiryDays ?? 0;
+        this.maxBytes = options.maxBytes ?? 0;
         this.now = options.now ?? Date.now;
 
         webserver.addApi('/store', Router()
@@ -113,6 +121,13 @@ export class RestAPI extends Service {
                 }
 
                 const json = JSON.stringify(req.body);
+                if (this.wouldExceedMaxBytes(req.params.app, req.params.value, json)) {
+                    const error = `Value with name ${req.params.value} not saved: the data store is full `
+                        + `(STORE_MAX_MB ${this.maxBytes / (1024 * 1024)})`;
+                    this.warnFull(error);
+                    res.status(507).json({ error });
+                    return;
+                }
 
                 // 201 for a value, or an app, that was not there before
                 const created = this.store.put(req.params.app, req.params.value, json, this.now()) === 'created';
@@ -341,6 +356,23 @@ export class RestAPI extends Service {
             this.logError(`Data store: could not remove the values not written for ${this.expiryDays} days: `
                 + `${errorMessage(err)}. Tried again in an hour.`, false);
         }
+    }
+
+    // Whether storing `json` would take the store above maxBytes. A replaced value counts only by
+    // how much it grows, so that a full store still takes a value that does not grow.
+    private wouldExceedMaxBytes(app: string, name: string, json: string): boolean {
+        if (this.maxBytes <= 0) return false;
+        const previous = this.store.sizeOf(app, name) ?? 0;
+        const growth = Buffer.byteLength(json, 'utf8') - previous;
+        return growth > 0 && this.store.counts().bytes + growth > this.maxBytes;
+    }
+
+    private warnFull(error: string): void {
+        const now = this.now();
+        if (now - this.fullWarnedAt < FULL_WARNING_INTERVAL_MILLIS) return;
+        this.fullWarnedAt = now;
+        this.logWarning(`PUT answered 507: ${error}. Delete values or raise STORE_MAX_MB. `
+            + 'This is logged at most once a minute.');
     }
 
     // At shutdown. Every write is committed when its request is answered, so there is nothing to

@@ -146,8 +146,14 @@ describe('Config', () => {
             expect((await loadConfig({ STORE_EXPIRY_DAYS: '7' })).STORE_EXPIRY_DAYS).toBe(7);
         });
 
+        it('defaults to no size limit, and takes one in MiB', async () => {
+            expect((await loadConfig({ STORE_MAX_MB: undefined })).STORE_MAX_MB).toBe(0);
+            expect((await loadConfig({ STORE_MAX_MB: '512' })).STORE_MAX_MB).toBe(512);
+        });
+
         it.each([
             [ 'STORE_EXPIRY_DAYS', '-1' ], [ 'STORE_EXPIRY_DAYS', '1.5' ], [ 'STORE_EXPIRY_DAYS', 'never' ],
+            [ 'STORE_MAX_MB', '-1' ], [ 'STORE_MAX_MB', '1GB' ],
         ])('refuses to start with %s "%s"', async (name, raw) => {
             await expect(loadConfig({ [name]: raw })).rejects.toThrow(name);
         });

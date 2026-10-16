@@ -605,4 +605,53 @@ describe('RestAPI', () => {
             await expect(get('/appA/key')).resolves.toEqual({ status: 200, body: 1 });
         });
     });
+
+    describe('STORE_MAX_MB', () => {
+        let now = 0;
+
+        // 20 bytes of JSON at most.
+        beforeEach(async () => {
+            api = create({ maxBytes: 20, now: () => now }, webserver);
+            await api.init();
+        });
+
+        it('refuses a PUT that would take the store above it with 507, and stores nothing', async () => {
+            await expect(put('/appA/one', 'x'.repeat(10))).resolves.toMatchObject({ status: 201 });
+            await expect(put('/appA/two', 'y'.repeat(10))).resolves.toEqual({
+                status: 507,
+                body: { error: `Value with name two not saved: the data store is full (STORE_MAX_MB ${20 / (1024 * 1024)})` },
+            });
+
+            await expect(get('/appA')).resolves.toEqual({ status: 200, body: [ 'one' ] });
+            expect(logged(LogLevel.Warn)).toEqual([ expect.stringContaining('PUT answered 507') ]);
+        });
+
+        // A full store still takes a value that does not grow, and room is made by deleting.
+        it('counts a replaced value only by how much it grows', async () => {
+            await put('/appA/one', 'x'.repeat(16));
+            await expect(put('/appA/one', 'y'.repeat(16))).resolves.toMatchObject({ status: 200 });
+            await expect(put('/appA/one', 'z'.repeat(4))).resolves.toMatchObject({ status: 200 });
+            await expect(put('/appA/two', 'w'.repeat(10))).resolves.toMatchObject({ status: 201 });
+            // 6 + 12 bytes stored, and "abc" takes 5 more.
+            await expect(put('/appA/three', 'abc')).resolves.toMatchObject({ status: 507 });
+
+            await del('/appA/two');
+            await expect(put('/appA/three', 'abc')).resolves.toMatchObject({ status: 201 });
+        });
+
+        it('warns at most once a minute', async () => {
+            await put('/appA/one', 'x'.repeat(18));
+            for (let i = 0; i < 3; i++) await put(`/appA/n${i}`, 'too much');
+            now += 60_000;
+            await put('/appA/again', 'too much');
+
+            expect(logged(LogLevel.Warn)).toHaveLength(2);
+        });
+
+        it('refuses nothing with STORE_MAX_MB 0', async () => {
+            await restart({ maxBytes: 0 });
+
+            await expect(put('/appA/big', 'x'.repeat(100_000))).resolves.toMatchObject({ status: 201 });
+        });
+    });
 });

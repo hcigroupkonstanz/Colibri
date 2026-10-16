@@ -122,6 +122,8 @@ export const Config = {
     // Days after which a data store value that has not been written since is deleted (see
     // RestAPI.expire); 0: never.
     STORE_EXPIRY_DAYS: parseNonNegativeInt('STORE_EXPIRY_DAYS', process.env.STORE_EXPIRY_DAYS, 30),
+    // MiB of JSON the data store may hold before it refuses a PUT with 507; 0: no limit.
+    STORE_MAX_MB: parseNonNegativeInt('STORE_MAX_MB', process.env.STORE_MAX_MB, 0),
 
     // Default of 30 (was Error.stackTraceLimit = Infinity) caps the cost of every stack
     // capture - each logError call with printStacktrace on walks this many frames - while

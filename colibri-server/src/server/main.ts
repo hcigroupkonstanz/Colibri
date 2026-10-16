@@ -59,6 +59,7 @@ connectionPool.appClientWarningThreshold = Config.APP_CLIENT_WARNING_THRESHOLD;
  */
 const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer, {
     expiryDays: Config.STORE_EXPIRY_DAYS,
+    maxBytes: Config.STORE_MAX_MB * 1024 * 1024,
 });
 const dataRootCheck = new colibri.DataRootCheck(Config.DATA_ROOT);
 
@@ -103,6 +104,7 @@ const adminData = new colibri.AdminData({
         APP_CLIENT_WARNING_THRESHOLD: Config.APP_CLIENT_WARNING_THRESHOLD,
         MODEL_TOMBSTONE_SECONDS: Config.MODEL_TOMBSTONE_SECONDS,
         STORE_EXPIRY_DAYS: Config.STORE_EXPIRY_DAYS,
+        STORE_MAX_MB: Config.STORE_MAX_MB,
         TRUSTED_PROXIES: Config.TRUSTED_PROXIES,
         TCP_PROXY_PROTOCOL: Config.TCP_PROXY_PROTOCOL,
         TCP_TLS_AT_PROXY: Config.TCP_TLS_AT_PROXY,
