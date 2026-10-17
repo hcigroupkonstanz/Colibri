@@ -2,7 +2,7 @@
 // are asked for and sent. Every snapshot is read only and bounded in size: a page of models, not the
 // store; a model's JSON up to a limit; names cut to a length. None of these functions changes the
 // state it reads.
-import { BuildInfo, CertificateInfo, RingBuffer } from '../core/index.js';
+import { BuildInfo, CertificateInfo, ProxyCertificateResult, RingBuffer } from '../core/index.js';
 import { DataStore, ModelEntry, NetworkClient, Tombstone } from '../command-hooks/index.js';
 import { ClientActivity, LoadLimit, RateSample } from '../networking/client-activity.js';
 import { PROTOCOL_VERSION } from '../networking/protocol.js';
@@ -570,6 +570,8 @@ export interface ServerSources {
     settings: ServerSettings;
     // The certificate served now, if TLS is on.
     tls: CertificateInfo | undefined;
+    // The latest check of PROXY_TLS_ADDRESSES; undefined without them.
+    proxyTls: ReadonlyArray<ProxyCertificateResult> | undefined;
     // Whether TCP_TLS_AT_PROXY applies: it is on, and so is TCP_PROXY_PROTOCOL.
     tcpTlsAtProxy: boolean;
     voice: VoiceStatus | undefined;
@@ -578,6 +580,25 @@ export interface ServerSources {
     tcpClients: ReadonlyArray<NetworkClient>;
     webClients: ReadonlyArray<SocketIoClient>;
 }
+
+// A certificate's names (its subject alternative names, or its subject), issuer and validity.
+export interface TlsSnapshot {
+    names: string;
+    issuer: string;
+    selfSigned: boolean;
+    validFrom: number;
+    validTo: number;
+    fingerprint256: string;
+}
+
+const tlsSnapshot = (info: CertificateInfo): TlsSnapshot => ({
+    names: info.names,
+    issuer: info.issuer,
+    selfSigned: info.selfSigned,
+    validFrom: info.validFrom.getTime(),
+    validTo: info.validTo.getTime(),
+    fingerprint256: info.fingerprint256,
+});
 
 export interface ServerSnapshot {
     at: number;
@@ -592,7 +613,16 @@ export interface ServerSnapshot {
     uptime: number;
     settings: ServerSettings;
     // The certificate's names (its subject alternative names, or its subject), issuer and validity.
-    tls: { names: string; issuer: string; selfSigned: boolean; validFrom: number; validTo: number; fingerprint256: string } | null;
+    tls: TlsSnapshot | null;
+    // The certificates the proxy presents at PROXY_TLS_ADDRESSES, one entry per certificate with the
+    // addresses that presented it, and one per address that could not be checked. Empty until the
+    // first check has finished; null without PROXY_TLS_ADDRESSES.
+    proxyTls: Array<{
+        addresses: string[];
+        checkedAt: number;
+        certificate: (TlsSnapshot & { trusted: boolean; trustError: string | null }) | null;
+        error: string | null;
+    }> | null;
     // TLS that ends at a trusted proxy in front of this server, which sees only the proxy's own
     // connections and knows of it only from the proxy or the operator. `web`: a web client or admin
     // page connected now, the one asking included, reached the proxy over TLS (see
@@ -661,15 +691,16 @@ export const serverSnapshot = function (sources: ServerSources): ServerSnapshot 
         startedAt: sources.startedAt,
         uptime: Math.max(0, Math.round((now - sources.startedAt) / 1000)),
         settings: sources.settings,
-        tls: tls
-            ? {
-                names: tls.names,
-                issuer: tls.issuer,
-                selfSigned: tls.selfSigned,
-                validFrom: tls.validFrom.getTime(),
-                validTo: tls.validTo.getTime(),
-                fingerprint256: tls.fingerprint256,
-            }
+        tls: tls ? tlsSnapshot(tls) : null,
+        proxyTls: sources.proxyTls
+            ? sources.proxyTls.map(result => ({
+                addresses: [ ...result.addresses ],
+                checkedAt: result.checkedAt,
+                certificate: result.certificate
+                    ? { ...tlsSnapshot(result.certificate), trusted: result.certificate.trusted, trustError: result.certificate.trustError ?? null }
+                    : null,
+                error: result.error ?? null,
+            }))
             : null,
         tlsAtProxy: { web: webTlsAtProxy, tcp: sources.tcpTlsAtProxy },
         voice: sources.voice ?? null,

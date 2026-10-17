@@ -518,7 +518,7 @@ sending the previous one; the next replaces it.
 
 | Topic | Query | Snapshot |
 | --- | --- | --- |
-| `server` | none | `{ version, build, protocolVersion, node, startedAt, uptime, settings, tls, tlsAtProxy, voice, counts }` |
+| `server` | none | `{ version, build, protocolVersion, node, startedAt, uptime, settings, tls, proxyTls, tlsAtProxy, voice, counts }` |
 | `clients` | none | `{ clients: ClientRow[], total, adminPages }`, at most 1000 rows |
 | `models` | `{ app?, channel?, filter?, offset?, limit? }` | `{ query, channels, channelsTotal, models: ModelRow[], total, deleted, deletedTotal, tombstoneSeconds }` |
 | `model` | `{ app, channel, id }` | `{ app, channel, id, found, deletedAt?, fields?, bytes?, updatedAt?, json?, truncated? }` |
@@ -527,9 +527,14 @@ sending the previous one; the next replaces it.
 - **`server`:** `settings` maps the configuration variables in effect to their values: ports and hosts,
   `BASE_URL`, `VOICE_SAMPLING_RATE`, `VOICE_RECORDING`, `TCP_IDLE_TIMEOUT_SECONDS`, the load limits,
   `APP_CLIENT_WARNING_THRESHOLD`, `MODEL_TOMBSTONE_SECONDS`, `TRUSTED_PROXIES`,
-  `TCP_PROXY_PROTOCOL` and `TCP_TLS_AT_PROXY`. `tls` is `null` without TLS, otherwise
-  `{ names, issuer, selfSigned, validFrom, validTo, fingerprint256 }` of the certificate served now;
-  never paths, key material or file contents. `tlsAtProxy` is `{ web, tcp }`: `web` is `true` while a
+  `TCP_PROXY_PROTOCOL`, `TCP_TLS_AT_PROXY` and `PROXY_TLS_ADDRESSES` (as `host:port` strings). `tls`
+  is `null` without TLS, otherwise `{ names, issuer, selfSigned, validFrom, validTo, fingerprint256 }`
+  of the certificate served now; never paths, key material or file contents. `proxyTls` is `null`
+  without `PROXY_TLS_ADDRESSES`, empty until the first check has finished, and otherwise one
+  `{ addresses, checkedAt, certificate, error }` per certificate the proxy presented, with the
+  addresses that presented it, and one per address that could not be checked (`certificate`
+  `null`, `error` the reason). `certificate` is the fields of `tls` plus `trusted` and `trustError`
+  (OpenSSL's or Node's reason, `null` when trusted). `tlsAtProxy` is `{ web, tcp }`: `web` is `true` while a
   web client or admin page connected now, the asking page included, reached a trusted proxy over
   TLS, as `tlsAtProxy` in `clients`; `tcp` is `true` when `TCP_TLS_AT_PROXY` and `TCP_PROXY_PROTOCOL`
   are on, so the proxy terminates TLS for every `tcp` client through it, whether or not one is

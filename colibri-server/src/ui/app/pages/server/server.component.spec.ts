@@ -24,6 +24,7 @@ const snapshot = (overrides: Partial<ServerSnapshot> = {}): ServerSnapshot => ({
         TRUSTED_PROXIES: [], TCP_PROXY_PROTOCOL: false
     },
     tls: null,
+    proxyTls: null,
     tlsAtProxy: { web: false, tcp: false },
     voice: { listening: true, recording: false, samplingRate: 48000, clients: 0 },
     counts: {
@@ -85,6 +86,78 @@ describe('serverSections', () => {
         expect(fact(snapshot({ tls: { ...tls, validTo: 99 * DAY } }), 'certificate', 'Valid until')).toEqual(expect.objectContaining({ tone: 'err', note: 'expired' }));
         expect(fact(snapshot({ tls: { ...tls, validTo: 200 * DAY } }), 'certificate', 'Valid until')?.tone).toBeUndefined();
         expect(fact(s, 'network', 'Web')?.note).toBe('HTTPS and WSS');
+    });
+
+    describe('the proxy\'s certificate (PROXY_TLS_ADDRESSES)', () => {
+        const certificate = { names: 'DNS:colibri.example.org', issuer: 'CN=R11, O=Let\'s Encrypt, C=US', selfSigned: false,
+            validFrom: 90 * DAY, validTo: 150 * DAY, fingerprint256: 'AB:CD' };
+        const proxied = (proxyTls: ServerSnapshot['proxyTls'], tls: ServerSnapshot['tls'] = null) => snapshot({
+            tls, proxyTls, settings: { ...snapshot().settings, PROXY_TLS_ADDRESSES: [ 'colibri.example.org:443', 'colibri.example.org:9212' ] }
+        });
+        const sectionsOf = (s: ServerSnapshot) => serverSections(s, String).filter(x => x.id.endsWith('certificate') || x.id.startsWith('proxy-'));
+
+        it('shows nothing without PROXY_TLS_ADDRESSES, and lists them under Network when set', () => {
+            expect(sectionsOf(snapshot())).toEqual([]);
+            expect(fact(snapshot(), 'network', 'Proxy TLS addresses')).toEqual(expect.objectContaining({ value: 'None', tone: 'off' }));
+            expect(fact(proxied([]), 'network', 'Proxy TLS addresses')?.value).toBe('colibri.example.org:443, colibri.example.org:9212');
+        });
+
+        it('says it is checking until the first check has finished', () => {
+            expect(sectionsOf(proxied([])).map(x => [ x.title, x.facts.map(f => `${f.label}: ${f.value}`) ])).toEqual([
+                [ 'Proxy TLS certificate', [ 'Addresses: colibri.example.org:443, colibri.example.org:9212', 'Status: Checking' ] ]
+            ]);
+        });
+
+        it('describes a trusted certificate with every address that presented it', () => {
+            const s = proxied([ { addresses: [ 'colibri.example.org:443', 'colibri.example.org:9212' ], checkedAt: 99 * DAY,
+                certificate: { ...certificate, trusted: true, trustError: null }, error: null } ]);
+
+            const [ section ] = sectionsOf(s);
+            expect(section!.title).toBe('Proxy TLS certificate');
+            expect(section!.facts.map(f => f.label)).toEqual([ 'Addresses', 'Trusted', 'Names', 'Issuer', 'Valid from', 'Valid until', 'SHA-256 fingerprint', 'Checked' ]);
+            expect(section!.facts[1]).toEqual(expect.objectContaining({ value: 'Yes', tone: 'ok' }));
+            expect(section!.facts[5]).toEqual(expect.objectContaining({ note: 'in 50 days' }));
+        });
+
+        it('marks one clients would refuse, and an address it could not reach', () => {
+            const s = proxied([
+                { addresses: [ 'colibri.example.org:443' ], checkedAt: 99 * DAY,
+                    certificate: { ...certificate, validTo: 105 * DAY, trusted: false, trustError: 'CERT_HAS_EXPIRED' }, error: null },
+                { addresses: [ 'colibri.example.org:9212' ], checkedAt: 99 * DAY, certificate: null, error: 'connect ECONNREFUSED 10.20.0.1:9212' }
+            ]);
+
+            const [ refused, unreachable ] = sectionsOf(s);
+            expect(refused!.facts.find(f => f.label === 'Trusted')).toEqual(expect.objectContaining({ value: 'No', tone: 'err', note: 'CERT_HAS_EXPIRED' }));
+            expect(refused!.facts.find(f => f.label === 'Valid until')).toEqual(expect.objectContaining({ tone: 'warn', note: 'expires in 5 days' }));
+            expect(unreachable!.facts.map(f => [ f.label, f.value, f.tone, f.note ])).toEqual([
+                [ 'Addresses', 'colibri.example.org:9212', undefined, undefined ],
+                [ 'Connection', 'Failed', 'err', 'connect ECONNREFUSED 10.20.0.1:9212' ],
+                [ 'Checked', String(99 * DAY), undefined, undefined ]
+            ]);
+            expect(new Set(sectionsOf(s).map(x => x.id)).size).toBe(2);
+        });
+
+        // The check runs once an hour: one that has expired since is refused already.
+        it('marks a certificate that has expired since the check as not trusted', () => {
+            const s = proxied([ { addresses: [ 'colibri.example.org:443' ], checkedAt: 99 * DAY,
+                certificate: { ...certificate, validTo: 100 * DAY - 1, trusted: true, trustError: null }, error: null } ]);
+
+            expect(sectionsOf(s)[0]!.facts.find(f => f.label === 'Trusted')).toEqual(expect.objectContaining({ value: 'No', tone: 'err', note: 'expired' }));
+        });
+
+        // TLS from the proxy to the server as well: clients see the proxy's certificate, the
+        // server's own is the one between the two.
+        it('tells the server\'s own certificate from the proxy\'s when it shows both', () => {
+            const own = { ...certificate, names: 'DNS:colibri-internal', selfSigned: true, issuer: 'CN=colibri-internal', fingerprint256: 'EF:01' };
+            const s = proxied([ { addresses: [ 'colibri.example.org:443' ], checkedAt: 99 * DAY,
+                certificate: { ...certificate, trusted: true, trustError: null }, error: null } ], own);
+
+            expect(sectionsOf(s).map(x => [ x.title, x.facts.find(f => f.label === 'SHA-256 fingerprint')?.value ])).toEqual([
+                [ 'TLS certificate (this server)', 'EF:01' ],
+                [ 'Proxy TLS certificate', 'AB:CD' ]
+            ]);
+            expect(sectionsOf(snapshot({ tls: own })).map(x => x.title)).toEqual([ 'TLS certificate' ]);
+        });
     });
 
     describe('TLS terminated by this server or by a proxy', () => {
@@ -168,7 +241,7 @@ describe('serverSections', () => {
             }), 'network', 'TCP TLS termination');
             const labels = serverSections(snapshot(), String).find(x => x.id === 'network')?.facts.map(f => f.label);
 
-            expect(labels?.slice(-2)).toEqual([ 'PROXY protocol on TCP', 'TCP TLS termination' ]);
+            expect(labels?.slice(-3)).toEqual([ 'PROXY protocol on TCP', 'TCP TLS termination', 'Proxy TLS addresses' ]);
             expect(setting(true, true)).toEqual(expect.objectContaining({ value: 'Proxy', tone: 'ok', variable: 'TCP_TLS_AT_PROXY' }));
             expect(setting(true, true)?.note).toBeUndefined();
             expect(setting(true, false)).toEqual(expect.objectContaining({ value: 'Proxy', tone: 'warn', note: 'needs TCP_PROXY_PROTOCOL' }));
