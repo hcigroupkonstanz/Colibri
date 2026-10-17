@@ -15,11 +15,14 @@ Works only with colibri-server 2.0.0 or newer.
 - **Breaking:** colour callbacks receive a `ColorValue`, either `"#RRGGBBAA"` from Unity or `[r, g, b, a]` from a web
   client. Convert it with `toHexColor()` or `toRgbaColor()`.
 - **Breaking:** `rxjs` is a peer dependency. npm 7 and newer install it automatically.
+- **Breaking:** `delete()` deletes an object for every client, as deleting a `SyncBehaviour` does in Unity. Before, it
+  only stopped syncing the object on this client, which `detach()` does now.
 - `registerModel` first asks the server for a model with the same id. If the server has one, its values win.
 - After a reconnect, all synchronized models are updated with what changed during the outage.
 
 ### Added
 
+- `synced()`: declare synced properties without decorators, for plain JavaScript.
 - `SyncTransform` and `RegisterSyncTransforms()`: read and move the objects of Unity's `SyncTransform` component, with
   the `sync-transform` sample.
 - `deleteRestObject()` and `DeleteRestApi()`: delete a value from the data store.

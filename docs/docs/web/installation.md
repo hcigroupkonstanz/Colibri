@@ -14,8 +14,9 @@ Voice chat is currently not supported on the web ([details](./voice-chat.md)).
 ## Requirements
 
 - A current browser, or Node.js 18 or newer.
-- TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false` in
-  `tsconfig.json`. `@Synced()` does not work with it.
+- For `@Synced()`: TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false`
+  in `tsconfig.json`. `@Synced()` does not work with it. Plain JavaScript uses `synced()` instead
+  ([Plain JavaScript](#plain-javascript)).
 - `rxjs` 7.8.1 or a newer 7.x. It is a peer dependency: npm 7 and newer install it automatically. With other
   package managers, add it to your project yourself.
 - A [Colibri server](../server/installation.md) 2.0.0 or newer. A Colibri 2 server refuses Colibri 1 web clients,
@@ -60,13 +61,26 @@ Without the Git history, for example in a downloaded ZIP of the repository, thes
 
 ## Plain JavaScript
 
-Colibri targets TypeScript. The documentation and the samples are TypeScript only. `@Synced()` is a TypeScript
-decorator, so plain JavaScript without a build step cannot use it. Messages, the data store and `RemoteLogger` work
-from JavaScript as usual.
+Colibri targets TypeScript. The documentation and the samples are TypeScript. `@Synced()` is a TypeScript
+decorator, so plain JavaScript declares synced properties with `synced()` in the constructor instead:
 
-For `SyncModel` in a project that must stay plain JavaScript, there is an
-[unsupported workaround](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/docs/js-workaround/README.md).
-It is not tested and may stop working in any release. Prefer TypeScript wherever you can.
+```js
+import { RegisterModelSync, SyncModel, synced } from '@hcikn/colibri';
+
+class Player extends SyncModel {
+    constructor(id) {
+        super(id);
+        synced(this, { name: '', score: 0 });
+    }
+}
+
+const [players$, registerPlayer] = RegisterModelSync({ name: 'player', type: Player });
+```
+
+- Each key is a synced property with its start value. Properties set outside `synced()` stay on this client.
+- `synced(this, { address: '' }, { address: 'billingAddress' })` syncs `address` under another name, as
+  `@Synced('billingAddress')` does.
+- Messages, the data store and `RemoteLogger` work from JavaScript as usual.
 
 ## Samples
 

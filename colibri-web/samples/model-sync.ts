@@ -55,9 +55,8 @@ void (async () => {
     const newClass = new SampleClass('use a real id here');
     registerExampleClass(newClass);
 
-    // colibri-web has no call that deletes a model for every client. newClass.delete() only
-    // stops this client sending newClass's changes: newClass stays in SampleClasses$,
-    // on the server and on every other client.
+    // delete() deletes the model for every client: it leaves SampleClasses$ here and on every
+    // other client, and Unity destroys its GameObject.
     // newClass.delete();
 
     const sendNumber = () => {

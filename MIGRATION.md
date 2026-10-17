@@ -133,8 +133,8 @@ These changes need no code changes, but you may notice them:
 npm install @hcikn/colibri@2 rxjs
 ```
 
-- Colibri 2 needs **TypeScript 5.0 or newer**. For plain JavaScript, see the
-  [unsupported workaround](colibri-web/docs/js-workaround/README.md).
+- Colibri 2 needs **TypeScript 5.0 or newer** for `@Synced()`. Plain JavaScript declares synced properties with
+  `synced()` ([details](https://colibri.hci.uni-konstanz.de/web/installation#plain-javascript)).
 - `rxjs` is now a peer dependency. npm 7 and newer install it automatically.
 
 ### Change the port
@@ -172,6 +172,9 @@ Sync.receiveColor('tint', colour => setTint(toHexColor(colour)));
 
 **Pass `name` to `RegisterModelSync`.** Without it, the channel is the class name, which a minified production
 build changes: `RegisterModelSync({ name: 'player', type: Player })`.
+
+**`delete()` deletes the object for every client.** In Colibri 1, `delete()` only stopped syncing it on this client.
+Where you meant that, e.g. when a component unmounts, call `detach()` instead.
 
 ### Changes in behaviour
 
