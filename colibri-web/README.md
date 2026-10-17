@@ -10,9 +10,8 @@ Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 ## Requirements
 
 - Node.js 18 or newer
-- For `@Synced()`: TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false`
-  in `tsconfig.json`. Plain JavaScript uses `synced()` instead
-  ([details](https://colibri.hci.uni-konstanz.de/web/installation#plain-javascript)).
+- TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false` in
+  `tsconfig.json`.
 - [colibri-server](../colibri-server/README.md#installation) 2.0.0 or newer
 
 ## Installation
@@ -203,8 +202,6 @@ clients.
   `Player` in the [Unity README](../colibri-unity/README.md#syncbehaviour). Property names are compared in lower
   case, so `score` matches Unity's `Score` ([details](https://colibri.hci.uni-konstanz.de/web/syncmodel)).
 - `delete()` deletes an object for every client.
-- In plain JavaScript, declare synced properties with `synced(this, { … })` in the constructor
-  ([details](https://colibri.hci.uni-konstanz.de/web/installation#plain-javascript)).
 
 ### Monitoring
 

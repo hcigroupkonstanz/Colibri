@@ -133,8 +133,8 @@ These changes need no code changes, but you may notice them:
 npm install @hcikn/colibri@2 rxjs
 ```
 
-- Colibri 2 needs **TypeScript 5.0 or newer** for `@Synced()`. Plain JavaScript declares synced properties with
-  `synced()` ([details](https://colibri.hci.uni-konstanz.de/web/installation#plain-javascript)).
+- Colibri 2 needs **TypeScript 5.0 or newer**. A project that must stay plain JavaScript can fall back on `synced()`
+  for synced properties ([details](https://colibri.hci.uni-konstanz.de/web/installation#plain-javascript)).
 - `rxjs` is now a peer dependency. npm 7 and newer install it automatically.
 
 ### Change the port

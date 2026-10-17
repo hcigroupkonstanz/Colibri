@@ -22,7 +22,8 @@ Works only with colibri-server 2.0.0 or newer.
 
 ### Added
 
-- `synced()`: declare synced properties without decorators, for plain JavaScript.
+- `synced()`: a fallback for synced properties in projects that must stay plain JavaScript. Prefer TypeScript with
+  `@Synced()`.
 - `SyncTransform` and `RegisterSyncTransforms()`: read and move the objects of Unity's `SyncTransform` component, with
   the `sync-transform` sample.
 - `deleteRestObject()` and `DeleteRestApi()`: delete a value from the data store.

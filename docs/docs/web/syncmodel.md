@@ -70,7 +70,6 @@ export class Participant extends SyncModel<Participant> {
 - Properties without `@Synced()` stay on this client.
 - Colibri creates the objects of other clients with `new Participant(id)`. If your class has its own constructor,
   it must work with the id as its only argument.
-- In plain JavaScript, declare synced properties with `synced()` instead ([Plain JavaScript](./installation.md#plain-javascript)).
 
 A synced property holds a value that can be written as JSON. To sync with Unity, use these types:
 

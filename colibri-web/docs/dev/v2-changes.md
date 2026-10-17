@@ -19,8 +19,8 @@ Colibri component from 1.x.
   decorator.
 - **Breaking:** Colibri now targets TypeScript (5.0 or newer). `@Synced()` is a TypeScript
   decorator, and the samples assume a TypeScript project.
-  Projects that are tied to plain JavaScript declare synced properties with `synced()` in the
-  constructor, which does what `@Synced()` does: registers each property under its name
+  Projects that are tied to plain JavaScript fall back on `synced()` in the constructor, which
+  does what `@Synced()` does: registers each property under its name
   lowercased (or the name given), and reports a change unless it is a remote update being
   applied. It replaces the workaround that was documented in the repository.
 - **Breaking:** `SyncModel.delete()` deletes a model for every client: `RegisterModelSync`
