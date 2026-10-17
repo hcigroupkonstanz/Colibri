@@ -1,6 +1,6 @@
 import { filter } from 'rxjs';
 
-import { BuildInfo, CertificateInfo, Payload, Service } from '../core/index.js';
+import { BuildInfo, CertificateInfo, Payload, ProxyCertificateResult, Service } from '../core/index.js';
 import { DataStore, NetworkMessage } from '../command-hooks/index.js';
 import { RateLimit, TokenBucket } from '../networking/inbound-limits.js';
 import { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';
@@ -56,6 +56,8 @@ export interface AdminSources {
     startedAt: number;
     settings: ServerSettings;
     tls?: { readonly info: CertificateInfo };
+    // The certificates of PROXY_TLS_ADDRESSES; left out without them.
+    proxyTls?: { readonly results: ReadonlyArray<ProxyCertificateResult> };
     // Whether TCP_TLS_AT_PROXY applies: it is on, and so is TCP_PROXY_PROTOCOL. Off if left out.
     tcpTlsAtProxy?: boolean;
     voice?: { readonly status: VoiceStatus };
@@ -293,6 +295,7 @@ export class AdminData extends Service {
                     startedAt: sources.startedAt,
                     settings: sources.settings,
                     tls: sources.tls?.info,
+                    proxyTls: sources.proxyTls?.results,
                     tcpTlsAtProxy: sources.tcpTlsAtProxy ?? false,
                     voice: sources.voice?.status,
                     store: sources.store,

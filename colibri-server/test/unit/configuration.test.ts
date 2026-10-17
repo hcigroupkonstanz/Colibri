@@ -139,6 +139,19 @@ describe('Config', () => {
         });
     });
 
+    describe('PROXY_TLS_ADDRESSES', () => {
+        it('is empty by default, and takes host names with ports', async () => {
+            expect((await loadConfig({ PROXY_TLS_ADDRESSES: undefined })).PROXY_TLS_ADDRESSES).toEqual([]);
+            expect((await loadConfig({ PROXY_TLS_ADDRESSES: 'colibri.example.org, colibri.example.org:9212' })).PROXY_TLS_ADDRESSES)
+                .toEqual([ { host: 'colibri.example.org', port: 443 }, { host: 'colibri.example.org', port: 9212 } ]);
+        });
+
+        it('refuses to start with an entry that is no address, naming it', async () => {
+            await expect(loadConfig({ PROXY_TLS_ADDRESSES: 'https://colibri.example.org' }))
+                .rejects.toThrow('Invalid PROXY_TLS_ADDRESSES: "https://colibri.example.org"');
+        });
+    });
+
     describe('TRUSTED_PROXIES', () => {
         it('trusts no proxy when unset or empty', async () => {
             expect((await loadConfig({ TRUSTED_PROXIES: undefined })).TRUSTED_PROXIES).toEqual([]);

@@ -3,10 +3,12 @@ import { Service } from './service.js';
 import {
     CertificateInfo,
     TlsCredentials,
+    Validity,
     checkTlsCredentials,
     describeCertificateInfo,
     readTlsFiles,
     readTlsFilesAsync,
+    validityAt,
 } from './tls-files.js';
 
 /**
@@ -19,24 +21,6 @@ import {
  * few seconds costs nothing and sees every kind of change.
  */
 export const TLS_FILE_CHECK_MILLIS = 10_000;
-
-// How long before a certificate expires the server warns about it, at most. certbot renews a
-// 90-day certificate 30 days ahead, so one that gets this close was not renewed. A short-lived
-// certificate (Let's Encrypt also issues 6-day ones) is warned about only in the last fifth of its
-// lifetime, so that it is not warned about all the time.
-const EXPIRY_WARNING_MILLIS = 7 * 24 * 60 * 60 * 1000;
-const EXPIRY_WARNING_SHARE = 0.2;
-
-type Validity = 'valid' | 'expiring' | 'expired' | 'not-yet-valid';
-
-const validityAt = function (info: CertificateInfo, now: number): Validity {
-    if (now < info.validFrom.getTime()) return 'not-yet-valid';
-    if (now >= info.validTo.getTime()) return 'expired';
-
-    const lifetime = info.validTo.getTime() - info.validFrom.getTime();
-    const warnFrom = info.validTo.getTime() - Math.min(EXPIRY_WARNING_MILLIS, lifetime * EXPIRY_WARNING_SHARE);
-    return now >= warnFrom ? 'expiring' : 'valid';
-};
 
 const sameCredentials = (a: TlsCredentials, b: TlsCredentials): boolean => a.cert.equals(b.cert) && a.key.equals(b.key);
 

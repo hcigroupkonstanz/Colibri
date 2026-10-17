@@ -33,6 +33,12 @@ const tlsCertificate = Config.TLS_CERT && Config.TLS_KEY
     ? new colibri.TlsCertificate(Config.TLS_CERT, Config.TLS_KEY)
     : undefined;
 
+// The certificates the proxy in front of the server presents to clients, which the server cannot
+// see otherwise, for the monitoring page.
+const proxyCertificates = Config.PROXY_TLS_ADDRESSES.length > 0
+    ? new colibri.ProxyCertificateCheck(Config.PROXY_TLS_ADDRESSES)
+    : undefined;
+
 // Behind these proxies, a web client's address is taken from X-Forwarded-For. The TCP worker
 // compiles its own from the same list, for the PROXY protocol.
 const trustProxy = colibri.compileTrustedProxies(Config.TRUSTED_PROXIES);
@@ -103,8 +109,10 @@ const adminData = new colibri.AdminData({
         TRUSTED_PROXIES: Config.TRUSTED_PROXIES,
         TCP_PROXY_PROTOCOL: Config.TCP_PROXY_PROTOCOL,
         TCP_TLS_AT_PROXY: Config.TCP_TLS_AT_PROXY,
+        PROXY_TLS_ADDRESSES: Config.PROXY_TLS_ADDRESSES.map(colibri.formatProxyTlsAddress),
     },
     tls: tlsCertificate,
+    proxyTls: proxyCertificates,
     tcpTlsAtProxy: tcpTlsAtProxyInEffect(Config),
     voice: voiceServer,
     restStore: restApi,
@@ -155,6 +163,8 @@ const startup = async () => {
         tlsAtProxy: Config.TCP_TLS_AT_PROXY,
     }, tlsCertificate);
     voiceServer.start(Config.VOICE_PORT, Config.VOICE_HOST);
+    // Last: a proxy that forwards to this server can then pass a check through to it.
+    proxyCertificates?.start();
 };
 
 startup().catch((err) => {
