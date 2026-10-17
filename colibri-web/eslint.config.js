@@ -15,7 +15,7 @@ export default tseslint.config(
     nPlugin.configs['flat/recommended-module'],
     promisePlugin.configs['flat/recommended'],
     {
-        // plain JS files (this config, docs/js-workaround/) run on Node, and unlike
+        // plain JS files (this config, the plain-JavaScript test) run on Node, and unlike
         // the .ts files they are not covered by typescript-eslint's no-undef opt-out
         files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
         languageOptions: {
@@ -71,7 +71,7 @@ export default tseslint.config(
     {
         // interactive CLI demos: an explicit exit on user command is the point,
         // not a library abruptly killing its host process
-        files: ['samples/**', 'docs/js-workaround/**'],
+        files: ['samples/**'],
         rules: {
             'n/no-process-exit': 'off'
         }

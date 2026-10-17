@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SyncModel } from '../src/SyncModel';
-import { Synced } from '../src/Synced';
+import { Synced, synced } from '../src/Synced';
 
 // Exposes the private `__syncedProperties` map the tests below reach into,
 // without resorting to `any`.
@@ -148,5 +148,86 @@ describe('Synced', () => {
                 vi.useRealTimers();
             }
         });
+    });
+});
+
+// synced(): the same, for plain JavaScript, called in the constructor.
+describe('synced()', () => {
+    interface CubeData {
+        x: number;
+        posY: number;
+        color: string;
+    }
+
+    class Cube extends SyncModel<CubeData> {
+        declare x: number;
+        declare posY: number;
+        declare color: string;
+
+        constructor(id: string) {
+            super(id);
+            synced(this, { x: 0, posY: 1, color: 'red' }, { posY: 'y' });
+        }
+    }
+
+    const internals = (model: SyncModel<unknown>) => (model as unknown as SyncModelInternals).__syncedProperties;
+
+    it('syncs each property under its name lowercased, or the name given', () => {
+        const cube = new Cube('c1');
+
+        expect(internals(cube)).toEqual({ x: 'x', y: 'posY', color: 'color' });
+        expect(cube.toJson()).toEqual({ id: 'c1', x: 0, y: 1, color: 'red' });
+    });
+
+    it('reports a change by its local name, and applies a remote update without reporting it', () => {
+        const cube = new Cube('c1');
+        const changes: string[] = [];
+        cube.modelChanges.subscribe(change => changes.push(change));
+
+        cube.posY = 5;
+        cube.update({ x: 3, y: 7 } as Partial<CubeData>);
+
+        expect(changes).toEqual(['posY']);
+        expect([cube.x, cube.posY]).toEqual([3, 7]);
+        expect(cube.toJson(['posY'])).toEqual({ id: 'c1', y: 7 });
+    });
+
+    it('works next to @Synced() members', () => {
+        class Labelled extends SyncModel<unknown> {
+            @Synced() accessor label = 'a';
+            declare size: number;
+
+            constructor(id: string) {
+                super(id);
+                synced(this, { size: 2 });
+            }
+        }
+
+        expect(new Labelled('l1').toJson()).toEqual({ id: 'l1', label: 'a', size: 2 });
+    });
+
+    it.each([
+        ['id', { id: 'x' }],
+        ['delete', { delete: 1 }],
+        ['label', { label: 'b' }]
+    ])("refuses '%s', which is a member already, naming it", (key, values) => {
+        class Labelled extends SyncModel<unknown> {
+            @Synced() accessor label = 'a';
+        }
+
+        expect(() => {
+            synced(new Labelled('l1'), values);
+        }).toThrow(`synced(): '${key}' is already a member of Labelled`);
+    });
+
+    it('refuses a property synced twice, and a start value of undefined', () => {
+        const cube = new Cube('c1');
+
+        expect(() => {
+            synced(cube, { x: 1 });
+        }).toThrow("synced(): 'x' is already a member of Cube");
+        expect(() => {
+            synced(cube, { size: undefined });
+        }).toThrow("synced(): 'size' has no start value");
     });
 });

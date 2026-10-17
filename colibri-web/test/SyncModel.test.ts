@@ -165,12 +165,72 @@ describe('SyncModel', () => {
                 }
             });
 
+            user.deletions.subscribe(() => undefined);
             user.delete();
             expect(completed).toBe(true);
 
             // After completion, next() is a no-op; a local set emits nothing.
             user.name = 'ignored';
             expect(emissions).toEqual([]);
+        });
+
+        // RegisterModelSync deletes it for every client on this.
+        it('emits on deletions once, however often it is called', () => {
+            const user = new User('user-1');
+            let deletions = 0;
+            user.deletions.subscribe(() => deletions++);
+
+            user.delete();
+            user.delete();
+
+            expect(deletions).toBe(1);
+        });
+
+        // With no RegisterModelSync listing it, nothing knows the channel to delete it on.
+        it('warns, once, when no RegisterModelSync lists the model', () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            try {
+                const user = new User('user-1');
+                user.delete();
+                user.delete();
+
+                expect(warn).toHaveBeenCalledTimes(1);
+                expect(warn).toHaveBeenCalledWith(
+                    expect.stringContaining("delete() of 'user-1', which no RegisterModelSync lists")
+                );
+            } finally {
+                warn.mockRestore();
+            }
+        });
+    });
+
+    // The flag delete() keeps is private to SyncModel: a model may have a `deleted` of its own.
+    it('deletes a model that has a deleted property of its own', () => {
+        class Task extends SyncModel<unknown> {
+            deleted = true;
+        }
+        const task = new Task('t1');
+        let deletions = 0;
+        task.deletions.subscribe(() => deletions++);
+
+        task.delete();
+
+        expect(deletions).toBe(1);
+        expect(task.deleted).toBe(true);
+    });
+
+    describe('detach', () => {
+        it('completes modelChanges without deleting the model anywhere', () => {
+            const user = new User('user-1');
+            let deletions = 0;
+            let completed = false;
+            user.deletions.subscribe(() => deletions++);
+            user.modelChanges.subscribe({ complete: () => (completed = true) });
+
+            user.detach();
+
+            expect(completed).toBe(true);
+            expect(deletions).toBe(0);
         });
     });
 

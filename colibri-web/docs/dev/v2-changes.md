@@ -18,9 +18,18 @@ Colibri component from 1.x.
   synchronization in frameworks like React, which never worked correctly under the legacy
   decorator.
 - **Breaking:** Colibri now targets TypeScript (5.0 or newer). `@Synced()` is a TypeScript
-  decorator, and the documentation, samples and tests all assume a TypeScript project.
-  Projects that are tied to plain JavaScript can fall back on the
-  [workaround](../js-workaround/README.md) documented in the repository.
+  decorator, and the samples assume a TypeScript project.
+  Projects that are tied to plain JavaScript fall back on `synced()` in the constructor, which
+  does what `@Synced()` does: registers each property under its name
+  lowercased (or the name given), and reports a change unless it is a remote update being
+  applied. It replaces the workaround that was documented in the repository.
+- **Breaking:** `SyncModel.delete()` deletes a model for every client: `RegisterModelSync`
+  sends `model::delete` on its channel and takes the model out of the list, as destroying a
+  `SyncBehaviour` does in colibri-unity. The server already accepted it from web clients.
+  The old behaviour, stop syncing on this client only, is `detach()`, which
+  `RegisterModelSync` uses on a delete from another client and when `registerModel` replaces
+  a listed copy. An update for an id this client deleted is not listed for 60 s, as
+  colibri-unity's `LocallyDeletedModels` does.
 - **Breaking:** the socket handshake announces protocol version `'2'` instead of `'1'`, and
   colibri-server 2.0.0 checks it and refuses any other version. colibri-web 1.x and
   colibri-server 2.0.0 therefore cannot be used together; upgrade both. See
