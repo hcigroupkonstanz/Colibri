@@ -266,7 +266,10 @@ namespace HCIKonstanz.Colibri.Synchronization
         private void OnApplicationPause(bool paused)
         {
             if (paused)
+            {
                 SendPendingChanges();
+                PhysicsClient.SaveRun();
+            }
         }
 
         /// <summary>

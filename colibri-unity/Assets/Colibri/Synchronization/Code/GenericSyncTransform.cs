@@ -229,6 +229,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetForPlaySession()
         {
+            if (_id != null)
+                Application.quitting -= SaveRun;
             _id = null;
             _previousRunId = null;
         }
@@ -241,11 +243,25 @@ namespace HCIKonstanz.Colibri.Synchronization
                 {
                     _previousRunId = PlayerPrefs.GetString(PreviousRunKey, "");
                     _id = System.Guid.NewGuid().ToString();
-                    PlayerPrefs.SetString(PreviousRunKey, _id);
-                    PlayerPrefs.Save();
+                    Application.quitting += SaveRun;
                 }
                 return _id;
             }
+        }
+
+        /// <summary>
+        /// Keeps this run's id for the next one: as the run ends, not at its start. Written at the
+        /// start, a second instance on the same machine, a second Editor on a copy of the project
+        /// say, read the first one's live id as its previous run, and took the physics of every
+        /// body the first one simulated. Also called when the app is paused, the way out on
+        /// Android, where quitting is not reported reliably (see SyncTicker).
+        /// </summary>
+        internal static void SaveRun()
+        {
+            if (_id == null)
+                return;
+            PlayerPrefs.SetString(PreviousRunKey, _id);
+            PlayerPrefs.Save();
         }
 
         internal static bool WasPreviousRun(string id)

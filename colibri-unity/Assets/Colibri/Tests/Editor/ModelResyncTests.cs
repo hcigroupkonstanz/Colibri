@@ -1338,6 +1338,30 @@ namespace HCIKonstanz.Colibri.Tests
             }
         }
 
+        /// <summary>
+        /// Written at the start of a run, a second instance on the same machine read the first
+        /// one's live id as its previous run, and took the physics of everything it simulated.
+        /// </summary>
+        [Test]
+        public void ARunsIdIsKeptForTheNextRunOnlyAsItEnds()
+        {
+            PlayerPrefs.SetString("Colibri.PhysicsClientId", "the previous run");
+            PhysicsClient.ResetForPlaySession();
+            try
+            {
+                var id = PhysicsClient.Id;
+                Assert.That(PlayerPrefs.GetString("Colibri.PhysicsClientId", ""), Is.EqualTo("the previous run"));
+
+                PhysicsClient.SaveRun();
+                Assert.That(PlayerPrefs.GetString("Colibri.PhysicsClientId", ""), Is.EqualTo(id));
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
+                PhysicsClient.ResetForPlaySession();
+            }
+        }
+
         [Test]
         public void AnotherClientsPhysicsIsNotTakenAfterARestart()
         {

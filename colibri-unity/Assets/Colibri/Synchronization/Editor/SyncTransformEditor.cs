@@ -7,7 +7,9 @@ using HCIKonstanz.Colibri.Core;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    // Without it, Unity shows no Inspector for several selected objects at all.
     [CustomEditor(typeof(SyncTransform))]
+    [CanEditMultipleObjects]
     public class SyncTransformEditor : Editor
     {
         [InitializeOnLoadMethod]
