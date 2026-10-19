@@ -53,7 +53,8 @@ export abstract class SyncModel<T> {
         }
         // Detached first: ending modelChanges sends a change still buffered, which must not go out
         // after the delete. With MODEL_TOMBSTONE_SECONDS=0 it created the object again everywhere.
-        this.detach();
+        // SyncModel's own detach(), whatever a model class has under that name.
+        SyncModel.prototype.detach.call(this);
         this.deletions.next();
         this.deletions.complete();
     }

@@ -3,6 +3,18 @@ import { Colibri, Message, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected, whenColibriCreated } from './lifecycle';
 import { SyncModel } from './SyncModel';
 
+// SyncModel's own toJson(), update() and detach(), not what a model class puts under these names. A
+// model class with an update() of its own, to move the model each frame say, took over how the
+// changes other clients sent were applied: nothing they changed ever arrived, and nothing said so.
+const toJsonOf = <T>(model: SyncModel<T>, attributes?: string[]): Partial<T> =>
+    SyncModel.prototype.toJson.call(model, attributes) as Partial<T>;
+const updateOf = <T>(model: SyncModel<T>, updates: Partial<T>): void => {
+    SyncModel.prototype.update.call(model, updates);
+};
+const detachOf = (model: SyncModel<unknown> | undefined): void => {
+    if (model) SyncModel.prototype.detach.call(model);
+};
+
 interface ModelSyncMsg<T extends SyncModel<T>> extends Message {
     command: 'model::update' | 'model::delete';
     payload: Partial<T> & { id: string };
@@ -278,7 +290,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         afresh.set(model.id, Date.now());
         answered.add(model);
         releaseHeldChanges(model);
-        sendUpdate(colibri, model, model.toJson());
+        sendUpdate(colibri, model, toJsonOf(model));
     };
 
     // At first and after a reconnect, everything else is asked for once every own model asked for
@@ -496,7 +508,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             endConfirmation(id);
             if (model) {
                 heldChanges.delete(model);
-                sendUpdate(asker, model, model.toJson());
+                sendUpdate(asker, model, toJsonOf(model));
             } else if (!isBare(modelData)) {
                 applyUpdate(model, modelData);
             }
@@ -571,8 +583,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const sendOnTop = (id: string, asker: Colibri, model: T, shown: Partial<T>, held: string[], lost: string[]) => {
         if (held.length === 0 && lost.length === 0) return false;
         // toJson() with no properties named is all of them.
-        const current = model.toJson() as Record<string, unknown>;
-        const sent: Record<string, unknown> = held.length > 0 ? model.toJson(held) : { id };
+        const current = toJsonOf(model) as Record<string, unknown>;
+        const sent: Record<string, unknown> = held.length > 0 ? toJsonOf(model, held) : { id };
         for (const key of lost) sent[key] = current[key];
         sendUpdate(asker, model, sent as Partial<T>);
 
@@ -625,8 +637,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         }
         applyUpdate(model, withoutChanges(theirs as Partial<T>, model, held));
 
-        const current = model.toJson() as Record<string, unknown>;
-        const update: Record<string, unknown> = held.length > 0 ? model.toJson(held) : { id };
+        const current = toJsonOf(model) as Record<string, unknown>;
+        const update: Record<string, unknown> = held.length > 0 ? toJsonOf(model, held) : { id };
         for (const key of again) update[key] = current[key];
         // Not for a model whose detach() was called since: that ended what it sends.
         if (ownModels.has(model) && Object.keys(update).length > 1) sendUpdate(asker, model, update as Partial<T>);
@@ -693,8 +705,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const known = knownValues.get(model);
         if (!known) return [];
         const since = lastHeardBeforeOutage - KNOWN_VALUES_MS;
-        const heldKeys = new Set(held.length > 0 ? Object.keys(model.toJson(held)) : []);
-        const current = model.toJson() as Record<string, unknown>;
+        const heldKeys = new Set(held.length > 0 ? Object.keys(toJsonOf(model, held)) : []);
+        const current = toJsonOf(model) as Record<string, unknown>;
         return Object.entries(modelData)
             .filter(([key, value]) => {
                 const values = known.get(key) ?? [];
@@ -727,7 +739,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             if (ownModels.has(model)) remember(model, update);
 
             // Update existing model
-            model.update(update);
+            updateOf(model, update);
             models.next([...models.value]);
         } else if (modelData.id) {
             if (recentlyDeletedHere(modelData.id)) return;
@@ -741,13 +753,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             });
             newModel.modelChanges$.subscribe(changes => {
                 changesToSend.delete(newModel);
-                const update = newModel.toJson(changes);
+                const update = toJsonOf(newModel, changes);
                 SendMessage(name, 'model::update', update);
                 keepOut(newModel, update);
                 models.next([...models.value]);
             });
 
-            newModel.update(modelData);
+            updateOf(newModel, modelData);
             models.next([...models.value, newModel]);
         }
     };
@@ -768,13 +780,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // are sent as.
     const withoutChanges = (modelData: Partial<T>, model: T, changes: string[]): Partial<T> => {
         if (changes.length === 0) return modelData;
-        const changed = new Set(Object.keys(model.toJson(changes)).filter(key => key !== 'id'));
+        const changed = new Set(Object.keys(toJsonOf(model, changes)).filter(key => key !== 'id'));
         return Object.fromEntries(Object.entries(modelData).filter(([key]) => !changed.has(key))) as Partial<T>;
     };
 
     const onDelete = (id: string) => {
         const model = models.value.find(m => m.id === id);
-        model?.detach();
+        detachOf(model);
         forget(id, model);
     };
 
@@ -859,7 +871,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
                 const colibri = Colibri.getInstance(false);
                 if (!colibri || mustHold()) holdChanges(model, changes);
-                else sendUpdate(colibri, model, model.toJson(changes));
+                else sendUpdate(colibri, model, toJsonOf(model, changes));
             },
             // delete() and detach() end the stream: this client sends nothing more for the model - so
             // neither a held change, nor the whole model again after a reconnect.
@@ -879,7 +891,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (listed) {
             endConfirmation(model.id);
             askedAfterOutage.delete(model.id);
-            listed.detach();
+            detachOf(listed);
             models.next(models.value.map(m => (m === listed ? model : m)));
         } else {
             models.next([...models.value, model]);
