@@ -136,9 +136,10 @@ npm ci
 npm run samples/broadcast
 ```
 
-Each sample asks for the server address and port. Press Enter twice for the public test server
-`colibri.hci.uni-konstanz.de` and port 9211. To see two clients exchange data, start the same sample in a second
-terminal, or run it next to a Unity client whose app name is `myAppName`, which all samples use.
+Each sample asks for an app name, the server address and the port. Enter an app name of your own, e.g.
+`alex-samples`, and press Enter twice for the public test server `colibri.hci.uni-konstanz.de` and port 9211. To see
+two clients exchange data, start the same sample in a second terminal with the same app name, or run it next to a
+Unity client with that app name.
 
 | Sample                                                                                                                 | Shows                                                                           | Run with                                             |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -154,8 +155,8 @@ terminal, or run it next to a Unity client whose app name is `myAppName`, which 
 message type. Use it to check that a Unity client and the web client understand each other.
 
 :::note
-Everyone who runs the samples on the public test server uses the app name `myAppName`. You may see data from other
-people there. Use your own server, or change the app name in the sample, if that gets in the way.
+Everyone who runs the samples on one server with the same app name is in one app and sees the others' data. Without
+an app name of your own, the samples use `myAppName`, as other people may do.
 :::
 
 ## Upgrading from Colibri 1

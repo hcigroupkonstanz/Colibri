@@ -1,9 +1,9 @@
 import { Colibri, GetRestApi, PutRestApi } from '@hcikn/colibri';
 
-import { colibriAddress, colibriPort, rl } from './common';
+import { colibriAddress, colibriApp, colibriPort, rl } from './common';
 
 void (async () => {
-    new Colibri('myAppName', await colibriAddress(), await colibriPort());
+    new Colibri(await colibriApp(), await colibriAddress(), await colibriPort());
 
     const sampleObject = {
         name: 'Test',

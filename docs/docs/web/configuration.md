@@ -48,8 +48,8 @@ new Colibri('myAppName', '<server-address>', 9211);
 ## App name
 
 - All clients of your app, web and Unity, must use the same app name.
-- Anyone else who uses the name joins your app and sees its messages and synchronized objects. The examples and
-  samples use `myAppName`. For your own project, choose a unique name.
+- Anyone else who uses the name joins your app and sees its messages and synchronized objects. The examples use
+  `myAppName`. For your own project, choose a unique name.
 - `colibri` is reserved for the server's monitoring page. The server treats a client with this name as a monitoring
   page: it sends it the server's log and skips the protocol version check. Colibri warns if you use it.
 

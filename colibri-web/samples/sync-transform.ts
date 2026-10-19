@@ -1,13 +1,13 @@
 import { Colibri, RegisterSyncTransforms, SyncTransform, type Vector3 } from '@hcikn/colibri';
-import { colibriAddress, colibriPort, rl } from './common';
+import { colibriAddress, colibriApp, colibriPort, rl } from './common';
 
 /**
  *  Shows and moves the objects of colibri-unity's SyncTransform component. Run it next to the
- *  SyncTransform sample in Unity, with the app name 'myAppName' there as well, or in a second
- *  terminal to see two web clients move the same objects.
+ *  SyncTransform sample in Unity, with the same app name there, or in a second terminal to see two
+ *  web clients move the same objects.
  */
 void (async () => {
-    new Colibri('myAppName', await colibriAddress(), await colibriPort());
+    new Colibri(await colibriApp(), await colibriAddress(), await colibriPort());
 
     // The Unity sample syncs its placed objects without a ModelId, and creates cubes and spheres
     // at runtime with the ModelIds 'cube' and 'sphere'. Each ModelId has a channel of its own.
