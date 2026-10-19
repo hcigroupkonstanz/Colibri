@@ -117,6 +117,7 @@ public class MyClass : SyncBehaviour<MyClass>
 - A property needs both a getter and a setter. A field must not be `readonly`.
 - Member names are compared without regard to case. Two `[Sync]` members whose names differ only in case are an
   error.
+- A `[Sync]` member must not be called `Id`, `ID` or `id`: `id` is the name of the model's own `Id`.
 - To sync an object of your own class, sync a `JObject`. Convert with
   `JObject.FromObject(value, ColibriJson.Serializer)` and back with `ToObject<MyType>(ColibriJson.Serializer)`. See
   [Sending other types as JSON](./messages.md#sending-other-types-as-json).

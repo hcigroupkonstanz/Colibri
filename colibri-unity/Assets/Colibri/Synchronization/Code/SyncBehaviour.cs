@@ -156,6 +156,16 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static void RegisterAttribute(string memberName, Type valueType, MemberInfo member)
         {
             var name = ToWireName(memberName);
+
+            // "id" is the model's id on the wire. A member of that name, `[Sync] public int ID` say,
+            // went out as the id of every update this object sent, and every client took the
+            // model it named for another object.
+            if (name == "id")
+            {
+                Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{memberName}': 'id' is the name of the model's own Id. Rename the member.");
+                return;
+            }
+
             if (_syncedAttributes.ContainsKey(name))
             {
                 Debug.LogError($"Colibri: '{typeof(T).Name}' has more than one [Sync] member named '{memberName}' (names are matched case-insensitively). Rename one of them.");
