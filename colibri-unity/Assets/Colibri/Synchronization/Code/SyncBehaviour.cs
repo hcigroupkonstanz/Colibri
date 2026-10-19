@@ -12,7 +12,7 @@ using HCIKonstanz.Colibri.Core;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
-    public abstract class SyncBehaviour<T> : MonoBehaviour, SyncTicker.ITickable
+    public abstract class SyncBehaviour<T> : MonoBehaviour, SyncTicker.ITickable, ISyncedObject
         where T : SyncBehaviour<T>
     {
         private const string SupportedTypes = "bool, int, float, string, Vector2, Vector3, Quaternion, Color, JObject and arrays of those";
@@ -369,6 +369,17 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private readonly TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
 
+        string ISyncedObject.Id => Id;
+        bool ISyncedObject.MadeItsId => _hasMadeItsId;
+
+        void ISyncedObject.TakeId(string id, bool madeHere)
+        {
+            if (!String.IsNullOrEmpty(Id))
+                return;
+            Id = id;
+            _hasMadeItsId = madeHere;
+        }
+
         private int _tickIndex = -1;
         int SyncTicker.ITickable.TickIndex { get => _tickIndex; set => _tickIndex = value; }
 
@@ -410,12 +421,11 @@ namespace HCIKonstanz.Colibri.Synchronization
             Initialize();
 
             // Awake only ever runs on an object in a scene - a placed or an instantiated one,
-            // never a prefab asset - so there is no prefab case to exclude here.
+            // never a prefab asset - so there is no prefab case to exclude here. Another synced
+            // component of the object may have given this one its id already: see SyncedIds.
             if (String.IsNullOrEmpty(Id))
-            {
-                Id = Guid.NewGuid().ToString();
-                _hasMadeItsId = true;
-            }
+                SyncedIds.Assign(this, this);
+            SyncedIds.Register(Id);
 
             var self = this as T;
             _trackers = new IChangeTracker[_attributeList.Count];
@@ -477,6 +487,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             // delete below goes out at once: sent after the delete, the update would bring the
             // object back to life on the server.
             SyncTicker.Deregister(this);
+            if (HasAwoken)
+                SyncedIds.Deregister(Id);
 
             Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
             Sync.RemoveModelDeleteListener(Channel, OnModelDelete);

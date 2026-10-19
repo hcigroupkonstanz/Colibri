@@ -67,6 +67,9 @@ objects you create at runtime with `Instantiate`, but not for placed objects: ea
 - The `Template` can also be an inactive object in the scene. An active one would sync as an object of its own.
 - The manager creates the copies at the top level of the scene hierarchy. It activates each copy, so the copy runs
   `Awake`, and then applies the synchronized values.
+- An object can have more than one synced component, e.g. a `SyncTransform` on the head and on each hand of an
+  avatar. Leave their `Id` empty. The components on the object's top GameObject share its `Id`, and a component on a
+  child adds its path, e.g. `<Id>/LeftHand`. Set the manager's `Template` to a component on the top GameObject.
 - Without a matching manager in the scene, the console warns
   `No generic Colibri SyncManager found (without ModelId) - synchronization of newly created objects may be restricted`.
 - By the way: `SyncTransform` is also a `SyncBehaviour`, and `[SyncTransformManager]` is its manager.

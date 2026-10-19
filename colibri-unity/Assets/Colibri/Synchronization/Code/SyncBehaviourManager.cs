@@ -18,6 +18,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private readonly List<T> _existingObjects = new List<T>();
         private bool _isCreatingObject;
         private bool _warnedNoTemplate;
+        private bool _warnedUnknownPart;
 
         private void Start()
         {
@@ -95,6 +96,17 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (LocallyDeletedModels.Contains(Channel, id))
                 return;
 
+            // In this scene already, built with the object it is part of (it asks for its own
+            // state then) or placed in it.
+            if (SyncedIds.IsLive(id))
+                return;
+
+            // A part below the top of an object, such as an avatar's hand: the whole object is
+            // built, from its top's id, unless it is here already without this part.
+            var anchorId = SyncedIds.AnchorOfPart(id);
+            if (anchorId != null && SyncedIds.IsLive(anchorId))
+                return;
+
             // A manager without a template is how objects placed in the scene are synced, so it is
             // only worth a word once a model arrives that it would have to build - and then once,
             // not for every update of every such model.
@@ -106,6 +118,18 @@ namespace HCIKonstanz.Colibri.Synchronization
                     Debug.LogWarning($"Colibri: '{GetType().FullName}' received model '{id}' on channel '{Channel}', "
                         + "which is not in this scene, and has no Template to build it from. Assign a Template to build "
                         + "the objects other clients create.");
+                }
+                return;
+            }
+
+            if (anchorId != null && !SyncedIds.TemplateHasPart(Template, typeof(T), anchorId, id))
+            {
+                if (!_warnedUnknownPart)
+                {
+                    _warnedUnknownPart = true;
+                    Debug.LogWarning($"Colibri: '{GetType().FullName}' received model '{id}' on channel '{Channel}', a part of "
+                        + $"another client's object '{anchorId}' that its Template '{Template.name}' does not have. Use the same "
+                        + "prefab on every client.");
                 }
                 return;
             }
@@ -124,7 +148,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             try
             {
                 Template.enabled = false;
-                Template.Id = id;
+                Template.Id = anchorId ?? id;
                 go = Instantiate(Template);
 
                 // Templates are often kept switched off in the scene, and a clone starts out
@@ -138,9 +162,16 @@ namespace HCIKonstanz.Colibri.Synchronization
                     go.gameObject.SetActive(true);
 
                 // Known before its state is applied, so that a throw there cannot make the
-                // next update for this id build a second object.
-                _existingObjects.Add(go);
-                go.OnModelUpdate(data);
+                // next update for this id build a second object. The clone's other parts of this
+                // manager's type too: each asks for its own state, and none is built again.
+                foreach (var part in go.GetComponentsInChildren<T>(true))
+                {
+                    if (part.ModelId == Template.ModelId && !_existingObjects.Contains(part))
+                        _existingObjects.Add(part);
+                }
+                var target = anchorId == null ? go : go.GetComponentsInChildren<T>(true).FirstOrDefault(p => p.Id == id);
+                if (target)
+                    target.OnModelUpdate(data);
             }
             finally
             {

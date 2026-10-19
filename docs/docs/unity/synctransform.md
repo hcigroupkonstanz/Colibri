@@ -110,6 +110,9 @@ from its `Template` and syncs it. Destroying the object destroys the copies.
   `Template`.
 - The `Template` can also be an inactive object in the scene. An active one would sync as an object of its own.
 - The manager creates the copies at the top level of the scene hierarchy.
+- A prefab can have more than one `SyncTransform`, e.g. on the head and on each hand of an avatar. Leave their `Id`
+  empty: the one on the prefab's top GameObject gets the new `Id`, and each one on a child adds its path, e.g.
+  `<Id>/LeftHand`. Set the `Template` to the `SyncTransform` on the top GameObject.
 - If two managers handle the same `ModelId`, the console warns
   `Warning: Multiple instances of '…' detected with overlapping ModelID. …`.
 - If a manager without a `Template` receives an object it does not have, it warns once:
