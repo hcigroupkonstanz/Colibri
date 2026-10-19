@@ -88,7 +88,6 @@ namespace HCIKonstanz.Colibri.Networking
         {
             isConnected = false;
             connecting?.Cancel();
-            connecting = null;
 
             // Thread.Abort is unsupported on .NET Core / IL2CPP and would leave the socket in
             // an undefined state anyway. Cancelling and closing the client is what actually
@@ -217,16 +216,31 @@ namespace HCIKonstanz.Colibri.Networking
         private async void Connect()
         {
             connecting?.Cancel();
-            connecting = new CancellationTokenSource();
-            var token = connecting.Token;
-            var config = ColibriConfig.Load();
-            var host = config.Host;
-            var port = config.VoiceServerPort;
+            var source = new CancellationTokenSource();
+            connecting = source;
+            try
+            {
+                await ConnectWhenResolved(source.Token);
+            }
+            finally
+            {
+                if (connecting == source)
+                    connecting = null;
+                source.Dispose();
+            }
+        }
+
+        private async System.Threading.Tasks.Task ConnectWhenResolved(CancellationToken token)
+        {
             var delayMs = 1000;
             var reported = false;
 
             while (true)
             {
+                // Read again for each try: an address fixed in the configuration meanwhile is used.
+                var config = ColibriConfig.Load();
+                var host = config.Host;
+                var port = config.VoiceServerPort;
                 IPAddress address;
                 string failure;
                 try
