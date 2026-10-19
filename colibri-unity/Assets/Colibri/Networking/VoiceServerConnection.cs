@@ -80,7 +80,7 @@ namespace HCIKonstanz.Colibri.Networking
         private void OnEnable()
         {
             DontDestroyOnLoad(this);
-            if (!String.IsNullOrEmpty(ColibriConfig.Load().ServerAddress))
+            if (!String.IsNullOrEmpty(ColibriConfig.Load().Host))
                 Connect();
         }
 
@@ -108,7 +108,7 @@ namespace HCIKonstanz.Colibri.Networking
         private void Update()
         {
             // Every frame, so a packet goes out with the App Name configured now.
-            UseAppName(ColibriConfig.Load().AppName);
+            UseAppName(ColibriConfig.Load().App);
 
             if (isConnected)
                 DeliverReceivedPackets();
@@ -204,7 +204,7 @@ namespace HCIKonstanz.Colibri.Networking
         private void Connect()
         {
             var config = ColibriConfig.Load();
-            var host = config.ServerAddress;
+            var host = config.Host;
             var address = ResolveServerAddress(host, config.VoiceServerPort);
             udpClient = address != null ? OpenSocket(address) : null;
 
@@ -212,7 +212,7 @@ namespace HCIKonstanz.Colibri.Networking
             {
                 sendIPEndPoint = new IPEndPoint(address, config.VoiceServerPort);
                 samplingRate = config.VoiceServerSamplingRate > 0 ? config.VoiceServerSamplingRate : DEFAULT_SAMPLING_RATE;
-                UseAppName(config.AppName);
+                UseAppName(config.App);
 
                 // The server's voice socket is IPv4 unless VOICE_HOST is an IPv6 address, and
                 // nothing comes back from a server that does not listen on IPv6. Said so that a

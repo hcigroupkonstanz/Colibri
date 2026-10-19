@@ -69,7 +69,7 @@ namespace HCIKonstanz.Colibri.Store
         internal static string StorePath(string appName, string objectName)
             => $"api/store/{System.Uri.EscapeDataString(appName ?? "")}/{System.Uri.EscapeDataString(objectName ?? "")}";
 
-        private static string Url(string objectName) => ColibriConfig.GetWebUrl(StorePath(ColibriConfig.Load().AppName, objectName));
+        private static string Url(string objectName) => ColibriConfig.GetWebUrl(StorePath(ColibriConfig.Load().App, objectName));
 
         /// <summary>
         /// The name as the server stores it, the same rule as colibri-web's: surrounding spaces and

@@ -88,6 +88,19 @@ namespace HCIKonstanz.Colibri.Setup
         public string AppName = "";
         public string ServerAddress = "colibri.hci.uni-konstanz.de";
 
+        /// <summary>
+        /// <see cref="AppName"/> and <see cref="ServerAddress"/> as they are used: without the
+        /// spaces around them. A space typed or pasted along with them used to make the address
+        /// fail to resolve, with an error about DNS for an address that looked right, and the name
+        /// put the client into an app of its own, which looked like the right one everywhere.
+        /// </summary>
+        internal string App => (AppName ?? "").Trim();
+        internal string Host => (ServerAddress ?? "").Trim();
+
+        /// <summary>A message for an empty server address, as <see cref="NOT_CONFIGURED_MESSAGE"/> is for the App Name.</summary>
+        public static readonly string NO_SERVER_ADDRESS_MESSAGE =
+            "Colibri has no server address. Open Window -> Colibri Configuration, enter the Server Address, and press Save Config.";
+
         // colibri-server 2.x's default ports. 1.x's were 9011, 9012 and 9013: the defaults differ so
         // that a client of one version does not reach a server of the other by them. A configuration
         // saved by 1.x keeps the ports it saved; only a new one starts out with these.
@@ -161,7 +174,7 @@ namespace HCIKonstanz.Colibri.Setup
             var protocol = config.IsSSL ? "https" : "http";
             endpoint = endpoint.TrimStart('/'); // remove leading slash
 
-            var uri = $"{protocol}://{UrlHost(config.ServerAddress)}:{config.WebServerPort}/{endpoint}";
+            var uri = $"{protocol}://{UrlHost(config.Host)}:{config.WebServerPort}/{endpoint}";
             return uri;
         }
 
