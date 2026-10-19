@@ -93,6 +93,29 @@ namespace HCIKonstanz.Colibri.Synchronization
         public bool UseLocalTransform = false;
 
         /// <summary>
+        /// A synced object below this one that syncs its world pose moved with it, and read that
+        /// pose as its own change: it sent it back to every client, which moved this object's copy
+        /// there again, and a moment later's update from its owner moved it on. Nested
+        /// SyncTransforms, an avatar's hands below its body, echoed old poses and drifted.
+        /// </summary>
+        private protected override void AfterUpdateApplied()
+        {
+            foreach (var part in GetComponentsInChildren<ISyncedObject>(true))
+            {
+                if (!ReferenceEquals(part, this))
+                    part.LatchMovedWithParent();
+            }
+        }
+
+        private protected override void LatchMovedWithParent()
+        {
+            if (UseLocalTransform)
+                return;
+            Latch(nameof(Position));
+            Latch(nameof(Rotation));
+        }
+
+        /// <summary>
         /// The Sync* boxes. A member whose box is unticked reads a placeholder above (the origin,
         /// no rotation, scale one, active), which must never go on the wire: a client with that
         /// box ticked would apply it.

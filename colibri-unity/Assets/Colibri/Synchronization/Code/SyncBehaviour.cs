@@ -403,6 +403,31 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         void ISyncedObject.MarkAsCopy() => _isCopy = true;
 
+        void ISyncedObject.LatchMovedWithParent() => LatchMovedWithParent();
+
+        /// <summary>See <see cref="ISyncedObject.LatchMovedWithParent"/>; GenericSyncTransform latches its world pose.</summary>
+        private protected virtual void LatchMovedWithParent()
+        {
+        }
+
+        /// <summary>Called once an update from the server has been applied to this object.</summary>
+        private protected virtual void AfterUpdateApplied()
+        {
+        }
+
+        /// <summary>Takes the member's current value as no change of this object's.</summary>
+        private protected void Latch(string memberName)
+        {
+            if (_trackers == null)
+                return;
+            var self = this as T;
+            foreach (var attribute in _attributeList)
+            {
+                if (attribute.MemberName == memberName)
+                    _trackers[attribute.Index].Latch(self);
+            }
+        }
+
         void ISyncedObject.MarkDiscarded()
         {
             _hasReceivedDestroyCommand = true;
@@ -765,6 +790,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
                     UpdateAttribute(prop.Key, prop.Value);
                 }
+
+                AfterUpdateApplied();
 
                 _isReady.TrySetResult(true);
 

@@ -24,6 +24,12 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         /// <summary>Marks a part of a copy that is destroyed again at once: it sends no delete.</summary>
         void MarkDiscarded();
+
+        /// <summary>
+        /// Takes the pose it has now as no change of its own: an update another client sent moved
+        /// a synced object above it, and it with it.
+        /// </summary>
+        void LatchMovedWithParent();
     }
 
     /// <summary>

@@ -1407,6 +1407,28 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(Sent(model), Is.Null);
         }
 
+        /// <summary>
+        /// A world-space SyncTransform below another moved with it when the parent's update was
+        /// applied, read that as its own change and sent it back: nested SyncTransforms echoed
+        /// old poses and drifted.
+        /// </summary>
+        [Test]
+        public void AChildThatMovedWithItsParentsUpdateSendsNothing()
+        {
+            var parent = Spawn<ResyncTransform>("body");
+            var child = new GameObject("hand").AddComponent<ResyncTransform>();
+            child.transform.SetParent(parent.transform, false);
+            child.transform.localPosition = new Vector3(0f, 1f, 0f);
+            parent.Wake();
+            child.Wake();
+
+            parent.OnModelUpdate(new JObject { { "id", parent.Id }, { "position", new JArray(5f, 0f, 0f) } });
+            Poll(child);
+
+            Assert.That(child.transform.position, Is.EqualTo(new Vector3(5f, 1f, 0f)));
+            Assert.That(Sent(child), Is.Null, "The child sent the pose its parent's update gave it");
+        }
+
         /*
          *  Without a server, a placed body waited for its first answer for good. Once this client
          *  has been without one for the connect timeout, it is simulated without the server's state.
