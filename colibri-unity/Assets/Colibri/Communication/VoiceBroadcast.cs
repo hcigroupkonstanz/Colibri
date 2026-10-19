@@ -50,28 +50,65 @@ namespace HCIKonstanz.Colibri.Communication
         // Opus codec, null when voice goes out as PCM
         private OpusEncoder opusEncoder;
 
+        // Android: waiting for the microphone permission, and when it was last checked.
+        private bool waitingForPermission;
+        private float permissionCheckedAt;
+        private bool permissionAskedAgain;
+
         private void Start()
         {
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
             {
-                PermissionCallbacks microphonePermissionCallbacks = new PermissionCallbacks();
-                microphonePermissionCallbacks.PermissionGranted += OnMicrophonePermissionGranted;
-                microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
-#if UNITY_2023_1_OR_NEWER
-                // This event only exists from Unity 2023.1 on. Unguarded, it was a compile error
-                // in every Android build on 2022.3, the oldest version the package supports.
-                microphonePermissionCallbacks.PermissionRequestDismissed += OnMicrophonePermissionDenied;
-#endif
-                Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
+                waitingForPermission = true;
+                RequestMicrophonePermission();
                 return;
             }
 #endif
             InitBroadcast();
         }
 
+#if UNITY_ANDROID
+        private void RequestMicrophonePermission()
+        {
+            PermissionCallbacks microphonePermissionCallbacks = new PermissionCallbacks();
+            microphonePermissionCallbacks.PermissionGranted += OnMicrophonePermissionGranted;
+            microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
+#if UNITY_2023_1_OR_NEWER
+            // This event only exists from Unity 2023.1 on. Unguarded, it was a compile error
+            // in every Android build on 2022.3, the oldest version the package supports.
+            microphonePermissionCallbacks.PermissionRequestDismissed += OnMicrophonePermissionDismissed;
+#endif
+            Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
+        }
+
+        // Android cancels a request while another one is shown, and the user can close the dialog:
+        // either used to leave voice off for the session. Asked once more, and after that, see Update.
+        private void OnMicrophonePermissionDismissed(string permissionName)
+        {
+            if (!permissionAskedAgain)
+            {
+                permissionAskedAgain = true;
+                RequestMicrophonePermission();
+                return;
+            }
+            Debug.LogWarning(DEBUG_HEADER + "The microphone permission request was closed without an answer. Voice starts once the "
+                + "permission is granted, e.g. in the device's settings for this app.");
+        }
+#endif
+
         private void Update()
         {
+#if UNITY_ANDROID
+            // Granted later, in the device's settings or by another request, voice starts then.
+            // Checked once a second: the check goes through Java.
+            if (waitingForPermission && Time.unscaledTime - permissionCheckedAt >= 1f)
+            {
+                permissionCheckedAt = Time.unscaledTime;
+                if (Permission.HasUserAuthorizedPermission(Permission.Microphone))
+                    InitBroadcast();
+            }
+#endif
             if (isInitialized && broadcast)
             {
                 SendRecordedSamples();
@@ -90,7 +127,8 @@ namespace HCIKonstanz.Colibri.Communication
 
         private void OnMicrophonePermissionDenied(string permissionName)
         {
-            Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: Microphone permission NOT granted");
+            Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: Microphone permission NOT granted. Voice starts "
+                + "once it is granted, e.g. in the device's settings for this app.");
         }
 
         /// <summary>
@@ -112,6 +150,11 @@ namespace HCIKonstanz.Colibri.Communication
 
         private void InitBroadcast()
         {
+            // From the permission callback or the check in Update, whichever comes first.
+            waitingForPermission = false;
+            if (isInitialized)
+                return;
+
             // As VoiceServerConnection has it: frames are counted at this rate, and at 0 they would
             // hold no samples.
             int configuredSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
