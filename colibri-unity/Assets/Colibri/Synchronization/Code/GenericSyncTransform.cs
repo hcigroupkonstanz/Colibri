@@ -110,23 +110,30 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
-        private string clientPhysicsId = System.Guid.NewGuid().ToString();
-
         [Sync]
         public string PhysicsId
         {
             get
             {
-                if (PhysicsAuthority) _physicsId = clientPhysicsId;
+                if (PhysicsAuthority) _physicsId = PhysicsClient.Id;
                 return _physicsId;
             }
             set
             {
                 _physicsId = value;
-                PhysicsAuthority = _physicsId == clientPhysicsId;
+                PhysicsAuthority = _physicsId == PhysicsClient.Id;
+
+                // This client held the physics in its previous run: it takes it again, on the next
+                // FixedUpdate, so that the poll sends this run's id. The id of a run that has ended
+                // used to stay on the server while other clients stayed connected, and nobody
+                // simulated the object any more: the restarted client gave it up to the id it no
+                // longer had, and the others had given it up to that id before.
+                if (!PhysicsAuthority && PhysicsClient.WasPreviousRun(_physicsId))
+                    _takesPhysicsBack = true;
             }
         }
         private string _physicsId;
+        private bool _takesPhysicsBack;
 
         [Header("Physics")]
         public bool PhysicsAuthority = false;
@@ -155,6 +162,12 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         internal void HoldOrSimulate(double now)
         {
+            if (_takesPhysicsBack)
+            {
+                _takesPhysicsBack = false;
+                PhysicsAuthority = true;
+            }
+
             if (rigidbody)
             {
                 // Simulated only once the server's state is known. A placed object whose
@@ -175,6 +188,47 @@ namespace HCIKonstanz.Colibri.Synchronization
                 else
                     rigidbody.isKinematic = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// The id with which this client holds the physics of an object (see
+    /// <see cref="GenericSyncTransform{T}.PhysicsId"/>): a new one for each run, and the one of its
+    /// previous run, which PlayerPrefs keeps.
+    /// </summary>
+    internal static class PhysicsClient
+    {
+        private const string PreviousRunKey = "Colibri.PhysicsClientId";
+
+        private static string _id;
+        private static string _previousRunId;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForPlaySession()
+        {
+            _id = null;
+            _previousRunId = null;
+        }
+
+        internal static string Id
+        {
+            get
+            {
+                if (_id == null)
+                {
+                    _previousRunId = PlayerPrefs.GetString(PreviousRunKey, "");
+                    _id = System.Guid.NewGuid().ToString();
+                    PlayerPrefs.SetString(PreviousRunKey, _id);
+                    PlayerPrefs.Save();
+                }
+                return _id;
+            }
+        }
+
+        internal static bool WasPreviousRun(string id)
+        {
+            _ = Id;
+            return !string.IsNullOrEmpty(id) && id == _previousRunId;
         }
     }
 }

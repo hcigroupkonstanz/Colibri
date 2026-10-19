@@ -1281,6 +1281,55 @@ namespace HCIKonstanz.Colibri.Tests
         }
 
 
+        /// <summary>
+        /// The client that held the physics restarted while others stayed connected: the server
+        /// still names its previous run. It takes the physics back and sends this run's id, where
+        /// it used to give it up, so that nobody simulated the body any more.
+        /// </summary>
+        [Test]
+        public void AClientThatHeldThePhysicsInItsPreviousRunTakesItBack()
+        {
+            PlayerPrefs.SetString("Colibri.PhysicsClientId", "the previous run");
+            PhysicsClient.ResetForPlaySession();
+            try
+            {
+                var sync = SpawnBall(placed: true);
+                sync.OnModelUpdate(new JObject { { "id", sync.Id }, { "physicsid", "the previous run" } });
+                Assert.That(sync.PhysicsAuthority, Is.False, "Taken back inside the update, the claim is never sent");
+
+                FixedStep(sync);
+                Poll(sync);
+
+                Assert.That(sync.PhysicsAuthority, Is.True);
+                Assert.That(Sent(sync)?["physicsid"]?.Value<string>(), Is.EqualTo(PhysicsClient.Id));
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
+                PhysicsClient.ResetForPlaySession();
+            }
+        }
+
+        [Test]
+        public void AnotherClientsPhysicsIsNotTakenAfterARestart()
+        {
+            PlayerPrefs.SetString("Colibri.PhysicsClientId", "the previous run");
+            PhysicsClient.ResetForPlaySession();
+            try
+            {
+                var sync = SpawnBall(placed: true);
+                sync.OnModelUpdate(new JObject { { "id", sync.Id }, { "physicsid", "another client's" } });
+                FixedStep(sync);
+
+                Assert.That(sync.PhysicsAuthority, Is.False);
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
+                PhysicsClient.ResetForPlaySession();
+            }
+        }
+
         /*
          *  Without a server, a placed body waited for its first answer for good. Once this client
          *  has been without one for the connect timeout, it is simulated without the server's state.
