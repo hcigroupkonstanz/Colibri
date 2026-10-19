@@ -39,6 +39,12 @@ namespace HCIKonstanz.Colibri.Tests
 
             [Sync]
             public string Label = "";
+
+            [Sync]
+            public Vector3 Where = new Vector3(1f, 2f, 3f);
+
+            [Sync]
+            public float[] Values = { 1f };
         }
 
         private GameObject _gameObject;
@@ -107,6 +113,27 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(model.Count, Is.EqualTo(7));
             Assert.That(model.Data?["kept"]?.Value<bool>(), Is.True);
             Assert.That(model.Label, Is.EqualTo("after"));
+        }
+
+        /// <summary>
+        /// A vector of the wrong shape was applied as zero: a null pose from a web client moved the
+        /// object to the origin. A single value for an array member became an empty array.
+        /// </summary>
+        [Test]
+        public void AVectorOrArrayOfTheWrongShapeIsSkipped()
+        {
+            _gameObject = new GameObject("mixed");
+            var model = _gameObject.AddComponent<MixedModel>();
+            model.Id = "mixed";
+
+            LogAssert.Expect(LogType.Warning, new Regex("received null for \\[Sync\\] Where"));
+            LogAssert.Expect(LogType.Warning, new Regex("received 5 for \\[Sync\\] Values"));
+            model.OnModelUpdate(new JObject { { "id", "mixed" }, { "where", JValue.CreateNull() }, { "values", 5 } });
+            // Reported once per member: the second one is skipped without a word.
+            model.OnModelUpdate(new JObject { { "id", "mixed" }, { "where", new JArray(1, 2) } });
+
+            Assert.That(model.Where, Is.EqualTo(new Vector3(1f, 2f, 3f)));
+            Assert.That(model.Values, Is.EqualTo(new[] { 1f }));
         }
     }
 }

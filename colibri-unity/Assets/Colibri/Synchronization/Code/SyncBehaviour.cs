@@ -1101,29 +1101,30 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (type == typeof(string))
                 return value.Value<string>();
             if (type == typeof(Vector2))
-                return value.ToVector2();
+                return value.ToVector2Strict();
             if (type == typeof(Vector3))
-                return value.ToVector3();
+                return value.ToVector3Strict();
             if (type == typeof(Quaternion))
-                return value.ToQuaternion();
+                return value.ToQuaternionStrict();
             if (type == typeof(Color))
-                return value.ToColor();
+                return value.ToColorStrict();
+            // A JSON null or a single value is no array: it used to become an empty one.
             if (type == typeof(bool[]))
-                return value.Select(x => (bool)x).ToArray();
+                return value.ArrayStrict().Select(x => (bool)x).ToArray();
             if (type == typeof(int[]))
-                return value.Select(x => (int)x).ToArray();
+                return value.ArrayStrict().Select(x => (int)x).ToArray();
             if (type == typeof(float[]))
-                return value.Select(x => (float)x).ToArray();
+                return value.ArrayStrict().Select(x => (float)x).ToArray();
             if (type == typeof(string[]))
-                return value.Select(x => (string)x).ToArray();
+                return value.ArrayStrict().Select(x => (string)x).ToArray();
             if (type == typeof(Vector2[]))
-                return value.Select(x => x.ToVector2()).ToArray();
+                return value.ArrayStrict().Select(x => x.ToVector2Strict()).ToArray();
             if (type == typeof(Vector3[]))
-                return value.Select(x => x.ToVector3()).ToArray();
+                return value.ArrayStrict().Select(x => x.ToVector3Strict()).ToArray();
             if (type == typeof(Quaternion[]))
-                return value.Select(x => x.ToQuaternion()).ToArray();
+                return value.ArrayStrict().Select(x => x.ToQuaternionStrict()).ToArray();
             if (type == typeof(Color[]))
-                return value.Select(x => x.ToColor()).ToArray();
+                return value.ArrayStrict().Select(x => x.ToColorStrict()).ToArray();
             if (type == typeof(JObject))
             {
                 // A JObject member that is null on the sender arrives as a JSON null, which is a

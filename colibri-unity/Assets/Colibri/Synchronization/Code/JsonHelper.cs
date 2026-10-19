@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using Newtonsoft.Json.Linq;
 using System.Linq;
 
@@ -55,6 +56,61 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return new Color(vals[0], vals[1], vals[2], vals.Length > 3 ? vals[3] : 1f);
 
             return Color.black;
+        }
+
+        /*
+         *  Strict forms for [Sync] members (SyncBehaviour.ReadValue): a value of the wrong shape
+         *  throws InvalidCastException, and the member is skipped with a warning, once. The forms
+         *  above warn every time and return zero, identity or black, which a member took: a null
+         *  pose from a web client moved the object to the origin.
+         */
+
+        internal static Vector2 ToVector2Strict(this JToken val)
+        {
+            var v = ReadFloatsStrict(val, 2);
+            return new Vector2(v[0], v[1]);
+        }
+
+        internal static Vector3 ToVector3Strict(this JToken val)
+        {
+            var v = ReadFloatsStrict(val, 3);
+            return new Vector3(v[0], v[1], v[2]);
+        }
+
+        internal static Quaternion ToQuaternionStrict(this JToken val)
+        {
+            var v = ReadFloatsStrict(val, 4);
+            return new Quaternion(v[0], v[1], v[2], v[3]);
+        }
+
+        internal static Color ToColorStrict(this JToken val)
+        {
+            if (val != null && val.Type == JTokenType.String)
+            {
+                if (ColorUtility.TryParseHtmlString(val.Value<string>(), out var parsed))
+                    return parsed;
+                throw new InvalidCastException($"'{val}' is not an HTML colour like \"#RRGGBBAA\"");
+            }
+            var v = ReadFloatsStrict(val, 3);
+            return new Color(v[0], v[1], v[2], v.Length > 3 ? v[3] : 1f);
+        }
+
+        /// <summary>The elements of a JSON array; anything else throws InvalidCastException.</summary>
+        internal static JArray ArrayStrict(this JToken val)
+            => val as JArray ?? throw new InvalidCastException($"expected an array, not {val?.Type.ToString() ?? "nothing"}");
+
+        private static float[] ReadFloatsStrict(JToken val, int minCount)
+        {
+            if (!(val is JArray array) || array.Count < minCount)
+                throw new InvalidCastException($"expected an array of {minCount} numbers");
+            var values = new float[array.Count];
+            for (var i = 0; i < array.Count; i++)
+            {
+                if (!(array[i] is JValue number) || (number.Type != JTokenType.Float && number.Type != JTokenType.Integer))
+                    throw new InvalidCastException($"value #{i} is '{array[i]}', not a number");
+                values[i] = number.Value<float>();
+            }
+            return values;
         }
 
         /// <summary>
