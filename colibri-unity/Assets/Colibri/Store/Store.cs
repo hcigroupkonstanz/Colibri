@@ -71,8 +71,30 @@ namespace HCIKonstanz.Colibri.Store
 
         private static string Url(string objectName) => ColibriConfig.GetWebUrl(StorePath(ColibriConfig.Load().AppName, objectName));
 
+        /// <summary>
+        /// The name as the server stores it, the same rule as colibri-web's: surrounding spaces and
+        /// leading slashes are removed. Null for a name that is empty, "." or "..": a URL parser
+        /// resolves those as directory steps, so Delete("") or Delete(".") addressed the app
+        /// itself and deleted every value of the app.
+        /// </summary>
+        internal static string KeyName(string objectName)
+        {
+            var name = (objectName ?? "").Trim().TrimStart('/');
+            return name.Length == 0 || name == "." || name == ".." ? null : name;
+        }
+
+        private static bool TryKeyName(string action, string objectName, out string name)
+        {
+            name = KeyName(objectName);
+            if (name == null)
+                Debug.LogError($"Colibri: could not {action} \"{objectName}\" - a name must not be empty, \".\" or \"..\".");
+            return name != null;
+        }
+
         public static async Task<T> Get<T>(string objectName)
         {
+            if (!TryKeyName("load", objectName, out objectName))
+                return default;
             var url = Url(objectName);
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
@@ -92,6 +114,8 @@ namespace HCIKonstanz.Colibri.Store
 
         public static async Task<bool> Put(string objectName, object putObject)
         {
+            if (!TryKeyName("save", objectName, out objectName))
+                return false;
             if (!TryToJson(objectName, putObject, out var jsonData))
                 return false;
 
@@ -115,6 +139,8 @@ namespace HCIKonstanz.Colibri.Store
 
         public static async Task<bool> Delete(string objectName)
         {
+            if (!TryKeyName("delete", objectName, out objectName))
+                return false;
             var url = Url(objectName);
             using (UnityWebRequest request = UnityWebRequest.Delete(url))
             {
