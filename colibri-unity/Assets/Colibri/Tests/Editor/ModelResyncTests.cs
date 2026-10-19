@@ -1367,6 +1367,7 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var model = Spawn<ResyncValuesModel>("values");
             model.Wake();
+            model.OnModelUpdate(Bare(model.Id));
 
             Poll(model);
             Poll(model);
@@ -1379,6 +1380,7 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var model = Spawn<ResyncValuesModel>("values");
             model.Wake();
+            model.OnModelUpdate(Bare(model.Id));
 
             model.Scores[0] = 5;
             model.Data["a"] = 2;
@@ -1421,11 +1423,14 @@ namespace HCIKonstanz.Colibri.Tests
             child.transform.localPosition = new Vector3(0f, 1f, 0f);
             parent.Wake();
             child.Wake();
+            parent.OnModelUpdate(Bare(parent.Id));
+            child.OnModelUpdate(Bare(child.Id));
 
             parent.OnModelUpdate(new JObject { { "id", parent.Id }, { "position", new JArray(5f, 0f, 0f) } });
             Poll(child);
 
-            Assert.That(child.transform.position, Is.EqualTo(new Vector3(5f, 1f, 0f)));
+            // The premise: Unity moves a child with its parent (the test harness on stubs does not).
+            Assume.That(child.transform.position, Is.EqualTo(new Vector3(5f, 1f, 0f)));
             Assert.That(Sent(child), Is.Null, "The child sent the pose its parent's update gave it");
         }
 

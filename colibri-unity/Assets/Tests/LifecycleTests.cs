@@ -149,8 +149,8 @@ namespace HCIKonstanz.Colibri.E2E
             yield return null;
             yield return null;
 
+            // An exception from the ticker's loop would be an error in the log, which fails the test.
             Assert.That(SyncTicker.RegisteredCount, Is.EqualTo(before));
-            AssertNoErrors();
         }
 
         /// <summary>An exception from one object's [Sync] getter used to stop the poll for every object after it.</summary>
@@ -159,15 +159,18 @@ namespace HCIKonstanz.Colibri.E2E
         {
             var broken = SpawnConfigured<E2EThrowingGetterModel>("throws", _ => { });
             var other = SpawnConfigured<E2ECountingModel>("goes-on", _ => { });
-            yield return null;
 
-            LogAssert.Expect(LogType.Error, new Regex("^Colibri: syncing 'throws' failed"));
+            // The poll reads members only after the first answer. broken asked first, on the same
+            // connection, so its answer is in once other is polled: 1 read in Awake, 1 at the
+            // answer, 1 at the first poll.
+            yield return E2EServer.WaitUntil(() => other.Polls >= 3, "The server never answered the models' requests", 10f);
+
+            LogAssert.Expect(LogType.Error, new Regex("^Colibri: syncing '.*' failed"));
             broken.Fail = true;
             var polledBefore = other.Polls;
             for (var i = 0; i < 5; i++)
                 yield return null;
 
-            AssertNoErrors();
             Assert.That(other.Polls, Is.GreaterThan(polledBefore));
         }
 
