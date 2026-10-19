@@ -42,32 +42,22 @@ namespace HCIKonstanz.Colibri.Synchronization
     }
 
     /// <summary>
-    /// The ids of the synced components of one object.
+    /// Assigns the model ids of synced components. Ids only have to be unique per channel and each
+    /// type syncs on its own, so all synced components on an object's anchor (its topmost synced
+    /// GameObject) share one id. A component further down takes
+    /// <c>&lt;anchorId&gt;/Body/LeftHand[1]#2</c>: its path from the anchor, <c>[i]</c> for sibling
+    /// GameObjects with the same name, <c>#n</c> for the n-th component of a type on one
+    /// GameObject. Every client derives the same ids from the same prefab.
     /// </summary>
     /// <remarks>
-    /// A model id only has to be unique on its channel, and each type syncs on its own channel. So
-    /// every synced component on an object's top GameObject (its anchor) takes the same id, and a
-    /// synced component further down takes that id plus its path from the anchor:
-    /// <c>&lt;id&gt;/Head</c>, <c>&lt;id&gt;/Body/LeftHand</c>. The client that creates the object
-    /// and every client that builds it from an update get the same ids from the same prefab.
-    ///
-    /// Each component used to make its own random id. A prefab with more than one synced
-    /// component, such as an avatar with a SyncTransform for the head and each hand, then had ids
-    /// on every other client that its owner did not know: each part went out as a new object,
-    /// every other client's manager built a whole avatar for it, whose parts made new ids again,
-    /// and so on without end.
-    ///
-    /// The anchor is the topmost synced GameObject above a component, up to the root of an
-    /// Instantiate: Unity names that "(Clone)", and a manager builds an object at it. Stopping
-    /// there keeps an object created below another synced one, a player under a synced room say,
-    /// apart from it, as it is on the clients that build it.
+    /// The anchor search stops at a GameObject named "(Clone)", where a manager builds an
+    /// object, so an object created below another synced one gets its own anchor.
     /// </remarks>
     internal static class SyncedIds
     {
         private const string CloneSuffix = "(Clone)";
 
-        // How many live synced components have each id. Several do: the components on one anchor
-        // share it.
+        // Live synced components per id; the components on one anchor share theirs.
         private static readonly Dictionary<string, int> _live = new Dictionary<string, int>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -91,22 +81,18 @@ namespace HCIKonstanz.Colibri.Synchronization
                 _live[id] = count - 1;
         }
 
-        /// <summary>Whether a synced component with this id is in the scene on this client.</summary>
         internal static bool IsLive(string id) => !String.IsNullOrEmpty(id) && _live.ContainsKey(id);
 
-        /// <summary>
-        /// Gives <paramref name="self"/>, whose id is empty, its id: the anchor's, plus its path
-        /// below it. The anchor's components that have no id yet get a new one first.
-        /// </summary>
+        /// <summary>Gives <paramref name="self"/>, whose id is empty, the anchor id plus its path.</summary>
         internal static void Assign(ISyncedObject self, Component component)
         {
             var anchor = FindAnchor(component.transform);
             var anchorId = AnchorId(anchor, out var madeHere);
+            // AnchorId already gave self an id if it made a new anchor id.
             if (String.IsNullOrEmpty(self.Id))
                 self.TakeId(anchorId + Suffix(anchor, component), madeHere);
         }
 
-        /// <summary>The topmost synced GameObject above <paramref name="transform"/>, see the remarks.</summary>
         internal static Transform FindAnchor(Transform transform)
         {
             var anchor = transform;
@@ -120,10 +106,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return anchor;
         }
 
-        /// <summary>
-        /// The id of the anchor's first synced component that has one. If none has, a new one,
-        /// which every component on the anchor without an id takes now.
-        /// </summary>
+        // The id of the anchor's first component that has one; if none has, a new one given to all of them.
         private static string AnchorId(Transform anchor, out bool madeHere)
         {
             var parts = anchor.GetComponents<ISyncedObject>();
@@ -145,15 +128,13 @@ namespace HCIKonstanz.Colibri.Synchronization
             return id;
         }
 
-        // The anchor id that an id with this suffix was made from.
+        // The anchor id inside an id that ends with suffix; any other id is the anchor id itself.
         private static string BaseId(string id, string suffix)
             => suffix.Length > 0 && id.EndsWith(suffix, StringComparison.Ordinal) ? id.Substring(0, id.Length - suffix.Length) : id;
 
         /// <summary>
-        /// "/Head/LeftHand" for a component on the GameObject at that path below the anchor, ""
-        /// for one on the anchor. A second component of the same type on one GameObject adds
-        /// "#1", a third "#2", and a GameObject whose siblings share its name adds its index
-        /// among them: "/Hand[1]".
+        /// The part of an id after the anchor id, e.g. "/Body/LeftHand[1]#2"; empty for the first
+        /// component of its type on the anchor.
         /// </summary>
         internal static string Suffix(Transform anchor, Component component)
         {
@@ -189,19 +170,14 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// The anchor's id in a part's id: the longest part of it before a '/' or '#' that
-        /// <paramref name="isAnchor"/> takes, e.g. one that is in the scene, or one a Template has
-        /// the part for. Null when there is none: the id is an object's own.
+        /// The longest prefix of a part's id before a '/' or '#' that <paramref name="isAnchor"/>
+        /// accepts, or null.
         /// </summary>
-        /// <remarks>
-        /// A manager builds a whole object from the update of one of its parts, once it can tell
-        /// which object that is. An id someone chose may contain a '/' too, "team/1" say, so the
-        /// id alone does not tell.
-        /// </remarks>
         internal static string AnchorOfPart(string id, Func<string, bool> isAnchor)
         {
             if (id == null)
                 return null;
+            // Chosen ids can contain '/' too ("team/1"), so only isAnchor tells where the anchor id ends.
             for (var i = id.Length - 1; i > 0; i--)
             {
                 if (id[i] != '/' && id[i] != '#')
@@ -213,10 +189,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return null;
         }
 
-        /// <summary>
-        /// Whether the id looks like a part of an object created at runtime: a GUID, which an
-        /// anchor makes in Awake, followed by a part's suffix.
-        /// </summary>
+        /// <summary>Whether the id is a generated anchor id (a GUID) followed by a part suffix.</summary>
         internal static bool LooksLikeRuntimePart(string id)
         {
             const int guidLength = 36;
@@ -225,15 +198,15 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Whether a clone of <paramref name="template"/>, its anchor taking
-        /// <paramref name="anchorId"/>, has a component of <paramref name="type"/> whose id is
-        /// <paramref name="id"/>.
+        /// Whether a clone of <paramref name="template"/> with anchor id <paramref name="anchorId"/>
+        /// has a <paramref name="type"/> component with <paramref name="id"/>.
         /// </summary>
         internal static bool TemplateHasPart(Component template, Type type, string anchorId, string id)
         {
             var anchor = template.transform;
             foreach (var part in template.GetComponentsInChildren(type, true))
             {
+                // A part with a preset id keeps it; the template itself takes anchorId.
                 if (part is ISyncedObject synced && !String.IsNullOrEmpty(synced.Id) && part != template)
                     continue;
                 if (anchorId + Suffix(anchor, part) == id)
