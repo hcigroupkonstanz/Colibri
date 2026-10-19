@@ -56,7 +56,9 @@ creates a `Player`, the manager creates the copy on this client from its `Templa
 
 1. Write the model script. It inherits from `SyncBehaviour<T>`, where `T` is the class itself, e.g.
    `Player : SyncBehaviour<Player>`.
-2. Write the manager script. It inherits from `SyncBehaviourManager<T>` with the same `T` and needs no code.
+2. Write the manager script. It inherits from `SyncBehaviourManager<T>` with the same `T` and needs no code. If it
+   needs `Start`, `OnEnable` or `OnDestroy`, override them and call the base method, e.g.
+   `protected override void Start() { base.Start(); … }`.
 3. Make a prefab with the model script.
 4. Add the manager script to the scene, e.g. on an empty GameObject, and set its `Template` to the prefab.
 

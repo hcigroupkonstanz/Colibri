@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json.Linq;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using HCIKonstanz.Colibri.Core;
@@ -20,8 +21,40 @@ namespace HCIKonstanz.Colibri.Synchronization
         private bool _warnedNoTemplate;
         private bool _warnedUnknownPart;
 
-        private void Start()
+        private bool _isListening;
+
+        // The manager starts listening in Start, after its Template is set, and stops in
+        // OnDestroy. Both used to be private: a manager script with a Start of its own hid the
+        // manager's, which then never ran, and the manager synced nothing, without a word. Now
+        // hiding one warns (CS0114), and should Start not run anyway, the manager starts a frame
+        // later and says why. Override them and call the base method.
+        protected virtual void OnEnable()
         {
+            if (!_isListening)
+                StartCoroutine(StartListeningIfStartDidNot());
+        }
+
+        protected virtual void Start() => StartListening();
+
+        protected virtual void OnDestroy() => StopListening();
+
+        private IEnumerator StartListeningIfStartDidNot()
+        {
+            yield return null;
+            if (_isListening || !isActiveAndEnabled)
+                yield break;
+
+            Debug.LogWarning($"Colibri: '{GetType().FullName}' has a Start method of its own, which hides the manager's. "
+                + "Write it as 'protected override void Start()' and call base.Start() in it.");
+            StartListening();
+        }
+
+        private void StartListening()
+        {
+            if (_isListening)
+                return;
+            _isListening = true;
+
             // Switched-off objects too. Each one raised ModelCreated in its Awake, before this
             // manager listened, and a script that hides an object in its own Awake or Start may
             // run before this Start. Left out, such an object never sent its state, so no other
@@ -52,8 +85,12 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (hasConflict)
                 Debug.LogWarning($"Warning: Multiple instances of '{GetType().FullName}' detected with overlapping ModelID. Please only use one manager for each synced model or specify unique ModelID!");
         }
-        private void OnDestroy()
+        private void StopListening()
         {
+            if (!_isListening)
+                return;
+            _isListening = false;
+
             Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
 
             // Static events do not unsubscribe themselves. Missing this leaks a handler - and its
@@ -62,8 +99,20 @@ namespace HCIKonstanz.Colibri.Synchronization
             SyncBehaviour<T>.ModelDestroyed -= OnModelDestroyed;
         }
 
+        // A destroyed manager whose OnDestroy did not run, hidden by one of the manager script's
+        // own, would still be called.
+        private bool StoppedListening()
+        {
+            if (this)
+                return false;
+            StopListening();
+            return true;
+        }
+
         private void OnModelCreated(SyncBehaviour<T> model)
         {
+            if (StoppedListening())
+                return;
             if (!(model is T))
                 return;
             if (model.ModelId != Template?.ModelId && !(Template == null && String.IsNullOrEmpty(model.ModelId)))
@@ -79,12 +128,16 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void OnModelDestroyed(SyncBehaviour<T> model)
         {
+            if (StoppedListening())
+                return;
             if (model is T typed)
                 _existingObjects.Remove(typed);
         }
 
         private void OnModelUpdate(JObject data)
         {
+            if (StoppedListening())
+                return;
             var id = data["id"].Value<string>();
             if (_existingObjects.Any(t => t.Id == id))
                 return;
