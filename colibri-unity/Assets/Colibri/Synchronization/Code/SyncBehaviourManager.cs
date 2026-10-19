@@ -17,6 +17,10 @@ namespace HCIKonstanz.Colibri.Synchronization
         public T Template;
 
         private readonly List<T> _existingObjects = new List<T>();
+
+        // Placed objects switched off since their scene loaded, by id. Unity runs Awake only on an
+        // active object, so these do not listen for their own updates.
+        private readonly Dictionary<string, T> _dormantObjects = new Dictionary<string, T>();
         private bool _isCreatingObject;
         private bool _warnedNoTemplate;
         private bool _warnedUnknownPart;
@@ -69,6 +73,13 @@ namespace HCIKonstanz.Colibri.Synchronization
                 .ToArray();
             _existingObjects.AddRange(existingBehaviours);
 
+            foreach (var dormant in UnityCompat.FindAll<T>(FindObjectsInactive.Include))
+            {
+                if (!dormant.HasAwoken && dormant != Template && !String.IsNullOrEmpty(dormant.Id)
+                    && (dormant.ModelId == Template?.ModelId || (Template == null && String.IsNullOrEmpty(dormant.ModelId))))
+                    _dormantObjects[dormant.Id] = dormant;
+            }
+
             foreach (var existingBehaviour in existingBehaviours)
                 existingBehaviour.TriggerSync();
 
@@ -119,6 +130,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             if (_isCreatingObject)
                 return;
+            _dormantObjects.Remove(model.Id ?? "");
             if (_existingObjects.Any(e => e.Id == model.Id))
                 return;
 
@@ -159,6 +171,30 @@ namespace HCIKonstanz.Colibri.Synchronization
             var anchorId = SyncedIds.AnchorOfPart(id);
             if (anchorId != null && SyncedIds.IsLive(anchorId))
                 return;
+
+            // A placed object of this scene that is switched off here. Shown on another client
+            // (SyncTransform's active: true), it is switched on here too, and takes the update.
+            // Any other update waits until it is shown: it asks for its state as it wakes. Treated
+            // as unknown, it was built a second time from a Template, or a warning asked for one.
+            if (_dormantObjects.TryGetValue(id, out var dormant))
+            {
+                if (!dormant)
+                {
+                    _dormantObjects.Remove(id);
+                }
+                else
+                {
+                    var parent = dormant.transform.parent;
+                    if (data.TryGetValue("active", out var active) && active.Type == JTokenType.Boolean && active.Value<bool>()
+                        && (parent == null || parent.gameObject.activeInHierarchy))
+                    {
+                        _dormantObjects.Remove(id);
+                        dormant.gameObject.SetActive(true);
+                        dormant.OnModelUpdate(data);
+                    }
+                    return;
+                }
+            }
 
             // A manager without a template is how objects placed in the scene are synced, so it is
             // only worth a word once a model arrives that it would have to build - and then once,

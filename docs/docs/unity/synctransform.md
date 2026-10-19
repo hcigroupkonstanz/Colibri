@@ -65,6 +65,7 @@ reconnect.
 - `SetActive(false)` hides the copies on the other clients, and `SetActive(true)` shows them. Only the object's own
   active state (`activeSelf`) is synced. Deactivating a parent has no effect on the other clients. With
   `SyncActive` off, the active state stays local.
+- A placed object saved switched off in the scene appears on every client once one client switches it on.
 - Disabling only the `SyncTransform` component pauses syncing without hiding anything. Changes made meanwhile are
   sent when you enable it again.
 - Destroying the object, or unloading its scene, e.g. by loading another scene, deletes it on the server and on all
