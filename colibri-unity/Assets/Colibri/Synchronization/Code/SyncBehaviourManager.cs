@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HCIKonstanz.Colibri.Core;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
@@ -87,6 +88,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 existingBehaviour.TriggerSync();
 
             Sync.AddModelUpdateListener(Channel, OnModelUpdate);
+            SceneManager.sceneLoaded += OnSceneLoaded;
 
             // Listen for newly instantiated objects and propagate initial state
             SyncBehaviour<T>.ModelCreated += OnModelCreated;
@@ -106,11 +108,24 @@ namespace HCIKonstanz.Colibri.Synchronization
             _isListening = false;
 
             Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
+            SceneManager.sceneLoaded -= OnSceneLoaded;
 
             // Static events do not unsubscribe themselves. Missing this leaks a handler - and its
             // destroyed manager - into the next Play session whenever domain reload is disabled.
             SyncBehaviour<T>.ModelCreated -= OnModelCreated;
             SyncBehaviour<T>.ModelDestroyed -= OnModelDestroyed;
+        }
+
+        // A manager that outlives a scene load, kept with DontDestroyOnLoad say, lost the copies it
+        // had built with the old scene, which sent no delete (see SyncBehaviour.OnDestroy). It asked
+        // for the channel's models only in Start, so they came back only once they changed again.
+        // A manager in the new scene asks in its own Start.
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (StoppedListening())
+                return;
+            if (mode == LoadSceneMode.Single && gameObject.scene != scene)
+                Sync.RequestModels(Channel);
         }
 
         // A destroyed manager whose OnDestroy did not run, hidden by one of the manager script's
