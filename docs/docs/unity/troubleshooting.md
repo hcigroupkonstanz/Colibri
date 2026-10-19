@@ -96,10 +96,10 @@ the server needs no app restart.
 |---|---|---|
 | Nobody is heard, and the server logs `Ignoring voice packet from <address>:<port> for app <app id>: no Unity client of that app is connected from <address>` | The client is not connected for messages, the voice goes through a proxy, or the client connected over IPv6 while voice uses IPv4 | Make sure the scene calls `Sync.Receive` or uses a `SyncBehaviour`. See [Requirements](./voice-chat.md#requirements) and [Server addresses](./configuration.md#server-addresses). |
 | A client hears nobody | It does not broadcast itself | Start its `VoiceBroadcast` ([Requirements](./voice-chat.md#requirements)) |
-| `[VoiceBroadcast] Voice Broadcast initialization failed: Microphone permission NOT granted` | The user refused the microphone permission on Android | Grant the permission in the device settings |
+| `[VoiceBroadcast] Voice Broadcast initialization failed: Microphone permission NOT granted. …` | The user refused the microphone permission on Android | Grant the permission in the device settings. Voice starts then. |
 | `[VoiceBroadcast] Voice Broadcast initialization failed: No recording device found` | No microphone | Connect a microphone |
 | `Colibri voice: no voice is sent without an App Name. …` | No app name set | Set an app name ([Configuration](./configuration.md)) |
-| `Colibri voice: could not resolve the server address '…' …` | The server address cannot be resolved | Check the server address |
+| `Colibri voice: could not resolve the server address '…' (…). Voice chat is off until it works; trying again. …` | The server address cannot be resolved, e.g. on a device that is not on the network yet | Check the server address. Voice starts by itself once it resolves. |
 | `Colibri voice: the server address '…' has only IPv6 addresses (…), and this device has no route to them, …` or `Colibri voice: sending to … failed (NetworkUnreachable), dropping voice until a send works again` | No route to the server's voice address, e.g. a server name with only IPv6 addresses on a network without IPv6, or a network change | Use a network with IPv6, or give the server name an IPv4 address. After a network change, voice resumes by itself. |
 | `[VoiceBroadcast] Use Opus Codec is on, but …. Sending voice as PCM.` | Opus does not support this platform, sampling rate or frame size | See [Opus](./voice-chat.md#opus) |
 

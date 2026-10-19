@@ -87,6 +87,8 @@ namespace HCIKonstanz.Colibri.Networking
         private void OnDisable()
         {
             isConnected = false;
+            connecting?.Cancel();
+            connecting = null;
 
             // Thread.Abort is unsupported on .NET Core / IL2CPP and would leave the socket in
             // an undefined state anyway. Cancelling and closing the client is what actually
@@ -201,12 +203,84 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        private void Connect()
+        // Cancelled in OnDisable: the lookup of the server address, while it is retried.
+        private CancellationTokenSource connecting;
+
+        // The longest wait between two lookups of the server address.
+        private const int MAX_LOOKUP_RETRY_MS = 30_000;
+
+        /// <summary>
+        /// Looks the server address up off the main thread, and again with growing waits until it
+        /// resolves: a lookup that failed once, on a headset still joining Wi-Fi say, used to turn
+        /// voice off for the run, and it blocked the main thread while it lasted.
+        /// </summary>
+        private async void Connect()
         {
+            connecting?.Cancel();
+            connecting = new CancellationTokenSource();
+            var token = connecting.Token;
             var config = ColibriConfig.Load();
             var host = config.Host;
-            var address = ResolveServerAddress(host, config.VoiceServerPort);
-            udpClient = address != null ? OpenSocket(address) : null;
+            var port = config.VoiceServerPort;
+            var delayMs = 1000;
+            var reported = false;
+
+            while (true)
+            {
+                IPAddress address;
+                string failure;
+                try
+                {
+                    var candidates = await WebServerConnection.ResolveAsync(host, 10_000, token);
+                    address = ResolveServerAddress(host, port, candidates, out failure);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception e) when (e is SocketException || e is TimeoutException || e is ArgumentException)
+                {
+                    address = null;
+                    failure = $"could not resolve the server address '{host}' ({e.Message})";
+                }
+
+                // Disabled meanwhile, or another Connect is running.
+                if (token.IsCancellationRequested || !this)
+                    return;
+
+                if (address != null)
+                {
+                    if (reported)
+                        Debug.Log($"Colibri voice: the server address '{host}' resolves now. Voice chat is on.");
+                    StartWith(address, config);
+                    return;
+                }
+
+                if (!reported)
+                {
+                    reported = true;
+                    Debug.LogError($"Colibri voice: {failure}. Voice chat is off until it works; trying again. "
+                        + "Check the address in Window -> Colibri Configuration.");
+                }
+
+                try
+                {
+                    await System.Threading.Tasks.Task.Delay(delayMs, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                if (!this)
+                    return;
+                delayMs = Math.Min(delayMs * 2, MAX_LOOKUP_RETRY_MS);
+            }
+        }
+
+        private void StartWith(IPAddress address, ColibriConfig config)
+        {
+            var host = config.Host;
+            udpClient = OpenSocket(address);
 
             if (udpClient != null)
             {
@@ -239,49 +313,26 @@ namespace HCIKonstanz.Colibri.Networking
 
                 isConnected = true;
             }
-            else
-            {
-                enabled = false;
-            }
         }
 
         /// <summary>
-        /// The address to send voice to, or null, having said why, when there is none.
+        /// The address to send voice to, out of what the server address resolved to, or null,
+        /// with the reason in <paramref name="failure"/>, when there is none.
         /// </summary>
-        /// <remarks>
-        /// GetHostAddresses rather than GetHostEntry: for an IP address it hands the address
-        /// straight back, where GetHostEntry first attempts a reverse lookup, which can fail for
-        /// a LAN address with no DNS name and threw out of OnEnable. An IPv6 address in brackets
-        /// is taken apart first, as for the TCP connection.
-        /// </remarks>
-        private static IPAddress ResolveServerAddress(string host, int port)
+        private static IPAddress ResolveServerAddress(string host, int port, IReadOnlyList<IPAddress> resolved, out string failure)
         {
-            IPAddress[] candidates;
-            if (WebServerConnection.TryParseAddress(host, out var literal))
-            {
-                candidates = new[] { literal };
-            }
-            else
-            {
-                try
-                {
-                    candidates = Dns.GetHostAddresses(host);
-                }
-                catch (Exception e) when (e is SocketException || e is ArgumentException)
-                {
-                    Debug.LogError($"Colibri voice: could not resolve the server address '{host}' ({e.Message}). Voice chat is off. Check the address in Window -> Colibri Configuration.");
-                    return null;
-                }
-            }
+            var candidates = new IPAddress[resolved.Count];
+            for (var i = 0; i < resolved.Count; i++)
+                candidates[i] = resolved[i];
 
+            failure = null;
             var address = SelectServerAddress(candidates, candidate => WebServerConnection.HasRoute(candidate, port));
             if (address == null)
             {
                 var found = candidates.Length == 0 ? "no addresses at all" : string.Join<IPAddress>(", ", candidates);
-                if (Array.Exists(candidates, IsSendableIPv6))
-                    Debug.LogError($"Colibri voice: the server address '{host}' has only IPv6 addresses ({found}), and this device has no route to them, as on a network with IPv4 only. Voice chat is off.");
-                else
-                    Debug.LogError($"Colibri voice: the server address '{host}' resolved to {found}, none of which voice can be sent to. Voice chat is off. Check the address in Window -> Colibri Configuration.");
+                failure = Array.Exists(candidates, IsSendableIPv6)
+                    ? $"the server address '{host}' has only IPv6 addresses ({found}), and this device has no route to them, as on a network with IPv4 only"
+                    : $"the server address '{host}' resolved to {found}, none of which voice can be sent to";
             }
 
             return address;
