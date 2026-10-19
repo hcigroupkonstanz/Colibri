@@ -1004,6 +1004,68 @@ namespace HCIKonstanz.Colibri.Synchronization
             // send-rate limit holds it back.
         }
 
+        private static readonly object UnsupportedValue = new object();
+
+        private static object ReadValue(Type type, JToken value)
+        {
+            if (type == typeof(bool))
+                return value.Value<bool>();
+            if (type == typeof(int))
+                return value.Value<int>();
+            if (type == typeof(float))
+                return value.Value<float>();
+            if (type == typeof(string))
+                return value.Value<string>();
+            if (type == typeof(Vector2))
+                return value.ToVector2();
+            if (type == typeof(Vector3))
+                return value.ToVector3();
+            if (type == typeof(Quaternion))
+                return value.ToQuaternion();
+            if (type == typeof(Color))
+                return value.ToColor();
+            if (type == typeof(bool[]))
+                return value.Select(x => (bool)x).ToArray();
+            if (type == typeof(int[]))
+                return value.Select(x => (int)x).ToArray();
+            if (type == typeof(float[]))
+                return value.Select(x => (float)x).ToArray();
+            if (type == typeof(string[]))
+                return value.Select(x => (string)x).ToArray();
+            if (type == typeof(Vector2[]))
+                return value.Select(x => x.ToVector2()).ToArray();
+            if (type == typeof(Vector3[]))
+                return value.Select(x => x.ToVector3()).ToArray();
+            if (type == typeof(Quaternion[]))
+                return value.Select(x => x.ToQuaternion()).ToArray();
+            if (type == typeof(Color[]))
+                return value.Select(x => x.ToColor()).ToArray();
+            if (type == typeof(JObject))
+            {
+                // A JObject member that is null on the sender arrives as a JSON null, which is a
+                // JValue: cast to JObject, it threw on every client that received it.
+                if (value.Type == JTokenType.Null)
+                    return null;
+                return value as JObject ?? throw new InvalidCastException($"{value.Type} is not a JSON object");
+            }
+            return UnsupportedValue;
+        }
+
+        // The members whose unreadable value has been reported, so that a sender that keeps
+        // sending one is reported once.
+        private HashSet<string> _warnedUnreadable;
+
+        private void WarnUnreadable(SyncedAttribute attribute, JToken value, Exception exception)
+        {
+            if (!(_warnedUnreadable ??= new HashSet<string>()).Add(attribute.Name))
+                return;
+            var text = value.ToString(Newtonsoft.Json.Formatting.None);
+            if (text.Length > 100)
+                text = text.Substring(0, 100) + "...";
+            Debug.LogWarning($"Colibri: '{name}' ({Id}) received {text} for [Sync] {attribute.MemberName}, which is a "
+                + $"{attribute.PropertyType.Name}: {exception.Message} Ignoring it. This is logged once per member.");
+        }
+
         private void UpdateAttribute(string name, JToken value)
         {
             if (!_syncedAttributes.ContainsKey(name))
@@ -1015,42 +1077,28 @@ namespace HCIKonstanz.Colibri.Synchronization
             var self = this as T;
             var attribute = _syncedAttributes[name];
 
-            if (attribute.PropertyType == typeof(bool))
-                attribute.SetBoxed(self, value.Value<bool>());
-            else if (attribute.PropertyType == typeof(int))
-                attribute.SetBoxed(self, value.Value<int>());
-            else if (attribute.PropertyType == typeof(float))
-                attribute.SetBoxed(self, value.Value<float>());
-            else if (attribute.PropertyType == typeof(string))
-                attribute.SetBoxed(self, value.Value<string>());
-            else if (attribute.PropertyType == typeof(Vector2))
-                attribute.SetBoxed(self, value.ToVector2());
-            else if (attribute.PropertyType == typeof(Vector3))
-                attribute.SetBoxed(self, value.ToVector3());
-            else if (attribute.PropertyType == typeof(Quaternion))
-                attribute.SetBoxed(self, value.ToQuaternion());
-            else if (attribute.PropertyType == typeof(Color))
-                attribute.SetBoxed(self, value.ToColor());
-            else if (attribute.PropertyType == typeof(bool[]))
-                attribute.SetBoxed(self, value.Select(x => (bool)x).ToArray());
-            else if (attribute.PropertyType == typeof(int[]))
-                attribute.SetBoxed(self, value.Select(x => (int)x).ToArray());
-            else if (attribute.PropertyType == typeof(float[]))
-                attribute.SetBoxed(self, value.Select(x => (float)x).ToArray());
-            else if (attribute.PropertyType == typeof(string[]))
-                attribute.SetBoxed(self, value.Select(x => (string)x).ToArray());
-            else if (attribute.PropertyType == typeof(Vector2[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToVector2()).ToArray());
-            else if (attribute.PropertyType == typeof(Vector3[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToVector3()).ToArray());
-            else if (attribute.PropertyType == typeof(Quaternion[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToQuaternion()).ToArray());
-            else if (attribute.PropertyType == typeof(Color[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToColor()).ToArray());
-            else if (attribute.PropertyType == typeof(JObject))
-                attribute.SetBoxed(self, value);
-            else
+            // Read first, set after, so that only a value that cannot be read is caught here: an
+            // exception from a [Sync] setter in application code goes on to Sync's dispatch, which
+            // reports it. A value of the wrong type, or a JSON null, used to throw out of the
+            // update, and every member after it in the update was lost.
+            object read;
+            try
+            {
+                read = ReadValue(attribute.PropertyType, value);
+            }
+            catch (Exception e) when (e is InvalidCastException || e is FormatException || e is OverflowException
+                || e is ArgumentException || e is InvalidOperationException)
+            {
+                WarnUnreadable(attribute, value, e);
+                return;
+            }
+
+            if (read == UnsupportedValue)
+            {
                 Debug.LogError($"Unable to update attribute {name}: Unsupported type {attribute.PropertyType}");
+                return;
+            }
+            attribute.SetBoxed(self, read);
 
             // What the server sent is now the known state, not a change for the poll to report.
             // This used to be a per-attribute "received, swallow the next change" flag instead,

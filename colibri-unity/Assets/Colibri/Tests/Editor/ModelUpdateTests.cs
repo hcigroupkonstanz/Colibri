@@ -1,7 +1,9 @@
 using HCIKonstanz.Colibri.Synchronization;
 using Newtonsoft.Json.Linq;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace HCIKonstanz.Colibri.Tests
@@ -25,6 +27,18 @@ namespace HCIKonstanz.Colibri.Tests
 
             [Sync]
             public Vector3 Where { get; set; }
+        }
+
+        private class MixedModel : SyncBehaviour<MixedModel>
+        {
+            [Sync]
+            public JObject Data = new JObject { { "kept", true } };
+
+            [Sync]
+            public int Count = 7;
+
+            [Sync]
+            public string Label = "";
         }
 
         private GameObject _gameObject;
@@ -53,6 +67,46 @@ namespace HCIKonstanz.Colibri.Tests
 
             Assert.That(model.Label, Is.EqualTo("from the server"));
             Assert.That(model.Where, Is.EqualTo(new Vector3(1f, 2f, 3f)));
+        }
+
+        /// <summary>
+        /// A JObject member that is null on the sender arrives as a JSON null. It used to throw on
+        /// every receiver, and the members after it in the update were lost.
+        /// </summary>
+        [Test]
+        public void ANullJObjectIsAppliedAsNullAndTheRestOfTheUpdateToo()
+        {
+            _gameObject = new GameObject("mixed");
+            var model = _gameObject.AddComponent<MixedModel>();
+            model.Id = "mixed";
+
+            model.OnModelUpdate(new JObject { { "id", "mixed" }, { "data", JValue.CreateNull() }, { "label", "after" } });
+
+            Assert.That(model.Data, Is.Null);
+            Assert.That(model.Label, Is.EqualTo("after"));
+        }
+
+        /// <summary>A value that cannot be read, from a web client say, is skipped with a warning.</summary>
+        [Test]
+        public void AValueThatCannotBeReadIsSkippedAndTheRestOfTheUpdateApplied()
+        {
+            _gameObject = new GameObject("mixed");
+            var model = _gameObject.AddComponent<MixedModel>();
+            model.Id = "mixed";
+
+            LogAssert.Expect(LogType.Warning, new Regex("received null for \\[Sync\\] Count"));
+            LogAssert.Expect(LogType.Warning, new Regex("received \\[1,2\\] for \\[Sync\\] Data"));
+            model.OnModelUpdate(new JObject
+            {
+                { "id", "mixed" },
+                { "count", JValue.CreateNull() },
+                { "data", new JArray(1, 2) },
+                { "label", "after" },
+            });
+
+            Assert.That(model.Count, Is.EqualTo(7));
+            Assert.That(model.Data?["kept"]?.Value<bool>(), Is.True);
+            Assert.That(model.Label, Is.EqualTo("after"));
         }
     }
 }
