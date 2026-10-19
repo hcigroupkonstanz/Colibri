@@ -15,7 +15,7 @@ Voice chat is currently not supported on the web ([details](./voice-chat.md)).
 
 - A current browser, or Node.js 18 or newer.
 - TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false` in
-  `tsconfig.json`. `@Synced()` does not work with it.
+  `tsconfig.json`. `@Synced()` does not work with it. With Vite, see [Vite](#vite).
 - `rxjs` 7.8.1 or a newer 7.x. It is a peer dependency: npm 7 and newer install it automatically. With other
   package managers, add it to your project yourself.
 - A [Colibri server](../server/installation.md) 2.0.0 or newer. A Colibri 2 server refuses Colibri 1 web clients,
@@ -34,6 +34,47 @@ yarn add @hcikn/colibri@2
 ```
 
 Keep the `@2`. Without it, npm may install a Colibri 1 release.
+
+## Vite
+
+Vite does not translate standard decorators such as `@Synced()`. A Vite project then fails to build with
+`Unexpected token`, or the browser reports `Uncaught SyntaxError: Invalid or unexpected token`. Let esbuild translate
+them:
+
+1. Install esbuild:
+
+   ```sh
+   npm install --save-dev esbuild
+   ```
+
+2. Add this plugin to `vite.config.ts`, or create the file with it:
+
+   ```ts
+   import { defineConfig } from 'vite';
+   import { transform } from 'esbuild';
+
+   export default defineConfig({
+       plugins: [
+           {
+               name: 'standard-decorators',
+               enforce: 'pre',
+               async transform(code, id) {
+                   const file = id.split('?')[0];
+                   if (!/\.[cm]?tsx?$/.test(file)) return null;
+                   const result = await transform(code, {
+                       loader: file.endsWith('x') ? 'tsx' : 'ts',
+                       target: 'es2022',
+                       sourcemap: true,
+                       sourcefile: file,
+                   });
+                   return { code: result.code, map: result.map };
+               },
+           },
+       ],
+   });
+   ```
+
+This works with Vite 7 and 8.
 
 ## Building from source
 
