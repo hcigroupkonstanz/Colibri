@@ -106,7 +106,8 @@ public class MyClass : SyncBehaviour<MyClass>
 - To sync an object of your own class, sync a `JObject`. Convert with
   `JObject.FromObject(value, ColibriJson.Serializer)` and back with `ToObject<MyType>(ColibriJson.Serializer)`. See
   [Sending other types as JSON](./messages.md#sending-other-types-as-json).
-- An array or `JObject` counts as changed only when you assign a new one. Changing an element in place is not sent.
+- An array or `JObject` is compared by its contents: changing an element in place is sent, and assigning an equal
+  one is not. A `Color` is compared as it is sent, with 8 bits a channel.
 - A member with an unsupported type, or one that breaks these rules, is reported at startup:
   `Colibri: cannot synchronize '<class>.<member>' …`. Follow the message.
 

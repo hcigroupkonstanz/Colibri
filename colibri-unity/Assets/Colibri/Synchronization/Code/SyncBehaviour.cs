@@ -66,31 +66,35 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private sealed class ChangeTracker<TValue> : IChangeTracker
         {
+            private static readonly Func<TValue, TValue, bool> AreEqual = SyncValues.EqualityFor<TValue>();
+            private static readonly Func<TValue, TValue> Keep = SyncValues.CopyFor<TValue>();
+
             private readonly Func<T, TValue> _getter;
             private TValue _lastValue;
 
             public ChangeTracker(Func<T, TValue> getter, T target)
             {
                 _getter = getter;
-                _lastValue = getter(target);
+                _lastValue = Keep(getter(target));
             }
 
             public bool CaptureChange(T target)
             {
                 var current = _getter(target);
 
-                // EqualityComparer<TValue>.Default resolves to the IEquatable<> implementation
-                // for Vector3/Quaternion/..., so comparing costs nothing and boxes nothing.
-                if (EqualityComparer<TValue>.Default.Equals(current, _lastValue))
+                // See SyncValues: compared as they go on the wire. For Vector3, Quaternion and the
+                // other value types that is EqualityComparer<TValue>.Default, the IEquatable<>
+                // implementation, so comparing costs nothing and boxes nothing.
+                if (AreEqual(current, _lastValue))
                     return false;
 
-                _lastValue = current;
+                _lastValue = Keep(current);
                 return true;
             }
 
             public void Latch(T target)
             {
-                _lastValue = _getter(target);
+                _lastValue = Keep(_getter(target));
             }
         }
 
@@ -1126,6 +1130,89 @@ namespace HCIKonstanz.Colibri.Synchronization
             // disagree for good. Dropped, they all agree on the value this client now shows.
             if (_nextUpdate != null && _nextUpdate.Remove(attribute.Name) && _nextUpdate.Count == 1)
                 _nextUpdate = null;
+        }
+    }
+
+    /// <summary>
+    /// How a [Sync] member's values are compared for a change, and kept to compare the next one
+    /// with: as they go on the wire.
+    /// </summary>
+    /// <remarks>
+    /// Arrays and JObjects used to be compared by reference. A getter that builds the value, such
+    /// as <c>[Sync] public Vector3[] Points => _points.ToArray();</c>, then made a change in every
+    /// poll: the member went out at the send-rate limit for good, and every client that applied it
+    /// read a new array again and sent it back. Changed in place, the same array was no change.
+    /// Each is now compared element by element, or with JToken.DeepEquals, against a copy.
+    ///
+    /// A Color goes on the wire as #RRGGBBAA, 8 bits a channel. Compared exactly, a color set in
+    /// every frame, such as Color.gray, differed from the rounded one every other client applied,
+    /// so each of them sent it back, and on again. Colors are compared as Color32.
+    ///
+    /// The comparers are made for each supported type by name, so IL2CPP compiles each of them.
+    /// </remarks>
+    internal static class SyncValues
+    {
+        internal static Func<TValue, TValue, bool> EqualityFor<TValue>()
+        {
+            var type = typeof(TValue);
+            object equality =
+                type == typeof(Color) ? (object)new Func<Color, Color, bool>(SameOnTheWire) :
+                type == typeof(JObject) ? (object)new Func<JObject, JObject, bool>(JToken.DeepEquals) :
+                type == typeof(bool[]) ? (object)new Func<bool[], bool[], bool>(SequenceEqual) :
+                type == typeof(int[]) ? (object)new Func<int[], int[], bool>(SequenceEqual) :
+                type == typeof(float[]) ? (object)new Func<float[], float[], bool>(SequenceEqual) :
+                type == typeof(string[]) ? (object)new Func<string[], string[], bool>(SequenceEqual) :
+                type == typeof(Vector2[]) ? (object)new Func<Vector2[], Vector2[], bool>(SequenceEqual) :
+                type == typeof(Vector3[]) ? (object)new Func<Vector3[], Vector3[], bool>(SequenceEqual) :
+                type == typeof(Quaternion[]) ? (object)new Func<Quaternion[], Quaternion[], bool>(SequenceEqual) :
+                type == typeof(Color[]) ? (object)new Func<Color[], Color[], bool>(SameOnTheWire) :
+                (object)null;
+            return equality as Func<TValue, TValue, bool> ?? EqualityComparer<TValue>.Default.Equals;
+        }
+
+        internal static Func<TValue, TValue> CopyFor<TValue>()
+        {
+            if (typeof(TValue).IsArray)
+                return value => value == null ? value : (TValue)((Array)(object)value).Clone();
+            if (typeof(TValue) == typeof(JObject))
+                return value => value == null ? value : (TValue)(object)((JObject)(object)value).DeepClone();
+            return value => value;
+        }
+
+        internal static bool SameOnTheWire(Color a, Color b)
+        {
+            Color32 x = a;
+            Color32 y = b;
+            return x.r == y.r && x.g == y.g && x.b == y.b && x.a == y.a;
+        }
+
+        private static bool SameOnTheWire(Color[] a, Color[] b)
+        {
+            if (ReferenceEquals(a, b))
+                return true;
+            if (a == null || b == null || a.Length != b.Length)
+                return false;
+            for (var i = 0; i < a.Length; i++)
+            {
+                if (!SameOnTheWire(a[i], b[i]))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool SequenceEqual<TElement>(TElement[] a, TElement[] b)
+        {
+            if (ReferenceEquals(a, b))
+                return true;
+            if (a == null || b == null || a.Length != b.Length)
+                return false;
+            var comparer = EqualityComparer<TElement>.Default;
+            for (var i = 0; i < a.Length; i++)
+            {
+                if (!comparer.Equals(a[i], b[i]))
+                    return false;
+            }
+            return true;
         }
     }
 }

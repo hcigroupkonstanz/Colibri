@@ -52,6 +52,34 @@ namespace HCIKonstanz.Colibri.Tests
             public void Wake() => Awake();
         }
 
+        private class ResyncValuesModel : SyncBehaviour<ResyncValuesModel>
+        {
+            private readonly List<Vector3> _points = new List<Vector3> { Vector3.one };
+
+            /// <summary>A new array in every read, as a getter over a list makes one.</summary>
+            [Sync]
+            public Vector3[] Points
+            {
+                get => _points.ToArray();
+                set
+                {
+                    _points.Clear();
+                    _points.AddRange(value);
+                }
+            }
+
+            [Sync]
+            public int[] Scores = { 1, 2 };
+
+            [Sync]
+            public Color Tint = Color.white;
+
+            [Sync]
+            public JObject Data = new JObject { { "a", 1 } };
+
+            public void Wake() => Awake();
+        }
+
         private readonly List<GameObject> _gameObjects = new List<GameObject>();
 
         /// <summary>A round of answers an earlier test left open would count as one this test's reconnect follows.</summary>
@@ -1328,6 +1356,55 @@ namespace HCIKonstanz.Colibri.Tests
                 PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
                 PhysicsClient.ResetForPlaySession();
             }
+        }
+
+        /// <summary>
+        /// Arrays were compared by reference: a getter that builds a new array made a change in
+        /// every poll, sent at the send-rate limit for good, and every receiver sent it back.
+        /// </summary>
+        [Test]
+        public void AnArrayBuiltAnewInEveryReadIsNoChange()
+        {
+            var model = Spawn<ResyncValuesModel>("values");
+            model.Wake();
+
+            Poll(model);
+            Poll(model);
+
+            Assert.That(Sent(model), Is.Null);
+        }
+
+        [Test]
+        public void AnArrayOrJObjectChangedInPlaceIsAChange()
+        {
+            var model = Spawn<ResyncValuesModel>("values");
+            model.Wake();
+
+            model.Scores[0] = 5;
+            model.Data["a"] = 2;
+            Poll(model);
+
+            var sent = Sent(model);
+            Assert.That(sent?["scores"]?.ToObject<int[]>(), Is.EqualTo(new[] { 5, 2 }));
+            Assert.That(sent?["data"]?["a"]?.Value<int>(), Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// A color goes on the wire with 8 bits a channel. Set again in every frame, Color.gray
+        /// differed from the rounded one another client applied, and the two sent it back and
+        /// forth for good.
+        /// </summary>
+        [Test]
+        public void AColorSetAgainAfterItsRoundedValueArrivedIsNoChange()
+        {
+            var model = Spawn<ResyncValuesModel>("values");
+            model.Wake();
+            model.OnModelUpdate(new JObject { { "id", model.Id }, { "tint", "#808080FF" } });
+
+            model.Tint = Color.gray;
+            Poll(model);
+
+            Assert.That(Sent(model), Is.Null);
         }
 
         /*
