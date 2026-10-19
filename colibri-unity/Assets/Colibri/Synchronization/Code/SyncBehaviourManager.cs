@@ -138,6 +138,12 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
 
             _existingObjects.Add(model as T);
+
+            // A part of a copy another manager built of another client's object, e.g. the
+            // SyncTransform next to a Player: it asks for its own state. Its full state sent from
+            // here went over the owner's newer values, or put the template's on the server.
+            if (((ISyncedObject)model).IsCopy)
+                return;
             model.TriggerSync();
         }
 
@@ -170,9 +176,11 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
 
             // A part below the top of an object, such as an avatar's hand: the whole object is
-            // built, from its top's id, unless it is here already without this part.
-            var anchorId = SyncedIds.AnchorOfPart(id);
-            if (anchorId != null && SyncedIds.IsLive(anchorId))
+            // built, from its top's id, unless it is here already, or placed and switched off,
+            // without this part.
+            var anchorId = SyncedIds.AnchorOfPart(id, prefix => SyncedIds.IsLive(prefix) || _dormantObjects.ContainsKey(prefix)
+                || (Template && SyncedIds.TemplateHasPart(Template, typeof(T), prefix, id)));
+            if (anchorId != null && (SyncedIds.IsLive(anchorId) || _dormantObjects.ContainsKey(anchorId)))
                 return;
 
             // A placed object of this scene that is switched off here. Shown on another client
@@ -191,8 +199,21 @@ namespace HCIKonstanz.Colibri.Synchronization
                     if (data.TryGetValue("active", out var active) && active.Type == JTokenType.Boolean && active.Value<bool>()
                         && (parent == null || parent.gameObject.activeInHierarchy))
                     {
+                        // Woken without TriggerSync: it asks for its state as it wakes, and the
+                        // update is applied as its first answer. A full state sent from here put
+                        // its values from the scene file over everything the update did not carry.
                         _dormantObjects.Remove(id);
-                        dormant.gameObject.SetActive(true);
+                        _isCreatingObject = true;
+                        try
+                        {
+                            dormant.gameObject.SetActive(true);
+                        }
+                        finally
+                        {
+                            _isCreatingObject = false;
+                        }
+                        if (!_existingObjects.Contains(dormant))
+                            _existingObjects.Add(dormant);
                         dormant.OnModelUpdate(data);
                     }
                     return;
@@ -214,14 +235,16 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             }
 
-            if (anchorId != null && !SyncedIds.TemplateHasPart(Template, typeof(T), anchorId, id))
+            // Built as an object of its own, a part the Template does not have became a second
+            // object, which followed that part.
+            if (anchorId == null && SyncedIds.LooksLikeRuntimePart(id))
             {
                 if (!_warnedUnknownPart)
                 {
                     _warnedUnknownPart = true;
                     Debug.LogWarning($"Colibri: '{GetType().FullName}' received model '{id}' on channel '{Channel}', a part of "
-                        + $"another client's object '{anchorId}' that its Template '{Template.name}' does not have. Use the same "
-                        + "prefab on every client.");
+                        + $"another client's object that its Template '{Template.name}' does not have. Use the same prefab on "
+                        + "every client.");
                 }
                 return;
             }
@@ -229,8 +252,9 @@ namespace HCIKonstanz.Colibri.Synchronization
             _isCreatingObject = true;
             SyncBehaviour<T>.RemoteModelBeingBuilt = id;
             var prevEnabled = Template.enabled;
-            var prevId = Template.Id;
+            var baseId = anchorId ?? id;
             T go = null;
+            GameObject holder = null;
 
             // Restored in finally: applying the state can throw - a [Sync] setter in
             // application code, a value that cannot be read - and the exception leaves through
@@ -240,22 +264,44 @@ namespace HCIKonstanz.Colibri.Synchronization
             try
             {
                 Template.enabled = false;
-                Template.Id = anchorId ?? id;
-                go = Instantiate(Template);
 
-                // Templates are often kept switched off in the scene, and a clone starts out
-                // as its template is. A clone that is off never runs Awake: it never registers
-                // for its own updates or with the ticker, so it stayed exactly as this first
-                // update left it - and an object hidden elsewhere (active: false) could never
-                // be shown again. Switched on first, Awake runs and latches the template's
-                // values; the state applied next is then latched too, so none of it is echoed
-                // back, and it decides whether the object ends up visible.
+                // Built below a holder that is switched off, so that every part has its id, and
+                // knows it is a copy, before any part wakes. A part that woke first took an id of
+                // its own: the one a model script sets in Awake, this client's device id say, and
+                // the copy synced as another object. The template's own component takes the id
+                // the update names; the others take what the creator's SyncedIds.Assign gave them,
+                // unless they have an Id of their own. A copy is not deleted when its scene
+                // unloads (see SyncBehaviour.OnDestroy), and other managers add their parts of it
+                // without sending them back (see OnModelCreated).
+                holder = new GameObject("[Colibri copy being built]");
+                holder.SetActive(false);
+                go = Instantiate(Template, holder.transform);
+                var top = go.transform;
+                foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
+                {
+                    var component = (Component)part;
+                    if (ReferenceEquals(component, go))
+                        go.Id = baseId + SyncedIds.Suffix(top, component);
+                    else if (String.IsNullOrEmpty(part.Id))
+                        part.TakeId(baseId + SyncedIds.Suffix(top, component), false);
+                    part.MarkAsCopy();
+                }
+
+                // At the top level of the scene, where it wakes. Templates are often kept switched
+                // off in the scene, and a clone starts out as its template is. A clone that is off
+                // never runs Awake: it never registers for its own updates or with the ticker, so
+                // it stayed exactly as this first update left it - and an object hidden elsewhere
+                // (active: false) could never be shown again. Switched on first, Awake runs and
+                // latches the template's values; the state applied next is then latched too, so
+                // none of it is echoed back, and it decides whether the object ends up visible.
+                go.transform.SetParent(null, false);
                 if (!go.gameObject.activeSelf)
                     go.gameObject.SetActive(true);
 
-                // Not deleted when its scene unloads, see SyncBehaviour.OnDestroy.
+                // An Id changed after base.Awake() is set back, as the poll would, before the
+                // copy's part is looked up by it.
                 foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
-                    part.MarkAsCopy();
+                    part.KeepRegisteredId();
 
                 // A model script that sets Id in its own Awake gave the copy another Id. Kept,
                 // the copy synced as some other object, and every further update for this id
@@ -268,7 +314,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                         part.MarkDiscarded();
                     Destroy(go.gameObject);
                     Debug.LogError($"Colibri: '{GetType().FullName}' cannot build '{id}', another client's {typeof(T).Name}: the copy "
-                        + $"took the Id '{go.Id}' as it woke. A model script must not set Id in Awake when it has one already, "
+                        + "took another Id as it woke. A model script must not set Id in Awake when it has one already, "
                         + "e.g. 'if (string.IsNullOrEmpty(Id)) Id = ...;'.");
                     return;
                 }
@@ -288,8 +334,9 @@ namespace HCIKonstanz.Colibri.Synchronization
                 if (go)
                     go.enabled = true;
 
+                if (holder)
+                    Destroy(holder);
                 Template.enabled = prevEnabled;
-                Template.Id = prevId;
                 _isCreatingObject = false;
                 SyncBehaviour<T>.RemoteModelBeingBuilt = null;
             }

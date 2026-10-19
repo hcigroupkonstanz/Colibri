@@ -148,16 +148,26 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(hand.Id, Is.EqualTo("chosen"));
         }
 
-        [TestCase("4f8a2c1e-0000-4000-8000-000000000001/Hand", "4f8a2c1e-0000-4000-8000-000000000001")]
-        [TestCase("4f8a2c1e-0000-4000-8000-000000000001/Arm/Hand[1]#2", "4f8a2c1e-0000-4000-8000-000000000001")]
-        [TestCase("4f8a2c1e-0000-4000-8000-000000000001#1", "4f8a2c1e-0000-4000-8000-000000000001")]
-        [TestCase("4f8a2c1e-0000-4000-8000-000000000001", null)]
+        /// <summary>The longest top that is known, so an id someone chose with a '/' in it still works.</summary>
+        [TestCase("player-A/LeftHand", "player-A")]
+        [TestCase("team/1/Arm/Hand[1]#2", "team/1")]
         [TestCase("team/1", null)]
-        [TestCase("not-a-guid-at-all-but-36-characters/Hand", null)]
+        [TestCase("player-A", null)]
         [TestCase(null, null)]
-        public void OnlyAPartsIdIsTakenApart(string id, string anchor)
+        public void APartsIdIsTakenApartAtAKnownTop(string id, string anchor)
         {
-            Assert.That(SyncedIds.AnchorOfPart(id), Is.EqualTo(anchor));
+            var known = new HashSet<string> { "player-A", "team/1" };
+
+            Assert.That(SyncedIds.AnchorOfPart(id, known.Contains), Is.EqualTo(anchor));
+        }
+
+        [TestCase("4f8a2c1e-0000-4000-8000-000000000001/Hand", true)]
+        [TestCase("4f8a2c1e-0000-4000-8000-000000000001#1", true)]
+        [TestCase("4f8a2c1e-0000-4000-8000-000000000001", false)]
+        [TestCase("team/1", false)]
+        public void AnIdLooksLikeAPartOfAnObjectCreatedAtRuntime(string id, bool looksLikeOne)
+        {
+            Assert.That(SyncedIds.LooksLikeRuntimePart(id), Is.EqualTo(looksLikeOne));
         }
 
         [Test]

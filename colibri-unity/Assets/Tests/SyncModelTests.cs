@@ -36,6 +36,17 @@ namespace HCIKonstanz.Colibri.E2E
     {
     }
 
+    /// <summary>A manager script with a Start of its own, which hides the manager's.</summary>
+    public class E2EOwnStartManager : SyncBehaviourManager<E2ESyncModel>
+    {
+        public bool Started;
+
+        private new void Start()
+        {
+            Started = true;
+        }
+    }
+
     /// <summary>A model with a [Sync] setter that throws for one value, as a setter in application code can.</summary>
     public class E2EFragileModel : SyncBehaviour<E2EFragileModel>
     {
@@ -319,6 +330,31 @@ namespace HCIKonstanz.Colibri.E2E
                 Assert.That(payload["id"].Value<string>(), Is.EqualTo(id));
                 Assert.That(payload["label"].Value<string>(), Is.EqualTo("local"));
             });
+        }
+
+        /// <summary>
+        /// Unity calls one Start, the manager script's own, which hid the manager's: the manager
+        /// never listened and never built anything, without a word. It starts a frame later now,
+        /// and says why.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AManagerWhoseScriptHasItsOwnStartStillBuildsObjects()
+        {
+            var templateObject = Spawn("own-start-template");
+            templateObject.SetActive(false);
+            var template = templateObject.AddComponent<E2ESyncModel>();
+            LogAssert.Expect(LogType.Warning, new Regex("has a Start method of its own"));
+            var manager = Spawn<E2EOwnStartManager>("own-start-manager");
+            manager.Template = template;
+            yield return null;
+            yield return null;
+            yield return LetInitialStateArrive();
+            Assert.That(manager.Started, Is.True, "Precondition: Unity ran the script's own Start");
+
+            var id = Guid.NewGuid().ToString();
+            Peer.Send(Channel, "model::update", new JObject { { "id", id }, { "label", "from the peer" } });
+
+            yield return E2EServer.WaitUntil(() => Instances(id).Any(), $"The manager never built the model '{id}'");
         }
 
         /// <summary>

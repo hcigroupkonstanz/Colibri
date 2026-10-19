@@ -30,6 +30,15 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// a synced object above it, and it with it.
         /// </summary>
         void LatchMovedWithParent();
+
+        /// <summary>Whether the object is a part of a copy a manager built.</summary>
+        bool IsCopy { get; }
+
+        /// <summary>The Id the object registered with in Awake; null before Awake.</summary>
+        string RegisteredId { get; }
+
+        /// <summary>Sets an Id or ModelId changed since Awake back, with an error.</summary>
+        void KeepRegisteredId();
     }
 
     /// <summary>
@@ -180,21 +189,39 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// For an id made for a part below an anchor by <see cref="Assign"/> on a client that
-        /// created the object: the anchor's id, which was new there. Null for any other id.
+        /// The anchor's id in a part's id: the longest part of it before a '/' or '#' that
+        /// <paramref name="isAnchor"/> takes, e.g. one that is in the scene, or one a Template has
+        /// the part for. Null when there is none: the id is an object's own.
         /// </summary>
         /// <remarks>
         /// A manager builds a whole object from the update of one of its parts, once it can tell
-        /// which object that is. An anchor made its id there as a GUID, so a part's id is a GUID
-        /// followed by its suffix. An id that someone chose, "team/1" say, is not taken apart.
+        /// which object that is. An id someone chose may contain a '/' too, "team/1" say, so the
+        /// id alone does not tell.
         /// </remarks>
-        internal static string AnchorOfPart(string id)
+        internal static string AnchorOfPart(string id, Func<string, bool> isAnchor)
+        {
+            if (id == null)
+                return null;
+            for (var i = id.Length - 1; i > 0; i--)
+            {
+                if (id[i] != '/' && id[i] != '#')
+                    continue;
+                var anchorId = id.Substring(0, i);
+                if (isAnchor(anchorId))
+                    return anchorId;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Whether the id looks like a part of an object created at runtime: a GUID, which an
+        /// anchor makes in Awake, followed by a part's suffix.
+        /// </summary>
+        internal static bool LooksLikeRuntimePart(string id)
         {
             const int guidLength = 36;
-            if (id == null || id.Length <= guidLength || (id[guidLength] != '/' && id[guidLength] != '#'))
-                return null;
-            var anchorId = id.Substring(0, guidLength);
-            return Guid.TryParseExact(anchorId, "D", out _) ? anchorId : null;
+            return id != null && id.Length > guidLength && (id[guidLength] == '/' || id[guidLength] == '#')
+                && Guid.TryParseExact(id.Substring(0, guidLength), "D", out _);
         }
 
         /// <summary>

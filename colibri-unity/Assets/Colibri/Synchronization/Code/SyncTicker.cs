@@ -165,7 +165,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             {
                 Deregister(tickable);
                 if (tickable is ISyncedObject synced)
-                    SyncedIds.Deregister(synced.Id);
+                    SyncedIds.Deregister(synced.RegisteredId ?? synced.Id);
                 return false;
             }
             return true;

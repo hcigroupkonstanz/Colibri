@@ -403,6 +403,12 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         void ISyncedObject.MarkAsCopy() => _isCopy = true;
 
+        bool ISyncedObject.IsCopy => _isCopy;
+
+        string ISyncedObject.RegisteredId => _registeredId;
+
+        void ISyncedObject.KeepRegisteredId() => KeepRegisteredId();
+
         void ISyncedObject.LatchMovedWithParent() => LatchMovedWithParent();
 
         /// <summary>See <see cref="ISyncedObject.LatchMovedWithParent"/>; GenericSyncTransform latches its world pose.</summary>
@@ -558,6 +564,10 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         protected virtual void OnDestroy()
         {
+            // Under the Id and ModelId it registered with: changed since, the listeners, the
+            // delete and the bookkeeping went to the new ones.
+            KeepRegisteredId();
+
             // An update the send-rate limit still holds is dropped with the object, and the
             // delete below goes out at once: sent after the delete, the update would bring the
             // object back to life on the server.
