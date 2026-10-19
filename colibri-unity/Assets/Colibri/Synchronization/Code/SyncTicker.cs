@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
@@ -45,6 +47,10 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static bool _hasEmptySlots;
         private static SyncTicker _instance;
 
+        // The objects whose exception has been logged, so that one failing every frame is
+        // reported once.
+        private static readonly HashSet<ITickable> _reported = new HashSet<ITickable>();
+
         // Statics survive Play mode when domain reload is disabled, which would otherwise leave
         // the list full of destroyed components from the previous session.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -53,6 +59,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             _tickables.Clear();
             _hasEmptySlots = false;
             _instance = null;
+            _reported.Clear();
 
             DestroyStrayTickers();
         }
@@ -124,6 +131,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             _tickables[index] = null;
             tickable.TickIndex = -1;
             _hasEmptySlots = true;
+            _reported.Remove(tickable);
         }
 
         private static void EnsureInstance()
@@ -141,11 +149,70 @@ namespace HCIKonstanz.Colibri.Synchronization
             DontDestroyOnLoad(go);
         }
 
+        /*
+         *  Each object on its own. An exception out of one object's poll or flush - a [Sync]
+         *  getter in application code, or an object destroyed without leaving the list because its
+         *  script's own OnDestroy hid SyncBehaviour's - used to leave the loop, so every object
+         *  after it in the list stopped syncing, every frame, with one error in the console.
+         */
+
+        /// <summary>Whether the slot holds an object to tick; takes a destroyed one off the list.</summary>
+        private static bool IsLive(ITickable tickable)
+        {
+            if (tickable == null)
+                return false;
+            if (tickable is Object unityObject && !unityObject)
+            {
+                Deregister(tickable);
+                if (tickable is ISyncedObject synced)
+                    SyncedIds.Deregister(synced.Id);
+                return false;
+            }
+            return true;
+        }
+
+        private static void Report(ITickable tickable, Exception exception)
+        {
+            if (!_reported.Add(tickable))
+                return;
+            var context = tickable as Object;
+            Debug.LogError($"Colibri: syncing '{(context ? context.name : tickable.GetType().Name)}' failed. The other objects go on "
+                + $"syncing. This is logged once per object.\n{exception}", context);
+        }
+
+        private static void Poll(ITickable tickable)
+        {
+            try
+            {
+                tickable.PollChanges();
+            }
+            catch (Exception exception)
+            {
+                Report(tickable, exception);
+            }
+        }
+
+        private static void Flush(ITickable tickable, double now, double interval, double heardAt)
+        {
+            try
+            {
+                tickable.FlushUpdate(now, interval, heardAt);
+            }
+            catch (Exception exception)
+            {
+                Report(tickable, exception);
+            }
+        }
+
         private void Update()
         {
             // Index loop over the raw list: no enumerator, no defensive copy, no allocation.
             for (var i = 0; i < _tickables.Count; i++)
-                _tickables[i]?.PollChanges();
+            {
+                var tickable = _tickables[i];
+                if (IsLive(tickable))
+                    Poll(tickable);
+            }
         }
 
         private void LateUpdate()
@@ -160,7 +227,11 @@ namespace HCIKonstanz.Colibri.Synchronization
             var heardAt = Sync.LastHeardAt(now);
 
             for (var i = 0; i < _tickables.Count; i++)
-                _tickables[i]?.FlushUpdate(now, interval, heardAt);
+            {
+                var tickable = _tickables[i];
+                if (IsLive(tickable))
+                    Flush(tickable, now, interval, heardAt);
+            }
 
             if (_hasEmptySlots)
                 Compact();
@@ -218,12 +289,20 @@ namespace HCIKonstanz.Colibri.Synchronization
         internal static void SendPendingChanges()
         {
             for (var i = 0; i < _tickables.Count; i++)
-                _tickables[i]?.PollChanges();
+            {
+                var tickable = _tickables[i];
+                if (IsLive(tickable))
+                    Poll(tickable);
+            }
 
             var now = Time.unscaledTimeAsDouble;
             var heardAt = Sync.LastHeardAt(now);
             for (var i = 0; i < _tickables.Count; i++)
-                _tickables[i]?.FlushUpdate(now, 0, heardAt);
+            {
+                var tickable = _tickables[i];
+                if (IsLive(tickable))
+                    Flush(tickable, now, 0, heardAt);
+            }
         }
 
         private static void Compact()

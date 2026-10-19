@@ -1,13 +1,62 @@
+using System;
 using System.Collections;
 using System.Linq;
+using System.Text.RegularExpressions;
 using HCIKonstanz.Colibri.Core;
 using HCIKonstanz.Colibri.Synchronization;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
 
 namespace HCIKonstanz.Colibri.E2E
 {
+    /// <summary>Hides SyncBehaviour's OnDestroy, as a model script with an OnDestroy of its own does.</summary>
+    public class E2EOwnOnDestroyModel : SyncBehaviour<E2EOwnOnDestroyModel>
+    {
+        [Sync]
+        public int Value = 0;
+
+        private new void OnDestroy()
+        {
+        }
+    }
+
+    /// <summary>A [Sync] getter in application code that throws once told to.</summary>
+    public class E2EThrowingGetterModel : SyncBehaviour<E2EThrowingGetterModel>
+    {
+        public bool Fail;
+
+        [Sync]
+        public int Value
+        {
+            get
+            {
+                if (Fail)
+                    throw new InvalidOperationException("a broken getter");
+                return 0;
+            }
+            set { }
+        }
+    }
+
+    /// <summary>Counts how often the ticker reads its [Sync] member.</summary>
+    public class E2ECountingModel : SyncBehaviour<E2ECountingModel>
+    {
+        public int Polls;
+
+        [Sync]
+        public int Value
+        {
+            get
+            {
+                Polls++;
+                return 0;
+            }
+            set { }
+        }
+    }
+
     /// <summary>
     /// The machinery behind the sync loop, which has no public surface and therefore no other way
     /// of being checked.
@@ -81,6 +130,45 @@ namespace HCIKonstanz.Colibri.E2E
 
             Assert.That(SyncTicker.RegisteredCount, Is.EqualTo(before),
                 "A destroyed object is still registered with the ticker");
+        }
+
+        /// <summary>
+        /// A model script with an OnDestroy of its own hides SyncBehaviour's, which takes the object
+        /// off the ticker's list. The ticker then polled a destroyed object every frame, and the
+        /// exception left its loop, so every object after it stopped syncing.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AnObjectDestroyedWithoutSyncBehavioursOnDestroyLeavesTheTicker()
+        {
+            var before = SyncTicker.RegisteredCount;
+            var model = SpawnConfigured<E2EOwnOnDestroyModel>("own-on-destroy", _ => { });
+            yield return null;
+
+            Object.Destroy(model.gameObject);
+            yield return null;
+            yield return null;
+            yield return null;
+
+            Assert.That(SyncTicker.RegisteredCount, Is.EqualTo(before));
+            AssertNoErrors();
+        }
+
+        /// <summary>An exception from one object's [Sync] getter used to stop the poll for every object after it.</summary>
+        [UnityTest]
+        public IEnumerator AnObjectThatThrowsIsReportedOnceAndTheOthersGoOnSyncing()
+        {
+            var broken = SpawnConfigured<E2EThrowingGetterModel>("throws", _ => { });
+            var other = SpawnConfigured<E2ECountingModel>("goes-on", _ => { });
+            yield return null;
+
+            LogAssert.Expect(LogType.Error, new Regex("^Colibri: syncing 'throws' failed"));
+            broken.Fail = true;
+            var polledBefore = other.Polls;
+            for (var i = 0; i < 5; i++)
+                yield return null;
+
+            AssertNoErrors();
+            Assert.That(other.Polls, Is.GreaterThan(polledBefore));
         }
 
         /// <summary>
