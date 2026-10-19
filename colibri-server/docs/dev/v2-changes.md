@@ -578,10 +578,12 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   a file it may not write read-only, without a word) leaves the store in memory, starting with the
   values in `store.db` if it can still be read, or else `store.json`'s. Apps and names are listed
   in key order, no longer in creation order, and an app exists while it holds a value: `GET` and
-  `DELETE /api/store/:app` answer 404 once its last value is gone. The server's connection has
-  automatic checkpoints off; a worker thread with its own connection checkpoints every second
-  (`StoreCheckpointer`), since an automatic checkpoint synced to disk inside a PUT, on the main
-  thread: 16 to 79 ms about every 500 small PUTs.
+  `DELETE /api/store/:app` answer 404 once its last value is gone. A worker thread with its own
+  connection checkpoints every second (`StoreCheckpointer`), since an automatic checkpoint synced
+  to disk inside a PUT, on the main thread: 16 to 79 ms about every 500 small PUTs. The server's
+  connection checkpoints itself only after 4000 pages (about 16 MiB) of log, and
+  `journal_size_limit` cuts the log back to 16 MiB: the worker's PASSIVE checkpoints never start
+  the log over, so under a few hundred PUTs a second it grew without limit.
 - **Expiry and a size limit.** Values not written for `STORE_EXPIRY_DAYS` (default 30, `0` never)
   are deleted at startup and every hour. `STORE_MAX_MB` (default `0`, off) answers 507 to a `PUT`
   that would take the store above it; a replaced value counts only by how much it grows. Without

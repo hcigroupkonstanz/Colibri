@@ -7,6 +7,12 @@ export const STORE_DATABASE_FILENAME = 'store.db';
 // A value to store: its app, its name and its JSON text.
 export type StoreEntry = readonly [ app: string, name: string, json: string ];
 
+// The size the write-ahead log is cut back to when SQLite starts it over (see open), and the
+// number of pages after which a commit checkpoints it itself if the checkpoint worker falls
+// behind (see RestAPI.startCheckpointer): about the same size at SQLite's default 4 KiB pages.
+export const WAL_SIZE_LIMIT_BYTES = 16 * 1024 * 1024;
+export const WAL_BACKSTOP_PAGES = 4000;
+
 // The schema version in PRAGMA user_version. 0 is a database that initialize() has not completed:
 // a new file, or one a crash left before the import from store.json committed.
 const SCHEMA_VERSION = 1;
@@ -63,6 +69,10 @@ export class StoreDatabase {
             // WAL mode can lose the last writes on a power cut but never corrupts the database.
             if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
             db.exec('PRAGMA synchronous = NORMAL');
+            // SQLite reuses the write-ahead log from its start once a checkpoint has copied all
+            // of it, but leaves the file at its largest size until the database is closed. This
+            // cuts it back to 16 MiB whenever it starts over.
+            db.exec(`PRAGMA journal_size_limit = ${WAL_SIZE_LIMIT_BYTES}`);
         } catch (err) {
             db.close();
             throw err;

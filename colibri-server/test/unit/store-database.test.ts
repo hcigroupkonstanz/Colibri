@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { PassThrough } from 'stream';
-import { StoreDatabase, writeStoreJson } from '../../src/server/modules/web/store-database.js';
+import { StoreDatabase, WAL_BACKSTOP_PAGES, WAL_SIZE_LIMIT_BYTES, writeStoreJson } from '../../src/server/modules/web/store-database.js';
+import { statSync } from 'fs';
 
 describe('StoreDatabase', () => {
     const open: StoreDatabase[] = [];
@@ -25,6 +26,28 @@ describe('StoreDatabase', () => {
     afterEach(async () => {
         for (const db of open.splice(0)) db.close();
         for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+    });
+
+    // With automatic checkpoints off, a client writing every frame grew store.db-wal without
+    // limit: the worker's PASSIVE checkpoints never start the log over. The backstop the server
+    // sets (see RestAPI.startCheckpointer) does, and journal_size_limit cuts the file back.
+    it('keeps the write-ahead log near WAL_SIZE_LIMIT_BYTES under the server\'s checkpoint backstop', async () => {
+        const file = await tempFile();
+        const db = StoreDatabase.open(file);
+        open.push(db);
+        db.initialize();
+        db.setAutoCheckpoint(WAL_BACKSTOP_PAGES);
+
+        let largest = 0;
+        for (let i = 0; i < 800; i++) {
+            // A different value each time: SQLite does not write the pages of an unchanged one.
+            db.put('app', `key${i % 4}`, JSON.stringify(String(i).repeat(16 * 1024).slice(0, 64 * 1024)));
+            largest = Math.max(largest, statSync(`${file}-wal`).size);
+        }
+
+        // 800 writes of 64 KiB are about 50 MiB of log; without the backstop it reached about 40.
+        expect(largest).toBeLessThan(WAL_SIZE_LIMIT_BYTES * 1.25);
+        expect(statSync(`${file}-wal`).size).toBeLessThan(WAL_SIZE_LIMIT_BYTES * 1.25);
     });
 
     it('stores, replaces and deletes values, and says which were new', () => {

@@ -2,7 +2,7 @@ import { Service } from '../core/index.js';
 import { hasEmptyJsonBody, hasRestMediaType, WebServer } from './web-server.js';
 import { REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { StoreCheckpointer } from './store-checkpoint.js';
-import { STORE_DATABASE_FILENAME, StoreDatabase, StoreEntry } from './store-database.js';
+import { STORE_DATABASE_FILENAME, StoreDatabase, StoreEntry, WAL_BACKSTOP_PAGES } from './store-database.js';
 import { Router } from 'express';
 import { lstat, mkdir, readFile, rename } from 'fs/promises';
 import * as path from 'path';
@@ -235,8 +235,14 @@ export class RestAPI extends Service {
             + 'until the server can write it.', false);
     }
 
-    // Automatic checkpoints off, and a worker thread doing them instead (see StoreCheckpointer). If
-    // the worker ends, they are turned back on, so that the write-ahead log cannot grow for good.
+    // A worker thread does the checkpoints (see StoreCheckpointer), and the server's own commits
+    // only as a backstop, far later than SQLite's default. The worker's PASSIVE checkpoints never
+    // start the log over: SQLite only does that when a write begins on a log that is copied in
+    // full, and once PUTs come faster than a checkpoint takes, one always lands during it. With
+    // automatic checkpoints off, a client calling Store.Put every frame grew store.db-wal by about
+    // 150 MB a minute, until the volume was full. The backstop is a checkpoint by the writer
+    // itself, which copies everything, so the next write starts the log over. If the worker ends,
+    // the default comes back.
     private startCheckpointer(db: StoreDatabase): void {
         this.checkpointer = StoreCheckpointer.start(this.databasePath, CHECKPOINT_INTERVAL_MILLIS, (error, workerGone) => {
             if (workerGone) {
@@ -250,7 +256,7 @@ export class RestAPI extends Service {
             this.logWarning(`Data store: a checkpoint of ${this.databasePath} failed: ${error.message}. `
                 + 'This is logged at most once a minute.');
         });
-        db.setAutoCheckpoint(0);
+        db.setAutoCheckpoint(WAL_BACKSTOP_PAGES);
     }
 
     // store.json is an object of objects. A store file that parses to null, an array, or a
