@@ -1,4 +1,4 @@
-import { Payload, Service } from '../core/index.js';
+import { MAX_PAYLOAD_DEPTH, Payload, Service, nestsDeeperThan } from '../core/index.js';
 import { ConnectionPool, NetworkMessage } from './connection-pool.js';
 import { DataStore, SyncModel } from './data-store.js';
 
@@ -103,6 +103,16 @@ export class ModelSynchronization extends Service {
             const payload = (msg.payload?.asValue<{ id?: string }>()) || {};
             if (typeof(payload?.id) !== 'string') {
                 this.logError('Cannot update model without "id" attribute', false);
+                return;
+            }
+            // Stored, it would be written out again for every model::request on the channel, and
+            // JSON.stringify overflows the stack on deep nesting: each of those requests would fail.
+            if (nestsDeeperThan(payload)) {
+                this.logError(
+                    `Ignoring a model::update for '${payload.id}' on channel '${msg.channel}' from client '${msg.origin.name}' ` +
+                        `(${msg.origin.id}, app '${msg.origin.app}'): it nests deeper than ${MAX_PAYLOAD_DEPTH} levels`,
+                    false
+                );
                 return;
             }
 

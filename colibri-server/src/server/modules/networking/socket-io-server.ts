@@ -2,7 +2,7 @@ import { Server as SocketIoServer, Socket as SocketIoSocket, Event as SocketIoEv
 import { Server as HttpServer } from 'http';
 import { Observable, Subject } from 'rxjs';
 
-import { CONNECTION_LINE, Metadata, Payload, Service } from '../core/index.js';
+import { CONNECTION_LINE, MAX_PAYLOAD_DEPTH, Metadata, Payload, Service, nestsDeeperThan } from '../core/index.js';
 import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks/index.js';
 import { abbreviate } from '../command-hooks/connection-pool.js';
 import {
@@ -439,6 +439,12 @@ export class SocketIOServer extends Service implements NetworkServer {
             const body = (content ?? {}) as { command?: unknown; payload?: unknown };
             if (typeof body.command !== 'string') {
                 ignoreMalformed(`an event on channel '${abbreviate(channel)}' has no command`);
+                return;
+            }
+            // Relayed to Unity, stored or logged, a deeper one is written out with JSON.stringify
+            // or Socket.IO's encoder, and both overflow the stack (see MAX_PAYLOAD_DEPTH).
+            if (nestsDeeperThan(body.payload)) {
+                ignoreMalformed(`a payload on channel '${abbreviate(channel)}' nests deeper than ${MAX_PAYLOAD_DEPTH} levels`);
                 return;
             }
 

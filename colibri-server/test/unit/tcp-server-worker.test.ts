@@ -1013,6 +1013,22 @@ describe('TCPServerWorker', () => {
             ]);
         });
 
+        // Held, a deep update was written out again with JSON.stringify as it went, which
+        // overflowed the stack: the worker died and took every Unity client with it.
+        it('drops a model update nested deeper than MAX_PAYLOAD_DEPTH instead of holding it', () => {
+            configure({ inboundBacklogLimit: 1 });
+            const socket = handshaked();
+            send(socket, 'objects', 'model::update', '{"id":"a","x":1}');
+            const depth = 25_000;
+            send(socket, 'objects', 'model::update', `{"id":"deep","tree":${'['.repeat(depth)}${']'.repeat(depth)}}`);
+            send(socket, 'objects', 'model::update', '{"id":"b","x":1}');
+
+            caughtUp();
+            expect(() => internals.tick()).not.toThrow();
+
+            expect(relayedUpdates()).toEqual([{ id: 'a', x: 1 }, { id: 'b', x: 1 }]);
+        });
+
         it('passes held updates on ahead of the next message once there is room', () => {
             configure({ inboundBacklogLimit: 1 });
             const socket = handshaked();

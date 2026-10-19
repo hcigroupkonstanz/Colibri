@@ -1,6 +1,7 @@
 // What the server does with incoming messages when it, or one client, is taking in more than it can
 // process - and the bookkeeping that makes that visible in the log instead of silent.
 import { COLIBRI_CHANNEL } from './protocol.js';
+import { nestsDeeperThan } from '../core/payload.js';
 
 // The channel ClientLogger listens on.
 const LOG_CHANNEL = 'log';
@@ -144,13 +145,16 @@ export const lostUpdatesNote = function (summary: EpisodeSummary): string {
     );
 };
 
-// A model::update payload the server can apply: a JSON object with a string id, the same test
-// ModelSynchronization makes. Anything else is passed on or dropped as it is, never merged.
+// A model::update payload the server can apply: a JSON object with a string id, nested no deeper
+// than MAX_PAYLOAD_DEPTH, the same test ModelSynchronization makes. Anything else is passed on or
+// dropped as it is, never merged: a held update is written out again with JSON.stringify, which
+// overflows the stack on a deep one.
 export type ModelUpdate = Record<string, unknown> & { id: string };
 
 export const asModelUpdate = function (value: unknown): ModelUpdate | undefined {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-    return typeof (value as { id?: unknown }).id === 'string' ? (value as ModelUpdate) : undefined;
+    if (typeof (value as { id?: unknown }).id !== 'string') return undefined;
+    return nestsDeeperThan(value) ? undefined : (value as ModelUpdate);
 };
 
 export interface HeldUpdate {

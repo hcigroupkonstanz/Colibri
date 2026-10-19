@@ -1,3 +1,26 @@
+// How deeply a payload may nest. JSON.parse takes any depth, but JSON.stringify and Socket.IO's
+// encoder recurse, and a few thousand levels overflow the stack wherever a payload is written out
+// again: in the TCP worker that ended the thread and dropped every Unity client, on a Socket.IO
+// listener it ended the whole server. Colibri's own values (vectors, colors, a [Sync] JObject)
+// nest a handful of levels.
+export const MAX_PAYLOAD_DEPTH = 100;
+
+// Without recursing itself, so it is safe on exactly the values it is there to catch. Binary data
+// (a Buffer from Socket.IO, say) counts as one value: walking it byte by byte is pointless.
+export const nestsDeeperThan = function (value: unknown, maxDepth: number = MAX_PAYLOAD_DEPTH): boolean {
+    if (typeof value !== 'object' || value === null) return false;
+    const pending: Array<{ node: object; depth: number }> = [{ node: value, depth: 1 }];
+    while (pending.length > 0) {
+        const { node, depth } = pending.pop()!;
+        if (depth > maxDepth) return true;
+        if (ArrayBuffer.isView(node) || node instanceof ArrayBuffer) continue;
+        for (const child of Object.values(node)) {
+            if (typeof child === 'object' && child !== null) pending.push({ node: child as object, depth: depth + 1 });
+        }
+    }
+    return false;
+};
+
 // Wraps a NetworkMessage's payload in whichever representation the producer already
 // had (raw bytes off the TCP wire, wire string, or parsed value from Socket.IO) and
 // memoizes the others on first request. Same-transport relaying (TCP->TCP, web->web)

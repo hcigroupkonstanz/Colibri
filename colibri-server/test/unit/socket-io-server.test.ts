@@ -7,6 +7,7 @@ import { SocketIoClient, SocketIOServer } from '../../src/server/modules/network
 import { MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeMessageFrame } from '../../src/server/modules/networking/protocol.js';
 import { MAX_HELD_OBJECTS } from '../../src/server/modules/networking/inbound-limits.js';
 import { Service } from '../../src/server/modules/core/service.js';
+import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/core/payload.js';
 import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
 import { ConnectionPool, NetworkClient, NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
 import { TrustProxy, compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
@@ -280,6 +281,27 @@ describe('SocketIOServer', () => {
                 expect(socket.connected).toBe(true);
                 expect(server.hasRecipients('appA')).toBe(true);
                 expect(logged(LogLevel.Error)).toEqual([]);
+            });
+
+            // 6000 levels overflowed JSON.stringify in the 'error' handler and ended the server.
+            it.each(['error', 'myChannel'])('ignores a payload nested deeper than MAX_PAYLOAD_DEPTH on %s', async (channel) => {
+                const { socket } = connect({ app: 'appA', version: PROTOCOL_VERSION });
+                await nextColibriEvent(socket);
+                const relayed: string[] = [];
+                server.messages$.subscribe(m => relayed.push(m.channel));
+
+                const depth = 6000;
+                sendRaw(socket, channel, '['.repeat(depth) + ']'.repeat(depth));
+                sendRaw(socket, channel, '['.repeat(MAX_PAYLOAD_DEPTH) + ']'.repeat(MAX_PAYLOAD_DEPTH));
+                const next = received('done');
+                socket.emit('done', { command: 'broadcast::string', payload: '' });
+                await next;
+
+                expect(relayed).toEqual([channel, 'done']);
+                expect(socket.connected).toBe(true);
+                expect(logged(LogLevel.Error)).toEqual([
+                    expect.stringContaining(`a payload on channel '${channel}' nests deeper than ${MAX_PAYLOAD_DEPTH} levels`),
+                ]);
             });
         });
 

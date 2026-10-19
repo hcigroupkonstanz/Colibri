@@ -1486,8 +1486,20 @@ export class TCPServerWorker extends WorkerService {
     }
 
     private postHeld(client: TcpClient, update: HeldUpdate): void {
-        const payload = ownBytes(Buffer.from(JSON.stringify(update.model), 'utf8'));
-        this.postClientMessage(client, update.channel, MODEL_UPDATE_COMMAND, payload);
+        // asModelUpdate keeps the nesting that overflows JSON.stringify out of `held`. Should
+        // anything else make it throw, one update is lost, not the worker and every Unity client
+        // on it.
+        let json: string;
+        try {
+            json = JSON.stringify(update.model);
+        } catch (err) {
+            this.logWarning(
+                `Dropped a held model::update for '${update.model.id}' on channel '${update.channel}' from client ${client.id}: ` +
+                    `it could not be written out again (${err instanceof Error ? err.message : String(err)})`
+            );
+            return;
+        }
+        this.postClientMessage(client, update.channel, MODEL_UPDATE_COMMAND, ownBytes(Buffer.from(json, 'utf8')));
     }
 
     private recordLimited(client: TcpClient, refusedBy: Refusal, limited: Limited, now: number): void {
