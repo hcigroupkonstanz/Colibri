@@ -25,6 +25,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         private bool _warnedNoTemplate;
         private bool _warnedUnknownPart;
 
+        // Ids of other clients' objects whose copy took another Id as it woke: see OnModelUpdate.
+        private readonly HashSet<string> _unbuildable = new HashSet<string>();
+
         private bool _isListening;
 
         // The manager starts listening in Start, after its Template is set, and stops in
@@ -158,7 +161,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             // sent before the server had the delete. Built from it, the deleted object was back on
             // this client, with the template's values for every member the update did not carry,
             // and nothing was going to delete it again.
-            if (LocallyDeletedModels.Contains(Channel, id))
+            if (LocallyDeletedModels.Contains(Channel, id) || _unbuildable.Contains(id))
                 return;
 
             // In this scene already, built with the object it is part of (it asks for its own
@@ -254,6 +257,22 @@ namespace HCIKonstanz.Colibri.Synchronization
                 foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
                     part.MarkAsCopy();
 
+                // A model script that sets Id in its own Awake gave the copy another Id. Kept,
+                // the copy synced as some other object, and every further update for this id
+                // built yet another one, dozens a second. It goes again, without a delete.
+                var target = go.GetComponentsInChildren<T>(true).FirstOrDefault(p => p.Id == id);
+                if (!target)
+                {
+                    _unbuildable.Add(id);
+                    foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
+                        part.MarkDiscarded();
+                    Destroy(go.gameObject);
+                    Debug.LogError($"Colibri: '{GetType().FullName}' cannot build '{id}', another client's {typeof(T).Name}: the copy "
+                        + $"took the Id '{go.Id}' as it woke. A model script must not set Id in Awake when it has one already, "
+                        + "e.g. 'if (string.IsNullOrEmpty(Id)) Id = ...;'.");
+                    return;
+                }
+
                 // Known before its state is applied, so that a throw there cannot make the
                 // next update for this id build a second object. The clone's other parts of this
                 // manager's type too: each asks for its own state, and none is built again.
@@ -262,9 +281,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     if (part.ModelId == Template.ModelId && !_existingObjects.Contains(part))
                         _existingObjects.Add(part);
                 }
-                var target = anchorId == null ? go : go.GetComponentsInChildren<T>(true).FirstOrDefault(p => p.Id == id);
-                if (target)
-                    target.OnModelUpdate(data);
+                target.OnModelUpdate(data);
             }
             finally
             {

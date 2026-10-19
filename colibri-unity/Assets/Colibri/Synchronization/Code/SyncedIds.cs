@@ -21,6 +21,9 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         /// <summary>Marks a part of a copy that a manager built from another client's update.</summary>
         void MarkAsCopy();
+
+        /// <summary>Marks a part of a copy that is destroyed again at once: it sends no delete.</summary>
+        void MarkDiscarded();
     }
 
     /// <summary>

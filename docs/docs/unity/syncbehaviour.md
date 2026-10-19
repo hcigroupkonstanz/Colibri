@@ -66,6 +66,20 @@ For objects placed in the scene, give each one a fixed `Id` in the Inspector, e.
 the object with the same `Id`. An object with an empty `Id` gets a new random `Id` when it starts. That is right for
 objects you create at runtime with `Instantiate`, but not for placed objects: each client would have its own object.
 
+To give an object you create at runtime a fixed `Id`, set it in the model's `Awake` before `base.Awake()`, and only when
+it is empty. The copies on the other clients already have the creator's `Id` then:
+
+```csharp
+protected override void Awake()
+{
+    if (string.IsNullOrEmpty(Id))
+        Id = $"player-{SystemInfo.deviceUniqueIdentifier}";
+    base.Awake();
+}
+```
+
+An `Id` or `ModelId` changed after `Awake`, e.g. right after `Instantiate`, is set back, and the console shows an error.
+
 - The `Template` can also be an inactive object in the scene. An active one would sync as an object of its own.
 - The manager creates the copies at the top level of the scene hierarchy. It activates each copy, so the copy runs
   `Awake`, and then applies the synchronized values.

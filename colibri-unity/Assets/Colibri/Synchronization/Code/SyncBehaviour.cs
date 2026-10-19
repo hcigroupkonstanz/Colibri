@@ -374,6 +374,10 @@ namespace HCIKonstanz.Colibri.Synchronization
         // A part of a copy that a manager built from another client's update.
         private bool _isCopy;
 
+        // The Id and ModelId the object registered with in Awake, see KeepRegisteredId.
+        private string _registeredId;
+        private string _registeredModelId;
+
         private readonly TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
 
         string ISyncedObject.Id => Id;
@@ -388,6 +392,31 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         void ISyncedObject.MarkAsCopy() => _isCopy = true;
+
+        void ISyncedObject.MarkDiscarded()
+        {
+            _hasReceivedDestroyCommand = true;
+            _nextUpdate = null;
+        }
+
+        /// <summary>
+        /// The object listens for its model, and asks for it, under the Id and ModelId it has in
+        /// Awake. Changed later, e.g. right after Instantiate, which runs Awake, the object went
+        /// on listening under the old ones and sent under the new ones: it never took the
+        /// server's answer and never synced, and its manager built a second object from that
+        /// answer. Nothing said so. They are now set back, with an error that says how to do it.
+        /// </summary>
+        private void KeepRegisteredId()
+        {
+            if (_registeredId == null || (Id == _registeredId && ModelId == _registeredModelId))
+                return;
+
+            Debug.LogError($"Colibri: the Id or ModelId of '{name}' ({typeof(T).Name}) was changed after it woke, to '{Id}' and "
+                + $"'{ModelId}'. It keeps '{_registeredId}' and '{_registeredModelId}'. Set them in the Inspector, or in the model's "
+                + "Awake before base.Awake(), and Id only when it is empty: 'if (string.IsNullOrEmpty(Id)) Id = ...;'.", this);
+            Id = _registeredId;
+            ModelId = _registeredModelId;
+        }
 
         private int _tickIndex = -1;
         int SyncTicker.ITickable.TickIndex { get => _tickIndex; set => _tickIndex = value; }
@@ -468,6 +497,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, OnRequestedAgain);
             }
             Sync.AddModelDeleteListener(Channel, OnModelDelete);
+            _registeredId = Id;
+            _registeredModelId = ModelId;
 
             ModelCreated?.Invoke(this);
 
@@ -550,6 +581,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             // A component that is switched off on its own (enabled = false) neither latches nor
             // sends, so whatever changed meanwhile is picked up as a normal change once it is
             // back on.
+            KeepRegisteredId();
+
             if (!enabled)
                 return;
 
