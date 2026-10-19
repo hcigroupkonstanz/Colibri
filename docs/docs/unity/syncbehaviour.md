@@ -86,6 +86,8 @@ An `Id` or `ModelId` changed after `Awake`, e.g. right after `Instantiate`, is s
 - An object can have more than one synced component, e.g. a `SyncTransform` on the head and on each hand of an
   avatar. Leave their `Id` empty. The components on the object's top GameObject share its `Id`, and a component on a
   child adds its path, e.g. `<Id>/LeftHand`. Set the manager's `Template` to a component on the top GameObject.
+- A synced component you add at runtime with `AddComponent` below another synced object counts as a part of that
+  object. If each client adds one, give each an `Id` of its own, or they become one object.
 - Without a matching manager in the scene, the console warns
   `No generic Colibri SyncManager found (without ModelId) - synchronization of newly created objects may be restricted`.
 - By the way: `SyncTransform` is also a `SyncBehaviour`, and `[SyncTransformManager]` is its manager.
