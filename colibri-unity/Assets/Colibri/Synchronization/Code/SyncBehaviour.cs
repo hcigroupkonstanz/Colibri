@@ -416,8 +416,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
         }
 
-        /// <summary>Called once an update from the server has been applied to this object.</summary>
-        private protected virtual void AfterUpdateApplied()
+        /// <summary>Called once <paramref name="update"/>, from the server, has been applied to this object.</summary>
+        private protected virtual void AfterUpdateApplied(JObject update)
         {
         }
 
@@ -801,7 +801,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     UpdateAttribute(prop.Key, prop.Value);
                 }
 
-                AfterUpdateApplied();
+                AfterUpdateApplied(data);
 
                 _isReady.TrySetResult(true);
 

@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
@@ -98,8 +99,13 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// there again, and a moment later's update from its owner moved it on. Nested
         /// SyncTransforms, an avatar's hands below its body, echoed old poses and drifted.
         /// </summary>
-        private protected override void AfterUpdateApplied()
+        private protected override void AfterUpdateApplied(JObject update)
         {
+            // Only a pose that moved moves the children, and an object without children has none
+            // to latch: this runs for every update of every SyncTransform.
+            if (transform.childCount == 0 || !(update.ContainsKey("position") || update.ContainsKey("rotation")))
+                return;
+
             foreach (var part in GetComponentsInChildren<ISyncedObject>(true))
             {
                 if (!ReferenceEquals(part, this))
