@@ -18,6 +18,9 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         /// <summary>Sets an empty id, before or during the object's Awake.</summary>
         void TakeId(string id, bool madeHere);
+
+        /// <summary>Marks a part of a copy that a manager built from another client's update.</summary>
+        void MarkAsCopy();
     }
 
     /// <summary>

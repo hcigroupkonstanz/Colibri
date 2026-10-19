@@ -367,6 +367,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         // Given its id in Awake, a fresh one: the server holds nothing for the object.
         private bool _hasMadeItsId;
 
+        // A part of a copy that a manager built from another client's update.
+        private bool _isCopy;
+
         private readonly TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
 
         string ISyncedObject.Id => Id;
@@ -379,6 +382,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             Id = id;
             _hasMadeItsId = madeHere;
         }
+
+        void ISyncedObject.MarkAsCopy() => _isCopy = true;
 
         private int _tickIndex = -1;
         int SyncTicker.ITickable.TickIndex { get => _tickIndex; set => _tickIndex = value; }
@@ -503,6 +508,16 @@ namespace HCIKonstanz.Colibri.Synchronization
             // (SingletonLifetime.IsQuitting) is raised before teardown whatever the object's state.
             if (_isQuitting || SingletonLifetime.IsQuitting || _hasReceivedDestroyCommand)
                 return;
+
+            // A copy of another client's object goes with its scene, and a manager builds it again
+            // when the scene loads again. Deleted, it was gone for everyone, its owner included: a
+            // client reloading the scene to start over took every other client's avatar with it.
+            // Destroying the copy on purpose still deletes it.
+            if (_isCopy && !gameObject.scene.isLoaded)
+            {
+                _isReady.TrySetCanceled();
+                return;
+            }
 
             // So that an update another client sent before the server had this delete does not
             // make a manager build the object again - see LocallyDeletedModels.

@@ -69,6 +69,8 @@ reconnect.
   sent when you enable it again.
 - Destroying the object, or unloading its scene, e.g. by loading another scene, deletes it on the server and on all
   other clients.
+- Unloading a scene does not delete the copies of other clients' objects that a manager created in it. The manager
+  creates them again when the scene loads again.
 - After any client loads the scene again, its objects sync again between all clients that load the scene from then
   on. A client that kept the scene open lost its copies with the delete. It gets them back only by loading the scene
   again, or from a manager whose `Template` creates them ([Objects created at runtime](#objects-created-at-runtime)).

@@ -161,6 +161,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 if (!go.gameObject.activeSelf)
                     go.gameObject.SetActive(true);
 
+                // Not deleted when its scene unloads, see SyncBehaviour.OnDestroy.
+                foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
+                    part.MarkAsCopy();
+
                 // Known before its state is applied, so that a throw there cannot make the
                 // next update for this id build a second object. The clone's other parts of this
                 // manager's type too: each asks for its own state, and none is built again.
