@@ -13,7 +13,6 @@ Meta Quest and Android.
 
 1. Open *Window → Colibri Configuration*. The window opens automatically while the project has no configuration.
 2. Set **App Name** to a name that is unique to your project. Clients exchange data only if their app names match.
-   The examples and samples use `myAppName`.
 3. Set **Server Address** to the address of the Colibri server you want to use. The address is a host name or IP
    address without `http://`. A public test server is available: `colibri.hci.uni-konstanz.de`.
 4. Click *Save Config*.
