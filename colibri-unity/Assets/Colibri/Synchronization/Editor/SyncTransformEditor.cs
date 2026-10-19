@@ -30,8 +30,16 @@ namespace HCIKonstanz.Colibri.Synchronization
             {
                 if (GUILayout.Button("Generate ID"))
                 {
-                    synctransform.Id = Guid.NewGuid().ToString();
-                    EditorUtility.SetDirty(synctransform);
+                    // Through SerializedObject, which records an override on a prefab instance, and
+                    // undo. Set on the component and marked dirty, the id of a prefab instance was
+                    // not saved: it was back to the prefab's on Play or when the scene was reloaded,
+                    // so placed copies of one prefab shared an empty id. One id per selected object.
+                    foreach (var selected in targets)
+                    {
+                        var serialized = new SerializedObject(selected);
+                        serialized.FindProperty(nameof(SyncTransform.Id)).stringValue = Guid.NewGuid().ToString();
+                        serialized.ApplyModifiedProperties();
+                    }
                 }
             }
         }
