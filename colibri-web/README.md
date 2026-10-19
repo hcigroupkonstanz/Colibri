@@ -12,7 +12,7 @@ Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 - Node.js 18 or newer
 - TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false` in
   `tsconfig.json`. Vite needs a plugin for them: see
-  [Vite](../docs/docs/web/installation.md#vite).
+  [Vite](https://colibri.hci.uni-konstanz.de/web/installation#vite).
 - [colibri-server](../colibri-server/README.md#installation) 2.0.0 or newer
 
 ## Installation

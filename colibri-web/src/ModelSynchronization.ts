@@ -867,11 +867,16 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             next: () => {
                 const changes = [...(changesToSend.get(model) ?? [])];
                 changesToSend.delete(model);
-                if (changes.length === 0) return;
+                if (changes.length > 0) {
+                    const colibri = Colibri.getInstance(false);
+                    if (!colibri || mustHold()) holdChanges(model, changes);
+                    else sendUpdate(colibri, model, toJsonOf(model, changes));
+                }
 
-                const colibri = Colibri.getInstance(false);
-                if (!colibri || mustHold()) holdChanges(model, changes);
-                else sendUpdate(colibri, model, toJsonOf(model, changes));
+                // A change of a model another client created made the list emit, one of this
+                // client's own did not: a page that renders the list never showed it. Held back
+                // or sent, the model has changed here.
+                if (models.value.includes(model)) models.next([...models.value]);
             },
             // delete() and detach() end the stream: this client sends nothing more for the model - so
             // neither a held change, nor the whole model again after a reconnect.

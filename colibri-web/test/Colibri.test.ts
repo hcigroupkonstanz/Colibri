@@ -1969,6 +1969,25 @@ describe("a model class with methods named like SyncModel's", () => {
     });
 });
 
+// A change of a model another client created made the list emit, one of this client's own did not,
+// so a page rendering the list never showed it.
+describe('the list of models', () => {
+    it('emits when this client changes one of its own models', async () => {
+        new Colibri('app', 'localhost', 9211);
+        const [widgets$, registerWidget] = RegisterModelSync({ name: 'own-changes', type: Widget });
+        const widget = new Widget('w1');
+        registerWidget(widget);
+        const emitted: string[][] = [];
+        widgets$.subscribe(list => emitted.push(list.map(w => w.label)));
+
+        widget.label = 'changed';
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(emitted.at(-1)).toEqual(['changed']);
+        expect(emitted.length).toBeGreaterThan(1);
+    });
+});
+
 describe('keeping a change made after registerModel', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
