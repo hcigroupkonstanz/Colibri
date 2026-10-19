@@ -79,6 +79,9 @@ export const MAX_REPLY_BACKLOG_BYTES = 64 * 1024 * 1024;
 // can hold on to.
 const CLOSE_GRACE_MILLIS = 5000;
 
+// A channel or command may be up to 64 KiB; a log line names only this much of one.
+const abbreviateName = (name: string): string => (name.length > 200 ? `${name.slice(0, 200)}...` : name);
+
 // How many TCP messages may be waiting for the main thread before the worker starts holding back
 // model updates and dropping broadcasts (see isLimitable). At the main thread's saturation point on
 // a 4-core test machine (about 15k model::update/s) 2000 is roughly 130 ms of work: well clear of a
@@ -420,6 +423,8 @@ export class TCPServerWorker extends WorkerService {
     // The same for a connection refused for its PROXY protocol header, by the address of the peer
     // that sent it (or did not).
     private readonly proxyHeaderWarnedAt = new AddressThrottle();
+    // The same for a connection closed for a message before its handshake.
+    private readonly noHandshakeWarnedAt = new AddressThrottle();
 
     public constructor() {
         super(true);
@@ -1205,12 +1210,21 @@ export class TCPServerWorker extends WorkerService {
                     break;
 
                 case FrameType.Message:
+                    // A Colibri client handshakes before it sends anything else, so this is no
+                    // Colibri client, or not one this server can serve. Each such message used to
+                    // log an ERROR line, and a peer that kept sending was never closed: what it
+                    // sent kept it from looking idle. A loop of them stalled the main thread with
+                    // log lines.
                     if (!client.app) {
-                        this.logError(
-                            `Ignoring message (${frame.channel} / ${frame.command}) from client ${client.id} without app`,
-                            false
-                        );
-                        break;
+                        if (this.noHandshakeWarnedAt.shouldWarn(client.address, now)) {
+                            this.logWarning(
+                                `Closing the connection of client ${client.id} from ${client.address}: it sent a message ` +
+                                    `(${abbreviateName(frame.channel)} / ${abbreviateName(frame.command)}) before a handshake naming its app. ` +
+                                    'Logged at most once a minute per address.'
+                            );
+                        }
+                        this.closeClient(client);
+                        return;
                     }
 
                     client.traffic.received += 1;
