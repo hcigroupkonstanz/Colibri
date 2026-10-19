@@ -36,6 +36,11 @@ namespace HCIKonstanz.Colibri.Communication
         private int microphoneSamplingRate;
         private bool broadcast = false;
 
+        // The microphone recorded from, null for the default one. Chosen once, in InitBroadcast:
+        // MicrophoneID is an index into this device's list, so one chosen in the Editor can be out
+        // of range on a headset. It threw there, and voice was off for good.
+        private string microphoneDevice;
+
         // Networking
         private VoiceServerConnection voiceServerConnection;
         private VoiceFramer framer;
@@ -88,6 +93,23 @@ namespace HCIKonstanz.Colibri.Communication
             Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: Microphone permission NOT granted");
         }
 
+        /// <summary>
+        /// The microphone to record from, null for the default one. Meta Quest and other Android
+        /// devices use the default one, as they always did, decided at runtime: the build target
+        /// used to decide, so the Editor with the Android target ignored MicrophoneID too.
+        /// </summary>
+        private string ChooseMicrophone(string[] devices)
+        {
+            if (Application.platform == RuntimePlatform.Android)
+                return null;
+            if (MicrophoneID >= 0 && MicrophoneID < devices.Length)
+                return devices[MicrophoneID];
+
+            Debug.LogWarning(DEBUG_HEADER + "Microphone ID " + MicrophoneID + " is not a microphone of this device, which has "
+                + devices.Length + ". Using the default one.");
+            return null;
+        }
+
         private void InitBroadcast()
         {
             // As VoiceServerConnection has it: frames are counted at this rate, and at 0 they would
@@ -101,19 +123,20 @@ namespace HCIKonstanz.Colibri.Communication
                 Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: No recording device found");
                 return;
             }
+            microphoneDevice = ChooseMicrophone(recordingDevices);
             if (Debugging)
             {
                 for (int i = 0; i < recordingDevices.Length; i++)
                 {
                     Debug.Log(DEBUG_HEADER + "Recording device found: " + recordingDevices[i] + " ID: " + i);
                 }
-                Debug.Log(DEBUG_HEADER + "Using recording device: " + recordingDevices[MicrophoneID] + " ID: " + MicrophoneID);
+                Debug.Log(DEBUG_HEADER + "Using recording device: " + (microphoneDevice ?? "the default one"));
             }
 
             // Get supported sampling rates of the selected recording device
             int minSupportedSamplingRate;
             int maxSupportedSamplingRate;
-            Microphone.GetDeviceCaps(recordingDevices[MicrophoneID], out minSupportedSamplingRate, out maxSupportedSamplingRate);
+            Microphone.GetDeviceCaps(microphoneDevice, out minSupportedSamplingRate, out maxSupportedSamplingRate);
             if (Debugging) Debug.Log(DEBUG_HEADER + "Sampling rates supported: " + minSupportedSamplingRate + " - " + maxSupportedSamplingRate);
 
             // Decide on sampling rate. A microphone that takes any rate reports 0 to 0, and its
@@ -156,13 +179,9 @@ namespace HCIKonstanz.Colibri.Communication
 
                 // Start recording using selected recording device
                 Debug.Log(DEBUG_HEADER + "Start voice broadcasting");
-#if UNITY_ANDROID
-                recordingAudioClip = Microphone.Start(null, true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
-#else
-                recordingAudioClip = Microphone.Start(Microphone.devices[MicrophoneID], true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
-#endif
+                recordingAudioClip = Microphone.Start(microphoneDevice, true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
                 if (Debugging) Debug.Log(DEBUG_HEADER + "Channel count: " + recordingAudioClip.channels);
-                lastRecordingSamplePosition = Microphone.GetPosition(null);
+                lastRecordingSamplePosition = Microphone.GetPosition(microphoneDevice);
 
                 // A new one for every broadcast, so that none of the last broadcast's audio goes
                 // out with this one.
@@ -182,11 +201,7 @@ namespace HCIKonstanz.Colibri.Communication
             if (broadcast)
             {
                 broadcast = false;
-#if UNITY_ANDROID
-                Microphone.End(null);
-#else
-                Microphone.End(Microphone.devices[MicrophoneID]);
-#endif
+                Microphone.End(microphoneDevice);
             }
         }
 
@@ -216,11 +231,7 @@ namespace HCIKonstanz.Colibri.Communication
             int differenceSinceLastAdd = 0;
 
             // Get sample count since last adding
-#if UNITY_ANDROID
-            int currentSamplePosition = Microphone.GetPosition(null);
-#else
-            int currentSamplePosition = Microphone.GetPosition(Microphone.devices[MicrophoneID]);
-#endif
+            int currentSamplePosition = Microphone.GetPosition(microphoneDevice);
             if (currentSamplePosition > lastRecordingSamplePosition)
             {
                 differenceSinceLastAdd = currentSamplePosition - lastRecordingSamplePosition;
