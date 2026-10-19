@@ -1537,6 +1537,29 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(Sent(child), Is.Null, "The child sent the pose its parent's update gave it");
         }
 
+        /// <summary>
+        /// The hand's update came before the body's, in one batch: the body's then moved the hand
+        /// on by the body's move, and the hand was off until its next update.
+        /// </summary>
+        [Test]
+        public void AChildKeepsItsOwnUpdatesPoseWhenItsParentsUpdateComesAfterIt()
+        {
+            var parent = Spawn<ResyncTransform>("body");
+            var child = new GameObject("hand").AddComponent<ResyncTransform>();
+            child.transform.SetParent(parent.transform, false);
+            parent.Wake();
+            child.Wake();
+            parent.OnModelUpdate(Bare(parent.Id));
+            child.OnModelUpdate(Bare(child.Id));
+
+            child.OnModelUpdate(new JObject { { "id", child.Id }, { "position", new JArray(1f, 2f, 3f) } });
+            parent.OnModelUpdate(new JObject { { "id", parent.Id }, { "position", new JArray(4f, 5f, 6f) } });
+            Poll(child);
+
+            Assert.That(child.transform.position, Is.EqualTo(new Vector3(1f, 2f, 3f)));
+            Assert.That(Sent(child), Is.Null);
+        }
+
         /*
          *  Without a server, a placed body waited for its first answer for good. Once this client
          *  has been without one for the connect timeout, it is simulated without the server's state.

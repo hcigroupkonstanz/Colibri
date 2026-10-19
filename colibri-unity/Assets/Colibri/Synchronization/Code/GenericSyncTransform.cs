@@ -93,6 +93,12 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         public bool UseLocalTransform = false;
 
+        // The world pose the last update from another client gave this object; see
+        // LatchMovedWithParent.
+        private bool _hasReceivedPose;
+        private Vector3 _receivedPosition;
+        private Quaternion _receivedRotation;
+
         /// <summary>
         /// A synced object below this one that syncs its world pose moved with it, and read that
         /// pose as its own change: it sent it back to every client, which moved this object's copy
@@ -103,9 +109,18 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             // Only a pose that moved moves the children, and an object without children has none
             // to latch: this runs for every update of every SyncTransform.
-            if (transform.childCount == 0 || !(update.ContainsKey("position") || update.ContainsKey("rotation")))
+            if (!(update.ContainsKey("position") || update.ContainsKey("rotation")))
                 return;
 
+            if (!UseLocalTransform)
+            {
+                _hasReceivedPose = true;
+                _receivedPosition = transform.position;
+                _receivedRotation = transform.rotation;
+            }
+
+            if (transform.childCount == 0)
+                return;
             foreach (var part in GetComponentsInChildren<ISyncedObject>(true))
             {
                 if (!ReferenceEquals(part, this))
@@ -113,10 +128,24 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
+        /// <summary>
+        /// Moved with a synced parent by the parent's update. An object that syncs its world pose
+        /// goes back to the one its own last update gave it: that update may have come first, in
+        /// the same batch, and the parent's then moved it on by the parent's move, so a hand was
+        /// off by the body's motion until its next update. Either way, the pose it has then is no
+        /// change of its own. One that never got an update of its own follows its parent.
+        /// </summary>
         private protected override void LatchMovedWithParent()
         {
             if (UseLocalTransform)
                 return;
+            if (_hasReceivedPose)
+            {
+                if (SyncPosition)
+                    transform.position = _receivedPosition;
+                if (SyncRotation)
+                    transform.rotation = _receivedRotation;
+            }
             Latch(nameof(Position));
             Latch(nameof(Rotation));
         }
