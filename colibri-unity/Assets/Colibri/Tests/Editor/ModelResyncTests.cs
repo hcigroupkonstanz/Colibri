@@ -8,6 +8,7 @@ using HCIKonstanz.Colibri.Synchronization;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace HCIKonstanz.Colibri.Tests
@@ -1380,6 +1381,84 @@ namespace HCIKonstanz.Colibri.Tests
                 PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
                 PhysicsClient.ResetForPlaySession();
             }
+        }
+
+        /// <summary>
+        /// An Id set right after Instantiate, which runs Awake: the object used to listen under the
+        /// old one and send under the new one, and never synced. It moves to the new one, deletes
+        /// the model it created under the old one, and announces itself once the server has
+        /// nothing for the new one.
+        /// </summary>
+        [Test]
+        public void AnObjectCreatedHereFollowsANewIdAndAnnouncesItself()
+        {
+            var model = SpawnModel();
+            model.OnModelUpdate(Bare(model.Id));
+            var oldId = model.Id;
+            model.Label = "mine";
+
+            model.Id = "player-" + System.Guid.NewGuid();
+            Poll(model);
+
+            Assert.That(model.Id, Is.Not.EqualTo(oldId));
+            Assert.That(LocallyDeletedModels.Contains(model.Channel, oldId), Is.True, "The model created under the old Id was not deleted");
+            Assert.That(Sent(model), Is.Null, "Sent before the server answered for the new Id");
+
+            model.OnModelUpdate(Bare(model.Id));
+            var sent = Sent(model);
+            Assert.That(sent?["id"]?.Value<string>(), Is.EqualTo(model.Id));
+            Assert.That(sent?["label"]?.Value<string>(), Is.EqualTo("mine"));
+        }
+
+        /// <summary>A placed object's old Id may be other clients' too: it is left, not deleted.</summary>
+        [Test]
+        public void APlacedObjectFollowsANewIdAndTakesTheServersState()
+        {
+            var model = Spawn<ResyncModel>("placed");
+            model.Id = "placed-" + System.Guid.NewGuid();
+            model.Wake();
+            model.OnModelUpdate(Bare(model.Id));
+            var oldId = model.Id;
+
+            model.Id = "placed-" + System.Guid.NewGuid();
+            Poll(model);
+            model.OnModelUpdate(new JObject { { "id", model.Id }, { "label", "from the server" } });
+            Poll(model);
+
+            Assert.That(LocallyDeletedModels.Contains(model.Channel, oldId), Is.False);
+            Assert.That(model.Label, Is.EqualTo("from the server"));
+            Assert.That(Sent(model), Is.Null);
+        }
+
+        [Test]
+        public void AnObjectFollowsANewModelIdToItsChannel()
+        {
+            var model = SpawnModel();
+            model.OnModelUpdate(Bare(model.Id));
+
+            model.ModelId = "red";
+            Poll(model);
+            model.OnModelUpdate(Bare(model.Id));
+
+            Assert.That(model.Channel, Does.EndWith("_red"));
+            Assert.That(Sent(model)?["id"]?.Value<string>(), Is.EqualTo(model.Id), "It did not announce itself on the new channel");
+        }
+
+        /// <summary>A model script that sets Id in Awake gave a copy another object's Id: a copy keeps its own.</summary>
+        [Test]
+        public void ACopyOfAnotherClientsObjectKeepsItsId()
+        {
+            var model = Spawn<ResyncModel>("copy");
+            model.Id = "theirs-" + System.Guid.NewGuid();
+            ((ISyncedObject)model).MarkAsCopy();
+            model.Wake();
+            var id = model.Id;
+
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("a copy of another client's object, was changed"));
+            model.Id = "mine";
+            Poll(model);
+
+            Assert.That(model.Id, Is.EqualTo(id));
         }
 
         /// <summary>

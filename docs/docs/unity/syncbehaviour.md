@@ -78,7 +78,14 @@ protected override void Awake()
 }
 ```
 
-An `Id` or `ModelId` changed after `Awake`, e.g. right after `Instantiate`, is set back, and the console shows an error.
+You can also change `Id` or `ModelId` later, e.g. right after `Instantiate` or once you know which user the object
+stands for. From the next frame on, the object syncs under the new ones: it takes the server's state for the new `Id`,
+or sends its own if the server has none.
+
+- If this client created the object under the old `Id`, that model is deleted on all other clients.
+- Synced parts below the object keep their `Id`. Change theirs too if needed.
+- `ModelDestroyed` and `ModelCreated` are raised for the object, as it leaves the old model and joins the new one.
+- A copy that a manager created of another client's object keeps its `Id`. Changing it logs an error.
 
 - The `Template` can also be an inactive object in the scene. An active one would sync as an object of its own.
 - The manager creates the copies at the top level of the scene hierarchy. It activates each copy, so the copy runs

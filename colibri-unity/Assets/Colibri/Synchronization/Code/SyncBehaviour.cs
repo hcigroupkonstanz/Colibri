@@ -330,7 +330,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         public string ModelId = "";
         private readonly string ChannelPrefix = ToWireName(typeof(T).Name);
-        internal string Channel { get => ChannelPrefix + (String.IsNullOrEmpty(ModelId) ? "" : $"_{ModelId}"); }
+        internal string Channel { get => ChannelOf(ModelId); }
+        private string ChannelOf(string modelId) => ChannelPrefix + (String.IsNullOrEmpty(modelId) ? "" : $"_{modelId}");
 
         // Parallel to _attributeList.
         private IChangeTracker[] _trackers;
@@ -388,7 +389,12 @@ namespace HCIKonstanz.Colibri.Synchronization
         private string _registeredId;
         private string _registeredModelId;
 
-        private readonly TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
+        // A new one when the object moves to another Id (see FollowIdChange).
+        private TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
+
+        // Moved to another Id after being created here: it sends its full state once the server
+        // answers that it holds nothing for the new one.
+        private bool _announceAtFirstAnswer;
 
         string ISyncedObject.Id => Id;
         bool ISyncedObject.MadeItsId => _hasMadeItsId;
@@ -441,20 +447,84 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// The object listens for its model, and asks for it, under the Id and ModelId it has in
-        /// Awake. Changed later, e.g. right after Instantiate, which runs Awake, the object went
-        /// on listening under the old ones and sent under the new ones: it never took the
-        /// server's answer and never synced, and its manager built a second object from that
-        /// answer. Nothing said so. They are now set back, with an error that says how to do it.
+        /// Follows an Id or ModelId changed after Awake, at the next poll: right after Instantiate,
+        /// which runs Awake, to the id of the player the object stands for, say. The object leaves
+        /// its old model and channel, asks the server for the new one, and takes the server's
+        /// state, or sends its own if the server has none and the object was created here. A
+        /// model this client created under the old Id is deleted for everyone: nobody else has
+        /// it, and other clients' copies of it would stay for good. The parts below the object
+        /// keep their Ids.
+        /// </summary>
+        /// <remarks>
+        /// The object used to go on listening under the old Id and sending under the new one: it
+        /// never took the server's answer, never synced, and its manager built a second object
+        /// from that answer. A copy that a manager built of another client's object keeps the Id
+        /// it was built with (see <see cref="KeepRegisteredId"/>).
+        /// </remarks>
+        private void FollowIdChange()
+        {
+            if (_registeredId == null || (Id == _registeredId && ModelId == _registeredModelId))
+                return;
+            if (_isCopy)
+            {
+                KeepRegisteredId();
+                return;
+            }
+
+            var oldId = _registeredId;
+            var oldChannel = ChannelOf(_registeredModelId);
+            var madeHere = _hasMadeItsId;
+
+            Sync.RemoveModelUpdateListener(oldChannel, OnModelUpdate);
+            Sync.RemoveModelDeleteListener(oldChannel, OnModelDelete);
+            SyncedIds.Deregister(oldId);
+            ModelDestroyed?.Invoke(this);
+            if (madeHere)
+            {
+                LocallyDeletedModels.Remember(oldChannel, oldId);
+                Sync.SendModelDelete(oldChannel, oldId);
+            }
+
+            // A start under the new Id: what this object sent or was told under the old one says
+            // nothing about the new model, and what it holds now is compared with the answer.
+            _nextUpdate = null;
+            _hasMadeItsId = false;
+            _hasReceivedFirstUpdate = false;
+            _isBuiltFromUpdate = false;
+            _round = null;
+            _keptInRound = null;
+            _sentInRound = null;
+            _sentValues = null;
+            _announceAtFirstAnswer = madeHere;
+            var wasReady = _isReady;
+            _isReady = new TaskCompletionSource<bool>();
+            wasReady.TrySetCanceled();
+            var self = this as T;
+            for (var i = 0; i < _trackers.Length; i++)
+                _trackers[i].Latch(self);
+
+            _registeredId = Id;
+            _registeredModelId = ModelId;
+            SyncedIds.Register(Id);
+            LocallyDeletedModels.Forget(Channel, Id);
+            Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, OnRequestedAgain);
+            Sync.AddModelDeleteListener(Channel, OnModelDelete);
+            ModelCreated?.Invoke(this);
+        }
+
+        /// <summary>
+        /// Sets an Id or ModelId changed since Awake back, with an error: for a copy a manager
+        /// built of another client's object. A model script that set Id there gave the copy
+        /// another object's Id, often this client's own.
         /// </summary>
         private void KeepRegisteredId()
         {
             if (_registeredId == null || (Id == _registeredId && ModelId == _registeredModelId))
                 return;
 
-            Debug.LogError($"Colibri: the Id or ModelId of '{name}' ({typeof(T).Name}) was changed after it woke, to '{Id}' and "
-                + $"'{ModelId}'. It keeps '{_registeredId}' and '{_registeredModelId}'. Set them in the Inspector, or in the model's "
-                + "Awake before base.Awake(), and Id only when it is empty: 'if (string.IsNullOrEmpty(Id)) Id = ...;'.", this);
+            Debug.LogError($"Colibri: the Id or ModelId of '{name}' ({typeof(T).Name}), a copy of another client's object, was "
+                + $"changed to '{Id}' and '{ModelId}'. It keeps '{_registeredId}' and '{_registeredModelId}'. A model script must not "
+                + "set Id in Awake when it has one already, e.g. 'if (string.IsNullOrEmpty(Id)) Id = ...;'.", this);
             Id = _registeredId;
             ModelId = _registeredModelId;
         }
@@ -564,9 +634,13 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         protected virtual void OnDestroy()
         {
-            // Under the Id and ModelId it registered with: changed since, the listeners, the
-            // delete and the bookkeeping went to the new ones.
-            KeepRegisteredId();
+            // Under the Id and ModelId it registered with: changed since, but not yet followed (see
+            // FollowIdChange), the listeners, the delete and the bookkeeping went to the new ones.
+            if (_registeredId != null)
+            {
+                Id = _registeredId;
+                ModelId = _registeredModelId;
+            }
 
             // An update the send-rate limit still holds is dropped with the object, and the
             // delete below goes out at once: sent after the delete, the update would bring the
@@ -626,7 +700,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             // A component that is switched off on its own (enabled = false) neither latches nor
             // sends, so whatever changed meanwhile is picked up as a normal change once it is
             // back on.
-            KeepRegisteredId();
+            FollowIdChange();
 
             if (!enabled)
                 return;
@@ -826,6 +900,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 // again.
                 if (!isFirstUpdate && data.Count == 1 && !_hasReceivedDestroyCommand)
                     AddFullState();
+                else if (isFirstUpdate && _announceAtFirstAnswer && data.Count == 1 && !_hasReceivedDestroyCommand)
+                    AddFullState();
+                if (isFirstUpdate)
+                    _announceAtFirstAnswer = false;
             }
         }
 

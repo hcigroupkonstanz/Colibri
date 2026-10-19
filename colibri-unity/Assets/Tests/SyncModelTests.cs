@@ -333,6 +333,30 @@ namespace HCIKonstanz.Colibri.E2E
         }
 
         /// <summary>
+        /// An Id set right after the object woke, as code that learns which user an object stands
+        /// for does. The object used to listen under its old Id and never synced; it moves to the
+        /// new one and, created here, announces itself there.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AnObjectWhoseIdIsSetAfterItWokeSyncsUnderTheNewOne()
+        {
+            var model = Spawn<E2ESyncModel>("renamed");
+            var oldId = model.Id;
+            var newId = "renamed-" + Guid.NewGuid();
+            model.Id = newId;
+            model.Label = "after the rename";
+
+            yield return Peer.Expect(Channel, "model::update", frame =>
+            {
+                var payload = TcpPeer.Json(frame);
+                Assert.That(payload["id"].Value<string>(), Is.EqualTo(newId));
+                Assert.That(payload["label"].Value<string>(), Is.EqualTo("after the rename"));
+            });
+            Assert.That(model.Id, Is.EqualTo(newId));
+            Assert.That(oldId, Is.Not.EqualTo(newId));
+        }
+
+        /// <summary>
         /// Unity calls one Start, the manager script's own, which hid the manager's: the manager
         /// never listened and never built anything, without a word. It starts a frame later now,
         /// and says why.
