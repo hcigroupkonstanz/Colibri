@@ -50,10 +50,16 @@ namespace HCIKonstanz.Colibri.Communication
         // Opus codec, null when voice goes out as PCM
         private OpusEncoder opusEncoder;
 
-        // Android: waiting for the microphone permission, and when it was last checked.
+#if UNITY_ANDROID
+        // Android: waiting for the microphone permission, and when it was last checked. The
+        // permission callbacks may run on another thread, so they only set the flags below, and
+        // Update acts on them.
         private bool waitingForPermission;
         private float permissionCheckedAt;
         private bool permissionAskedAgain;
+        private volatile bool permissionGranted;
+        private volatile bool permissionDismissed;
+#endif
 
         private void Start()
         {
@@ -72,19 +78,19 @@ namespace HCIKonstanz.Colibri.Communication
         private void RequestMicrophonePermission()
         {
             PermissionCallbacks microphonePermissionCallbacks = new PermissionCallbacks();
-            microphonePermissionCallbacks.PermissionGranted += OnMicrophonePermissionGranted;
+            microphonePermissionCallbacks.PermissionGranted += _ => permissionGranted = true;
             microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
 #if UNITY_2023_1_OR_NEWER
             // This event only exists from Unity 2023.1 on. Unguarded, it was a compile error
             // in every Android build on 2022.3, the oldest version the package supports.
-            microphonePermissionCallbacks.PermissionRequestDismissed += OnMicrophonePermissionDismissed;
+            microphonePermissionCallbacks.PermissionRequestDismissed += _ => permissionDismissed = true;
 #endif
             Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
         }
 
         // Android cancels a request while another one is shown, and the user can close the dialog:
         // either used to leave voice off for the session. Asked once more, and after that, see Update.
-        private void OnMicrophonePermissionDismissed(string permissionName)
+        private void OnMicrophonePermissionDismissed()
         {
             if (!permissionAskedAgain)
             {
@@ -100,9 +106,20 @@ namespace HCIKonstanz.Colibri.Communication
         private void Update()
         {
 #if UNITY_ANDROID
-            // Granted later, in the device's settings or by another request, voice starts then.
-            // Checked once a second: the check goes through Java.
-            if (waitingForPermission && Time.unscaledTime - permissionCheckedAt >= 1f)
+            if (permissionDismissed)
+            {
+                permissionDismissed = false;
+                OnMicrophonePermissionDismissed();
+            }
+
+            // Granted by the request, later in the device's settings or by another request, voice
+            // starts then. Checked once a second: the check goes through Java.
+            if (permissionGranted)
+            {
+                permissionGranted = false;
+                InitBroadcast();
+            }
+            else if (waitingForPermission && Time.unscaledTime - permissionCheckedAt >= 1f)
             {
                 permissionCheckedAt = Time.unscaledTime;
                 if (Permission.HasUserAuthorizedPermission(Permission.Microphone))
@@ -120,10 +137,6 @@ namespace HCIKonstanz.Colibri.Communication
             opusEncoder?.Destroy();
         }
 
-        private void OnMicrophonePermissionGranted(string permissionName)
-        {
-            InitBroadcast();
-        }
 
         private void OnMicrophonePermissionDenied(string permissionName)
         {
@@ -150,8 +163,10 @@ namespace HCIKonstanz.Colibri.Communication
 
         private void InitBroadcast()
         {
+#if UNITY_ANDROID
             // From the permission callback or the check in Update, whichever comes first.
             waitingForPermission = false;
+#endif
             if (isInitialized)
                 return;
 
