@@ -131,7 +131,8 @@ registerTransform(marker);
 ## Sample
 
 The [sync-transform](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/sync-transform.ts) sample lists the objects of Unity's SyncTransform sample and moves, scales, hides and shows
-them from a terminal. Start the SyncTransform sample in Unity with the app name `myAppName`, then run:
+them from a terminal. Start the SyncTransform sample in Unity with an app name of your own, then run the sample below
+and enter the same app name:
 
 ```sh
 cd colibri-web
@@ -148,7 +149,5 @@ apply here too:
 
 - Call `RegisterSyncTransforms` once per `ModelId` and share what it returns. Two calls for the same `ModelId` on
   one page do not see each other's changes.
-- The web client cannot delete an object for the other clients. `delete()` only stops syncing it on this client.
-  When a Unity client deletes an object, it disappears from the list.
 - Like all synchronized objects, the server keeps the objects only while at least one client of the app is
   connected.

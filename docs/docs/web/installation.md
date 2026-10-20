@@ -15,7 +15,7 @@ Voice chat is currently not supported on the web ([details](./voice-chat.md)).
 
 - A current browser, or Node.js 18 or newer.
 - TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false` in
-  `tsconfig.json`. `@Synced()` does not work with it.
+  `tsconfig.json`. `@Synced()` does not work with it. With Vite, see [Vite](#vite).
 - `rxjs` 7.8.1 or a newer 7.x. It is a peer dependency: npm 7 and newer install it automatically. With other
   package managers, add it to your project yourself.
 - A [Colibri server](../server/installation.md) 2.0.0 or newer. A Colibri 2 server refuses Colibri 1 web clients,
@@ -34,6 +34,47 @@ yarn add @hcikn/colibri@2
 ```
 
 Keep the `@2`. Without it, npm may install a Colibri 1 release.
+
+## Vite
+
+Vite does not translate standard decorators such as `@Synced()`. A Vite project then fails to build with
+`Unexpected token`, or the browser reports `Uncaught SyntaxError: Invalid or unexpected token`. Let esbuild translate
+them:
+
+1. Install esbuild:
+
+   ```sh
+   npm install --save-dev esbuild
+   ```
+
+2. Add this plugin to `vite.config.ts`, or create the file with it:
+
+   ```ts
+   import { defineConfig } from 'vite';
+   import { transform } from 'esbuild';
+
+   export default defineConfig({
+       plugins: [
+           {
+               name: 'standard-decorators',
+               enforce: 'pre',
+               async transform(code, id) {
+                   const file = id.split('?')[0];
+                   if (!/\.[cm]?tsx?$/.test(file)) return null;
+                   const result = await transform(code, {
+                       loader: file.endsWith('x') ? 'tsx' : 'ts',
+                       target: 'es2022',
+                       sourcemap: true,
+                       sourcefile: file,
+                   });
+                   return { code: result.code, map: result.map };
+               },
+           },
+       ],
+   });
+   ```
+
+This works with Vite 7 and 8.
 
 ## Building from source
 
@@ -60,13 +101,29 @@ Without the Git history, for example in a downloaded ZIP of the repository, thes
 
 ## Plain JavaScript
 
-Colibri targets TypeScript. The documentation and the samples are TypeScript only. `@Synced()` is a TypeScript
-decorator, so plain JavaScript without a build step cannot use it. Messages, the data store and `RemoteLogger` work
-from JavaScript as usual.
+Colibri targets TypeScript. The documentation and the samples are TypeScript only. Prefer TypeScript wherever you
+can.
 
-For `SyncModel` in a project that must stay plain JavaScript, there is an
-[unsupported workaround](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/docs/js-workaround/README.md).
-It is not tested and may stop working in any release. Prefer TypeScript wherever you can.
+Messages, the data store and `RemoteLogger` work from JavaScript as usual. `@Synced()` is a TypeScript decorator, so
+plain JavaScript without a build step cannot use it. For `SyncModel` in a project that must stay plain JavaScript,
+declare the synced properties with `synced()` in the constructor instead:
+
+```js
+import { RegisterModelSync, SyncModel, synced } from '@hcikn/colibri';
+
+class Player extends SyncModel {
+    constructor(id) {
+        super(id);
+        synced(this, { name: '', score: 0 });
+    }
+}
+
+const [players$, registerPlayer] = RegisterModelSync({ name: 'player', type: Player });
+```
+
+- Each key is a synced property with its start value. Properties set outside `synced()` stay on this client.
+- `synced(this, { address: '' }, { address: 'billingAddress' })` syncs `address` under another name, as
+  `@Synced('billingAddress')` does.
 
 ## Samples
 
@@ -79,9 +136,10 @@ npm ci
 npm run samples/broadcast
 ```
 
-Each sample asks for the server address and port. Press Enter twice for the public test server
-`colibri.hci.uni-konstanz.de` and port 9211. To see two clients exchange data, start the same sample in a second
-terminal, or run it next to a Unity client whose app name is `myAppName`, which all samples use.
+Each sample asks for an app name, the server address and the port. Enter an app name of your own, e.g.
+`alex-samples`, and press Enter twice for the public test server `colibri.hci.uni-konstanz.de` and port 9211. To see
+two clients exchange data, start the same sample in a second terminal with the same app name, or run it next to a
+Unity client with that app name.
 
 | Sample                                                                                                                 | Shows                                                                           | Run with                                             |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -97,8 +155,8 @@ terminal, or run it next to a Unity client whose app name is `myAppName`, which 
 message type. Use it to check that a Unity client and the web client understand each other.
 
 :::note
-Everyone who runs the samples on the public test server uses the app name `myAppName`. You may see data from other
-people there. Use your own server, or change the app name in the sample, if that gets in the way.
+Everyone who runs the samples on one server with the same app name is in one app and sees the others' data. Without
+an app name of your own, the samples use `myAppName`, as other people may do.
 :::
 
 ## Upgrading from Colibri 1

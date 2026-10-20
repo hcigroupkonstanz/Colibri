@@ -121,7 +121,7 @@ The Observable that `RegisterModelSync` returns (`players$` above) lists all syn
 ones this client registered and the ones from other clients.
 
 - It emits the current list right away when you subscribe.
-- It emits again when an object is added or deleted, or when another client changes one.
+- It emits again when an object is added, changed or deleted, by this client or by another one.
 - The objects in the list are live: their properties always have the latest values.
 
 To change an object from another client, assign a new value to a synced property. Colibri sends it to all other
@@ -181,12 +181,28 @@ nothing.
 You may call `RegisterModelSync` and register objects before `new Colibri()`. Colibri syncs them once the client
 exists.
 
+## Deleting objects
+
+`delete()` deletes an object for every client:
+
+```ts
+me.delete();
+```
+
+- The object disappears from the list on every client. Unity destroys its GameObject.
+- The server removes it and, for 10 minutes (`MODEL_TOMBSTONE_SECONDS`), ignores late changes to it from other
+  clients.
+- Delete the object that is in the list now. `delete()` of an object that `registerPlayer` replaced does nothing, and
+  for an object no `RegisterModelSync` lists, it only warns in the console.
+- To use the id again, register a new object with it.
+- To stop syncing an object on this client only, call `detach()` instead. The other clients keep it.
+
 ## Reconnects
 
 When the connection drops, Colibri reconnects by itself and catches up: it asks the server for all objects again
 and applies what changed during the outage. You do not have to do anything.
 
-- **Changes during the outage:** changes you make while disconnected are sent after the reconnect.
+- **Changes during the outage:** changes and deletes you make while disconnected are sent after the reconnect.
 - **The server forgets objects.** The server keeps synchronized objects in memory only, per app name. It forgets them
   when it restarts and when the last client of the app disconnects, for example during an outage of a lone client.
   After the reconnect, your client sends the objects it registered again. Objects of other clients come back only
@@ -214,9 +230,6 @@ This does not cover every case:
 
 ## Limitations
 
-- **No delete for other clients.** The web client cannot delete an object for the other clients. `delete()` only
-  stops syncing it on this client. The object stays on the server and on all other clients. An object that another
-  client, such as Unity, deletes disappears from your list.
 - **One `RegisterModelSync` per channel.** Two `RegisterModelSync` calls with the same `name` on one page do not see
   each other's changes. Call it once per channel and share what it returns.
 - **Not stored permanently.** The server forgets synchronized objects when it restarts or when the last client of the

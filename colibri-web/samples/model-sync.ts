@@ -1,5 +1,5 @@
 import { Colibri, RegisterModelSync, SyncModel, Synced } from '@hcikn/colibri';
-import { colibriAddress, colibriPort, rl } from './common';
+import { colibriAddress, colibriApp, colibriPort, rl } from './common';
 
 /**
  *  To use the @Synced() decorator, TypeScript standard decorators must be enabled
@@ -19,7 +19,7 @@ export class SampleClass extends SyncModel<SampleClass> {
 }
 
 void (async () => {
-    new Colibri('myAppName', await colibriAddress(), await colibriPort());
+    new Colibri(await colibriApp(), await colibriAddress(), await colibriPort());
 
     /**
      *  This is the registration for the SampleClass. It returns an Observable of every
@@ -55,9 +55,8 @@ void (async () => {
     const newClass = new SampleClass('use a real id here');
     registerExampleClass(newClass);
 
-    // colibri-web has no call that deletes a model for every client. newClass.delete() only
-    // stops this client sending newClass's changes: newClass stays in SampleClasses$,
-    // on the server and on every other client.
+    // delete() deletes the model for every client: it leaves SampleClasses$ here and on every
+    // other client, and Unity destroys its GameObject.
     // newClass.delete();
 
     const sendNumber = () => {
