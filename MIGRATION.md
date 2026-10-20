@@ -32,10 +32,16 @@ them as described under [Unity](#unity).
    and `VOICE_PORT`.
 3. **Compose file from the Colibri 1 README:** remove `tty: true`. Otherwise warnings and errors are mixed into the
    normal log output. The new [compose file](colibri-server/README.md#docker-recommended) also limits the log size.
-4. **Data directory:** your data in `./data` keeps working. The server now runs as user `node` (uid 1000) and takes
+4. **Data directory:** your data in `./data` keeps working. On the first start, the server imports `store.json` into
+   `store.db` and renames it to `store.json.imported-<date>`. Imported values are deleted 30 days later unless they
+   are written again; set `STORE_EXPIRY_DAYS=0` to keep them for good. To go back to Colibri 1 later, export the store
+   first ([Backup](https://colibri.hci.uni-konstanz.de/server/configuration#backup)) and put the file into the old
+   data folder as `store.json`. The server now runs as user `node` (uid 1000) and takes
    over the data directory on startup. If you start the container with `--user` (or `user:` in compose), give the
    directory to that user first, e.g. `sudo chown -R 1001:1001 ./data` for `--user 1001:1001`.
-5. **Without Docker:** the server needs Node.js 24 or newer.
+5. **Without Docker:** the server needs Node.js 24 or newer. If the machine has a
+   public IPv6 address, make sure the firewall covers IPv6, or set `WEBSERVER_HOST`, `TCP_HOST` and `VOICE_HOST` to
+   `0.0.0.0`.
 
 If you use voice chat through a UDP proxy, add the proxy to `TRUSTED_PROXIES`, or publish 9213/udp directly.
 Otherwise the server drops the voice.
@@ -133,8 +139,8 @@ These changes need no code changes, but you may notice them:
 npm install @hcikn/colibri@2 rxjs
 ```
 
-- Colibri 2 needs **TypeScript 5.0 or newer**. For plain JavaScript, see the
-  [unsupported workaround](colibri-web/docs/js-workaround/README.md).
+- Colibri 2 needs **TypeScript 5.0 or newer**. A project that must stay plain JavaScript can fall back on `synced()`
+  for synced properties ([details](https://colibri.hci.uni-konstanz.de/web/installation#plain-javascript)).
 - `rxjs` is now a peer dependency. npm 7 and newer install it automatically.
 
 ### Change the port
@@ -172,6 +178,9 @@ Sync.receiveColor('tint', colour => setTint(toHexColor(colour)));
 
 **Pass `name` to `RegisterModelSync`.** Without it, the channel is the class name, which a minified production
 build changes: `RegisterModelSync({ name: 'player', type: Player })`.
+
+**`delete()` deletes the object for every client.** In Colibri 1, `delete()` only stopped syncing it on this client.
+Where you meant that, e.g. when a component unmounts, call `detach()` instead.
 
 ### Changes in behaviour
 

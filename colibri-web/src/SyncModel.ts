@@ -20,6 +20,12 @@ export abstract class SyncModel<T> {
         share()
     );
 
+    // Emits once, when delete() is called: the RegisterModelSync that lists the model deletes it
+    // for every client. Public only for RegisterModelSync, as modelChanges is for @Synced().
+    public readonly deletions = new Subject<void>();
+    // An ES private field: a subclass may well have a `deleted` of its own.
+    #deleted = false;
+
     public constructor(id: string) {
         this.id = id;
     }
@@ -32,7 +38,32 @@ export abstract class SyncModel<T> {
         this.modelChanges.next(prop);
     }
 
+    /**
+     * Deletes the model for every client of the app: on the server, on every other client (Unity
+     * destroys its GameObject), and from this client's list. The model stops syncing.
+     */
     public delete(): void {
+        if (this.#deleted) return;
+        this.#deleted = true;
+        if (!this.deletions.observed) {
+            console.warn(
+                `Colibri: delete() of '${this.id}', which no RegisterModelSync lists. Register it, or ` +
+                    'take it from the list RegisterModelSync gives, to delete it for every client.'
+            );
+        }
+        // Detached first: ending modelChanges sends a change still buffered, which must not go out
+        // after the delete. With MODEL_TOMBSTONE_SECONDS=0 it created the object again everywhere.
+        this.detach();
+        this.deletions.next();
+        this.deletions.complete();
+    }
+
+    /**
+     * Stops syncing the model on this client only: it sends nothing more, and every other client
+     * keeps it. For RegisterModelSync, on a delete from another client and when registerModel
+     * replaces a listed copy.
+     */
+    public detach(): void {
         this.modelChanges.complete();
     }
 

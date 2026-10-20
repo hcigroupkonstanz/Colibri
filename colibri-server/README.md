@@ -13,7 +13,7 @@ Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 
 ## Requirements
 
-- Docker, or Node.js 24 or newer
+- Docker, or Node.js 24.15 or newer
 - Open ports 9211/tcp (web), 9212/tcp (Unity clients) and 9213/udp (voice chat)
 - Colibri 2 clients. The server refuses Colibri 1 clients.
 

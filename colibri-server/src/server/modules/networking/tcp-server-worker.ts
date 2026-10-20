@@ -41,6 +41,7 @@ import {
     warnsAtEnd,
 } from './inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
+import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from './addresses.js';
 import { ClientActivity, RATE_WINDOW_MILLIS, TrafficMeter } from './client-activity.js';
 import { readProxyHeader } from './proxy-protocol.js';
 import { TrustProxy, compileTrustedProxies, trustNoProxy } from './trusted-proxies.js';
@@ -544,13 +545,17 @@ export class TCPServerWorker extends WorkerService {
             if (this.proxyProtocol) this.handleProxyProtocolConnection(socket, handle);
             else handle(socket, NOTHING_READ);
         });
-        this.server.listen(port, host);
+        const server = this.server;
+        server.once('listening', () => {
+            if (fellBackToIPv4(host, server.address())) this.logWarning(ipv4OnlyWarning('TCP_HOST', 'Unity port'));
+        });
+        server.listen(port, listenHost(host));
 
         const proxyProtocol = this.proxyProtocol
             ? `, PROXY protocol header required from TRUSTED_PROXIES (${this.trustedProxies.join(', ')})` +
                 (this.tlsAtProxy ? ', TLS terminated by proxy (TCP_TLS_AT_PROXY)' : '')
             : '';
-        this.logInfo(`Starting Colibri TCP server on ${host}:${port}${credentials ? ', TLS only' : ''}${proxyProtocol}`);
+        this.logInfo(`Starting Colibri TCP server on ${hostPort(host, port)}${credentials ? ', TLS only' : ''}${proxyProtocol}`);
         this.heartbeatInterval = setInterval(() => this.tick(), 100);
     }
 
@@ -561,7 +566,7 @@ export class TCPServerWorker extends WorkerService {
     // TCP_PROXY_PROTOCOL. Whatever follows the header goes on to `handle`, a TLS handshake included.
     private handleProxyProtocolConnection(socket: net.Socket, handle: ConnectionHandler): void {
         // Read now, which caches it for clientAddress.
-        const peer = socket.remoteAddress || 'UNDEFINED';
+        const peer = normalizeAddress(socket.remoteAddress || 'UNDEFINED');
         const trusted = this.trustProxy(peer, 0);
         const seconds = this.proxyHeaderTimeoutMillis / 1000;
         const noHeaderFix =
@@ -669,10 +674,11 @@ export class TCPServerWorker extends WorkerService {
     // The client's address: the one its connection's PROXY protocol header named, if it had one, else
     // the address the connection comes from. The TLS socket of a failed handshake has usually been
     // destroyed already, and then no longer knows its peer's address, but the TCP socket underneath it
-    // still does: the address was read when the connection was accepted, which cached it.
+    // still does: the address was read when the connection was accepted, which cached it. An IPv4
+    // client is named by its IPv4 address, also on a dual-stack TCP_HOST and from a PROXY v2 header.
     private clientAddress(socket: net.Socket, unknown = 'UNDEFINED'): string {
         const tcpSocket = tcpSocketOf(socket);
-        return this.proxiedAddresses.get(tcpSocket) || socket.remoteAddress || tcpSocket.remoteAddress || unknown;
+        return normalizeAddress(this.proxiedAddresses.get(tcpSocket) || socket.remoteAddress || tcpSocket.remoteAddress || unknown);
     }
 
     // TLS wraps the same frames, unchanged: past the handshake, a TLS client is handled exactly like
@@ -1082,7 +1088,7 @@ export class TCPServerWorker extends WorkerService {
         const id = randomUUID();
         const address = this.clientAddress(socket);
         const tcpSocket = tcpSocketOf(socket);
-        const through = this.proxiedAddresses.has(tcpSocket) ? ` through ${tcpSocket.remoteAddress}` : '';
+        const through = this.proxiedAddresses.has(tcpSocket) ? ` through ${normalizeAddress(tcpSocket.remoteAddress || 'UNDEFINED')}` : '';
         this.logDebug(
             `New client (${id}) connected from ${address}${through}, waiting for app name`,
             CONNECTION_LINE

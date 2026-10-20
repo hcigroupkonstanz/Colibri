@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { readTlsFiles } from './modules/core/tls-files.js';
+import { parseProxyTlsAddresses } from './modules/core/proxy-certificate.js';
 import { parseTrustedProxies } from './modules/networking/trusted-proxies.js';
 
 // automatically load .env file. Quietly: dotenv 17 otherwise prints an "injected env"
@@ -87,21 +88,25 @@ if (tcpProxyProtocol && trustedProxies.length === 0) {
 // does not say, so the operator does. Without TCP_PROXY_PROTOCOL it has no effect; see
 // configurationWarnings.
 const tcpTlsAtProxy = parseBoolean('TCP_TLS_AT_PROXY', process.env.TCP_TLS_AT_PROXY, false);
+const proxyTlsAddresses = parseProxyTlsAddresses(process.env.PROXY_TLS_ADDRESSES);
 
 // The default ports are 9211, 9212 and 9213, not 1.x's 9011, 9012 and 9013: a 1.x and a 2.x
 // server can then run side by side on one host, and a client of one version does not reach a
 // server of the other by its defaults. A 1.x Unity client cannot even decode this server's
 // refusal.
+//
+// The hosts default to ::, which listens on IPv6 and IPv4, or on IPv4 only on a system without
+// IPv6 (see listenHost and VoiceServer.start). 1.x listened on IPv4 only (0.0.0.0).
 export const Config = {
-    TCP_HOST: process.env.TCP_HOST || '0.0.0.0',
+    TCP_HOST: process.env.TCP_HOST || '::',
     TCP_PORT: parsePort('TCP_PORT', process.env.TCP_PORT, 9212),
 
-    VOICE_HOST: process.env.VOICE_HOST || '0.0.0.0',
+    VOICE_HOST: process.env.VOICE_HOST || '::',
     VOICE_PORT: parsePort('VOICE_PORT', process.env.VOICE_PORT, 9213),
     VOICE_SAMPLING_RATE: parsePositiveInt('VOICE_SAMPLING_RATE', process.env.VOICE_SAMPLING_RATE, 48000),
     VOICE_RECORDING: process.env.VOICE_RECORDING?.toLowerCase() === 'true',
 
-    WEBSERVER_HOST: process.env.WEBSERVER_HOST || '0.0.0.0',
+    WEBSERVER_HOST: process.env.WEBSERVER_HOST || '::',
     WEBSERVER_PORT: parsePort('WEBSERVER_PORT', process.env.WEBSERVER_PORT, 9211),
     // WEBSERVER_ROOT and DATA_ROOT use path.resolve, not path.join: join glued even an
     // absolute path onto __dirname, so DATA_ROOT=/var/lib/colibri ended up at
@@ -118,6 +123,12 @@ export const Config = {
         __dirname,
         process.env.DATA_ROOT || '../../data/'
     ),
+
+    // Days after which a data store value that has not been written since is deleted (see
+    // RestAPI.expire); 0: never.
+    STORE_EXPIRY_DAYS: parseNonNegativeInt('STORE_EXPIRY_DAYS', process.env.STORE_EXPIRY_DAYS, 30),
+    // MiB of JSON the data store may hold before it refuses a PUT with 507; 0: no limit.
+    STORE_MAX_MB: parseNonNegativeInt('STORE_MAX_MB', process.env.STORE_MAX_MB, 0),
 
     // Default of 30 (was Error.stackTraceLimit = Infinity) caps the cost of every stack
     // capture - each logError call with printStacktrace on walks this many frames - while
@@ -160,6 +171,9 @@ export const Config = {
     // Whether a Unity client whose connection starts with such a header reached the proxy over TLS,
     // as the admin UI shows it. The header does not say.
     TCP_TLS_AT_PROXY: tcpTlsAtProxy,
+    // Where the proxy in front of the server serves TLS, whose certificates the monitoring page
+    // shows (see ProxyCertificateCheck); empty: nowhere.
+    PROXY_TLS_ADDRESSES: proxyTlsAddresses,
 };
 
 type TcpTlsAtProxySettings = Pick<typeof Config, 'TRUSTED_PROXIES' | 'TCP_PROXY_PROTOCOL' | 'TCP_TLS_AT_PROXY'>;

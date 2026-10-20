@@ -4,6 +4,7 @@ export * from './data-root-check.js';
 export * from './error-handler.js';
 export * from './log-message.js';
 export * from './payload.js';
+export * from './proxy-certificate.js';
 export * from './redirect-console.js';
 export * from './ring-buffer.js';
 export * from './serializable.js';

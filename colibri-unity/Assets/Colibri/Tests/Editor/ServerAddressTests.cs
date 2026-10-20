@@ -447,7 +447,7 @@ namespace HCIKonstanz.Colibri.Tests
         }
 
         /// <summary>
-        /// localhost against a server on IPv4 only, as colibri-server listens by default: 127.0.0.1
+        /// localhost against a server on IPv4 only, as colibri-server with TCP_HOST 0.0.0.0: 127.0.0.1
         /// is tried first, also where localhost resolves to ::1 first, here and on Windows.
         /// </summary>
         [Test]
@@ -464,9 +464,9 @@ namespace HCIKonstanz.Colibri.Tests
         }
 
         /// <summary>
-        /// localhost against a server on both loopbacks, as with TCP_HOST :: on Windows: TCP goes to
-        /// 127.0.0.1, where voice goes as well, so the server lets the voice in. Over ::1 it dropped
-        /// every voice packet, which came from 127.0.0.1.
+        /// localhost against a server on both loopbacks, as with TCP_HOST :: (the default) on
+        /// Windows: TCP goes to 127.0.0.1, where voice goes as well, so the server lets the voice in.
+        /// Over ::1 it dropped every voice packet, which came from 127.0.0.1.
         /// </summary>
         [Test]
         public void LocalhostConnectsOverIPv4ToAServerOnBothLoopbacks()

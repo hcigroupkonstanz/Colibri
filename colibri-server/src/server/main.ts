@@ -33,6 +33,12 @@ const tlsCertificate = Config.TLS_CERT && Config.TLS_KEY
     ? new colibri.TlsCertificate(Config.TLS_CERT, Config.TLS_KEY)
     : undefined;
 
+// The certificates the proxy in front of the server presents to clients, which the server cannot
+// see otherwise, for the monitoring page.
+const proxyCertificates = Config.PROXY_TLS_ADDRESSES.length > 0
+    ? new colibri.ProxyCertificateCheck(Config.PROXY_TLS_ADDRESSES)
+    : undefined;
+
 // Behind these proxies, a web client's address is taken from X-Forwarded-For. The TCP worker
 // compiles its own from the same list, for the PROXY protocol.
 const trustProxy = colibri.compileTrustedProxies(Config.TRUSTED_PROXIES);
@@ -57,7 +63,10 @@ connectionPool.appClientWarningThreshold = Config.APP_CLIENT_WARNING_THRESHOLD;
 /**
  *    APIs
  */
-const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer);
+const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer, {
+    expiryDays: Config.STORE_EXPIRY_DAYS,
+    maxBytes: Config.STORE_MAX_MB * 1024 * 1024,
+});
 const dataRootCheck = new colibri.DataRootCheck(Config.DATA_ROOT);
 
 /**
@@ -100,27 +109,31 @@ const adminData = new colibri.AdminData({
         CLIENT_MESSAGE_RATE_BURST: Config.CLIENT_MESSAGE_RATE_BURST,
         APP_CLIENT_WARNING_THRESHOLD: Config.APP_CLIENT_WARNING_THRESHOLD,
         MODEL_TOMBSTONE_SECONDS: Config.MODEL_TOMBSTONE_SECONDS,
+        STORE_EXPIRY_DAYS: Config.STORE_EXPIRY_DAYS,
+        STORE_MAX_MB: Config.STORE_MAX_MB,
         TRUSTED_PROXIES: Config.TRUSTED_PROXIES,
         TCP_PROXY_PROTOCOL: Config.TCP_PROXY_PROTOCOL,
         TCP_TLS_AT_PROXY: Config.TCP_TLS_AT_PROXY,
+        PROXY_TLS_ADDRESSES: Config.PROXY_TLS_ADDRESSES.map(colibri.formatProxyTlsAddress),
     },
     tls: tlsCertificate,
+    proxyTls: proxyCertificates,
     tcpTlsAtProxy: tcpTlsAtProxyInEffect(Config),
     voice: voiceServer,
     restStore: restApi,
 });
 
-// Logs what happens to the process itself, and shuts it down, in this order. restApi.flush()
-// is the only thing standing between a crash and up to SAVE_DEBOUNCE_MILLIS of lost store
-// writes. The voice server goes last: it saves the voice recordings still in progress, which
-// can take a while for long ones, and must not leave the store's pending writes to the watchdog.
+// Logs what happens to the process itself, and shuts it down, in this order. restApi.close()
+// checkpoints the data store's write-ahead log into store.db. The voice server goes last: it
+// saves the voice recordings still in progress, which can take a while for long ones, and must
+// not leave the data store's close to the watchdog.
 const SHUTDOWN_TIMEOUT_MILLIS = 5000;
 const serverProcess = new colibri.ServerProcess([
     { name: 'AdminData', stop: () => adminData.stop() },
     { name: 'WebServer', stop: () => webServer.stop() },
     { name: 'SocketIOServer', stop: () => socketioServer.stop() },
     { name: 'TCPServer', stop: () => tcpServer.stop() },
-    { name: 'RestAPI', stop: () => restApi.flush() },
+    { name: 'RestAPI', stop: () => restApi.close() },
     { name: 'VoiceServer', stop: () => voiceServer.stop() },
 ], SHUTDOWN_TIMEOUT_MILLIS);
 
@@ -155,6 +168,8 @@ const startup = async () => {
         tlsAtProxy: Config.TCP_TLS_AT_PROXY,
     }, tlsCertificate);
     voiceServer.start(Config.VOICE_PORT, Config.VOICE_HOST);
+    // Last: a proxy that forwards to this server can then pass a check through to it.
+    proxyCertificates?.start();
 };
 
 startup().catch((err) => {
@@ -167,13 +182,13 @@ startup().catch((err) => {
  */
 
 // `docker stop` sends SIGTERM (then SIGKILL after a grace period) with no handler
-// installed for either, so the TCP worker thread was never terminated and an in-flight
-// store.json write could be lost.
+// installed for either, so the TCP worker thread was never terminated and the data store
+// was never closed.
 process.on('SIGTERM', (signal) => void serverProcess.shutdown(`Received ${signal}`, 0));
 process.on('SIGINT', (signal) => void serverProcess.shutdown(`Received ${signal}`, 0));
 
-// Both of these used to process.exit(1) directly, discarding whatever the debounced store
-// save still had pending - in exactly the situation where losing it hurts most.
+// Both of these used to process.exit(1) directly, skipping the orderly shutdown above, in
+// exactly the situation where it matters most.
 process.on('unhandledRejection', (reason) => {
     serverProcess.reportError('Unhandled rejection', reason);
     void serverProcess.shutdown('Unhandled rejection', 1);
