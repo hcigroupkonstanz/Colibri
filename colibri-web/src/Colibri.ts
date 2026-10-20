@@ -4,41 +4,31 @@ import { ColibriError, ProtocolMismatchError } from './ColibriError';
 import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnected } from './lifecycle';
 
 /**
- * The wire protocol this client speaks, announced in the Socket.IO handshake query. Must
- * match `PROTOCOL_VERSION` in the server's `src/server/modules/networking/protocol.ts`; a
- * server speaking anything else refuses the connection rather than downgrading.
+ * The wire protocol version this client speaks, sent in the handshake query. Must match the
+ * server's `PROTOCOL_VERSION` (`src/server/modules/networking/protocol.ts`); a server refuses a
+ * client that announces another version.
  */
 export const PROTOCOL_VERSION = '2';
 
-// The media type of the server's REST store, with the protocol version in it: every request
-// accepts it, and setRestObject sends its value in it. colibri-server 2.x refuses a value sent as
-// plain application/json. A reverse proxy in front of servers of different versions on one host
-// name can route the store's requests by their Accept header.
+// Accept of every REST request, and Content-Type of setRestObject. colibri-server 2.x refuses a
+// value sent as plain application/json. The version in it lets a reverse proxy route by Accept.
 const REST_MEDIA_TYPE = `application/vnd.colibri.v${PROTOCOL_VERSION}+json`;
 
 const COLIBRI_CHANNEL = 'colibri';
-// The app name the server's admin UI connects with. Not the channel above, though spelt the same.
+// The app name of the server's admin UI. Unrelated to the channel above, though spelt the same.
 const ADMIN_APP = 'colibri';
 const PROTOCOL_REJECTED_COMMAND = 'protocol::rejected';
 const PROTOCOL_ACCEPTED_COMMAND = 'protocol::accepted';
 const LATENCY_COMMAND = 'latency';
 
-/**
- * How long to wait for the server to announce itself before concluding it predates the protocol
- * version check.
- *
- * A 2.0.0+ server sends `colibri`/`protocol::accepted` immediately on connect, before any
- * application traffic, so this is not a race - it is waiting for something that either comes
- * straight away or is never coming at all. The window is this generous only to survive an
- * event-loop stall on a loaded server.
- *
- * Deliberately not inferred from the 100ms `latency` broadcast, which looks like the same signal
- * and is not: that was added in colibri-server 1.2.0, so every 1.2.x and 1.3.x server sends it
- * while still speaking the old protocol. Verified against the published 1.1.1 and 1.3.1 images.
- */
+// How long to wait for `colibri`/`protocol::accepted` before concluding the server predates the
+// version check. A 2.0.0+ server sends it immediately on connect; the window only covers an
+// event-loop stall on a loaded server.
+//
+// Not inferred from the 100ms `latency` broadcast: 1.2.x and 1.3.x servers send it but speak v1.
 const OLD_SERVER_TIMEOUT_MS = 5000;
 
-/** What a server that never announced itself is speaking, since every release before 2.0.0 did. */
+// The protocol of every release before 2.0.0, none of which announce themselves.
 const OLD_SERVER_PROTOCOL_VERSION = '1';
 
 interface ProtocolRejection {
@@ -47,22 +37,18 @@ interface ProtocolRejection {
     clientVersion?: string;
 }
 
-// `window` and `document` are declared globally as non-optional by the "dom" lib, but
-// colibri-web also runs under plain Node (samples, e2e); shadow them here so the types
-// reflect that they're genuinely absent outside a browser.
+// The "dom" lib declares these as non-optional, but under plain Node (samples, e2e) they are
+// absent. Shadowed so the types say so.
 declare const window: Window | undefined;
 declare const document: Document | undefined;
 
-// The default server: the host that served the page. `typeof` rather than `window?.`, for the
-// reason given in onServerHelloMissing - under Node, `window` was never declared at all, so
-// reading it is a ReferenceError rather than undefined, and that escaped the constructor instead
-// of the ColibriError that says what is actually missing.
+// The default server: the host that served the page. `typeof` rather than `window?.`, since under
+// Node `window` is undeclared and reading it throws a ReferenceError.
 const pageHostname = (): string =>
     typeof window !== 'undefined' ? ((window.location as Location | undefined)?.hostname ?? '') : '';
 
-// Every scheme a server address may be written with, mapped to the pair this client needs: the
-// socket and the REST API have to agree on whether the connection is encrypted. http(s) is here
-// because it is what a browser's address bar shows for the very same server.
+// Every scheme a server address may use, mapped to the socket and REST schemes, which have to
+// agree on TLS. http(s) is accepted because a browser's address bar shows it for the same server.
 const SCHEMES: Partial<Record<string, { socket: string; rest: string }>> = {
     ws: { socket: 'ws', rest: 'http' },
     http: { socket: 'ws', rest: 'http' },
@@ -80,25 +66,21 @@ const parseServerAddress = (server: string) => {
         );
     }
 
-    // A trailing slash is what copying a URL out of an address bar gives you; left in, it put
-    // the port after the slash.
+    // Trailing slashes come from copying an address bar; they would put the port after the slash.
     const authority = (match ? match[2] : address).replace(/\/+$/, '');
     if (authority.length === 0) {
         throw new ColibriError('Server Address missing or empty!');
     }
 
-    // The URLs built from this are the host, the port and nothing else, so a path used to land in
-    // front of the port ('wss://host/colibri:9011') - and the admin UI's own URL ends in '/log'.
-    // Dropping it instead would quietly connect somewhere other than what was asked for.
+    // Rejected rather than dropped: the URLs are host and port only, so a path would land before
+    // the port, and dropping it would connect to something other than what was asked for.
     if (/[/?#]/.test(authority)) {
         throw new ColibriError(
             `Server address '${server}' has a path or query after the host - pass only the host and, optionally, the port, e.g. 'http://example.com:9211'.`
         );
     }
 
-    // Host, then an optional port, as in any URL; an IPv6 host has to be in brackets to tell its
-    // colons from the port's. The port used to be kept as part of the host, so the admin UI's
-    // 'http://host:9011' connected to 'ws://host:9011:9011'.
+    // Host, then an optional port. An IPv6 host is bracketed to tell its colons from the port's.
     const hostAndPort = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(authority);
     if (!hostAndPort) {
         throw new ColibriError(
@@ -106,18 +88,17 @@ const parseServerAddress = (server: string) => {
         );
     }
 
-    // `at`, because an optional group that did not match is undefined, which indexing's type hides.
+    // `at`: an optional group that did not match is undefined, which indexing's type hides.
     const portText = hostAndPort.at(2);
     return { ...schemes, host: hostAndPort[1], port: portText === undefined ? undefined : Number(portText) };
 };
 
-// colibri-server 2.x's default web port. 1.x's was 9011: the defaults differ so that a client of one
-// version does not reach a server of the other by them.
+// colibri-server 2.x's default web port. 1.x's was 9011: they differ so that a client of one
+// version does not reach a server of the other by default.
 const DEFAULT_PORT = 9211;
 
 const checkPort = (port: number) => {
-    // Number.isInteger also rejects NaN, which every comparison lets through - and
-    // `Number(process.argv[3])` is exactly how a sample ends up passing one.
+    // isInteger also rejects NaN, which passes the range check below.
     if (!Number.isInteger(port)) {
         throw new ColibriError(`Port must be a whole number (1 - 65535): ${port}`);
     }
@@ -126,14 +107,14 @@ const checkPort = (port: number) => {
     }
 };
 
-// Plain JavaScript callers - and anything read from a query string or an environment variable -
-// can pass the port as a numeric string. 1.x accepted '9011' (its range checks coerced it), so a
-// string of digits still means that port; anything else is left for checkPort to refuse.
+// Plain JavaScript callers, query strings and environment variables give the port as a string.
+// 1.x accepted '9011', so a digit string still means that port; anything else is left for
+// checkPort to refuse.
 const coercePort = (port: unknown): number | undefined =>
     typeof port === 'string' && /^\s*\d+\s*$/.test(port) ? Number(port) : (port as number | undefined);
 
-// The port may come from the address, from the constructor's argument, or from both if they
-// agree. Two different ports are a mistake, and picking either would hide it.
+// The port may come from the address, from the argument, or from both if they agree. Two
+// different ports are a mistake, and picking either would hide it.
 const resolvePort = (server: string, fromAddress: number | undefined, given: number | undefined): number => {
     if (given !== undefined) checkPort(given);
     if (fromAddress === undefined) return given ?? DEFAULT_PORT;
@@ -153,8 +134,7 @@ export interface Message {
     payload: unknown;
 }
 
-// Handlers given to RegisterChannel/RegisterOnce before `new Colibri()`, attached by the
-// constructor. Module-level rather than static, since there is no instance to hang them on yet.
+// Handlers given to RegisterChannel/RegisterOnce before `new Colibri()`; the constructor attaches them.
 const pendingRegistrations: { channel: string; handler: (payload: Message) => void; once: boolean }[] = [];
 
 export class Colibri {
@@ -165,20 +145,16 @@ export class Colibri {
     public readonly messages = this.messageSubject.asObservable();
     private readonly protocolMismatchSubject = new Subject<ProtocolMismatchError>();
     /**
-     * Reports that this client and the server do not speak the same wire protocol. There are two
-     * kinds, told apart by {@link ProtocolMismatchError.fatal `fatal`}, and each is emitted **at
-     * most once per instance**:
+     * Reports that this client and the server do not speak the same wire protocol. Two kinds,
+     * told apart by {@link ProtocolMismatchError.fatal `fatal`}, each emitted at most once per
+     * instance:
      *
-     * - `fatal: true` - the server **refused** this client. The connection is dead and will not
-     *   be retried, so this is the only notification an application gets.
-     * - `fatal: false` - the server did not announce itself within 5s of connecting, so it is
-     *   **suspected** to predate colibri-server 2.0.0. The connection stays up and keeps working;
-     *   this is a warning to upgrade the server, not a reason to tear anything down.
+     * - `fatal: true`: the server refused this client. The connection is closed and not retried.
+     * - `fatal: false`: the server did not announce itself within 5s of connecting, so it is
+     *   suspected to predate colibri-server 2.0.0. The connection stays up.
      *
-     * A suspicion can be followed by a refusal (say, the server is replaced by a newer one while
-     * this client is connected), but never the other way round. Nothing is replayed to a late
-     * subscriber, so subscribe right after construction; either kind is also logged, so the
-     * error is not lost without a subscriber.
+     * A suspicion can be followed by a refusal, never the other way round. Nothing is replayed to
+     * a late subscriber, so subscribe right after construction. Both kinds are also logged.
      */
     public readonly protocolMismatch = this.protocolMismatchSubject.asObservable();
     public readonly uri: string;
@@ -187,28 +163,25 @@ export class Colibri {
     public readonly port: number;
 
     private oldServerTimer: ReturnType<typeof setTimeout> | undefined;
-    // Once per instance, not once per connection: a server does not get newer between two
-    // reconnects, and repeating the warning on every one would bury it in its own noise.
+    // Once per instance, not per connection, so a reconnect does not repeat the warning.
     private hasReportedOldServer = false;
-    // Likewise for a refusal, which is otherwise reported once per `protocol::rejected` received.
+    // Once per instance, not once per `protocol::rejected` received.
     private hasReportedRefusal = false;
 
-    // Whether any connect has happened yet, so that the next one is known to be a reconnect.
     private hasConnected = false;
 
-    // Whether the current outage - from a failed connection attempt to the next connect - has
-    // been reported yet.
+    // An outage runs from a failed connection attempt to the next connect.
     private hasReportedOutage = false;
 
     /**
      * Connects to a Colibri server. Only one instance may exist.
      * @param app the application name; clients only see each other's messages within one app
      * @param server the host, optionally after `ws://`, `wss://`, `http://` or `https://` (the
-     *   secure ones mean `wss` for the socket and `https` for the REST API) and optionally with a
-     *   port, as in `'http://example.com:9211'`; nothing after the host and port. Defaults to the
-     *   host that served the page, and is required outside a browser.
-     * @param port the server port, if the address does not have one; 9211 if neither does. When
-     *   both have one, they must agree.
+     *   secure ones mean `wss` for the socket and `https` for REST) and optionally with a port,
+     *   as in `'http://example.com:9211'`; no path. Defaults to the host that served the page,
+     *   and is required outside a browser.
+     * @param port the server port, if the address has none; 9211 if neither does. When both have
+     *   one, they must agree.
      * @throws ColibriError for an address or port this client cannot connect to, or when an
      *   instance already exists
      */
@@ -225,21 +198,18 @@ export class Colibri {
             );
         }
 
-        // Only ws(s):// used to be recognised, so 'https://host' became 'ws://https://host:9011'.
         const address = parseServerAddress(server);
         this.port = resolvePort(server, address.port, coercePort(port));
         this.uri = `${address.socket}://${address.host}:${this.port}`;
-        // Encoded, like the key in getRestUri: the server decodes each path segment back to the
-        // very name the socket's handshake carries, so the two still name the same app.
+        // Encoded like the key in getRestUri; the server decodes it back to the handshake's app name.
         this.uriRestApi = `${address.rest}://${address.host}:${this.port}/api/store/${encodeURIComponent(app)}/`;
 
         // there is already an instance running
         if (Colibri.instance) throw new ColibriError('A Colibri instance already exists!');
         else Colibri.instance = this;
 
-        // The server tells the admin UI from an application by this name alone, so an app called
-        // 'colibri' connects - and is treated - as an admin UI, with nothing else to show for it.
-        // Only warned about: an app already relying on it keeps working as it did.
+        // The server tells the admin UI from an application by this name alone. Only warned about,
+        // so an app already named 'colibri' keeps working.
         if (app === ADMIN_APP) {
             console.warn(
                 `Colibri: the app name '${ADMIN_APP}' is reserved for the server's admin UI, and the server ` +
@@ -265,8 +235,7 @@ export class Colibri {
             }
         });
 
-        // Everything registered before this instance existed - through the wrappers below, and so
-        // through Sync and RegisterModelSync - in the order it was registered.
+        // Everything registered before this instance existed, in registration order.
         for (const { channel, handler, once } of pendingRegistrations.splice(0)) {
             if (once) this.registerOnce(channel, handler);
             else this.registerChannel(channel, handler);
@@ -279,29 +248,28 @@ export class Colibri {
         this.hasReportedOutage = false;
         this.waitForServerHello();
 
-        // The server relays, it does not replay: whatever it relayed while this client was away
-        // never reached it, so whoever has state to catch up on is told now. Socket.IO has
-        // already sent what this client queued while disconnected, so a catch-up sees that too.
+        // The server relays without replaying, so whatever it relayed while this client was away is
+        // lost. Whoever has state to catch up on is told now. Socket.IO has already flushed what
+        // was queued while disconnected, so a catch-up goes out after it.
         if (this.hasConnected) colibriReconnected(this);
         this.hasConnected = true;
     }
 
-    // From here until the next connect, whatever is sent waits in Socket.IO's buffer - and goes out
-    // on that connect ahead of anything a catch-up sends, which is the wrong order for some of it.
+    // Until the next connect, sends wait in Socket.IO's buffer and go out ahead of anything a
+    // catch-up sends, which is the wrong order for some of them.
     private onSocketDisconnect() {
         colibriDisconnected(this);
     }
 
-    // Socket.IO retries a failed connection by itself, for as long as it takes, and said nothing
-    // about it: a mistyped address, a server that is down and a firewall all looked like a
-    // connection that was merely slow. Reported once per outage, on its first failed attempt -
-    // not on every retry, which comes every few seconds for as long as the outage lasts.
+    // Socket.IO retries silently, so a mistyped address, a server that is down and a firewall all
+    // look like a slow connection. Reported once per outage, on its first failed attempt, not on
+    // every retry.
     private onSocketConnectError(error: Error & { description?: unknown }) {
         if (this.hasReportedOutage) return;
         this.hasReportedOutage = true;
 
-        // Under Node the message is only 'websocket error', and what went wrong (ECONNREFUSED,
-        // ENOTFOUND) is the underlying error's; a browser hides that, and has only the message.
+        // Under Node the message is only 'websocket error'; the cause (ECONNREFUSED, ENOTFOUND) is
+        // the underlying error's. A browser hides it.
         const cause = (error.description as { message?: unknown } | undefined)?.message;
         const reason = typeof cause === 'string' && cause.length > 0 ? `${error.message}: ${cause}` : error.message;
 
@@ -316,10 +284,9 @@ export class Colibri {
     /*
      *  Detecting a server that predates the protocol version check.
      *
-     *  The check is server-side, so a server too old to have it neither refuses this client nor
-     *  says what it speaks. A current server therefore announces itself unprompted, and the
-     *  absence of that announcement is the signal. Nothing here gates message delivery: the timer
-     *  only observes, and ordinary traffic neither sets nor clears it.
+     *  Such a server neither refuses this client nor says what it speaks, so a current one
+     *  announces itself unprompted and the missing announcement is the signal. The timer only
+     *  observes; it does not gate message delivery.
      */
 
     private waitForServerHello() {
@@ -340,13 +307,11 @@ export class Colibri {
         // A disconnected socket explains the silence by itself, and a reconnect re-arms this.
         if (!this.socket.connected) return;
 
-        // A frozen or backgrounded tab stops draining the socket while timers keep their own
-        // schedule, so on resume this can fire ahead of anything already queued. Waiting another
-        // window costs nothing and removes the likeliest false positive there is.
+        // A frozen or backgrounded tab stops draining the socket while timers keep running, so this
+        // can fire ahead of the queued announcement. Wait another window.
         //
-        // `typeof` rather than `document?.` - optional chaining does not save you from an
-        // identifier that was never declared, and under Node (samples, e2e) this would be a
-        // ReferenceError rather than undefined.
+        // `typeof` rather than `document?.`: under Node `document` is undeclared, which throws a
+        // ReferenceError that optional chaining does not catch.
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
             this.waitForServerHello();
             return;
@@ -358,17 +323,15 @@ export class Colibri {
         const error = new ProtocolMismatchError(
             `The server did not identify itself within ${OLD_SERVER_TIMEOUT_MS / 1000}s, so it predates ` +
                 `colibri-server 2.0.0 and speaks protocol v1; this client speaks v${PROTOCOL_VERSION}.`,
-            // A protocol version, like the refusal path reports - not the '<2.0.0' release range
-            // the message describes. Inferred rather than received, but not a guess: the
-            // announcement is sent by every 2.0.0+ server, and everything older speaks v1.
+            // A protocol version, as in the refusal. Inferred, not received: every 2.0.0+ server
+            // announces itself, and everything older speaks v1.
             OLD_SERVER_PROTOCOL_VERSION,
             PROTOCOL_VERSION,
             false
         );
 
-        // Not disconnected, and deliberately so: the Socket.IO envelope did not change between
-        // v1 and v2, so this connection works. Tearing it down over a suspicion would turn a
-        // warning into an outage.
+        // Not disconnected: the Socket.IO envelope is the same in v1 and v2, so the connection works.
+        // Tearing it down over a suspicion would turn a warning into an outage.
         console.warn(`Colibri: ${error.message} The connection still works; upgrade the server when you can.`);
         this.protocolMismatchSubject.next(error);
     }
@@ -377,13 +340,13 @@ export class Colibri {
         colibriHeardFrom(this);
         const { command, payload } = msg as Pick<Message, 'command' | 'payload'>;
 
+        // Colibri's own plumbing: kept off `messages` so applications need not recognize it.
         if (channel === COLIBRI_CHANNEL && command === PROTOCOL_REJECTED_COMMAND) {
             this.onProtocolRejected(payload as ProtocolRejection | undefined);
             return;
         }
 
-        // The server identifying itself, which is the whole point of the old-server check.
-        // Kept off `messages` for the same reason as the rejection: Colibri's own plumbing.
+        // The server announcing itself; kept off `messages` likewise.
         if (channel === COLIBRI_CHANNEL && command === PROTOCOL_ACCEPTED_COMMAND) {
             this.stopWaitingForServerHello();
             return;
@@ -392,23 +355,18 @@ export class Colibri {
         this.messageSubject.next({ channel, command, payload });
     }
 
-    // Kept off `messages` deliberately: this is Colibri's own plumbing, and surfacing it as
-    // an ordinary message would leave every application to recognize it for itself.
-    // Typed optional on purpose: the rejection comes off the wire, so a server that sends a
-    // bare `protocol::rejected` with no body must still produce a usable error rather than a
-    // TypeError that hides the real problem.
+    // `rejection` is optional because it comes off the wire, and a bare `protocol::rejected` must
+    // still give a usable error rather than a TypeError.
     private onProtocolRejected(rejection: ProtocolRejection | undefined) {
-        // The server has just told us exactly what is wrong, so the guess that would otherwise
-        // land five seconds later would only contradict it.
+        // The server has said what is wrong; the old-server guess five seconds later would contradict it.
         this.stopWaitingForServerHello();
         this.hasReportedOldServer = true;
 
-        // A mismatch cannot resolve itself, so retrying only produces a reconnect loop that
-        // buries the one log line explaining what is wrong.
+        // A mismatch cannot resolve itself; retrying only buries the log line that explains it.
         this.socket.io.reconnection(false);
         this.socket.disconnect();
 
-        // A second refusal can only repeat the first, so it still hangs up but says nothing.
+        // A second refusal repeats the first: hang up, say nothing.
         if (this.hasReportedRefusal) return;
         this.hasReportedRefusal = true;
 
@@ -482,10 +440,9 @@ export class Colibri {
 
     // #region Rest API
     /**
-     * Returns the REST API Endpoint for a given `key`, or null if the key is empty - or is `.` or
-     * `..`, which a URL cannot carry as a name. Any other key is stored under exactly that name,
-     * `#`, `?`, `/`, `%` and spaces included, after surrounding whitespace and leading slashes are
-     * stripped.
+     * Returns the REST API Endpoint for a given `key`, or null if the key is empty, `.` or `..`.
+     * Any other key is stored under exactly that name (`#`, `?`, `/`, `%` and spaces included)
+     * after surrounding whitespace and leading slashes are stripped.
      * @param key REST API storage key
      * @returns
      */
@@ -493,22 +450,20 @@ export class Colibri {
         key = key.trim();
         while (key.startsWith('/')) key = key.substring(1);
 
-        // A URL parser resolves a path segment of '.' or '..' - percent-encoded or not - as a
+        // A URL parser resolves a path segment of '.' or '..', percent-encoded or not, as a
         // directory step, so '..' would address the app's parent instead of a key.
         if (key.length === 0 || key === '.' || key === '..') return null;
 
-        // Encoded, since the key is a single path segment: written in as it was, a '#' or '?' cut
-        // the key short (the rest became a fragment or a query), a '/' split it into a path the
-        // server has no route for, and a '%' made a URL the server could not decode.
+        // Encoded because the key is one path segment: raw, '#' and '?' would cut it short, '/' would
+        // split it, and '%' would not decode on the server.
         return this.uriRestApi + encodeURIComponent(key);
     }
 
     /**
      * Queries an object from the REST API identified by `key`.
      *
-     * Not every failure resolves to null: when the server cannot be reached at all (a wrong
-     * address, the server down, no network), `fetch` rejects, and so does this - typically with a
-     * `TypeError` - as it does when the server's answer is not JSON. Catch it where that matters.
+     * Rejects when the server cannot be reached (wrong address, server down, no network) or an
+     * answer with a success status is not JSON.
      * @param key REST API storage key
      * @returns the stored value; or null if `key` is empty or the server answered with an error
      *   status, such as 404 for a key that was never stored. A stored `null` looks the same.
@@ -532,10 +487,8 @@ export class Colibri {
     /**
      * Sets or updates an object in the REST API identified by `key`.
      *
-     * Not every failure resolves to false: when the server cannot be reached at all (a wrong
-     * address, the server down, no network), `fetch` rejects, and so does this - typically with a
-     * `TypeError` - as it does when `data` cannot be turned into JSON (a circular structure, a
-     * BigInt). Catch it where that matters.
+     * Rejects when the server cannot be reached (wrong address, server down, no network) or
+     * `data` cannot be serialized to JSON (circular structure, BigInt).
      * @param key REST API storage key
      * @param data JSON data to write
      * @returns true if the server stored the data; false if `key` is empty or the server answered
@@ -560,9 +513,7 @@ export class Colibri {
     /**
      * Deletes the object identified by `key` from the REST API.
      *
-     * Not every failure resolves to false: when the server cannot be reached at all (a wrong
-     * address, the server down, no network), `fetch` rejects, and so does this - typically with a
-     * `TypeError`. Catch it where that matters.
+     * Rejects when the server cannot be reached (wrong address, server down, no network).
      * @param key REST API storage key
      * @returns true if the server deleted the value; false if `key` is empty or the server answered
      *   with any other status, such as 404 for a key that holds no value
@@ -598,9 +549,7 @@ export const SendMessage = (channel: string, command: string, payload: unknown =
 /**
  * @see {@link Colibri.registerChannel `Colibri.registerChannel()`}
  *
- * Works before `new Colibri()` too: the handler is then attached as soon as the instance is
- * constructed. This used to do nothing at all in that case, which also left every `Sync.receive*`
- * made before `new Colibri()` listening to nothing.
+ * Works before `new Colibri()` too: the handler is attached once the instance is constructed.
  */
 export const RegisterChannel = (channel: string, handler: (payload: Message) => void): void => {
     const colibri = Colibri.getInstance(false);
@@ -612,7 +561,7 @@ export const RegisterChannel = (channel: string, handler: (payload: Message) => 
  * @see {@link Colibri.unregisterChannel `Colibri.unregisterChannel()`}
  *
  * Before `new Colibri()`, takes back a handler that {@link RegisterChannel} or
- * {@link RegisterOnce} was still holding on to.
+ * {@link RegisterOnce} queued.
  */
 export const UnregisterChannel = (channel: string, handler: (payload: Message) => void): void => {
     const colibri = Colibri.getInstance(false);
@@ -621,7 +570,7 @@ export const UnregisterChannel = (channel: string, handler: (payload: Message) =
         return;
     }
 
-    // One per call, like Socket.IO's own off(): a handler registered twice is unregistered twice.
+    // Removes one registration per call, like Socket.IO's off().
     const index = pendingRegistrations.findIndex(p => p.channel === channel && p.handler === handler);
     if (index >= 0) pendingRegistrations.splice(index, 1);
 };

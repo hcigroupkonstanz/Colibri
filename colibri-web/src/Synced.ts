@@ -10,10 +10,7 @@ export function Synced<This extends SyncModel<unknown>, V>(syncedName: string = 
         value: ClassAccessorDecoratorTarget<This, V>,
         context: ClassAccessorDecoratorContext<This, V>
     ): ClassAccessorDecoratorResult<This, V> {
-        // TypeScript's decorator types make this look unreachable, since a
-        // correctly-typed usage site can only pass an accessor context here,
-        // but plain-JS/Babel consumers get no such guarantee, so this guards
-        // against misuse the type system can't observe for them.
+        // Unreachable for typed callers; plain-JS/Babel callers are not covered by the decorator types.
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (context.kind !== 'accessor') {
             throw new Error('@Synced() must decorate an `accessor` member');
@@ -22,8 +19,7 @@ export function Synced<This extends SyncModel<unknown>, V>(syncedName: string = 
         const key = String(context.name);
         const name = (syncedName || key).toLowerCase();
 
-        // Runs once per instance during construction, after the auto-accessor's
-        // own initializer has already set the backing value.
+        // Per instance, after the accessor's own initializer.
         context.addInitializer(function (this: This) {
             this.registerSyncedProperty(name, key);
         });
@@ -35,8 +31,7 @@ export function Synced<This extends SyncModel<unknown>, V>(syncedName: string = 
             set(this: This, newVal: V) {
                 value.set.call(this, newVal);
 
-                // Suppress emission while a remote update is being applied,
-                // see SyncModel.update().
+                // No echo of a remote update (SyncModel.update()).
                 if (!this.applyingRemoteUpdate) {
                     this.modelChanges.next(key);
                 }
@@ -58,9 +53,8 @@ export function Synced<This extends SyncModel<unknown>, V>(syncedName: string = 
  *  }
  *  ```
  *
- *  Each property then syncs as with `@Synced()`: under its name lowercased, or under `names[property]`
- *  as with `@Synced('name')`. Throws for a property that is already a member of the model, synced or
- *  one of SyncModel's, and for a start value of `undefined`, which is not JSON.
+ *  Each property syncs as with `@Synced()`, under its lowercased name or under `names[property]`.
+ *  Throws for a property the model already has as a member, and for a start value of `undefined`.
  */
 export function synced<M extends SyncModel<unknown>, P extends Record<string, unknown>>(
     model: M,
@@ -85,7 +79,7 @@ export function synced<M extends SyncModel<unknown>, P extends Record<string, un
             get: () => value,
             set: (newValue: unknown) => {
                 value = newValue;
-                // Suppressed while a remote update is being applied, see SyncModel.update().
+                // No echo of a remote update (SyncModel.update()).
                 if (!model.applyingRemoteUpdate) model.modelChanges.next(key);
             }
         });
