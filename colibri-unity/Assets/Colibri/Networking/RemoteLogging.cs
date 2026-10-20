@@ -22,34 +22,24 @@ namespace HCIKonstanz.Colibri.Networking
 
         private const float SendIntervalSeconds = 1f;
 
-        /// <summary>
-        /// Lines kept between two sends, connected or not; past this the oldest go. While connected
-        /// that is a second's worth - which is also all a runaway log loop can cost the server - and
-        /// while not, an outage's worth: held here rather than in the connection's own queue so that
-        /// a long outage's log output cannot crowd the messages that synchronize the application out
-        /// of that queue's bound. What is dropped is not lost without a trace: the next send starts
-        /// with one line saying how many are missing.
-        /// </summary>
+        // Oldest lines drop past this. During an outage lines wait here, not in the connection's outbox,
+        // where they would push broadcasts out of its MAX_QUEUED_MESSAGES cap.
         private const int MaxBufferedLines = 1000;
 
-        // Filled from Application.logMessageReceivedThreaded - that is, from whichever threads log,
-        // several at once - and drained on the main thread. A ConcurrentQueue: the LockFreeQueue
-        // this used to be recycles its nodes through a pool that is only safe with one producer.
+        // Filled from any thread (logMessageReceivedThreaded), drained on the main thread.
         private readonly ConcurrentQueue<LogMsg> _messages = new ConcurrentQueue<LogMsg>();
 
-        // Kept alongside the queue rather than asking it: ConcurrentQueue.Count walks its segments.
+        // ConcurrentQueue.Count walks its segments, so the count is kept here.
         private int _bufferedLines;
 
-        // Lines dropped by MaxBufferedLines since the last send.
+        // Lines dropped past MaxBufferedLines since the last send.
         private int _droppedLines;
 
         private WebServerConnection _server;
         private float _nextSendTime;
 
-        /// <summary>How many log lines are waiting to be sent. For the test suite.</summary>
+        // For the EditMode tests.
         internal int BufferedLineCount => Volatile.Read(ref _bufferedLines);
-
-        /// <summary>The log lines waiting to be sent, oldest first. For the test suite.</summary>
         internal string[] BufferedLines => _messages.Select(m => m.Message).ToArray();
 
         void OnEnable()
@@ -65,8 +55,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         void Update()
         {
-            // Unity's ==: the connection is rebuilt when a new Play session starts without a
-            // domain reload, and this component may outlive the one it first found.
+            // Fetch again: Instance was null in OnEnable, or the connection has been destroyed since.
             if (_server == null)
             {
                 _server = WebServerConnection.Instance;
@@ -80,16 +69,15 @@ namespace HCIKonstanz.Colibri.Networking
                     break;
 
                 case ConnectionStatus.ProtocolMismatch:
-                    // Final - nothing will be sent again - so anything kept would be kept forever.
+                    // Final, so anything kept would be kept forever.
                     Discard();
                     return;
 
                 default:
-                    // Kept for when the connection is back, up to MaxBufferedLines.
+                    // Keep buffering until connected.
                     return;
             }
 
-            // Batches a second's worth of log lines at a time.
             if (BufferedLineCount == 0 || Time.unscaledTime < _nextSendTime)
                 return;
 
@@ -97,7 +85,7 @@ namespace HCIKonstanz.Colibri.Networking
             SendLog();
         }
 
-        /// <remarks>Internal so the EditMode tests can log from several threads without a player loop.</remarks>
+        // Internal for the EditMode tests.
         internal void OnLogMessage(string condition, string stackTrace, LogType type)
         {
             string logType;
@@ -136,19 +124,13 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>
-        /// Hands every waiting line to the connection, once. The connection keeps them, in order,
-        /// if it drops on the way, so there is nothing to retry here - and retrying is what used to
-        /// send some lines twice: a send that failed after connecting was both queued for retry by
-        /// the connection and put back in this queue.
-        /// </summary>
+        // The connection keeps what it is handed if it drops, so nothing is retried here.
         private void SendLog() => SendLog((type, line) => _server.SendCommand("log", type, line));
 
-        /// <remarks>Internal, with the send handed in, so the EditMode tests can see what a batch sends.</remarks>
+        // Internal, with send injected, for the EditMode tests.
         internal void SendLog(Action<string, string> send)
         {
-            // Where the lines went missing, and once for all of them. Handed straight to the
-            // connection: through Debug.Log it would come back in here as one more line to buffer.
+            // Sent directly: through Debug.Log it would come back here as another buffered line.
             var dropped = Interlocked.Exchange(ref _droppedLines, 0);
             if (dropped > 0)
             {

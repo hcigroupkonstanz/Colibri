@@ -3,9 +3,8 @@ using System;
 namespace HCIKonstanz.Colibri.Networking.Protocol
 {
     /// <summary>
-    /// A single decoded v3 frame. The server models this as a discriminated union; C# has no
-    /// such type, so this is a tagged struct: read <see cref="Type"/> first, then only the
-    /// fields that belong to it. Everything else is left at its default.
+    /// A decoded v3 frame. Read <see cref="Type"/> first: only the fields of that type are set,
+    /// the others are left at their default.
     /// </summary>
     public readonly struct DecodedFrame : IEquatable<DecodedFrame>
     {
@@ -14,10 +13,10 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         /// <summary>Heartbeat only: the server's opaque ping timestamp, echoed back verbatim.</summary>
         public ulong PingTimestamp { get; }
 
-        /// <summary>Handshake only.</summary>
+        /// <summary>Handshake only: the protocol version the client speaks.</summary>
         public string Version { get; }
 
-        /// <summary>Handshake only.</summary>
+        /// <summary>Handshake only: the app the client joins.</summary>
         public string App { get; }
 
         /// <summary>Handshake only: the client's host name.</summary>

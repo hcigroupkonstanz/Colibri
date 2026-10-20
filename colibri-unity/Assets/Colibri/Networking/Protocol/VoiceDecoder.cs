@@ -3,33 +3,23 @@ using System;
 namespace HCIKonstanz.Colibri.Networking.Protocol
 {
     /// <summary>
-    /// Decodes one Opus packet into mono 16-bit little-endian PCM, at most
-    /// <paramref name="frameSamples"/> samples. Returns the PCM, or null with the reason in
-    /// <paramref name="error"/>.
+    /// Decodes one Opus packet into mono 16-bit little-endian PCM of at most
+    /// <paramref name="frameSamples"/> samples, or returns null with the reason in <paramref name="error"/>.
     /// </summary>
     internal delegate byte[] VoiceFrameDecoder(byte[] opus, int frameSamples, out string error);
 
-    /// <summary>
-    /// Creates the Opus decoder, or returns false with the reason in <paramref name="error"/>.
-    /// </summary>
+    /// <summary>Creates the Opus decoder, or returns false with the reason in <paramref name="error"/>.</summary>
     internal delegate bool VoiceFrameDecoderFactory(out VoiceFrameDecoder decoder, out string error);
 
     /// <summary>
     /// Gets the PCM to play out of received voice packets. The codec is per packet: PCM plays as
-    /// it is, and Opus is decoded, whatever the receiver's own Use Opus Codec says, which decides
-    /// only what a client sends. VoiceReceiver used to decode only with it on, and played Opus
-    /// packets as PCM otherwise, which is noise.
-    ///
-    /// An Opus packet that cannot be decoded is dropped: all of them where Opus does not run, as on
-    /// macOS and iOS or in the macOS Editor with Android as the build target, and otherwise the
-    /// ones Opus fails on. The first failure is reported, and no other. VoiceReceiver logged two
-    /// errors per Opus packet on macOS, and in that Editor threw on every one.
-    ///
-    /// The decoder is created with the first Opus packet, so a receiver that gets only PCM never
-    /// needs Opus. Nothing here throws, whatever the decoder or its factory does.
-    ///
-    /// Free of any <c>UnityEngine</c> dependency, so plain NUnit EditMode tests exercise it.
+    /// is and Opus is decoded, whatever the receiver's Use Opus Codec says (only the one on
+    /// VoiceBroadcast decides what a client sends). An Opus packet that cannot be decoded is
+    /// dropped, and only the first failure is reported. The Opus decoder is created with the first Opus packet, so a receiver
+    /// that only gets PCM never needs Opus. Decode never throws, whatever the decoder or its
+    /// factory does.
     /// </summary>
+    // No UnityEngine dependency, so plain NUnit EditMode tests can run it.
     internal sealed class VoiceDecoder
     {
         private readonly VoiceFrameDecoderFactory createOpusDecoder;
@@ -40,11 +30,6 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         private bool hasCreatedOpusDecoder;
         private bool opusFailureReported;
 
-        /// <param name="createOpusDecoder">Creates the Opus decoder, once, for the first Opus packet.</param>
-        /// <param name="reportOpusFailure">
-        /// Gets the reason the first time an Opus packet cannot be decoded: the decoder could not be
-        /// created, or failed on a packet.
-        /// </param>
         internal VoiceDecoder(VoiceFrameDecoderFactory createOpusDecoder, Action<string> reportOpusFailure = null)
         {
             this.createOpusDecoder = createOpusDecoder ?? throw new ArgumentNullException(nameof(createOpusDecoder));
@@ -53,8 +38,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
         /// <summary>
         /// The mono 16-bit little-endian PCM of <paramref name="packet"/>, or null when it cannot be
-        /// played: an Opus packet that cannot be decoded, or one of a codec this version does not
-        /// know, which as PCM would be noise too.
+        /// played: undecodable Opus, or a codec this version does not know (as PCM it would be noise).
         /// </summary>
         internal byte[] Decode(VoicePacket packet)
         {
@@ -85,8 +69,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             {
                 pcm = opusDecoder(packet.Data, packet.FrameSize, out error);
             }
-            // One that throws, such as a call into a native library that is not there, fails the
-            // packet like one that returns null.
+            // A decoder that throws (e.g. missing native library) fails the packet like one that returns null.
             catch (Exception e)
             {
                 pcm = null;

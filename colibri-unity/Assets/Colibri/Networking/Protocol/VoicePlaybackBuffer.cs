@@ -5,29 +5,17 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 {
     /// <summary>
     /// The voice a VoiceReceiver has received and not played yet: mono samples at the output
-    /// rate, written on the main thread and read on the audio thread, in OnAudioFilterRead.
-    ///
-    /// A ring for one writer and one reader, without a lock. VoiceReceiver used a List that both
-    /// threads changed unguarded, which now and then threw ArgumentOutOfRangeException, and the
-    /// audio thread allocated two arrays per callback. A lock would be held only briefly, but the
-    /// audio thread would still wait whenever the main thread held it, and a main thread that is
-    /// preempted while holding it, as on a busy Quest, makes the audio thread miss its deadline,
-    /// which is audible. Here neither thread ever waits for the other, and reading allocates
-    /// nothing.
-    ///
-    /// Each thread owns one counter and only reads the other's: the writer counts the samples
-    /// written, the reader the samples read. Both only grow, wrap around at 2^32 and index the
-    /// ring by their low bits, so its length is a power of two. A volatile write publishes a
-    /// counter only after the samples it covers have been written or read.
-    ///
-    /// A clear is a mark at the written count, which the reader skips to once, the first time it
-    /// sees that mark, unless it has read past it already.
-    ///
-    /// What does not fit is dropped, the newest samples: the oldest are the reader's to drop.
-    /// Fast-forward, on the reader's side, drops the oldest long before the ring is full.
-    ///
-    /// Free of any <c>UnityEngine</c> dependency, so plain NUnit EditMode tests exercise it.
+    /// rate, written on the main thread and read on the audio thread (OnAudioFilterRead).
     /// </summary>
+    // Lock-free ring for one writer and one reader. With a lock, a main thread preempted while
+    // holding it (busy Quest) makes the audio thread miss its deadline, which is audible.
+    // For the same reason Read must not allocate.
+    // Each thread owns one counter (samples written, samples read) and only reads the other's.
+    // The counters wrap at 2^32 and index the ring by their low bits, so its length is a power of
+    // two. A volatile write publishes a counter only after the samples it covers are written or read.
+    // Clear is a mark at the written count; the reader skips to it once, unless it is already past it.
+    // A full ring drops the newest samples; dropping the oldest is the reader's job (fast-forward).
+    // No UnityEngine dependency, so plain NUnit EditMode tests can run it.
     internal sealed class VoicePlaybackBuffer
     {
         private const int MinCapacity = 1024;
@@ -46,9 +34,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         private long fastForwarded;
 
         /// <param name="capacity">The samples it holds at least; rounded up to a power of two.</param>
-        /// <param name="startCount">
-        /// Where both counters start. For the tests, which start them just short of wrapping around.
-        /// </param>
+        /// <param name="startCount">Initial counter value; tests start just short of wrapping around.</param>
         internal VoicePlaybackBuffer(int capacity, int startCount = 0)
         {
             var length = MinCapacity;
@@ -66,8 +52,8 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         {
             get
             {
-                // In this order: the reader publishes a clear as applied after the read count it
-                // moved, so a clear seen applied comes with that count.
+                // appliedClear before read: the reader publishes appliedClear after read, so an
+                // applied clear comes with that read count.
                 var applied = Volatile.Read(ref appliedClear);
                 var from = Volatile.Read(ref read);
                 var cleared = Volatile.Read(ref clearedTo);
@@ -82,8 +68,8 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         internal long FastForwarded => Interlocked.Read(ref fastForwarded);
 
         /// <summary>
-        /// Writer only: appends the first <paramref name="count"/> of <paramref name="samples"/>, as
-        /// many as fit, and returns how many that is. The rest is dropped.
+        /// Writer only: appends up to <paramref name="count"/> of <paramref name="samples"/> and
+        /// returns how many fit. The rest is dropped.
         /// </summary>
         internal int Write(float[] samples, int count)
         {
@@ -104,34 +90,30 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         }
 
         /// <summary>
-        /// Writer only: drops everything written so far. The reader skips it at its next read, and
+        /// Writer only: drops everything written so far. The reader skips it at its next read;
         /// until then it still takes up room.
         /// </summary>
         internal void Clear() => Volatile.Write(ref clearedTo, written);
 
         /// <summary>
-        /// Reader only: fills <paramref name="data"/>, <paramref name="channels"/> interleaved
-        /// channels, with the next samples, each on every channel, and what is left with silence.
-        /// Returns the samples read.
+        /// Reader only: fills <paramref name="data"/> (<paramref name="channels"/> interleaved
+        /// channels) with the next samples, each copied to every channel, and the rest with
+        /// silence. Returns the samples read.
         /// </summary>
         /// <param name="fastForwardAbove">
-        /// With more samples than this waiting, the oldest are dropped first, so that
+        /// With more samples than this waiting, the oldest are dropped until
         /// <paramref name="keep"/> are left.
         /// </param>
-        /// <param name="keep">
-        /// The samples fast-forward keeps, as many as there are at most. VoiceReceiver kept the
-        /// last frame's worth and removed the rest, and with a frame longer than what was waiting,
-        /// such as one of 120 ms against a 100 ms latency, that was a negative count, which threw.
-        /// </param>
+        /// <param name="keep">The samples fast-forward leaves; clamped to what is waiting.</param>
         internal int Read(float[] data, int channels, int fastForwardAbove = int.MaxValue, int keep = 0)
         {
             var readCount = read;
-            // Before the written count, which then covers all the clear drops.
+            // Before written, so the mark is never ahead of the written count.
             var cleared = Volatile.Read(ref clearedTo);
             var writeCount = Volatile.Read(ref written);
-            // Only a clear not applied yet: the mark stays put while the counters move on, and
-            // 2^31 samples on, 12.4 hours at 48 kHz, it looked ahead of the reader again. Nor one
-            // the reader has passed, having read what was written after it before it saw it.
+            // Only an unapplied mark: an applied one stays put and would look ahead of the reader
+            // again after 2^31 samples (12.4 h at 48 kHz). Not one the reader is already past: it
+            // can read samples written after the mark before it sees the mark.
             if (cleared != appliedClear && unchecked(cleared - readCount) > 0)
                 readCount = cleared;
 
