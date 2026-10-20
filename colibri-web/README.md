@@ -11,7 +11,8 @@ Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 
 - Node.js 18 or newer
 - TypeScript 5.0 or newer with standard decorators. Leave `experimentalDecorators` unset or `false` in
-  `tsconfig.json`.
+  `tsconfig.json`. Vite needs a plugin for them: see
+  [Vite](https://colibri.hci.uni-konstanz.de/web/installation#vite).
 - [colibri-server](../colibri-server/README.md#installation) 2.0.0 or newer
 
 ## Installation
@@ -159,7 +160,8 @@ transform.position = [1, 0, 2];
 ```
 
 - Positions and scales are `[x, y, z]`, rotations `[x, y, z, w]`, in Unity's coordinates: left-handed with Y up.
-  For three.js and most other web 3D libraries, which are right-handed, negate `z`.
+  three.js and most other web 3D libraries are right-handed. To convert, negate `z` of positions, and `x` and `y` of
+  rotations. Scales need no conversion.
 - Assign a new array to change a value. Changing an array in place, e.g. `position[0] = 1`, is not sent.
 - Unity objects with a `ModelId` sync on a channel of their own. Pass it: `RegisterSyncTransforms('<ModelId>')`.
 - Call `RegisterSyncTransforms` once per `ModelId` and share what it returns.

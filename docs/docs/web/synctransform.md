@@ -131,7 +131,8 @@ registerTransform(marker);
 ## Sample
 
 The [sync-transform](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/sync-transform.ts) sample lists the objects of Unity's SyncTransform sample and moves, scales, hides and shows
-them from a terminal. Start the SyncTransform sample in Unity with the app name `myAppName`, then run:
+them from a terminal. Start the SyncTransform sample in Unity with an app name of your own, then run the sample below
+and enter the same app name:
 
 ```sh
 cd colibri-web

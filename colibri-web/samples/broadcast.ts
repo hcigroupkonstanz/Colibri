@@ -1,8 +1,8 @@
 import { Colibri, Sync } from '@hcikn/colibri';
-import { rl, colibriAddress, colibriPort } from './common';
+import { rl, colibriAddress, colibriApp, colibriPort } from './common';
 
 void (async () => {
-    new Colibri('myAppName', await colibriAddress(), await colibriPort());
+    new Colibri(await colibriApp(), await colibriAddress(), await colibriPort());
 
     console.log('Registering listeners for boolean, number, and string channels');
     Sync.receiveBool('myChannel', value => {

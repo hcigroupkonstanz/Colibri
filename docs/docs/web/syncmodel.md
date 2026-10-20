@@ -121,7 +121,7 @@ The Observable that `RegisterModelSync` returns (`players$` above) lists all syn
 ones this client registered and the ones from other clients.
 
 - It emits the current list right away when you subscribe.
-- It emits again when an object is added or deleted, or when another client changes one.
+- It emits again when an object is added, changed or deleted, by this client or by another one.
 - The objects in the list are live: their properties always have the latest values.
 
 To change an object from another client, assign a new value to a synced property. Colibri sends it to all other

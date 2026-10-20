@@ -1,5 +1,5 @@
 import { Colibri, RegisterModelSync, SyncModel, Synced } from '@hcikn/colibri';
-import { colibriAddress, colibriPort, rl } from './common';
+import { colibriAddress, colibriApp, colibriPort, rl } from './common';
 
 /**
  *  To use the @Synced() decorator, TypeScript standard decorators must be enabled
@@ -19,7 +19,7 @@ export class SampleClass extends SyncModel<SampleClass> {
 }
 
 void (async () => {
-    new Colibri('myAppName', await colibriAddress(), await colibriPort());
+    new Colibri(await colibriApp(), await colibriAddress(), await colibriPort());
 
     /**
      *  This is the registration for the SampleClass. It returns an Observable of every
