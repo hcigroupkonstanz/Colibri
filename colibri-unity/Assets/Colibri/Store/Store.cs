@@ -8,41 +8,23 @@ using Newtonsoft.Json;
 
 namespace HCIKonstanz.Colibri.Store
 {
+    /// <summary>
+    /// Reads, writes and deletes JSON values in the server's REST store, in the app of the Colibri configuration.
+    /// </summary>
     public static class Store
     {
-        /// <summary>
-        /// UnityWebRequest defaults to no timeout at all, so a wrong or unreachable server
-        /// address left Get/Put/Delete outstanding forever - no result, no error, nothing in
-        /// the console. An unconfigured project reaches the public default server, where this
-        /// was observed to still be waiting after a minute. Ten seconds is long enough for a
-        /// slow link and short enough that the failure is reported while the developer is still
-        /// looking at it.
-        /// </summary>
+        // UnityWebRequest has no timeout by default, so an unreachable server would leave a request pending forever.
         private const int TimeoutSeconds = 10;
 
-        /// <summary>
-        /// Newtonsoft with Colibri's converters, so a Vector3, Quaternion or Color in a saved
-        /// class converts - see <see cref="ColibriJson"/>.
-        /// </summary>
+        // Colibri's converters for Vector2/3/4, Quaternion and Color.
         private static readonly JsonSerializerSettings JsonSettings = ColibriJson.CreateSettings();
 
-        /// <summary>
-        /// The media type of the server's REST store, with the protocol version in it: every
-        /// request accepts it, and a Put sends its value in it. colibri-server 2.x refuses a value
-        /// sent as plain application/json. A reverse proxy in front of servers of different
-        /// versions on one host name can route the store's requests by their Accept header.
-        /// </summary>
+        // Sent as Accept on every request and as Content-Type on Put. colibri-server 2.x refuses a value as
+        // plain application/json; a reverse proxy can route by the Accept header.
         internal static string MediaType => $"application/vnd.colibri.v{WebServerConnection.ClientVersion}+json";
 
-        /// <summary>
-        /// Awaits a UnityWebRequest without pulling in a third-party awaiter.
-        /// </summary>
-        /// <remarks>
-        /// Deliberately *not* created with TaskCreationOptions.RunContinuationsAsynchronously:
-        /// UnityWebRequestAsyncOperation raises `completed` on the main thread, and completing the
-        /// task inline is what keeps the caller's code after `await` on the main thread too. Unlike
-        /// the UniTask awaiter this never throws - the caller checks `request.result` instead.
-        /// </remarks>
+        // No RunContinuationsAsynchronously: `completed` fires on the main thread and completing inline
+        // resumes the caller there. The task never faults; the caller checks request.result.
         private static Task SendAsync(UnityWebRequest request)
         {
             var tcs = new TaskCompletionSource<bool>();
@@ -55,28 +37,15 @@ namespace HCIKonstanz.Colibri.Store
             Debug.LogError($"Colibri: could not {action} \"{objectName}\" at {url} - {request.error} (HTTP {request.responseCode}). Check the server address and app name in Window -> Colibri Configuration.");
         }
 
-        /// <summary>
-        /// The path of <paramref name="objectName"/> in the store of <paramref name="appName"/>.
-        /// Each is one path segment, escaped as colibri-web escapes them (encodeURIComponent), so
-        /// that both clients address the same entry. Pasted in as they were, a '/' in a key made a
-        /// path the server has no route for, a '#' cut the key off there, and a '?' turned the
-        /// rest into a query string: Store.Put("round#2", ...) wrote the key "round".
-        /// </summary>
-        /// <remarks>
-        /// Uri.EscapeDataString also escapes ! * ' ( ), which encodeURIComponent leaves as they
-        /// are. The server decodes both forms to the same key.
-        /// </remarks>
+        // Each name is one path segment, escaped like colibri-web's encodeURIComponent so '/', '#' and '?'
+        // stay part of the key. EscapeDataString also escapes ! * ' ( ); the server decodes both to the same key.
         internal static string StorePath(string appName, string objectName)
             => $"api/store/{System.Uri.EscapeDataString(appName ?? "")}/{System.Uri.EscapeDataString(objectName ?? "")}";
 
         private static string Url(string objectName) => ColibriConfig.GetWebUrl(StorePath(ColibriConfig.Load().App, objectName));
 
-        /// <summary>
-        /// The name as the server stores it, the same rule as colibri-web's: surrounding spaces and
-        /// leading slashes are removed. Null for a name that is empty, "." or "..": a URL parser
-        /// resolves those as directory steps, so Delete("") or Delete(".") addressed the app
-        /// itself and deleted every value of the app.
-        /// </summary>
+        // The key as colibri-web normalizes it: surrounding whitespace and leading slashes removed.
+        // Null for "", "." and "..", which a URL parser resolves as directory steps (Delete("") would hit the app).
         internal static string KeyName(string objectName)
         {
             var name = (objectName ?? "").Trim().TrimStart('/');
@@ -91,6 +60,9 @@ namespace HCIKonstanz.Colibri.Store
             return name != null;
         }
 
+        /// <summary>
+        /// Loads the value stored under <paramref name="objectName"/>. Logs an error and returns default if there is no such value or it cannot be loaded.
+        /// </summary>
         public static async Task<T> Get<T>(string objectName)
         {
             if (!TryKeyName("load", objectName, out objectName))
@@ -112,6 +84,9 @@ namespace HCIKonstanz.Colibri.Store
             return default;
         }
 
+        /// <summary>
+        /// Stores <paramref name="putObject"/> as JSON under <paramref name="objectName"/>. Logs an error and returns false on failure.
+        /// </summary>
         public static async Task<bool> Put(string objectName, object putObject)
         {
             if (!TryKeyName("save", objectName, out objectName))
@@ -137,6 +112,9 @@ namespace HCIKonstanz.Colibri.Store
             return false;
         }
 
+        /// <summary>
+        /// Deletes the value stored under <paramref name="objectName"/>. Logs an error and returns false on failure.
+        /// </summary>
         public static async Task<bool> Delete(string objectName)
         {
             if (!TryKeyName("delete", objectName, out objectName))
@@ -158,18 +136,8 @@ namespace HCIKonstanz.Colibri.Store
             return false;
         }
 
-
-        /*
-         *  Conversion. Newtonsoft rather than JsonUtility: JsonUtility cannot round-trip
-         *  dictionaries, properties, or top-level arrays, so Get/Put silently disagreed with
-         *  everything Sync can carry.
-         *
-         *  A value Newtonsoft cannot convert used to throw a JsonException out of Put, or out of
-         *  Get after a successful request - past the await, into code written against a Store
-         *  that reports a failure and returns false or default. Now it does exactly that. An
-         *  exception thrown by the class itself - its constructor, a callback - still comes
-         *  through, with its own stack trace.
-         */
+        // Newtonsoft instead of JsonUtility, which cannot round-trip dictionaries, properties or top-level arrays.
+        // A JsonException is logged and reported as false/default; no other exception is caught.
 
         internal static bool TryToJson(string objectName, object value, out string json)
         {
@@ -209,7 +177,7 @@ namespace HCIKonstanz.Colibri.Store
             if (!type.IsGenericType)
                 return type.Name;
 
-            // No backtick on a type nested in a generic one, which is generic all the same.
+            // A type nested in a generic one is generic but has no backtick in its name.
             var tick = type.Name.IndexOf('`');
             var name = tick < 0 ? type.Name : type.Name.Substring(0, tick);
             return $"{name}<{string.Join(", ", System.Array.ConvertAll(type.GetGenericArguments(), TypeName))}>";

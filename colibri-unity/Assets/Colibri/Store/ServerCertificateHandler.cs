@@ -5,15 +5,13 @@ using UnityEngine.Networking;
 namespace HCIKonstanz.Colibri.Store
 {
     /// <summary>
-    /// Checks the web server's certificate for the Store's https requests the way the TCP
-    /// connection checks it, so that a server with a self-signed certificate works for both: with
-    /// <see cref="ColibriConfig.AllowSelfSignedCertificate"/> any certificate is accepted, and with
-    /// <see cref="ColibriConfig.ServerCertificateSha256"/> only the pinned one. Without either the
-    /// request has no handler and the system checks the certificate, as it always did.
+    /// The TCP connection's certificate rules for the Store's https requests, so one server setup
+    /// works for both.
     /// </summary>
     /// <remarks>
-    /// UnityWebRequest hands a certificate handler the certificate and nothing else, not the
-    /// system's verdict on it; see <see cref="ServerCertificatePolicy.AcceptsWithoutSystemCheck"/>.
+    /// UnityWebRequest passes the certificate but not the system's verdict, so the handler treats
+    /// the system as having rejected it. Only <see cref="ColibriConfig.ServerCertificateSha256"/>
+    /// or <see cref="ColibriConfig.AllowSelfSignedCertificate"/> can accept it then.
     /// </remarks>
     internal sealed class ServerCertificateHandler : CertificateHandler
     {
@@ -26,7 +24,7 @@ namespace HCIKonstanz.Colibri.Store
             _pin = pin;
         }
 
-        /// <summary>The handler for a request to the server <paramref name="config"/> names, or null for the system's own check.</summary>
+        /// <summary>The handler for the server in <paramref name="config"/>, or null when the system's own check applies.</summary>
         internal static ServerCertificateHandler For(ColibriConfig config)
         {
             if (!config.IsSSL || !ServerCertificatePolicy.HasOwnRules(config.AllowSelfSignedCertificate, config.ServerCertificateSha256))

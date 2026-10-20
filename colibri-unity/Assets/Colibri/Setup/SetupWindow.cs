@@ -20,29 +20,25 @@ namespace HCIKonstanz.Colibri.Setup
         private static bool _waitingToLoad;
         private static bool _portSettings = false;
 
-        // The two longest labels, both indented one level under "Server supports SSL/TLS?".
+        // The two longest labels, both indented under "Server supports SSL/TLS?". TlsLabelWidth sizes the column for them.
         private const string AllowSelfSignedLabel = "Allow self-signed certificate";
         private const string CertificateSha256Label = "Server certificate SHA-256";
 
-        /// <summary>How far EditorGUI indents per indentLevel; it does not expose the figure.</summary>
+        /// <summary>EditorGUI's indent per indentLevel. Unity does not expose it.</summary>
         private const float IndentPerLevel = 15f;
 
         /// <summary>The configuration asset, which Play mode and builds use.</summary>
         private ColibriConfig Config;
 
+        // Serialized like _refused, so a refused value survives a domain reload, such as entering
+        // Play mode. The unsaved object outlives the reload, and Unity restores the reference to it.
         /// <summary>
-        /// What the fields show and change: <see cref="Config"/>'s settings, but for those in
-        /// <see cref="_refused"/>. A change reaches Config only if it passes the checks (see
-        /// <see cref="ApplyValidSettings"/>).
+        /// What the fields show and change: <see cref="Config"/>'s settings, except those in
+        /// <see cref="_refused"/>. Changes reach Config through <see cref="ApplyValidSettings"/>.
         /// </summary>
-        /// <remarks>
-        /// Serialized, as <see cref="_refused"/> is, so that a refused value stays in the window
-        /// through a domain reload, such as when entering Play mode: an object that is not saved
-        /// outlives the reload, and Unity restores the window's reference to it.
-        /// </remarks>
         [SerializeField] private ColibriConfig _edited;
 
-        /// <summary>The settings whose value in <see cref="_edited"/> the checks refused, so Config does not have it.</summary>
+        /// <summary>Settings whose value in <see cref="_edited"/> failed the checks, so Config keeps its own.</summary>
         [SerializeField] private List<string> _refused = new List<string>();
 
         private Vector2 _scroll;
@@ -105,25 +101,24 @@ namespace HCIKonstanz.Colibri.Setup
             Config = ColibriConfig.Load();
             if (!ConfigExists())
             {
-                // Load() hands back a shared, hidden defaults object when there is no asset yet.
-                // That one must not *become* the asset, so this window creates its own to save.
+                // Load() returns a shared, hidden defaults object when there is no asset. Saving that
+                // object would make it the asset, so create a new one.
                 Config = CreateInstance<ColibriConfig>();
                 SaveConfig();
             }
 
-            // Still there after a domain reload. OnGUI fills it.
+            // Survives a domain reload, so only a new window creates it. OnGUI copies Config into it.
             if (_edited == null)
             {
                 _edited = CreateInstance<ColibriConfig>();
                 _edited.hideFlags = HideFlags.HideAndDontSave;
 
-                // Left from a copy that is gone, it would hold back the new copy's defaults.
+                // Names left over from the old copy would keep the new one from taking Config's values.
                 _refused.Clear();
             }
         }
 
-        // When the window closes, which drops a value the checks refused; not before a domain
-        // reload, as OnDisable would.
+        // Only when the window closes. OnDisable also runs on a domain reload, which must keep _edited.
         private void OnDestroy()
         {
             if (_edited != null)
@@ -145,8 +140,8 @@ namespace HCIKonstanz.Colibri.Setup
 
         private void OnGUI()
         {
-            // Every time, so that a change made elsewhere, such as in the asset's Inspector or by
-            // an Undo, shows here, and the next change here does not write the old value back.
+            // Every draw, so a change made elsewhere (Inspector, Undo) shows here, and a later edit
+            // here cannot write the old value back.
             ShowSettings(Config, _edited, _refused);
 
             var labelWidth = EditorGUIUtility.labelWidth;
@@ -155,9 +150,8 @@ namespace HCIKonstanz.Colibri.Setup
             // The Android section at the bottom can run past the edge of the window.
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
 
-            // Stretched to the width there is, not fixed to the window's 500 px: inside the scroll
-            // view, a vertical scrollbar takes some of those, and a fixed-width title then added
-            // a horizontal one as well.
+            // Stretched, not fixed: the scroll view's vertical scrollbar takes part of the width,
+            // and a fixed width would overflow it.
             GUILayout.Label("Colibri Setup", new GUIStyle(EditorStyles.largeLabel)
             {
                 fontSize = 22,
@@ -200,7 +194,6 @@ namespace HCIKonstanz.Colibri.Setup
                     "The server has TLS turned on (TLS_CERT and TLS_KEY): the TCP connection is encrypted, and the Store uses https."), _edited.IsSSL);
                 if (_edited.IsSSL)
                 {
-                    // Only meaningful with TLS, so only shown with it.
                     EditorGUI.indentLevel++;
                     _edited.AllowSelfSignedCertificate = EditorGUILayout.Toggle(new GUIContent(AllowSelfSignedLabel,
                         "Also accept a server certificate this device does not trust, such as a self-signed one. The connection "
@@ -223,7 +216,7 @@ namespace HCIKonstanz.Colibri.Setup
                 EditorGUILayout.EndVertical();
             }
 
-            // Also when nothing changed here: a change elsewhere can make a refused value valid.
+            // Every draw, even with no change here: a change elsewhere can make a refused value valid.
             _refused = ApplyValidSettings(_edited, Config);
 
             var errors = ConfigurationErrors(_edited);
@@ -243,8 +236,7 @@ namespace HCIKonstanz.Colibri.Setup
             foreach (var error in errors)
                 EditorGUILayout.HelpBox(error, MessageType.Error);
 
-            // Outside the foldout: it is closed whenever the window opens, and this is not a
-            // setting to forget about.
+            // Outside the foldout, which starts closed each time the window opens.
             if (_edited.MaxSendRate == 0)
             {
                 EditorGUILayout.HelpBox("Max Send Rate is 0, so there is no limit: every moving synced object sends an update "
@@ -260,9 +252,8 @@ namespace HCIKonstanz.Colibri.Setup
         }
 
         /// <summary>
-        /// A label column wide enough for the two TLS labels, the longest ones, with their indent.
-        /// Unity's default of 150 px cut them off, as "Allow self-signed certifi" and "Server
-        /// certificate SHA-2". Measured rather than fixed, so it follows the editor's font.
+        /// The label column width that fits the two TLS labels with their indent. Unity's default
+        /// of 150 px cuts them off. Measured rather than fixed, so it follows the editor's font.
         /// </summary>
         private static float TlsLabelWidth()
         {
@@ -274,20 +265,16 @@ namespace HCIKonstanz.Colibri.Setup
             return IndentPerLevel + widest + 4f;
         }
 
-        /// <summary>
-        /// The settings: every public field Unity serializes, so that one added later is not left
-        /// behind; not the name or the hide flags, which belong to the asset.
-        /// </summary>
+        /// <summary>Every public serialized field of ColibriConfig, so one added later is copied too.</summary>
         private static readonly FieldInfo[] Settings = typeof(ColibriConfig)
             .GetFields(BindingFlags.Public | BindingFlags.Instance)
             .Where(field => !field.IsNotSerialized)
             .ToArray();
 
         /// <summary>
-        /// Copies <paramref name="config"/>'s settings to <paramref name="shown"/>, but for the
+        /// Copies <paramref name="config"/>'s settings to <paramref name="shown"/>, except the
         /// <paramref name="refused"/> ones, which keep the value typed in.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal static void ShowSettings(ColibriConfig config, ColibriConfig shown, ICollection<string> refused)
         {
             foreach (var setting in Settings)
@@ -297,15 +284,11 @@ namespace HCIKonstanz.Colibri.Setup
 
         /// <summary>
         /// Copies to <paramref name="config"/>, the configuration in use, each setting in which
-        /// <paramref name="shown"/> differs from it, unless one of the checks that Save makes, and
-        /// that looks at the setting, then fails. So a valid change takes effect at once, as it
-        /// always has, even while another setting shows an error, and a value that Save refuses is
-        /// neither used in Play mode nor written to disk by whatever saves the project's assets
-        /// next. Writing the fields straight into the configuration did both, though Save was
-        /// disabled. Copying only those settings leaves a change made elsewhere to any other in place.
+        /// <paramref name="shown"/> differs from it, unless a check that Save makes on that setting
+        /// then fails. So a valid change takes effect at once, even while another setting shows an
+        /// error, and a refused value does not reach Play mode or the next asset save.
         /// </summary>
         /// <returns>The settings it did not copy, by name.</returns>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal static List<string> ApplyValidSettings(ColibriConfig shown, ColibriConfig config)
         {
             var changed = Settings.Where(setting => !Equals(setting.GetValue(shown), setting.GetValue(config))).ToList();
@@ -316,8 +299,8 @@ namespace HCIKonstanz.Colibri.Setup
             candidate.hideFlags = HideFlags.HideAndDontSave;
             try
             {
-                // Those of the settings that a failing check looks at, when they have their value
-                // from shown and every other setting has config's.
+                // The settings a failing check looks at, with shown's value for those in the list
+                // and config's for the rest.
                 List<FieldInfo> Failing(List<FieldInfo> settings)
                 {
                     foreach (var setting in Settings)
@@ -326,15 +309,14 @@ namespace HCIKonstanz.Colibri.Setup
                     return settings.Where(setting => looked.Contains(setting.Name)).ToList();
                 }
 
-                // All together first, since two ports can only be swapped together, less those
-                // that a failing check looks at, until the rest pass.
+                // Two ports can only change together, so start with all and drop the failing ones
+                // until the rest pass.
                 var applied = changed.ToList();
                 for (var failing = Failing(applied); failing.Count != 0; failing = Failing(applied))
                     applied = applied.Except(failing).ToList();
 
-                // Then each of the others on its own, so that a refused value does not hold back a
-                // valid one that shares a check with it, such as the voice port while the web port
-                // has the TCP port's number.
+                // Then each of the others alone, so a refused value does not hold back a valid one
+                // that shares a check with it.
                 foreach (var setting in changed.Except(applied).ToList())
                     if (Failing(applied.Append(setting).ToList()).Count == 0)
                         applied.Add(setting);
@@ -355,8 +337,7 @@ namespace HCIKonstanz.Colibri.Setup
         /// </summary>
         private static readonly (string[] LooksAt, Func<ColibriConfig, string> Error)[] Checks =
         {
-            // The status window's test. A name of spaces only used to pass here, and the status
-            // window then reported the project as not configured.
+            // IsConfigured, the status window's test, which treats a name of spaces as empty.
             (new[] { nameof(ColibriConfig.AppName) },
                 config => config.IsConfigured ? null : "App Name must not be empty!"),
             (new[] { nameof(ColibriConfig.ServerAddress) }, ServerAddressError),
@@ -384,11 +365,9 @@ namespace HCIKonstanz.Colibri.Setup
         private static bool IsPort(int port) => port > 0 && port <= 65535;
 
         /// <summary>
-        /// What is wrong with the server address, or null. It is a host name or an IP address
-        /// only: an address with a path or a port used to be saved, and the client then failed to
-        /// resolve it, with an error about DNS.
+        /// What is wrong with the server address, or null. Only a host name or an IP address is
+        /// valid: with a path or a port, the client cannot resolve it.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal static string ServerAddressError(ColibriConfig config)
         {
             var address = config.Host;
@@ -399,8 +378,8 @@ namespace HCIKonstanz.Colibri.Setup
             if (address.Contains("/") || address.Any(char.IsWhiteSpace))
                 return "Server address must be an IP address or a domain name only, without a path or spaces";
 
-            // A host name has no colon, and an IPv6 address has two or more, or brackets: one
-            // colon is a port. So is a colon after the closing bracket.
+            // A host name has no colon, and an IPv6 address has two or more or brackets. So one colon,
+            // or a colon after "]", is a port.
             var colons = address.Count(c => c == ':');
             if ((colons == 1 && !address.StartsWith("[")) || address.Contains("]:"))
                 return "Server address must not contain a port: enter the ports in their own fields";
@@ -412,11 +391,9 @@ namespace HCIKonstanz.Colibri.Setup
             => Checks.Select(check => check.Error(config)).Where(error => error != null).ToList();
 
         /// <summary>
-        /// What is wrong with the certificate settings, or null. A pinned fingerprint that cannot
-        /// match any certificate would have every connection rejected, so it is not saved; without
-        /// TLS the settings are not used, and not checked.
+        /// What is wrong with the certificate settings, or null. A fingerprint that matches no
+        /// certificate would reject every connection. Without TLS they are neither used nor checked.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal static string CertificateSettingsError(ColibriConfig config)
         {
             if (!config.IsSSL || ServerCertificatePolicy.TryNormalizeFingerprint(config.ServerCertificateSha256, out _))
@@ -426,8 +403,8 @@ namespace HCIKonstanz.Colibri.Setup
         }
 
         /// <summary>
-        /// Settings that break a build silently - see <see cref="AndroidSettingsCheck"/>.
-        /// Checked against the configuration as edited here, so turning SSL on clears the HTTP one.
+        /// Settings that silently break a build. See <see cref="AndroidSettingsCheck"/>. They are
+        /// checked against <see cref="_edited"/>, so turning SSL on clears the Allow downloads over HTTP issue.
         /// </summary>
         private void DrawAndroidIssues()
         {

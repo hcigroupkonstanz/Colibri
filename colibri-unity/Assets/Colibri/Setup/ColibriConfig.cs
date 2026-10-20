@@ -7,8 +7,8 @@ namespace HCIKonstanz.Colibri.Setup
         public static readonly string CONFIG_NAME = "ColibriConfig.asset";
 
         /// <summary>
-        /// What to tell someone whose project has no configuration asset yet. Kept here so the
-        /// connection loop, the Store and the status window all say exactly the same thing.
+        /// The message for a project without a configuration asset, shown by the connection loop,
+        /// the voice connection and the status window.
         /// </summary>
         public static readonly string NOT_CONFIGURED_MESSAGE =
             "Colibri is not configured yet. Open Window -> Colibri Configuration, enter an App Name, and press Save Config. " +
@@ -18,23 +18,20 @@ namespace HCIKonstanz.Colibri.Setup
         private static ColibriConfig _defaults;
 
         /// <summary>
-        /// The project's configuration. Never null: without a configuration asset this hands back
-        /// the defaults, so a missing asset surfaces as one clear message from the connection loop
-        /// rather than as a NullReferenceException from whichever call site touched it first.
+        /// The project's configuration, never null. Without an asset this returns the defaults, so
+        /// the connection loop reports the missing asset instead of a NullReferenceException.
         /// </summary>
         public static ColibriConfig Load()
         {
             if (_instance)
                 return _instance;
 
-            // Kept out of _instance so that the asset is picked up the moment it appears - which,
-            // in the editor, is as soon as the setup window saves it.
+            // Defaults are not cached here, so an asset saved in the setup window is picked up on the next call.
             _instance = Resources.Load<ColibriConfig>("ColibriConfig");
             if (_instance)
                 return _instance;
 
-            // Created once, not per call: the connection loop calls Load() every frame, and a
-            // ScriptableObject per frame would leak - CreateInstance is not garbage collected.
+            // Created once: Load() runs every frame, and CreateInstance objects are not garbage collected.
             if (!_defaults)
             {
                 _defaults = CreateInstance<ColibriConfig>();
@@ -45,32 +42,22 @@ namespace HCIKonstanz.Colibri.Setup
         }
 
         /// <summary>
-        /// A configuration is only usable with an app name: the server routes messages by it, so
-        /// an empty one silently isolates the client from every other client.
+        /// True when an App Name is set. Without one the client does not connect.
         /// </summary>
         public bool IsConfigured => !string.IsNullOrWhiteSpace(AppName);
 
-        /// <summary>
-        /// App names that many people end up with: example and placeholder names - colibri-web's
-        /// samples use "myAppName" - and what anyone types first. Lowercase; compared without
-        /// regard to case.
-        /// </summary>
+        // Example and placeholder names, in lowercase. colibri-web's samples use "myAppName".
         private static readonly string[] CommonAppNames =
         {
             "myappname", "myapp", "appname", "app", "test", "testapp", "demo", "example", "colibri", "default"
         };
 
         /// <summary>
-        /// Why <paramref name="appName"/> is likely to be shared with strangers, or null if it is
-        /// not. An empty name is not this method's concern - see <see cref="IsConfigured"/>.
+        /// Returns a warning when <paramref name="appName"/> is one that other projects are likely
+        /// to pick too, or null.
         /// </summary>
-        /// <remarks>
-        /// The server puts every client with the same app name into one app, whoever they are. So
-        /// unrelated projects that settle on the same example name see each other's objects and
-        /// messages, and since each update goes to every other client in the app, the server's
-        /// work grows with the square of the number of clients in it. Nothing says so at runtime:
-        /// it just works, for everyone at once.
-        /// </remarks>
+        // Every client with the same App Name shares one app on the server, so unrelated projects on a
+        // generic name see each other's objects, and the server's work grows with the square of the client count.
         internal static string SharedAppNameWarning(string appName)
         {
             if (string.IsNullOrWhiteSpace(appName))
@@ -88,58 +75,49 @@ namespace HCIKonstanz.Colibri.Setup
         public string AppName = "";
         public string ServerAddress = "colibri.hci.uni-konstanz.de";
 
-        /// <summary>
-        /// <see cref="AppName"/> and <see cref="ServerAddress"/> as they are used: without the
-        /// spaces around them. A space typed or pasted along with them used to make the address
-        /// fail to resolve, with an error about DNS for an address that looked right, and the name
-        /// put the client into an app of its own, which looked like the right one everywhere.
-        /// </summary>
+        // Trimmed: a stray space breaks DNS resolution of the address, or puts the client in an app of its own.
         internal string App => (AppName ?? "").Trim();
         internal string Host => (ServerAddress ?? "").Trim();
 
-        /// <summary>A message for an empty server address, as <see cref="NOT_CONFIGURED_MESSAGE"/> is for the App Name.</summary>
+        /// <summary>The message for an empty server address.</summary>
         public static readonly string NO_SERVER_ADDRESS_MESSAGE =
             "Colibri has no server address. Open Window -> Colibri Configuration, enter the Server Address, and press Save Config.";
 
-        // colibri-server 2.x's default ports. 1.x's were 9011, 9012 and 9013: the defaults differ so
-        // that a client of one version does not reach a server of the other by them. A configuration
-        // saved by 1.x keeps the ports it saved; only a new one starts out with these.
+        // colibri-server 2.x's ports. 1.x used 9011 to 9013, so a client of one version does not reach
+        // a server of the other by default. A configuration saved earlier keeps its ports.
         public int WebServerPort = 9211;
         public int TcpServerPort = 9212;
         public int VoiceServerPort = 9213;
 
         /// <summary>
-        /// The server has TLS turned on (<c>TLS_CERT</c> and <c>TLS_KEY</c> at colibri-server): the
-        /// TCP connection is encrypted, and the Store uses https. By default the server's certificate
-        /// has to be one this device trusts, issued for <see cref="ServerAddress"/>; see
-        /// <see cref="AllowSelfSignedCertificate"/> and <see cref="ServerCertificateSha256"/> for a
-        /// self-signed one.
+        /// Connects with TLS: the TCP connection is encrypted, and the Store uses https.
         /// </summary>
+        /// <remarks>
+        /// The server needs <c>TLS_CERT</c> and <c>TLS_KEY</c> set. Its certificate must be one this
+        /// device trusts and that is issued for <see cref="ServerAddress"/>, unless
+        /// <see cref="AllowSelfSignedCertificate"/> or <see cref="ServerCertificateSha256"/> is set.
+        /// </remarks>
         public bool IsSSL = false;
 
         /// <summary>
-        /// With <see cref="IsSSL"/>: also accept a server certificate this device does not trust,
-        /// such as a self-signed one, or one issued for another name. The connection is still
-        /// encrypted, but nothing checks that it goes to the right server; the first connection
-        /// says so once in the log, with the certificate's fingerprint for
-        /// <see cref="ServerCertificateSha256"/>.
+        /// With <see cref="IsSSL"/>, also accepts a server certificate this device does not trust,
+        /// such as a self-signed one, or one issued for another name.
         /// </summary>
         /// <remarks>
-        /// Off in a configuration saved before this field existed: Unity leaves a field the asset
-        /// has no value for at its initializer.
+        /// The connection stays encrypted, but nothing checks that it reaches the right server. The
+        /// warning logged when such a certificate is accepted includes its fingerprint, for
+        /// <see cref="ServerCertificateSha256"/>.
         /// </remarks>
         public bool AllowSelfSignedCertificate = false;
 
         /// <summary>
-        /// With <see cref="IsSSL"/>: the SHA-256 fingerprint of the one server certificate to
-        /// accept, as colibri-server logs it when it starts. When set, that certificate is accepted
-        /// whether this device trusts it or not, and every other certificate is rejected, trusted or
-        /// not. Upper or lower case, with or without colons. Empty for no pin, which is the default.
+        /// With <see cref="IsSSL"/>, the SHA-256 fingerprint of the one certificate to accept: it is
+        /// accepted whether this device trusts it or not, and every other certificate is rejected.
         /// </summary>
         /// <remarks>
-        /// Meant for a self-signed certificate, which stays the same until it is replaced. A
-        /// certificate from Let's Encrypt changes with every renewal, so pinning one rejects the
-        /// server after its next renewal; leave this empty for those.
+        /// colibri-server logs its fingerprint at startup. Upper or lower case, with or without colons.
+        /// Empty for no pin, the default. Meant for a self-signed certificate, which stays the same until
+        /// it is replaced. A Let's Encrypt certificate changes with every renewal, so leave this empty for those.
         /// </remarks>
         public string ServerCertificateSha256 = "";
 
@@ -149,17 +127,11 @@ namespace HCIKonstanz.Colibri.Setup
         public const int DEFAULT_MAX_SEND_RATE = 30;
 
         /// <summary>
-        /// The most updates per second one synced object sends, 0 for no limit. What
-        /// <c>SyncSettings.MaxSendRate</c> starts out as - see there for what the limit does.
+        /// The most updates per second one synced object sends, 0 for no limit. <c>SyncSettings.MaxSendRate</c>
+        /// starts out as this value.
         /// </summary>
-        /// <remarks>
-        /// A configuration asset saved before this field existed has no value for it, and Unity
-        /// leaves such a field at its initializer. So existing projects get the default without
-        /// saving their configuration again.
-        ///
-        /// [Min] keeps the asset's own Inspector from taking a negative value; one that gets in
-        /// anyway, by a hand edit, is reported and replaced with the default at runtime.
-        /// </remarks>
+        // [Min] keeps the Inspector from entering a negative value. A hand edit that gets one in is reported
+        // and replaced with the default at runtime.
         [Min(0)]
         public int MaxSendRate = DEFAULT_MAX_SEND_RATE;
 
@@ -179,11 +151,10 @@ namespace HCIKonstanz.Colibri.Setup
         }
 
         /// <summary>
-        /// The server address as the host of a URL: an IPv6 address goes in brackets there, so
-        /// that its colons are not read as the port's. One typed with brackets keeps them. A host
-        /// name never contains a colon, so a colon means an IPv6 address.
+        /// The server address as the host of a URL, with an IPv6 address in brackets so its colons
+        /// are not read as the port.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
+        // A host name has no colon, so a colon means IPv6. An address typed with brackets already has them.
         internal static string UrlHost(string serverAddress)
             => serverAddress.IndexOf(':') >= 0 && !serverAddress.StartsWith("[") ? $"[{serverAddress}]" : serverAddress;
     }
