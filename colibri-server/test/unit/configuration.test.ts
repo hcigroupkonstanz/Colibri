@@ -154,6 +154,26 @@ describe('Config', () => {
         });
     });
 
+    describe('data store', () => {
+        it('defaults to deleting values not written for 30 days, and takes 0 to keep them', async () => {
+            expect((await loadConfig({ STORE_EXPIRY_DAYS: undefined })).STORE_EXPIRY_DAYS).toBe(30);
+            expect((await loadConfig({ STORE_EXPIRY_DAYS: '0' })).STORE_EXPIRY_DAYS).toBe(0);
+            expect((await loadConfig({ STORE_EXPIRY_DAYS: '7' })).STORE_EXPIRY_DAYS).toBe(7);
+        });
+
+        it('defaults to no size limit, and takes one in MiB', async () => {
+            expect((await loadConfig({ STORE_MAX_MB: undefined })).STORE_MAX_MB).toBe(0);
+            expect((await loadConfig({ STORE_MAX_MB: '512' })).STORE_MAX_MB).toBe(512);
+        });
+
+        it.each([
+            [ 'STORE_EXPIRY_DAYS', '-1' ], [ 'STORE_EXPIRY_DAYS', '1.5' ], [ 'STORE_EXPIRY_DAYS', 'never' ],
+            [ 'STORE_MAX_MB', '-1' ], [ 'STORE_MAX_MB', '1GB' ],
+        ])('refuses to start with %s "%s"', async (name, raw) => {
+            await expect(loadConfig({ [name]: raw })).rejects.toThrow(name);
+        });
+    });
+
     describe('TRUSTED_PROXIES', () => {
         it('trusts no proxy when unset or empty', async () => {
             expect((await loadConfig({ TRUSTED_PROXIES: undefined })).TRUSTED_PROXIES).toEqual([]);

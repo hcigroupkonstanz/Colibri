@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { AdminService, BuildInfo, ServerSnapshot, SettingValue } from '../../services';
 import { LiveStatusComponent } from '../../components/live-status/live-status.component';
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
-import { count, duration } from '../../format';
+import { bytes, count, duration } from '../../format';
 
 export interface Fact {
     label: string;
@@ -36,7 +36,7 @@ const SHOWN = new Set([
     'WEBSERVER_HOST', 'WEBSERVER_PORT', 'BASE_URL', 'TCP_HOST', 'TCP_PORT', 'VOICE_HOST', 'VOICE_PORT',
     'VOICE_SAMPLING_RATE', 'VOICE_RECORDING', 'TCP_IDLE_TIMEOUT_SECONDS', 'TCP_INBOUND_BACKLOG_LIMIT',
     'CLIENT_MESSAGE_RATE_LIMIT', 'CLIENT_MESSAGE_RATE_BURST', 'APP_CLIENT_WARNING_THRESHOLD',
-    'MODEL_TOMBSTONE_SECONDS', 'TRUSTED_PROXIES', 'TCP_PROXY_PROTOCOL', 'TCP_TLS_AT_PROXY'
+    'MODEL_TOMBSTONE_SECONDS', 'STORE_EXPIRY_DAYS', 'STORE_MAX_MB', 'TRUSTED_PROXIES', 'TCP_PROXY_PROTOCOL', 'TCP_TLS_AT_PROXY'
 ]);
 
 const text = function (value: SettingValue | undefined): string {
@@ -167,7 +167,7 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
                     label: 'Recently deleted models', value: count(s.counts.deletedModels),
                     note: `kept for ${text(set['MODEL_TOMBSTONE_SECONDS'])} s`, link: '/models'
                 },
-                { label: 'REST store', value: plural(s.counts.storeKeys, 'value', 'values'), note: `in ${plural(s.counts.storeApps, 'app', 'apps')}` }
+                { label: 'REST store', value: plural(s.counts.storeKeys, 'value', 'values'), note: `in ${plural(s.counts.storeApps, 'app', 'apps')}, ${bytes(s.counts.storeBytes)}` }
             ]
         },
         {
@@ -221,7 +221,9 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
             limit('TCP inbound backlog', 'TCP_INBOUND_BACKLOG_LIMIT', set['TCP_INBOUND_BACKLOG_LIMIT'], n => `${count(n)} messages`),
             limit('TCP idle timeout', 'TCP_IDLE_TIMEOUT_SECONDS', set['TCP_IDLE_TIMEOUT_SECONDS'], n => `${count(n)} s`),
             limit('App client warning', 'APP_CLIENT_WARNING_THRESHOLD', set['APP_CLIENT_WARNING_THRESHOLD'], n => `above ${plural(n, 'client', 'clients')}`),
-            limit('Deleted models kept', 'MODEL_TOMBSTONE_SECONDS', set['MODEL_TOMBSTONE_SECONDS'], n => `${count(n)} s`)
+            limit('Deleted models kept', 'MODEL_TOMBSTONE_SECONDS', set['MODEL_TOMBSTONE_SECONDS'], n => `${count(n)} s`),
+            limit('REST store values kept', 'STORE_EXPIRY_DAYS', set['STORE_EXPIRY_DAYS'], n => `${plural(n, 'day', 'days')} after their last write`),
+            limit('REST store size', 'STORE_MAX_MB', set['STORE_MAX_MB'], n => `${count(n)} MiB`)
         ]
     });
 

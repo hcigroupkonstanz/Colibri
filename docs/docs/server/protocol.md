@@ -19,7 +19,7 @@ flowchart LR
     U <-->|"HTTP on 9211<br/>data store"| S
     W <-->|"HTTP on 9211<br/>data store"| S
     M["Browser"] <-->|"9211<br/>monitoring page"| S
-    S --- D[("Data directory<br/>store.json, voice recordings")]
+    S --- D[("Data directory<br/>store.db, voice recordings")]
 ```
 
 | Connection                | Port     | Used for                                                                |
@@ -150,14 +150,15 @@ The server and the clients keep checking that a connection is alive:
 
 ## Data store
 
-The data store keeps values on the server, in `store.json` in the data directory. Unlike synchronized objects, the
-values survive restarts. Clients read and write them over HTTP on the web port. Each value belongs to an app and has
-a key.
+The data store keeps values on the server, in `store.db` in the data directory. Unlike synchronized objects, the
+values survive restarts. A value that is not written again for 30 days is deleted
+([Data store](./configuration.md#data-store)). Clients read and write them over HTTP on the web port. Each value
+belongs to an app and has a key.
 
 | Request                         | Result                                                                                       |
 | ------------------------------- | -------------------------------------------------------------------------------------------- |
 | `GET /api/store`                | The names of all apps                                                                        |
-| `GET /api/store/<app>`          | The keys of the app                                                                          |
+| `GET /api/store/<app>`          | The keys of the app. `404` if it has none.                                                   |
 | `GET /api/store/<app>/<key>`    | The value. `404` if there is none.                                                           |
 | `PUT /api/store/<app>/<key>`    | Stores the JSON value in the request body. `201` if it is new, `200` if it replaced a value. |
 | `DELETE /api/store/<app>/<key>` | Deletes the value                                                                            |
@@ -174,7 +175,8 @@ curl http://localhost:9211/api/store/myAppName/myKey
 - A value may be up to 5 MiB.
 - Write app names and keys with special characters such as `/`, `?` or spaces percent-encoded.
 - Any web page may use the data store, also one served from elsewhere.
-- The server saves changes to `store.json` within a quarter of a second.
+- The server saves each change before it answers.
+- A `PUT` that would take the data store above `STORE_MAX_MB` gets `507` and stores nothing.
 
 The client libraries do all of this for you ([Unity data store](../unity/data-store.md),
 [web data store](../web/data-store.md)).

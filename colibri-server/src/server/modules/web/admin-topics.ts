@@ -574,7 +574,7 @@ export interface ServerSources {
     tcpTlsAtProxy: boolean;
     voice: VoiceStatus | undefined;
     store: DataStore;
-    restStore: { apps: number; keys: number } | undefined;
+    restStore: { apps: number; keys: number; bytes: number } | undefined;
     tcpClients: ReadonlyArray<NetworkClient>;
     webClients: ReadonlyArray<SocketIoClient>;
 }
@@ -612,9 +612,10 @@ export interface ServerSnapshot {
         modelApps: number;
         modelChannels: number;
         deletedModels: number;
-        // The REST store's apps and values.
+        // The REST store's apps and values, and the bytes of JSON they take.
         storeApps: number;
         storeKeys: number;
+        storeBytes: number;
     };
 }
 
@@ -684,6 +685,7 @@ export const serverSnapshot = function (sources: ServerSources): ServerSnapshot 
             deletedModels,
             storeApps: sources.restStore?.apps ?? 0,
             storeKeys: sources.restStore?.keys ?? 0,
+            storeBytes: sources.restStore?.bytes ?? 0,
         },
     };
 };

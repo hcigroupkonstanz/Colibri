@@ -781,7 +781,8 @@ and lost in a second drop soon after is still recognised.
 ## REST store
 
 A key-value store over HTTP on the web port, separate from the model store. Values are kept per app in
-`store.json` in the data directory (`DATA_ROOT`) and survive restarts. colibri-unity's `Store` and
+`store.db`, an SQLite database in the data directory (`DATA_ROOT`), and survive restarts. A value not
+written for `STORE_EXPIRY_DAYS` (30) is deleted. colibri-unity's `Store` and
 colibri-web's `getRestObject` / `setRestObject` use it.
 
 Values travel as JSON in the media type `application/vnd.colibri.v2+json` (`REST_MEDIA_TYPE` in
@@ -803,11 +804,11 @@ curl http://localhost:9211/api/store/app/name
 
 | Request | Response |
 | --- | --- |
-| `GET /api/store` | `200` with the app names, `["app1", …]` |
-| `GET /api/store/:app` | `200` with the value names of that app. `404` if the app is unknown. |
+| `GET /api/store` | `200` with the app names, `["app1", …]`, sorted |
+| `GET /api/store/:app` | `200` with the value names of that app, sorted. `404` if the app has no value. |
 | `GET /api/store/:app/:name` | `200` with the stored JSON value. `404` if there is none. |
-| `PUT /api/store/:app/:name` | Stores the request body, any JSON value (object, array, number, string, `true`, `null`), sent as `Content-Type: application/vnd.colibri.v2+json`, up to 5 MiB. `201` if new, `200` if it replaced a value, each with `{ "result": "…", "data": <the value> }`. `400`, storing nothing, for malformed JSON, no body or an empty one. `415` for any other `Content-Type`. `413` for a body over 5 MiB. |
-| `DELETE /api/store/:app` | `200`, and every value of the app is gone. `404` if the app is unknown. |
+| `PUT /api/store/:app/:name` | Stores the request body, any JSON value (object, array, number, string, `true`, `null`), sent as `Content-Type: application/vnd.colibri.v2+json`, up to 5 MiB. `201` if new, `200` if it replaced a value, each with `{ "result": "…", "data": <the value> }`. `400`, storing nothing, for malformed JSON, no body or an empty one. `415` for any other `Content-Type`. `413` for a body over 5 MiB. `507` when the store would go above `STORE_MAX_MB`. |
+| `DELETE /api/store/:app` | `200`, and every value of the app is gone. `404` if the app has no value. |
 | `DELETE /api/store/:app/:name` | `200`. `404` if there is no such value. |
 
 Any other request under `/api`, e.g. a `POST`, or a `PUT` without a value name, returns `404`. Errors
@@ -818,10 +819,8 @@ both names, so the two address the same values. Only `.` and `..` cannot be reac
 resolves them as a path step, encoded or not. Every response allows any origin (CORS), so a page served
 from elsewhere can use the store too.
 
-Writes reach `store.json` within 250 ms, together with any made meanwhile. The file is replaced
-atomically: written to `store.json.tmp`, then renamed. A failed save is logged and retried with the
-next one. On shutdown (`docker stop`, Ctrl+C or an uncaught error), the server writes whatever is not
-saved yet, and leaves `store.json` untouched if that is nothing.
+Each write is committed to `store.db` before it is answered. Names are sorted by their UTF-8 bytes
+(SQLite's `BINARY` order), so upper case comes before lower case.
 
 ## Voice packets (UDP)
 
