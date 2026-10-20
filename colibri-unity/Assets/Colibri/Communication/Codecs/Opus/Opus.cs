@@ -13,12 +13,7 @@ public static class Opus
     const string DllName = "libopus";
     #endif
 
-    /// <summary>
-    /// Whether this platform has an Opus library. The package ships one for Windows, Linux and
-    /// Android; elsewhere the functions below are stubs that fail. Loading it can still fail
-    /// here, as in the macOS Editor with Android as the build target.
-    /// </summary>
-    // Not a const: a const would leave the callers' other branch unreachable, with a warning.
+    // Also true in the macOS Editor with Android as the build target, where the library does not load.
     internal static readonly bool HasNativeLibrary = true;
 
     [DllImport(DllName)]

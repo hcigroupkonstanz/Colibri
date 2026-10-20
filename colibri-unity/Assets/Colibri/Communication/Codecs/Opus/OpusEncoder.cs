@@ -31,9 +31,7 @@ public class OpusEncoder
     }
 
     /// <summary>
-    /// Creates an encoder, or returns false with the reason: this platform has no Opus library,
-    /// the library does not load, or Opus refuses the configuration. Unlike the constructor, it
-    /// neither logs nor throws, so the caller can fall back to PCM and say so once.
+    /// Unlike the constructor, does not log, so the caller can fall back to PCM with one warning.
     /// </summary>
     internal static bool TryCreate(int samplingRate, int channels, OpusApplication application, out OpusEncoder encoder, out string error)
     {
@@ -50,8 +48,7 @@ public class OpusEncoder
         {
             created = Opus.opus_encoder_create(samplingRate, channels, (int)application, out code);
         }
-        // What a P/Invoke throws for a library that is missing, lacks the function, or is built
-        // for another CPU architecture.
+        // P/Invoke throws these when the library is missing, lacks the entry point, or is built for another CPU.
         catch (Exception e) when (e is DllNotFoundException || e is EntryPointNotFoundException || e is BadImageFormatException)
         {
             error = "the Opus library did not load: " + e.Message;
@@ -80,8 +77,8 @@ public class OpusEncoder
     }
 
     /// <summary>
-    /// Encodes one frame, or returns null with the error. Unlike <see cref="Encode"/>, it logs
-    /// nothing: VoiceBroadcast reports a failure once, not for every frame.
+    /// Unlike <see cref="Encode"/>, does not log: VoiceBroadcast reports a failure once per
+    /// broadcast, not for every frame.
     /// </summary>
     internal byte[] TryEncode(byte[] data, int frameSize, out OpusError error)
     {
