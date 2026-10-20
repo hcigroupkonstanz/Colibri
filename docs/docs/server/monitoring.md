@@ -95,6 +95,8 @@ The _Server_ page shows:
 - the settings in effect, with the variables that set them: ports, TLS, reverse proxy, load limits, idle timeout,
   deleted objects and voice chat ([Configuration](./configuration.md))
 - the TLS certificate's names, issuer, validity and fingerprint, with a warning 30 days before it expires
+- with `PROXY_TLS_ADDRESSES`, the same for the reverse proxy's certificate, and whether clients trust it
+  ([TLS at a reverse proxy](./configuration.md#tls-at-a-reverse-proxy))
 - the number of clients, apps, synchronized objects and data store values
 
 Use it to check that a change of the configuration took effect. The page never shows certificate files or keys.

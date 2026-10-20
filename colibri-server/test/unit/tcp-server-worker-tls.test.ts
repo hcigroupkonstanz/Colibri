@@ -445,6 +445,8 @@ describe('TCPServerWorker with TLS', () => {
         it.skipIf(!hasIPv6Loopback)('serves clients over IPv6 on an IPv6 TCP_HOST, and IPv4 clients too on ::', async () => {
             await start({}, '::');
             expect((internals.server!.address() as net.AddressInfo).family).toBe('IPv6');
+            expect(logs(LogLevel.Info)).toContain('Starting Colibri TCP server on [::]:0');
+            expect(logs(LogLevel.Warn)).toEqual([]);
 
             for (const [ host, name ] of [ [ '::1', 'over-ipv6' ], [ '127.0.0.1', 'over-ipv4' ] ]) {
                 const peer = await connectPlain(host);
@@ -454,6 +456,9 @@ describe('TCPServerWorker with TLS', () => {
 
             expect(posted.filter(p => p.channel === 'clientConnected$').map(p => p.content.name))
                 .toEqual([ 'over-ipv6', 'over-ipv4' ]);
+            // The IPv4 client by its IPv4 address, not the socket's ::ffff:127.0.0.1.
+            expect(posted.filter(p => p.channel === 'clientConnected$').map(p => p.content.address))
+                .toEqual([ '::1', '127.0.0.1' ]);
         });
 
         it('refuses a TLS client cleanly, saying what to change on either side', async () => {

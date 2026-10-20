@@ -192,6 +192,18 @@ describe('TCPServerWorker with TCP_PROXY_PROTOCOL', () => {
             ]);
         });
 
+        // A proxy on a dual-stack socket may put an IPv4 client into a version 2 IPv6 header.
+        it('names a client by its IPv4 address from an IPv4-mapped address in a version 2 header', async () => {
+            const mapped = await connect();
+            mapped.send(Buffer.concat([v2Proxy6('00000000000000000000ffffc6336407'), handshake('quest-mapped')]));
+
+            await eventually(() => mapped.count(FrameType.Heartbeat) > 0);
+            expect(connectedClients().map(c => c.address)).toEqual(['198.51.100.7']);
+            expect(newClientLines().map(l => l.replace(/\(.+?\) /, ''))).toEqual([
+                'New client connected from 198.51.100.7 through 127.0.0.1, waiting for app name',
+            ]);
+        });
+
         it('reads a header that arrives a few bytes at a time, and what follows it in the same read', async () => {
             const peer = await connect();
             const bytes = Buffer.concat([v1('198.51.100.7'), handshake()]);

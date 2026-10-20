@@ -53,21 +53,24 @@ The message names the variable. `docker logs colibri` shows it.
 | `WEBSERVER_PORT` | `9211`    | Port for the monitoring page, web clients and the data store (TCP)    |
 | `TCP_PORT`       | `9212`    | Port for Unity clients (TCP)                                           |
 | `VOICE_PORT`     | `9213`    | Port for voice chat (UDP)                                              |
-| `WEBSERVER_HOST` | `0.0.0.0` | Address the web port listens on                                        |
-| `TCP_HOST`       | `0.0.0.0` | Address the Unity port listens on                                      |
-| `VOICE_HOST`     | `0.0.0.0` | Address the voice port listens on                                      |
+| `WEBSERVER_HOST` | `::`      | Address the web port listens on                                        |
+| `TCP_HOST`       | `::`      | Address the Unity port listens on                                      |
+| `VOICE_HOST`     | `::`      | Address the voice port listens on                                      |
 
-`0.0.0.0` listens on every IPv4 address of the server. See [IPv6](#ipv6) for IPv6.
+`::` listens on every IPv6 and IPv4 address of the server, `0.0.0.0` on every IPv4 address only. See [IPv6](#ipv6).
 
 ### Data variables
 
-| Variable         | Default      | Description                                                                                                         |
-| ---------------- | ------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `DATA_ROOT`      | `../../data` | Data directory with `store.json` and voice recordings. Leave it unset with Docker.                                  |
-| `WEBSERVER_ROOT` | `../ui/`     | Files of the monitoring page. You do not need to change it.                                                         |
+| Variable            | Default      | Description                                                                                                      |
+| ------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `DATA_ROOT`         | `../../data` | Data directory with `store.db` and voice recordings. Leave it unset with Docker.                                 |
+| `WEBSERVER_ROOT`    | `../ui/`     | Files of the monitoring page. You do not need to change it.                                                      |
+| `STORE_EXPIRY_DAYS` | `30`         | Days after which a data store value that was not written again is deleted. `0`: never                            |
+| `STORE_MAX_MB`      | `0`          | MiB that all data store values may take together. `0`: no limit                                                  |
 
-Both may be absolute paths, e.g. `DATA_ROOT=/var/lib/colibri`. A relative path starts from the server's
-`dist/server` folder, so the default data directory is `colibri-server/data`.
+`DATA_ROOT` and `WEBSERVER_ROOT` may be absolute paths, e.g. `DATA_ROOT=/var/lib/colibri`. A relative path starts
+from the server's `dist/server` folder, so the default data directory is `colibri-server/data`. See
+[Data store](#data-store) for `STORE_EXPIRY_DAYS` and `STORE_MAX_MB`.
 
 ### Logging variables
 
@@ -113,12 +116,13 @@ With both set, the web and Unity ports use [TLS](#tls). Voice is not encrypted.
 
 ### Reverse proxy variables
 
-| Variable             | Default | Description                                                                                                                                                                           |
-| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRUSTED_PROXIES`    | empty   | Addresses of [reverse proxies](#running-behind-a-reverse-proxy) in front of the server, separated by commas, so that the log shows the clients' own addresses. IP addresses, ranges such as `172.30.0.0/24`, and `loopback`, `linklocal`, `uniquelocal`. |
-| `TCP_PROXY_PROTOCOL` | `false` | `true`: the proxy in front of the Unity port sends the PROXY protocol, which names the Unity client. Needs `TRUSTED_PROXIES`.                                                          |
-| `TCP_TLS_AT_PROXY`   | `false` | `true`: the proxy in front of the Unity port handles TLS. Only changes what the monitoring page shows. Needs `TCP_PROXY_PROTOCOL=true`.                                               |
-| `BASE_URL`           | empty   | Path of the monitoring page behind a reverse proxy, e.g. `/colibri`                                                                                                                  |
+| Variable              | Default | Description                                                                                                                                                                                                                                              |
+| --------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRUSTED_PROXIES`     | empty   | Addresses of [reverse proxies](#running-behind-a-reverse-proxy) in front of the server, separated by commas, so that the log shows the clients' own addresses. IP addresses, ranges such as `172.30.0.0/24`, and `loopback`, `linklocal`, `uniquelocal`. |
+| `TCP_PROXY_PROTOCOL`  | `false` | `true`: the proxy in front of the Unity port sends the PROXY protocol, which names the Unity client. Needs `TRUSTED_PROXIES`.                                                                                                                            |
+| `TCP_TLS_AT_PROXY`    | `false` | `true`: the proxy in front of the Unity port handles TLS. Only changes what the monitoring page shows. Needs `TCP_PROXY_PROTOCOL=true`.                                                                                                                  |
+| `PROXY_TLS_ADDRESSES` | empty   | Where the proxy serves TLS, separated by commas, e.g. `colibri.example.org, colibri.example.org:9212`, so that the monitoring page shows its certificate ([TLS at a reverse proxy](#tls-at-a-reverse-proxy)). Port 443 unless given.                     |
+| `BASE_URL`            | empty   | Path of the monitoring page behind a reverse proxy, e.g. `/colibri`                                                                                                                                                                                      |
 
 ## Changing ports
 
@@ -144,18 +148,17 @@ After a change, enter the new ports in the clients: in Unity's Colibri configura
 
 ## IPv6
 
-The server listens on IPv4 only by default. For clients that reach the server over IPv6, for example because its DNS
-name has only an IPv6 address, set:
+The server listens on IPv6 and IPv4 by default. On a server without IPv6, it listens on IPv4 only, and the log says
+so. To listen on IPv4 only, for example because the firewall covers only IPv4, set:
 
 ```sh
-WEBSERVER_HOST=::
-TCP_HOST=::
-VOICE_HOST=::
+WEBSERVER_HOST=0.0.0.0
+TCP_HOST=0.0.0.0
+VOICE_HOST=0.0.0.0
 ```
 
-`::` listens on IPv6 and IPv4. Another IPv6 address listens on that address only, without IPv4. Behind Docker's
-published ports or a reverse proxy, Docker or the proxy has to listen on IPv6 instead, and these settings can stay at
-their defaults.
+Another IPv6 address listens on that address only, without IPv4. Behind Docker's published ports or a reverse proxy,
+Docker or the proxy has to listen on IPv6 as well.
 
 :::note
 Unity clients connect over IPv4 if the server's name has an IPv4 address, and over IPv6 only if it has none. If the
@@ -275,6 +278,37 @@ _Server supports SSL/TLS?_ as well. See [Running behind a reverse proxy](#runnin
 TLS costs little: about 10 to 15 percent more data between Unity and the server, a little more processor time, and no
 measurable delay.
 
+The server does not see the proxy's certificate. To show it on the monitoring page, with a warning before it expires,
+set `PROXY_TLS_ADDRESSES` to the addresses where the proxy serves TLS:
+
+```sh
+PROXY_TLS_ADDRESSES=colibri.example.org, colibri.example.org:9212
+```
+
+The server connects to each address at startup and once an hour, as a client would, and checks the certificate against
+the usual certificate authorities and the address's name. The log reports a certificate that clients would refuse, one
+that is about to expire, and an address the server cannot reach.
+
+**Docker:** the server has to reach the proxy under its public name. If that name leads elsewhere from inside the
+container, for example to an IPv4 address behind carrier-grade NAT, map it to the host:
+
+```yaml
+services:
+    colibri:
+        extra_hosts:
+            - "colibri.example.org:host-gateway"
+```
+
+### TLS between proxy and server
+
+The proxy can use TLS towards the server as well, for example when it runs on another machine. Set `TLS_CERT` and
+`TLS_KEY` on the server, and have the proxy connect with TLS: in nginx, `proxy_pass https://…` for the web port, and
+`proxy_ssl on;` in the `stream` server for the Unity port. The PROXY protocol header still comes first.
+
+Clients only see the proxy's certificate. With `PROXY_TLS_ADDRESSES`, the monitoring page shows both: _TLS
+certificate (this server)_ and _Proxy TLS certificate_. To accept only one certificate in a Unity app (_Server certificate
+SHA-256_), use the fingerprint of the proxy's.
+
 ## Running behind a reverse proxy
 
 Behind a reverse proxy, such as nginx or Traefik, every client seems to come from the proxy's address: in the log, on
@@ -344,7 +378,7 @@ proxy_protocol on;
 If that `stream` server handles TLS (`listen 9212 ssl`), also set `TCP_TLS_AT_PROXY=true`. Then the monitoring page
 shows these Unity clients as _TLS (proxy)_. Nothing else depends on it.
 
-:::warning Order matters
+:::warning[Order matters]
 First restart the server with `TCP_PROXY_PROTOCOL=true`, then reload nginx with `proxy_protocol on`. Until both are
 done, every Unity connection through the proxy fails. In this order, the log says clearly which header is missing.
 :::
@@ -352,7 +386,7 @@ done, every Unity connection through the proxy fails. In this order, the log say
 At startup, the log then shows:
 
 ```
-Starting Colibri TCP server on 0.0.0.0:9212, PROXY protocol header required from TRUSTED_PROXIES (loopback, uniquelocal)
+Starting Colibri TCP server on [::]:9212, PROXY protocol header required from TRUSTED_PROXIES (loopback, uniquelocal)
 ```
 
 ### Proxy messages in the log
@@ -422,6 +456,29 @@ that reconnects within this time learns that the object was deleted and removes 
 in its scene again, for example after loading the scene again, may create it again.
 
 The server forgets all objects of an app, deleted or not, when the app's last client leaves.
+
+## Data store
+
+The server keeps the values of the [data store](./protocol.md#data-store) in `store.db` in the data directory, an
+SQLite database. A value that is not written again for `STORE_EXPIRY_DAYS` (30 days) is deleted. Reading it does not
+count. Set `STORE_EXPIRY_DAYS=0` to keep values for good, for example study data that stays on the server for months.
+
+`STORE_MAX_MB` limits how much all values may take together. A `PUT` that would go above it gets `507` and stores
+nothing. Without a limit, the data store grows until the disk is full: anyone who can reach the server can store values.
+
+### Backup
+
+`store-export.js` prints the data store as JSON, also while the server runs:
+
+```sh
+docker exec colibri node dist/server/store-export.js > store.json
+```
+
+**Node.js:** run `node dist/server/store-export.js > store.json` in the `colibri-server` folder.
+
+To restore it, put this `store.json` into a data directory without `store.db`. The server imports it on the next start
+and renames it to `store.json.imported-<date>`. A `store.json` next to a `store.db` is not imported, and the log says
+so.
 
 ## Voice chat
 

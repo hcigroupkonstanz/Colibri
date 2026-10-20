@@ -97,8 +97,8 @@ export class ModelSynchronization extends Service {
                 this.logError('Cannot update model without "id" attribute', false);
                 return;
             }
-            // Stored, it would be serialized for every model::request on the channel, and JSON.stringify
-            // overflows the stack on deep nesting.
+            // Stored, it would be written out again for every model::request on the channel, and
+            // JSON.stringify overflows the stack on deep nesting: each of those requests would fail.
             if (nestsDeeperThan(payload)) {
                 this.logError(
                     `Ignoring a model::update for '${payload.id}' on channel '${msg.channel}' from client '${msg.origin.name}' ` +

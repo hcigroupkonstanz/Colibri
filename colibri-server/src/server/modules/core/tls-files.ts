@@ -98,9 +98,12 @@ export const checkTlsCredentials = function (credentials: TlsCredentials, certPa
     return info;
 };
 
-/** Describes the first certificate in a PEM file: the server's own, ahead of its chain. */
-export const describeCertificate = function (cert: Buffer): CertificateInfo {
-    const x509 = new X509Certificate(cert);
+/**
+ * Describes the first certificate in a PEM file, the server's own ahead of its chain, or one a TLS
+ * server presented (see ProxyCertificateCheck).
+ */
+export const describeCertificate = function (cert: Buffer | X509Certificate): CertificateInfo {
+    const x509 = cert instanceof X509Certificate ? cert : new X509Certificate(cert);
     return {
         fingerprint256: x509.fingerprint256,
         names: x509.subjectAltName ?? oneLine(x509.subject),
@@ -112,6 +115,25 @@ export const describeCertificate = function (cert: Buffer): CertificateInfo {
         // marked as a server's only (PowerShell's New-SelfSignedCertificate makes them like that).
         selfSigned: x509.subject === x509.issuer && x509.verify(x509.publicKey),
     };
+};
+
+// How long before a certificate expires the server warns about it, at most. certbot renews a
+// 90-day certificate 30 days ahead, so one that gets this close was not renewed. A short-lived
+// certificate (Let's Encrypt also issues 6-day ones) is warned about only in the last fifth of its
+// lifetime, so that it is not warned about all the time.
+const EXPIRY_WARNING_MILLIS = 7 * 24 * 60 * 60 * 1000;
+const EXPIRY_WARNING_SHARE = 0.2;
+
+export type Validity = 'valid' | 'expiring' | 'expired' | 'not-yet-valid';
+
+/** Whether the certificate is valid at `now`, and whether it is time to warn about its expiry. */
+export const validityAt = function (info: CertificateInfo, now: number): Validity {
+    if (now < info.validFrom.getTime()) return 'not-yet-valid';
+    if (now >= info.validTo.getTime()) return 'expired';
+
+    const lifetime = info.validTo.getTime() - info.validFrom.getTime();
+    const warnFrom = info.validTo.getTime() - Math.min(EXPIRY_WARNING_MILLIS, lifetime * EXPIRY_WARNING_SHARE);
+    return now >= warnFrom ? 'expiring' : 'valid';
 };
 
 /** One line for the log: what the certificate is for, who issued it, until when, and its fingerprint. */

@@ -8,7 +8,7 @@ import { networkInterfaces, tmpdir } from 'os';
 import * as path from 'path';
 import { Subject, Subscription } from 'rxjs';
 import wavefile from 'wavefile';
-import { VoiceServer, voiceSocketOptions, wavHeader } from '../../src/server/modules/web/voice-server.js';
+import { VoiceServer, ipv6SocketsTakeIPv4, voiceSocketOptions, wavHeader } from '../../src/server/modules/web/voice-server.js';
 import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../../src/server/modules/web/voice-packet.js';
 import { UnityClient, UnityClientSource } from '../../src/server/modules/web/unity-client-addresses.js';
 import { ConsoleLog, LogLevel, LogMessage, Service } from '../../src/server/modules/core/index.js';
@@ -958,7 +958,31 @@ describe('VoiceServer', () => {
 
             unity.disconnect(mapped);
             await settled();
-            expect([ ...internals.clients.keys() ]).toEqual([ '::ffff:192.0.2.2:5002' ]);
+            expect([ ...internals.clients.keys() ]).toEqual([ '192.0.2.2:5002' ]);
+        });
+
+        // A dual-stack VOICE_HOST reports an IPv4 sender as ::ffff:192.0.2.9. The log names it by its
+        // IPv4 address, while the packets to it still go to the address the socket reported.
+        it('names an IPv4-mapped sender by its IPv4 address in the log', async () => {
+            const sent = relays(internals.udpSocket);
+            unity.connect('lab', '192.0.2.1');
+            unity.connect('lab', '192.0.2.2');
+            withClock(at => {
+                deliver(internals.udpSocket, '::ffff:192.0.2.1', 5001, voicePacket(1, 0, [], LAB));
+                deliver(internals.udpSocket, '::ffff:192.0.2.2', 5002, voicePacket(2, 0, [], LAB));
+                for (const offset of [ 0, 3000 ]) {
+                    at(offset);
+                    deliver(internals.udpSocket, '::ffff:192.0.2.9', 5009, voicePacket(9, offset, [], LAB));
+                }
+            });
+
+            expect(sent).toEqual([ '::ffff:192.0.2.1:5001' ]);
+            expect([ ...internals.clients.keys() ].sort()).toEqual([ '192.0.2.1:5001', '192.0.2.2:5002' ]);
+            expect(logs.filter(l => l.origin === 'VoiceServer' && /New voice client/.test(l.message)).map(l => l.message.replace(/ ID: .*$/, '')))
+                .toEqual([ 'New voice client connected from 192.0.2.1:5001', 'New voice client connected from 192.0.2.2:5002' ]);
+            expect(ignoredReports().map(l => l.message.replace(/ \(further .*$/, ''))).toEqual([
+                `Ignoring voice packet from 192.0.2.9:5009 for app ${appHex(LAB)}: no Unity client of that app is connected from 192.0.2.9`,
+            ]);
         });
     });
 });
@@ -1063,6 +1087,50 @@ describe('VoiceServer startup', () => {
             expect(errors()[0]!.message).not.toContain('Voice is disabled');
             expect(consoleError).not.toHaveBeenCalled();
         });
+
+        const warnings = () => logs.filter(l => l.origin === 'VoiceServer' && l.level === LogLevel.Warn).map(l => l.message);
+
+        // A system without IPv6 cannot open the IPv6 socket of the default VOICE_HOST=::.
+        it('listens on IPv4 only when VOICE_HOST is :: and the system has no IPv6', async () => {
+            server.start(0, '::');
+            const ipv6Socket = (server as unknown as VoiceServerInternals).udpSocket;
+            ipv6Socket.emit('error', Object.assign(new Error('bind EAFNOSUPPORT :::0'), { code: 'EAFNOSUPPORT' }));
+
+            const udpSocket = (server as unknown as VoiceServerInternals).udpSocket;
+            expect(udpSocket).not.toBe(ipv6Socket);
+            await once(udpSocket, 'listening');
+            expect((udpSocket.address() as AddressInfo).family).toBe('IPv4');
+            expect(warnings()).toEqual([ 'VOICE_HOST is ::, but this system has no IPv6: the voice port listens on IPv4 only (0.0.0.0)' ]);
+            expect(errors()).toEqual([]);
+            expect(server.status.listening).toBe(true);
+        });
+
+        // Unity clients send voice over IPv4 whenever the server's name has an IPv4 address.
+        it('listens on IPv4 only when VOICE_HOST is :: and IPv6 sockets take no IPv4', async () => {
+            server.start(0, '::', () => false);
+            const udpSocket = (server as unknown as VoiceServerInternals).udpSocket;
+            await once(udpSocket, 'listening');
+
+            expect((udpSocket.address() as AddressInfo).family).toBe('IPv4');
+            expect(warnings()).toEqual([ 'VOICE_HOST is ::, but IPv6 sockets take no IPv4 on this system (net.ipv6.bindv6only=1): '
+                + 'the voice port listens on IPv4 only (0.0.0.0)' ]);
+        });
+
+        it('keeps an explicit IPv6 VOICE_HOST other than :: as it is', async () => {
+            server.start(0, '::1', () => false);
+            expect(((server as unknown as VoiceServerInternals).udpSocket as unknown as { type: string }).type).toBe('udp6');
+            expect(warnings()).toEqual([]);
+        });
+    });
+});
+
+describe('ipv6SocketsTakeIPv4', () => {
+    it.each([ [ '0\n', true ], [ '1\n', false ] ])('reads net.ipv6.bindv6only %j as %s', (value, takes) => {
+        expect(ipv6SocketsTakeIPv4(() => value)).toBe(takes);
+    });
+
+    it('takes IPv4 where there is no such file, as on macOS and Windows', () => {
+        expect(ipv6SocketsTakeIPv4(() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); })).toBe(true);
     });
 });
 

@@ -154,6 +154,17 @@ this is the server's full detail.
   Unity clients through a proxy show without TLS, the TCP row says *unencrypted, proxy TLS
   undeclared*, and the setting *Not declared*. Set without `TCP_PROXY_PROTOCOL`, it has no effect,
   and the server warns at startup. It takes only `true` or `false`.
+- **The proxy's certificate.** With TLS at the proxy the server never sees the certificate its
+  clients get, and with TLS from the proxy to the server as well the Server page showed the
+  server's own, which clients never see. New `PROXY_TLS_ADDRESSES` (`host[:port]`, 443 by default)
+  names where the proxy serves TLS. `ProxyCertificateCheck` connects to each at startup and every
+  hour as a client would (`rejectUnauthorized: false`, then `authorized` and `authorizationError`,
+  which cover the certificate authorities and the host name), groups the addresses by
+  certificate, and logs each change: a new certificate, one clients would refuse, one about to
+  expire (the same rules as `TLS_CERT`'s), an unreachable address. The Server page shows a *Proxy
+  TLS certificate* section per certificate, and titles the server's own *TLS certificate (this
+  server)* when there are both. The addresses are a setting, never a request's Host header, which
+  a client could point anywhere.
 - **TCP port:** with new `TCP_PROXY_PROTOCOL=true`, a connection from a trusted peer must start
   with a PROXY protocol header, version 1 (nginx's `proxy_protocol on`) or 2. It is read ahead of a
   TLS handshake, also when it arrives in pieces. The client it names is the one in every log line
@@ -211,7 +222,7 @@ this is the server's full detail.
 
 - **Service log messages are printed to stdout and stderr**, one line each
   (`<ISO time> <LEVEL> [group/service] message`, errors and warnings on stderr), so they appear
-  in `docker logs`: refused clients, `store.json` write failures, TCP worker crashes and restarts,
+  in `docker logs`: refused clients, data store errors, TCP worker crashes and restarts,
   and client log lines at their level. Before, they reached only the admin UI's in-memory log. New
   `CONSOLE_LOG_LEVEL` (`error`, `warn`, `info` or `debug`; default `info`, and an invalid value
   stops startup) and `CONSOLE_LOG_BROADCAST_TRAFFIC` (default `false`). Control characters are
@@ -402,6 +413,16 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   that has only an AAAA record. With an A record as well, colibri-unity 2.0.0 connects and sends
   voice over IPv4, so TCP and voice come from the same address, as the voice check needs. See
   [Configuration](https://colibri.hci.uni-konstanz.de/server/configuration#all-variables).
+- **IPv6 and IPv4 by default.** `WEBSERVER_HOST`, `TCP_HOST` and `VOICE_HOST` default to `::`
+  instead of 1.x's `0.0.0.0`, so a server without Docker is reachable over IPv6 without settings,
+  and so is a container on a Docker network with IPv6. Web and TCP hand `::` to `listen()` as no
+  host: Node then listens on `::` with IPv4 as well, or on `0.0.0.0` on a system without IPv6.
+  Voice falls back to `0.0.0.0` on `EAFNOSUPPORT`, and also where IPv6 UDP sockets take no IPv4
+  (`net.ipv6.bindv6only=1`), since libuv leaves that setting alone for UDP and Unity clients send
+  voice over IPv4 whenever the server name has an A record. Each fallback is a warning in the log.
+  An IPv4 client of a dual-stack port is named by its IPv4 address, not `::ffff:<IPv4 address>`,
+  in the log, on the monitoring page and in `colibri::clients`. IPv6 hosts are in brackets in
+  the log and on the _Server_ page: `[::]:9211`.
 
 ### Load and lost connections
 
@@ -546,7 +567,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
 - **Any name is an ordinary name.** The store is keyed by `Map`s, so app and value names like
   `__proto__`, `constructor` or `toString` are stored like any other. Before,
   `DELETE /api/store/constructor/keys` broke every HTTP route until a restart, and
-  `PUT /api/store/__proto__/x` wrote onto `Object.prototype`. The `store.json` format is unchanged.
+  `PUT /api/store/__proto__/x` wrote onto `Object.prototype`.
 - **Errors are JSON**, `{ "error": … }`, with no stack trace or file path, and are logged. `400`
   (malformed JSON) and `413` (too large) keep their status, and every response, errors included,
   carries the CORS headers, so a browser client sees the error rather than a network failure.
@@ -561,15 +582,36 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   `{}`. colibri-unity's `Store` and colibri-web's `setRestObject` send a JSON body for every value,
   `null` included, except that `setRestObject(key, undefined)` sends none: it now gets `false` back
   and stores nothing, where it used to store `{}`. Store `null` instead.
-- Saving `store.json` is debounced (~250 ms) and atomic (write `store.json.tmp`, then rename), and
-  a save waits for the one still in flight, so two quick writes cannot interleave into a partial
-  file. The store is flushed on crash paths as well as on a clean shutdown, but only when it holds
-  something `store.json` does not, so stopping a server that cannot write its `DATA_ROOT` no
-  longer logs an `EACCES` when nothing changed. A save that failed is tried again at the latest
-  at shutdown.
-- The store is loaded in `Service.init()` via `fs/promises`, so requests can no longer be served
-  before it has loaded. A `store.json` whose top level, or one of whose apps, is not a JSON
-  object is skipped with an error instead of breaking every request.
+- The store is opened in `Service.init()`, so requests can no longer be served before it has
+  loaded. A `store.json` whose top level, or one of whose apps, is not a JSON object is skipped with
+  an error instead of breaking every request.
+
+- **Kept in SQLite.** The store moved from `store.json` to `store.db` (`node:sqlite`, built into
+  Node 24, no dependency). store.json held every value in memory and was rewritten as a whole after
+  every change, on the main thread: 26 ms per save for 5 MB of JSON, 640 ms for 95 MB, during which no
+  realtime message was relayed. With 100 MB stored and a PUT every 50 ms, a small GET took 682 ms at
+  p99 with store.json, 4.4 ms with SQLite. `store_values` is a rowid table with a unique index on
+  `(app, name)` and one on `updated_at` for expiry. A `WITHOUT ROWID` table keyed by `(app, name)`
+  keeps each row in the key's B-tree, which made listing 450 names next to 100 MB of values take
+  28 ms instead of 0.2 ms. A `store.json` is imported once, into a new `store.db`, then renamed to
+  `store.json.imported-<date>` (or `.corrupt-<date>` if it could not be loaded in full). Imported
+  values count as written at the import. A `store.db` that cannot be opened or written (SQLite opens
+  a file it may not write read-only, without a word) leaves the store in memory, starting with the
+  values in `store.db` if it can still be read, or else `store.json`'s. Apps and names are listed
+  in key order, no longer in creation order, and an app exists while it holds a value: `GET` and
+  `DELETE /api/store/:app` answer 404 once its last value is gone. A worker thread with its own
+  connection checkpoints every second (`StoreCheckpointer`), since an automatic checkpoint synced
+  to disk inside a PUT, on the main thread: 16 to 79 ms about every 500 small PUTs. The server's
+  connection checkpoints itself only after 4000 pages (about 16 MiB) of log, and
+  `journal_size_limit` cuts the log back to 16 MiB: the worker's PASSIVE checkpoints never start
+  the log over, so under a few hundred PUTs a second it grew without limit.
+- **Expiry and a size limit.** Values not written for `STORE_EXPIRY_DAYS` (default 30, `0` never)
+  are deleted at startup and every hour. `STORE_MAX_MB` (default `0`, off) answers 507 to a `PUT`
+  that would take the store above it; a replaced value counts only by how much it grows. Without
+  either, anyone who can reach the server could grow the store until the disk is full. A failing
+  sweep is logged and tried again an hour later.
+- `node dist/server/store-export.js > store.json` prints the store in the `store.json` shape, also
+  while the server runs. Such a file in a data directory without `store.db` is imported on start.
 
 The endpoints are documented under [REST store](protocol.md#rest-store).
 

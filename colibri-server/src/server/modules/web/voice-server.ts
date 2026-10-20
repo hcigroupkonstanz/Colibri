@@ -1,6 +1,7 @@
 import { CONNECTION_LINE, Service } from '../core/index.js';
 import * as dgram from 'dgram';
 import { AddressInfo, isIPv6 } from 'net';
+import { readFileSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { endianness } from 'os';
 import * as path from 'path';
@@ -12,7 +13,8 @@ import {
     VoiceCodec,
 } from './voice-packet.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
-import { UnityClientAddresses, UnityClientSource, normalizeAddress } from './unity-client-addresses.js';
+import { hostPort, ipv4OnlyWarning, normalizeAddress } from '../networking/addresses.js';
+import { UnityClientAddresses, UnityClientSource } from './unity-client-addresses.js';
 
 // Recordings can run for minutes at 48kHz, so a plain number[] would mean millions of
 // boxed-double pushes. This keeps samples in a flat Int16Array, growing (doubling) only
@@ -86,7 +88,10 @@ interface Rejection {
     last: number;
 }
 
-const voiceClientKey = (address: string, port: number): string => `${address}:${port}`;
+// A voice source as the log names it, and its key in `clients`. An IPv4 sender is named by its IPv4
+// address, also on a dual-stack VOICE_HOST, where the socket reports it as ::ffff:<IPv4 address>.
+// The packets to it still go to the address the socket reported (VoiceClient.ip).
+const voiceClientKey = (address: string, port: number): string => hostPort(normalizeAddress(address), port);
 const groupKey = (address: string, appId: number): string => `${address} ${appId}`;
 
 // A voice client sends a packet every 20 ms while it broadcasts (VoiceBroadcast's default frame).
@@ -149,6 +154,19 @@ export const wavHeader = function (samplingRate: number, dataBytes: number): Buf
  */
 export const voiceSocketOptions = function (hostname: string): dgram.SocketOptions {
     return isIPv6(hostname) ? { type: 'udp6', ipv6Only: false } : { type: 'udp4' };
+};
+
+/**
+ * Whether a UDP socket on `::` takes IPv4 as well. For UDP, unlike TCP, libuv leaves IPV6_V6ONLY as
+ * the system has it, except on Windows, where it clears it. On Linux that is net.ipv6.bindv6only,
+ * 0 unless changed. Elsewhere, macOS included, IPv6 sockets take IPv4 by default.
+ */
+export const ipv6SocketsTakeIPv4 = function (read: (file: string) => string = file => readFileSync(file, 'utf8')): boolean {
+    try {
+        return read('/proc/sys/net/ipv6/bindv6only').trim() !== '1';
+    } catch {
+        return true;
+    }
 };
 
 const formatAppId = (appId: number): string => `0x${appId.toString(16).padStart(8, '0')}`;
@@ -239,12 +257,30 @@ export class VoiceServer extends Service {
         return { listening: this.listening, recording: this.recordingVoiceData, samplingRate: this.samplingRate, clients: this.clients.size };
     }
 
-    public start(voicePort: number, hostname: string) {
+    // VOICE_HOST=::, the default, listens on IPv6 and IPv4. Where that is not possible, voice
+    // listens on IPv4 only, as Unity clients send voice over IPv4 whenever the server's name has an
+    // IPv4 address: on a system whose IPv6 sockets take no IPv4 (see ipv6SocketsTakeIPv4), and on
+    // one without IPv6, which fails the bind (see the error handler).
+    public start(voicePort: number, hostname: string, ipv6TakesIPv4: () => boolean = ipv6SocketsTakeIPv4) {
+        if (hostname === '::' && !ipv6TakesIPv4()) {
+            this.logWarning(ipv4OnlyWarning('VOICE_HOST', 'voice port', 'IPv6 sockets take no IPv4 on this system (net.ipv6.bindv6only=1)'));
+            hostname = '0.0.0.0';
+        }
+        this.openSocket(voicePort, hostname);
+
+        // Check if clients disconnected every second
+        this.disconnectCheckInterval = setInterval(() => {
+            this.pruneReports(Date.now());
+            void this.checkClientsDisconnected();
+        }, 1000);
+    }
+
+    private openSocket(voicePort: number, hostname: string): void {
         this.udpSocket = dgram.createSocket(voiceSocketOptions(hostname));
         this.udpSocket.on('listening', () => {
             this.listening = true;
             const address = this.udpSocket.address() as AddressInfo;
-            this.logInfo(`Voice server listening on ${address.address}:${address.port}`);
+            this.logInfo(`Voice server listening on ${hostPort(address.address, address.port)}`);
             this.logInfo(`Voice server Sampling Rate: ${this.samplingRate} Hz`);
             if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
         });
@@ -327,7 +363,7 @@ export class VoiceServer extends Service {
                 if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
                 this.appClients = undefined;
                 this.logDebug(
-                    `New voice client connected from ${remote.address}:${remote.port} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
+                    `New voice client connected from ${clientKey} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
                         + (admission === 'proxy' ? ' (through a trusted proxy, unchecked)' : ''),
                     CONNECTION_LINE
                 );
@@ -337,7 +373,7 @@ export class VoiceServer extends Service {
                 }
             } else if (voiceClient.appId !== appId) {
                 // Its app name changed: from now on it hears, and is heard by, the new app.
-                this.logDebug(`Voice client ${remote.address}:${remote.port} ID: ${voiceClient.userId} moved from app ${formatAppId(voiceClient.appId)} to app ${formatAppId(appId)}`);
+                this.logDebug(`Voice client ${clientKey} ID: ${voiceClient.userId} moved from app ${formatAppId(voiceClient.appId)} to app ${formatAppId(appId)}`);
                 this.leaveGroup(voiceClient);
                 voiceClient.appId = appId;
                 if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
@@ -379,25 +415,34 @@ export class VoiceServer extends Service {
         // only, never in the admin UI's log, and as nothing more than
         // 'bind EADDRINUSE 0.0.0.0:9013', without saying what had failed or what it meant.
         this.udpSocket.on('error', (err: NodeJS.ErrnoException) => {
+            if (!this.listening && hostname === '::' && err.code === 'EAFNOSUPPORT') {
+                this.logWarning(ipv4OnlyWarning('VOICE_HOST', 'voice port'));
+                this.closeSocket();
+                this.openSocket(voicePort, '0.0.0.0');
+                return;
+            }
             if (!this.listening) {
                 const inUse = err.code === 'EADDRINUSE' ? ', which another process is already using' : '';
-                this.logError(`Voice server could not listen on UDP ${hostname}:${voicePort}${inUse}: ${err.message}. `
+                this.logError(`Voice server could not listen on UDP ${hostPort(hostname, voicePort)}${inUse}: ${err.message}. `
                     + 'Voice is disabled until the server is restarted with a VOICE_HOST and VOICE_PORT it can listen on; '
                     + 'everything else keeps running.', false);
                 return;
             }
             // Once it listens, this is a failed receive, which a peer could cause at packet rate.
             if (!this.claimReport('socket error', Date.now())) return;
-            this.logError(`Voice server socket error on UDP ${hostname}:${voicePort}: ${err.message}`
+            this.logError(`Voice server socket error on UDP ${hostPort(hostname, voicePort)}: ${err.message}`
                 + ` (further ones are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
         });
         this.udpSocket.bind(voicePort, hostname);
+    }
 
-        // Check if clients disconnected every second
-        this.disconnectCheckInterval = setInterval(() => {
-            this.pruneReports(Date.now());
-            void this.checkClientsDisconnected();
-        }, 1000);
+    private closeSocket(): void {
+        // Throws if the socket is closed already.
+        try {
+            this.udpSocket.close();
+        } catch {
+            // Nothing left to close.
+        }
     }
 
     // Tolerates never having been started, for the same reason as SocketIOServer.stop().
@@ -408,14 +453,8 @@ export class VoiceServer extends Service {
     // dropped their whole recording without a word.
     public async stop(): Promise<void> {
         if (this.disconnectCheckInterval) clearInterval(this.disconnectCheckInterval);
-        if (this.udpSocket) {
-            // Throws if the socket is closed already. That must not cost the recordings below.
-            try {
-                this.udpSocket.close();
-            } catch {
-                // Nothing left to close.
-            }
-        }
+        // A socket closed already must not cost the recordings below.
+        if (this.udpSocket) this.closeSocket();
 
         // A save the last disconnect check started may still be writing. Waiting for it keeps
         // the two from writing at once; the clients it is saving are no longer in the map.
@@ -446,21 +485,21 @@ export class VoiceServer extends Service {
         // about who sent it: nothing can be checked, or counted, there. Asked first, so that a
         // Unity client on the proxy's machine does not have the voice of everyone behind the proxy
         // taken for its own, and dropped when it leaves.
+        const normalized = normalizeAddress(address);
         if (this.trustProxy(address, 0)) {
-            this.reportUncheckedProxy(address);
+            this.reportUncheckedProxy(normalized);
             return 'proxy';
         }
 
-        const normalized = normalizeAddress(address);
         const unityClients = this.unityClients.count(normalized, appId);
         if (unityClients === 0) {
-            this.reportNoUnityClient(source, address, appId, nowMillis);
+            this.reportNoUnityClient(source, normalized, appId, nowMillis);
             return undefined;
         }
 
         const group = this.groups.get(groupKey(normalized, appId));
         if (group && group.clients.size >= unityClients && !this.dropGoneVoiceClient(group, source, nowMillis)) {
-            this.reportNoRoom(source, address, appId, unityClients, nowMillis);
+            this.reportNoRoom(source, normalized, appId, unityClients, nowMillis);
             return undefined;
         }
         return 'unity';
@@ -520,7 +559,7 @@ export class VoiceServer extends Service {
         this.clients.delete(voiceClientKey(client.ip, client.port));
         this.leaveGroup(client);
         this.appClients = undefined;
-        this.logDebug(`Voice client ${client.ip}:${client.port} disconnected ID: ${client.userId}` + (why ? `: ${why}` : ''), CONNECTION_LINE);
+        this.logDebug(`Voice client ${voiceClientKey(client.ip, client.port)} disconnected ID: ${client.userId}` + (why ? `: ${why}` : ''), CONNECTION_LINE);
         if (client.recordingData.length > 0) this.droppedRecordings.push(client);
     }
 
@@ -607,7 +646,7 @@ export class VoiceServer extends Service {
     }
 
     private reportRelayFailure(peer: VoiceClient, err: unknown, nowMillis: number): void {
-        const target = `${peer.ip}:${peer.port}`;
+        const target = voiceClientKey(peer.ip, peer.port);
         // Keyed apart from the peer's own malformed packets, so neither report hides the other.
         if (!this.claimReport(`relay to ${target}`, nowMillis)) return;
 
@@ -702,10 +741,10 @@ export class VoiceServer extends Service {
         try {
             await mkdir(this.voiceRecordingPath, { recursive: true });
             await writeFile(filename, [ wavHeader(this.samplingRate, samples.byteLength), littleEndianBytes(samples) ]);
-            this.logInfo(`Voice recording of client ID ${client.userId} (${client.ip}:${client.port}, ${seconds} s) saved to ${filename}`);
+            this.logInfo(`Voice recording of client ID ${client.userId} (${voiceClientKey(client.ip, client.port)}, ${seconds} s) saved to ${filename}`);
         } catch (err) {
             // An fs error names the file itself.
-            this.logError(`Failed to save the voice recording of client ID ${client.userId} (${client.ip}:${client.port}, ${seconds} s): `
+            this.logError(`Failed to save the voice recording of client ID ${client.userId} (${voiceClientKey(client.ip, client.port)}, ${seconds} s): `
                 + `${err instanceof Error ? err.message : String(err)}`, false);
         }
     }
