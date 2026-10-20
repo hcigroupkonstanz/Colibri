@@ -1,11 +1,11 @@
 .hero {
-  padding: 3rem 0 2rem;
+  padding: 3rem 0 2.5rem;
   text-align: center;
 }
 
 .heroImage {
   width: 100%;
-  max-width: 640px;
+  max-width: 560px;
 }
 
 .title {
@@ -16,13 +16,86 @@
 .tagline {
   font-size: 1.25rem;
   color: var(--ifm-color-emphasis-700);
+  margin: 0;
+}
+
+/* The key areas: the focus of the page. */
+.areas {
+  padding: 2.5rem 0;
+  background: var(--ifm-color-emphasis-100);
+}
+
+/* Four areas side by side, two by two below 1200px, one below each other on phones. */
+.areaGrid {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 1200px) {
+  .areaGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .areaGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.area {
+  height: 100%;
+  padding: 1rem 0.5rem 1.5rem;
+  text-align: center;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1rem;
+  border-radius: 50%;
+  background: var(--ifm-color-primary);
+}
+
+.icon svg {
+  width: 2rem;
+  height: 2rem;
+  fill: none;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.areaTitle {
+  font-size: 1.25rem;
+}
+
+.snippet {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.sectionTitle {
+  text-align: center;
+  margin-bottom: 1.5rem;
 }
 
 .card {
   display: block;
   height: 100%;
+  padding: 1.5rem;
   color: inherit;
   border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-card-border-radius);
   transition: border-color 0.2s;
 }
 
@@ -30,4 +103,23 @@
   color: inherit;
   text-decoration: none;
   border-color: var(--ifm-color-primary);
+}
+
+.cardLink {
+  color: var(--ifm-color-primary);
+  font-weight: var(--ifm-font-weight-semibold);
+}
+
+.cardMuted {
+  border-style: dashed;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.cardMuted:hover {
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+.server {
+  text-align: center;
+  margin: 0.5rem 0 2rem;
 }
