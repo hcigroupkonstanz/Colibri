@@ -65,10 +65,13 @@ reconnect.
 - `SetActive(false)` hides the copies on the other clients, and `SetActive(true)` shows them. Only the object's own
   active state (`activeSelf`) is synced. Deactivating a parent has no effect on the other clients. With
   `SyncActive` off, the active state stays local.
+- A placed object saved switched off in the scene appears on every client once one client switches it on.
 - Disabling only the `SyncTransform` component pauses syncing without hiding anything. Changes made meanwhile are
   sent when you enable it again.
 - Destroying the object, or unloading its scene, e.g. by loading another scene, deletes it on the server and on all
   other clients.
+- Unloading a scene does not delete the copies of other clients' objects that a manager created in it. The manager
+  creates them again when the scene loads again.
 - After any client loads the scene again, its objects sync again between all clients that load the scene from then
   on. A client that kept the scene open lost its copies with the delete. It gets them back only by loading the scene
   again, or from a manager whose `Template` creates them ([Objects created at runtime](#objects-created-at-runtime)).
@@ -110,6 +113,9 @@ from its `Template` and syncs it. Destroying the object destroys the copies.
   `Template`.
 - The `Template` can also be an inactive object in the scene. An active one would sync as an object of its own.
 - The manager creates the copies at the top level of the scene hierarchy.
+- A prefab can have more than one `SyncTransform`, e.g. on the head and on each hand of an avatar. Leave their `Id`
+  empty: the one on the prefab's top GameObject gets the new `Id`, and each one on a child adds its path, e.g.
+  `<Id>/LeftHand`. Set the `Template` to the `SyncTransform` on the top GameObject.
 - If two managers handle the same `ModelId`, the console warns
   `Warning: Multiple instances of '…' detected with overlapping ModelID. …`.
 - If a manager without a `Template` receives an object it does not have, it warns once:

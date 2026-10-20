@@ -34,6 +34,35 @@ namespace HCIKonstanz.Colibri.Tests
         }
 
         /// <summary>
+        /// The same rule as colibri-web's getRestUri, so that a name addresses the same value on
+        /// both sides.
+        /// </summary>
+        [TestCase(" color ", "color")]
+        [TestCase("/color", "color")]
+        [TestCase(" //scores/alice", "scores/alice")]
+        [TestCase("a.b", "a.b")]
+        public void ANameLosesSurroundingSpacesAndLeadingSlashes(string name, string expected)
+        {
+            Assert.That(ColibriStore.KeyName(name), Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// A URL parser resolves "." and ".." as directory steps, and an empty name leaves none:
+        /// Delete("") addressed the app itself and deleted every value of it.
+        /// </summary>
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("   ")]
+        [TestCase("/")]
+        [TestCase(".")]
+        [TestCase("..")]
+        [TestCase(" /.. ")]
+        public void ANameThatAddressesNoValueIsRefused(string name)
+        {
+            Assert.That(ColibriStore.KeyName(name), Is.Null);
+        }
+
+        /// <summary>
         /// The server's REST_MEDIA_TYPE, which it builds from the same protocol version: a value
         /// sent as anything else is refused with 415.
         /// </summary>

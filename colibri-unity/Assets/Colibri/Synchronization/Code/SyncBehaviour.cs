@@ -12,7 +12,7 @@ using HCIKonstanz.Colibri.Core;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
-    public abstract class SyncBehaviour<T> : MonoBehaviour, SyncTicker.ITickable
+    public abstract class SyncBehaviour<T> : MonoBehaviour, SyncTicker.ITickable, ISyncedObject
         where T : SyncBehaviour<T>
     {
         private const string SupportedTypes = "bool, int, float, string, Vector2, Vector3, Quaternion, Color, JObject and arrays of those";
@@ -66,31 +66,35 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private sealed class ChangeTracker<TValue> : IChangeTracker
         {
+            private static readonly Func<TValue, TValue, bool> AreEqual = SyncValues.EqualityFor<TValue>();
+            private static readonly Func<TValue, TValue> Keep = SyncValues.CopyFor<TValue>();
+
             private readonly Func<T, TValue> _getter;
             private TValue _lastValue;
 
             public ChangeTracker(Func<T, TValue> getter, T target)
             {
                 _getter = getter;
-                _lastValue = getter(target);
+                _lastValue = Keep(getter(target));
             }
 
             public bool CaptureChange(T target)
             {
                 var current = _getter(target);
 
-                // EqualityComparer<TValue>.Default resolves to the IEquatable<> implementation
-                // for Vector3/Quaternion/..., so comparing costs nothing and boxes nothing.
-                if (EqualityComparer<TValue>.Default.Equals(current, _lastValue))
+                // See SyncValues: compared as they go on the wire. For Vector3, Quaternion and the
+                // other value types that is EqualityComparer<TValue>.Default, the IEquatable<>
+                // implementation, so comparing costs nothing and boxes nothing.
+                if (AreEqual(current, _lastValue))
                     return false;
 
-                _lastValue = current;
+                _lastValue = Keep(current);
                 return true;
             }
 
             public void Latch(T target)
             {
-                _lastValue = _getter(target);
+                _lastValue = Keep(_getter(target));
             }
         }
 
@@ -152,6 +156,16 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static void RegisterAttribute(string memberName, Type valueType, MemberInfo member)
         {
             var name = ToWireName(memberName);
+
+            // "id" is the model's id on the wire. A member of that name, `[Sync] public int ID` say,
+            // went out as the id of every update this object sent, and every client took the
+            // model it named for another object.
+            if (name == "id")
+            {
+                Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{memberName}': 'id' is the name of the model's own Id. Rename the member.");
+                return;
+            }
+
             if (_syncedAttributes.ContainsKey(name))
             {
                 Debug.LogError($"Colibri: '{typeof(T).Name}' has more than one [Sync] member named '{memberName}' (names are matched case-insensitively). Rename one of them.");
@@ -316,7 +330,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         public string ModelId = "";
         private readonly string ChannelPrefix = ToWireName(typeof(T).Name);
-        internal string Channel { get => ChannelPrefix + (String.IsNullOrEmpty(ModelId) ? "" : $"_{ModelId}"); }
+        internal string Channel { get => ChannelOf(ModelId); }
+        private string ChannelOf(string modelId) => ChannelPrefix + (String.IsNullOrEmpty(modelId) ? "" : $"_{modelId}");
 
         // Parallel to _attributeList.
         private IChangeTracker[] _trackers;
@@ -367,7 +382,152 @@ namespace HCIKonstanz.Colibri.Synchronization
         // Given its id in Awake, a fresh one: the server holds nothing for the object.
         private bool _hasMadeItsId;
 
-        private readonly TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
+        // A part of a copy that a manager built from another client's update.
+        private bool _isCopy;
+
+        // The Id and ModelId the object registered with in Awake, see KeepRegisteredId.
+        private string _registeredId;
+        private string _registeredModelId;
+
+        // A new one when the object moves to another Id (see FollowIdChange).
+        private TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
+
+        // Moved to another Id after being created here: it sends its full state once the server
+        // answers that it holds nothing for the new one.
+        private bool _announceAtFirstAnswer;
+
+        string ISyncedObject.Id => Id;
+        bool ISyncedObject.MadeItsId => _hasMadeItsId;
+
+        void ISyncedObject.TakeId(string id, bool madeHere)
+        {
+            if (!String.IsNullOrEmpty(Id))
+                return;
+            Id = id;
+            _hasMadeItsId = madeHere;
+        }
+
+        void ISyncedObject.MarkAsCopy() => _isCopy = true;
+
+        bool ISyncedObject.IsCopy => _isCopy;
+
+        string ISyncedObject.RegisteredId => _registeredId;
+
+        void ISyncedObject.KeepRegisteredId() => KeepRegisteredId();
+
+        void ISyncedObject.LatchMovedWithParent() => LatchMovedWithParent();
+
+        /// <summary>See <see cref="ISyncedObject.LatchMovedWithParent"/>; GenericSyncTransform latches its world pose.</summary>
+        private protected virtual void LatchMovedWithParent()
+        {
+        }
+
+        /// <summary>Called once <paramref name="update"/>, from the server, has been applied to this object.</summary>
+        private protected virtual void AfterUpdateApplied(JObject update)
+        {
+        }
+
+        /// <summary>Takes the member's current value as no change of this object's.</summary>
+        private protected void Latch(string memberName)
+        {
+            if (_trackers == null)
+                return;
+            var self = this as T;
+            foreach (var attribute in _attributeList)
+            {
+                if (attribute.MemberName == memberName)
+                    _trackers[attribute.Index].Latch(self);
+            }
+        }
+
+        void ISyncedObject.MarkDiscarded()
+        {
+            _hasReceivedDestroyCommand = true;
+            _nextUpdate = null;
+        }
+
+        /// <summary>
+        /// Follows an Id or ModelId changed after Awake, at the next poll: right after Instantiate,
+        /// which runs Awake, to the id of the player the object stands for, say. The object leaves
+        /// its old model and channel, asks the server for the new one, and takes the server's
+        /// state, or sends its own if the server has none and the object was created here. A
+        /// model this client created under the old Id is deleted for everyone: nobody else has
+        /// it, and other clients' copies of it would stay for good. The parts below the object
+        /// keep their Ids.
+        /// </summary>
+        /// <remarks>
+        /// The object used to go on listening under the old Id and sending under the new one: it
+        /// never took the server's answer, never synced, and its manager built a second object
+        /// from that answer. A copy that a manager built of another client's object keeps the Id
+        /// it was built with (see <see cref="KeepRegisteredId"/>).
+        /// </remarks>
+        private void FollowIdChange()
+        {
+            if (_registeredId == null || (Id == _registeredId && ModelId == _registeredModelId))
+                return;
+            if (_isCopy)
+            {
+                KeepRegisteredId();
+                return;
+            }
+
+            var oldId = _registeredId;
+            var oldChannel = ChannelOf(_registeredModelId);
+            var madeHere = _hasMadeItsId;
+
+            Sync.RemoveModelUpdateListener(oldChannel, OnModelUpdate);
+            Sync.RemoveModelDeleteListener(oldChannel, OnModelDelete);
+            SyncedIds.Deregister(oldId);
+            ModelDestroyed?.Invoke(this);
+            if (madeHere)
+            {
+                LocallyDeletedModels.Remember(oldChannel, oldId);
+                Sync.SendModelDelete(oldChannel, oldId);
+            }
+
+            // A start under the new Id: what this object sent or was told under the old one says
+            // nothing about the new model, and what it holds now is compared with the answer.
+            _nextUpdate = null;
+            _hasMadeItsId = false;
+            _hasReceivedFirstUpdate = false;
+            _isBuiltFromUpdate = false;
+            _round = null;
+            _keptInRound = null;
+            _sentInRound = null;
+            _sentValues = null;
+            _announceAtFirstAnswer = madeHere;
+            var wasReady = _isReady;
+            _isReady = new TaskCompletionSource<bool>();
+            wasReady.TrySetCanceled();
+            var self = this as T;
+            for (var i = 0; i < _trackers.Length; i++)
+                _trackers[i].Latch(self);
+
+            _registeredId = Id;
+            _registeredModelId = ModelId;
+            SyncedIds.Register(Id);
+            LocallyDeletedModels.Forget(Channel, Id);
+            Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, OnRequestedAgain);
+            Sync.AddModelDeleteListener(Channel, OnModelDelete);
+            ModelCreated?.Invoke(this);
+        }
+
+        /// <summary>
+        /// Sets an Id or ModelId changed since Awake back, with an error: for a copy a manager
+        /// built of another client's object. A model script that set Id there gave the copy
+        /// another object's Id, often this client's own.
+        /// </summary>
+        private void KeepRegisteredId()
+        {
+            if (_registeredId == null || (Id == _registeredId && ModelId == _registeredModelId))
+                return;
+
+            Debug.LogError($"Colibri: the Id or ModelId of '{name}' ({typeof(T).Name}), a copy of another client's object, was "
+                + $"changed to '{Id}' and '{ModelId}'. It keeps '{_registeredId}' and '{_registeredModelId}'. A model script must not "
+                + "set Id in Awake when it has one already, e.g. 'if (string.IsNullOrEmpty(Id)) Id = ...;'.", this);
+            Id = _registeredId;
+            ModelId = _registeredModelId;
+        }
 
         private int _tickIndex = -1;
         int SyncTicker.ITickable.TickIndex { get => _tickIndex; set => _tickIndex = value; }
@@ -410,12 +570,11 @@ namespace HCIKonstanz.Colibri.Synchronization
             Initialize();
 
             // Awake only ever runs on an object in a scene - a placed or an instantiated one,
-            // never a prefab asset - so there is no prefab case to exclude here.
+            // never a prefab asset - so there is no prefab case to exclude here. Another synced
+            // component of the object may have given this one its id already: see SyncedIds.
             if (String.IsNullOrEmpty(Id))
-            {
-                Id = Guid.NewGuid().ToString();
-                _hasMadeItsId = true;
-            }
+                SyncedIds.Assign(this, this);
+            SyncedIds.Register(Id);
 
             var self = this as T;
             _trackers = new IChangeTracker[_attributeList.Count];
@@ -449,6 +608,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, OnRequestedAgain);
             }
             Sync.AddModelDeleteListener(Channel, OnModelDelete);
+            _registeredId = Id;
+            _registeredModelId = ModelId;
 
             ModelCreated?.Invoke(this);
 
@@ -473,10 +634,20 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         protected virtual void OnDestroy()
         {
+            // Under the Id and ModelId it registered with: changed since, but not yet followed (see
+            // FollowIdChange), the listeners, the delete and the bookkeeping went to the new ones.
+            if (_registeredId != null)
+            {
+                Id = _registeredId;
+                ModelId = _registeredModelId;
+            }
+
             // An update the send-rate limit still holds is dropped with the object, and the
             // delete below goes out at once: sent after the delete, the update would bring the
             // object back to life on the server.
             SyncTicker.Deregister(this);
+            if (HasAwoken)
+                SyncedIds.Deregister(Id);
 
             Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
             Sync.RemoveModelDeleteListener(Channel, OnModelDelete);
@@ -491,6 +662,16 @@ namespace HCIKonstanz.Colibri.Synchronization
             // (SingletonLifetime.IsQuitting) is raised before teardown whatever the object's state.
             if (_isQuitting || SingletonLifetime.IsQuitting || _hasReceivedDestroyCommand)
                 return;
+
+            // A copy of another client's object goes with its scene, and a manager builds it again
+            // when the scene loads again. Deleted, it was gone for everyone, its owner included: a
+            // client reloading the scene to start over took every other client's avatar with it.
+            // Destroying the copy on purpose still deletes it.
+            if (_isCopy && !gameObject.scene.isLoaded)
+            {
+                _isReady.TrySetCanceled();
+                return;
+            }
 
             // So that an update another client sent before the server had this delete does not
             // make a manager build the object again - see LocallyDeletedModels.
@@ -519,6 +700,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             // A component that is switched off on its own (enabled = false) neither latches nor
             // sends, so whatever changed meanwhile is picked up as a normal change once it is
             // back on.
+            FollowIdChange();
+
             if (!enabled)
                 return;
 
@@ -692,6 +875,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     UpdateAttribute(prop.Key, prop.Value);
                 }
 
+                AfterUpdateApplied(data);
+
                 _isReady.TrySetResult(true);
 
                 // A bare { id } is the server's answer to a model::request for a model it holds
@@ -715,6 +900,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 // again.
                 if (!isFirstUpdate && data.Count == 1 && !_hasReceivedDestroyCommand)
                     AddFullState();
+                else if (isFirstUpdate && _announceAtFirstAnswer && data.Count == 1 && !_hasReceivedDestroyCommand)
+                    AddFullState();
+                if (isFirstUpdate)
+                    _announceAtFirstAnswer = false;
             }
         }
 
@@ -977,6 +1166,69 @@ namespace HCIKonstanz.Colibri.Synchronization
             // send-rate limit holds it back.
         }
 
+        private static readonly object UnsupportedValue = new object();
+
+        private static object ReadValue(Type type, JToken value)
+        {
+            if (type == typeof(bool))
+                return value.Value<bool>();
+            if (type == typeof(int))
+                return value.Value<int>();
+            if (type == typeof(float))
+                return value.Value<float>();
+            if (type == typeof(string))
+                return value.Value<string>();
+            if (type == typeof(Vector2))
+                return value.ToVector2Strict();
+            if (type == typeof(Vector3))
+                return value.ToVector3Strict();
+            if (type == typeof(Quaternion))
+                return value.ToQuaternionStrict();
+            if (type == typeof(Color))
+                return value.ToColorStrict();
+            // A JSON null or a single value is no array: it used to become an empty one.
+            if (type == typeof(bool[]))
+                return value.ArrayStrict().Select(x => (bool)x).ToArray();
+            if (type == typeof(int[]))
+                return value.ArrayStrict().Select(x => (int)x).ToArray();
+            if (type == typeof(float[]))
+                return value.ArrayStrict().Select(x => (float)x).ToArray();
+            if (type == typeof(string[]))
+                return value.ArrayStrict().Select(x => (string)x).ToArray();
+            if (type == typeof(Vector2[]))
+                return value.ArrayStrict().Select(x => x.ToVector2Strict()).ToArray();
+            if (type == typeof(Vector3[]))
+                return value.ArrayStrict().Select(x => x.ToVector3Strict()).ToArray();
+            if (type == typeof(Quaternion[]))
+                return value.ArrayStrict().Select(x => x.ToQuaternionStrict()).ToArray();
+            if (type == typeof(Color[]))
+                return value.ArrayStrict().Select(x => x.ToColorStrict()).ToArray();
+            if (type == typeof(JObject))
+            {
+                // A JObject member that is null on the sender arrives as a JSON null, which is a
+                // JValue: cast to JObject, it threw on every client that received it.
+                if (value.Type == JTokenType.Null)
+                    return null;
+                return value as JObject ?? throw new InvalidCastException($"{value.Type} is not a JSON object");
+            }
+            return UnsupportedValue;
+        }
+
+        // The members whose unreadable value has been reported, so that a sender that keeps
+        // sending one is reported once.
+        private HashSet<string> _warnedUnreadable;
+
+        private void WarnUnreadable(SyncedAttribute attribute, JToken value, Exception exception)
+        {
+            if (!(_warnedUnreadable ??= new HashSet<string>()).Add(attribute.Name))
+                return;
+            var text = value.ToString(Newtonsoft.Json.Formatting.None);
+            if (text.Length > 100)
+                text = text.Substring(0, 100) + "...";
+            Debug.LogWarning($"Colibri: '{name}' ({Id}) received {text} for [Sync] {attribute.MemberName}, which is a "
+                + $"{attribute.PropertyType.Name}: {exception.Message} Ignoring it. This is logged once per member.");
+        }
+
         private void UpdateAttribute(string name, JToken value)
         {
             if (!_syncedAttributes.ContainsKey(name))
@@ -988,42 +1240,28 @@ namespace HCIKonstanz.Colibri.Synchronization
             var self = this as T;
             var attribute = _syncedAttributes[name];
 
-            if (attribute.PropertyType == typeof(bool))
-                attribute.SetBoxed(self, value.Value<bool>());
-            else if (attribute.PropertyType == typeof(int))
-                attribute.SetBoxed(self, value.Value<int>());
-            else if (attribute.PropertyType == typeof(float))
-                attribute.SetBoxed(self, value.Value<float>());
-            else if (attribute.PropertyType == typeof(string))
-                attribute.SetBoxed(self, value.Value<string>());
-            else if (attribute.PropertyType == typeof(Vector2))
-                attribute.SetBoxed(self, value.ToVector2());
-            else if (attribute.PropertyType == typeof(Vector3))
-                attribute.SetBoxed(self, value.ToVector3());
-            else if (attribute.PropertyType == typeof(Quaternion))
-                attribute.SetBoxed(self, value.ToQuaternion());
-            else if (attribute.PropertyType == typeof(Color))
-                attribute.SetBoxed(self, value.ToColor());
-            else if (attribute.PropertyType == typeof(bool[]))
-                attribute.SetBoxed(self, value.Select(x => (bool)x).ToArray());
-            else if (attribute.PropertyType == typeof(int[]))
-                attribute.SetBoxed(self, value.Select(x => (int)x).ToArray());
-            else if (attribute.PropertyType == typeof(float[]))
-                attribute.SetBoxed(self, value.Select(x => (float)x).ToArray());
-            else if (attribute.PropertyType == typeof(string[]))
-                attribute.SetBoxed(self, value.Select(x => (string)x).ToArray());
-            else if (attribute.PropertyType == typeof(Vector2[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToVector2()).ToArray());
-            else if (attribute.PropertyType == typeof(Vector3[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToVector3()).ToArray());
-            else if (attribute.PropertyType == typeof(Quaternion[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToQuaternion()).ToArray());
-            else if (attribute.PropertyType == typeof(Color[]))
-                attribute.SetBoxed(self, value.Select(x => x.ToColor()).ToArray());
-            else if (attribute.PropertyType == typeof(JObject))
-                attribute.SetBoxed(self, value);
-            else
+            // Read first, set after, so that only a value that cannot be read is caught here: an
+            // exception from a [Sync] setter in application code goes on to Sync's dispatch, which
+            // reports it. A value of the wrong type, or a JSON null, used to throw out of the
+            // update, and every member after it in the update was lost.
+            object read;
+            try
+            {
+                read = ReadValue(attribute.PropertyType, value);
+            }
+            catch (Exception e) when (e is InvalidCastException || e is FormatException || e is OverflowException
+                || e is ArgumentException || e is InvalidOperationException)
+            {
+                WarnUnreadable(attribute, value, e);
+                return;
+            }
+
+            if (read == UnsupportedValue)
+            {
                 Debug.LogError($"Unable to update attribute {name}: Unsupported type {attribute.PropertyType}");
+                return;
+            }
+            attribute.SetBoxed(self, read);
 
             // What the server sent is now the known state, not a change for the poll to report.
             // This used to be a per-attribute "received, swallow the next change" flag instead,
@@ -1051,6 +1289,89 @@ namespace HCIKonstanz.Colibri.Synchronization
             // disagree for good. Dropped, they all agree on the value this client now shows.
             if (_nextUpdate != null && _nextUpdate.Remove(attribute.Name) && _nextUpdate.Count == 1)
                 _nextUpdate = null;
+        }
+    }
+
+    /// <summary>
+    /// How a [Sync] member's values are compared for a change, and kept to compare the next one
+    /// with: as they go on the wire.
+    /// </summary>
+    /// <remarks>
+    /// Arrays and JObjects used to be compared by reference. A getter that builds the value, such
+    /// as <c>[Sync] public Vector3[] Points => _points.ToArray();</c>, then made a change in every
+    /// poll: the member went out at the send-rate limit for good, and every client that applied it
+    /// read a new array again and sent it back. Changed in place, the same array was no change.
+    /// Each is now compared element by element, or with JToken.DeepEquals, against a copy.
+    ///
+    /// A Color goes on the wire as #RRGGBBAA, 8 bits a channel. Compared exactly, a color set in
+    /// every frame, such as Color.gray, differed from the rounded one every other client applied,
+    /// so each of them sent it back, and on again. Colors are compared as Color32.
+    ///
+    /// The comparers are made for each supported type by name, so IL2CPP compiles each of them.
+    /// </remarks>
+    internal static class SyncValues
+    {
+        internal static Func<TValue, TValue, bool> EqualityFor<TValue>()
+        {
+            var type = typeof(TValue);
+            object equality =
+                type == typeof(Color) ? (object)new Func<Color, Color, bool>(SameOnTheWire) :
+                type == typeof(JObject) ? (object)new Func<JObject, JObject, bool>(JToken.DeepEquals) :
+                type == typeof(bool[]) ? (object)new Func<bool[], bool[], bool>(SequenceEqual) :
+                type == typeof(int[]) ? (object)new Func<int[], int[], bool>(SequenceEqual) :
+                type == typeof(float[]) ? (object)new Func<float[], float[], bool>(SequenceEqual) :
+                type == typeof(string[]) ? (object)new Func<string[], string[], bool>(SequenceEqual) :
+                type == typeof(Vector2[]) ? (object)new Func<Vector2[], Vector2[], bool>(SequenceEqual) :
+                type == typeof(Vector3[]) ? (object)new Func<Vector3[], Vector3[], bool>(SequenceEqual) :
+                type == typeof(Quaternion[]) ? (object)new Func<Quaternion[], Quaternion[], bool>(SequenceEqual) :
+                type == typeof(Color[]) ? (object)new Func<Color[], Color[], bool>(SameOnTheWire) :
+                (object)null;
+            return equality as Func<TValue, TValue, bool> ?? EqualityComparer<TValue>.Default.Equals;
+        }
+
+        internal static Func<TValue, TValue> CopyFor<TValue>()
+        {
+            if (typeof(TValue).IsArray)
+                return value => value == null ? value : (TValue)((Array)(object)value).Clone();
+            if (typeof(TValue) == typeof(JObject))
+                return value => value == null ? value : (TValue)(object)((JObject)(object)value).DeepClone();
+            return value => value;
+        }
+
+        internal static bool SameOnTheWire(Color a, Color b)
+        {
+            Color32 x = a;
+            Color32 y = b;
+            return x.r == y.r && x.g == y.g && x.b == y.b && x.a == y.a;
+        }
+
+        private static bool SameOnTheWire(Color[] a, Color[] b)
+        {
+            if (ReferenceEquals(a, b))
+                return true;
+            if (a == null || b == null || a.Length != b.Length)
+                return false;
+            for (var i = 0; i < a.Length; i++)
+            {
+                if (!SameOnTheWire(a[i], b[i]))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool SequenceEqual<TElement>(TElement[] a, TElement[] b)
+        {
+            if (ReferenceEquals(a, b))
+                return true;
+            if (a == null || b == null || a.Length != b.Length)
+                return false;
+            var comparer = EqualityComparer<TElement>.Default;
+            for (var i = 0; i < a.Length; i++)
+            {
+                if (!comparer.Equals(a[i], b[i]))
+                    return false;
+            }
+            return true;
         }
     }
 }

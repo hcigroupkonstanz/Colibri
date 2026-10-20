@@ -1,10 +1,12 @@
 using System;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using HCIKonstanz.Colibri.Synchronization;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace HCIKonstanz.Colibri.Tests
@@ -32,6 +34,15 @@ namespace HCIKonstanz.Colibri.Tests
 
         private class InventoryItemManager : SyncBehaviourManager<InventoryItem>
         {
+        }
+
+        private class IdMemberModel : SyncBehaviour<IdMemberModel>
+        {
+            [Sync]
+            public int ID = 0;
+
+            [Sync]
+            public int Score = 0;
         }
 
         private CultureInfo _previousCulture;
@@ -87,6 +98,20 @@ namespace HCIKonstanz.Colibri.Tests
 
             Assert.That(manager.Channel, Is.EqualTo("inventoryitem"),
                 "The manager listens on a different channel from the models it is meant to create");
+        }
+
+        /// <summary>
+        /// "id" is the model's id on the wire: a member of that name went out as the id of every
+        /// update, and the other clients took the model it named for another object.
+        /// </summary>
+        [Test]
+        public void AMemberNamedIdIsRefused()
+        {
+            LogAssert.Expect(LogType.Error, new Regex(@"^Colibri: cannot synchronize 'IdMemberModel\.ID': 'id' is the name of the model's own Id"));
+
+            var names = SyncBehaviour<IdMemberModel>.SyncedNames.ToArray();
+
+            Assert.That(names, Is.EqualTo(new[] { "score" }));
         }
     }
 }

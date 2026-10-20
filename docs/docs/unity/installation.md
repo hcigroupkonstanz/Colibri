@@ -100,8 +100,9 @@ To see Colibri at work, you need two clients with the same configuration. You ha
 
 For example, with the SendData sample:
 
-1. [Configure](./configuration.md) Colibri with the app name `myAppName` and a server address, and enable *Run In
-   Background/Run Without Focus*.
+1. [Configure](./configuration.md) Colibri with an app name of your own, e.g. `alex-samples`, and a server address,
+   and enable *Run In Background/Run Without Focus*. On a shared server, everyone who uses the same app name sees the
+   same objects and messages.
 2. Import the SendData sample.
 3. Copy the project as described above and open the copy in a second Editor.
 4. Open the sample scene in both Editors and enter Play mode in both.

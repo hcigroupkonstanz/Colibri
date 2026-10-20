@@ -106,6 +106,9 @@ list or an object of your own class.
 - A saved `null` loads as `null`.
 - Values are saved per app name. Clients with another app name do not see them.
 - Names can contain any characters, including `/`, `#`, `?`, `%` and spaces.
+- Spaces at the start and end of a name, and slashes at its start, are removed: `" /color "` is the same name as
+  `"color"`.
+- An empty name, `.` or `..` stores and finds nothing: `Put` and `Delete` return `false`, `Get` returns `default`.
 
 :::note
 On IL2CPP builds with a *Managed Stripping Level* above *Minimal*, Unity may remove members of classes that only the

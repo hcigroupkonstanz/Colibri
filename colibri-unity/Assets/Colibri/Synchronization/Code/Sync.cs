@@ -1121,6 +1121,9 @@ namespace HCIKonstanz.Colibri.Synchronization
             SendCommand(channel, "model::request", null);
         }
 
+        /// <summary>Asks the server for every model of the channel again, as registering a listener for it does.</summary>
+        internal static void RequestModels(string channel) => SendCommand(channel, "model::request", null);
+
         public static void AddModelUpdateListener(string channel, Action<JObject> listener, string fetchInitialStateId)
             => AddModelUpdateListener(channel, listener, fetchInitialStateId, requestedAgain: null);
 

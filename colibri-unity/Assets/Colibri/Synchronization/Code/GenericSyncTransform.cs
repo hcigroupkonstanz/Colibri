@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
@@ -92,6 +93,63 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         public bool UseLocalTransform = false;
 
+        // The world pose the last update from another client gave this object; see
+        // LatchMovedWithParent.
+        private bool _hasReceivedPose;
+        private Vector3 _receivedPosition;
+        private Quaternion _receivedRotation;
+
+        /// <summary>
+        /// A synced object below this one that syncs its world pose moved with it, and read that
+        /// pose as its own change: it sent it back to every client, which moved this object's copy
+        /// there again, and a moment later's update from its owner moved it on. Nested
+        /// SyncTransforms, an avatar's hands below its body, echoed old poses and drifted.
+        /// </summary>
+        private protected override void AfterUpdateApplied(JObject update)
+        {
+            // Only a pose that moved moves the children, and an object without children has none
+            // to latch: this runs for every update of every SyncTransform.
+            if (!(update.ContainsKey("position") || update.ContainsKey("rotation")))
+                return;
+
+            if (!UseLocalTransform)
+            {
+                _hasReceivedPose = true;
+                _receivedPosition = transform.position;
+                _receivedRotation = transform.rotation;
+            }
+
+            if (transform.childCount == 0)
+                return;
+            foreach (var part in GetComponentsInChildren<ISyncedObject>(true))
+            {
+                if (!ReferenceEquals(part, this))
+                    part.LatchMovedWithParent();
+            }
+        }
+
+        /// <summary>
+        /// Moved with a synced parent by the parent's update. An object that syncs its world pose
+        /// goes back to the one its own last update gave it: that update may have come first, in
+        /// the same batch, and the parent's then moved it on by the parent's move, so a hand was
+        /// off by the body's motion until its next update. Either way, the pose it has then is no
+        /// change of its own. One that never got an update of its own follows its parent.
+        /// </summary>
+        private protected override void LatchMovedWithParent()
+        {
+            if (UseLocalTransform)
+                return;
+            if (_hasReceivedPose)
+            {
+                if (SyncPosition)
+                    transform.position = _receivedPosition;
+                if (SyncRotation)
+                    transform.rotation = _receivedRotation;
+            }
+            Latch(nameof(Position));
+            Latch(nameof(Rotation));
+        }
+
         /// <summary>
         /// The Sync* boxes. A member whose box is unticked reads a placeholder above (the origin,
         /// no rotation, scale one, active), which must never go on the wire: a client with that
@@ -110,23 +168,30 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
-        private string clientPhysicsId = System.Guid.NewGuid().ToString();
-
         [Sync]
         public string PhysicsId
         {
             get
             {
-                if (PhysicsAuthority) _physicsId = clientPhysicsId;
+                if (PhysicsAuthority) _physicsId = PhysicsClient.Id;
                 return _physicsId;
             }
             set
             {
                 _physicsId = value;
-                PhysicsAuthority = _physicsId == clientPhysicsId;
+                PhysicsAuthority = _physicsId == PhysicsClient.Id;
+
+                // This client held the physics in its previous run: it takes it again, on the next
+                // FixedUpdate, so that the poll sends this run's id. The id of a run that has ended
+                // used to stay on the server while other clients stayed connected, and nobody
+                // simulated the object any more: the restarted client gave it up to the id it no
+                // longer had, and the others had given it up to that id before.
+                if (!PhysicsAuthority && PhysicsClient.WasPreviousRun(_physicsId))
+                    _takesPhysicsBack = true;
             }
         }
         private string _physicsId;
+        private bool _takesPhysicsBack;
 
         [Header("Physics")]
         public bool PhysicsAuthority = false;
@@ -155,6 +220,12 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         internal void HoldOrSimulate(double now)
         {
+            if (_takesPhysicsBack)
+            {
+                _takesPhysicsBack = false;
+                PhysicsAuthority = true;
+            }
+
             if (rigidbody)
             {
                 // Simulated only once the server's state is known. A placed object whose
@@ -175,6 +246,63 @@ namespace HCIKonstanz.Colibri.Synchronization
                 else
                     rigidbody.isKinematic = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// The id with which this client holds the physics of an object (see
+    /// <see cref="GenericSyncTransform{T}.PhysicsId"/>): a new one for each run, and the one of its
+    /// previous run, which PlayerPrefs keeps.
+    /// </summary>
+    internal static class PhysicsClient
+    {
+        private const string PreviousRunKey = "Colibri.PhysicsClientId";
+
+        private static string _id;
+        private static string _previousRunId;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForPlaySession()
+        {
+            if (_id != null)
+                Application.quitting -= SaveRun;
+            _id = null;
+            _previousRunId = null;
+        }
+
+        internal static string Id
+        {
+            get
+            {
+                if (_id == null)
+                {
+                    _previousRunId = PlayerPrefs.GetString(PreviousRunKey, "");
+                    _id = System.Guid.NewGuid().ToString();
+                    Application.quitting += SaveRun;
+                }
+                return _id;
+            }
+        }
+
+        /// <summary>
+        /// Keeps this run's id for the next one: as the run ends, not at its start. Written at the
+        /// start, a second instance on the same machine, a second Editor on a copy of the project
+        /// say, read the first one's live id as its previous run, and took the physics of every
+        /// body the first one simulated. Also called when the app is paused, the way out on
+        /// Android, where quitting is not reported reliably (see SyncTicker).
+        /// </summary>
+        internal static void SaveRun()
+        {
+            if (_id == null)
+                return;
+            PlayerPrefs.SetString(PreviousRunKey, _id);
+            PlayerPrefs.Save();
+        }
+
+        internal static bool WasPreviousRun(string id)
+        {
+            _ = Id;
+            return !string.IsNullOrEmpty(id) && id == _previousRunId;
         }
     }
 }

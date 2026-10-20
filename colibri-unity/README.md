@@ -34,7 +34,7 @@ https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibr
 ## Configuration
 
 1. In *Window → Colibri Configuration*:
-   - Set **App Name** to a unique name that is not used on the server. Clients exchange data only if their app names match. The examples and samples use `myAppName`.
+   - Set **App Name** to a unique name that is not used on the server. Clients exchange data only if their app names match.
    - Set **Server Address** to the address of the Colibri server you want to use. The address is a host name or IP address without `http://`. A public test server is available: `colibri.hci.uni-konstanz.de`.
    - Click *Save Config*.  
    <img src="img/config.png" alt="Config Screen" width=400/>

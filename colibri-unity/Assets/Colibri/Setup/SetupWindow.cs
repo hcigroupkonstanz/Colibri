@@ -359,9 +359,7 @@ namespace HCIKonstanz.Colibri.Setup
             // window then reported the project as not configured.
             (new[] { nameof(ColibriConfig.AppName) },
                 config => config.IsConfigured ? null : "App Name must not be empty!"),
-            (new[] { nameof(ColibriConfig.ServerAddress) },
-                config => !config.ServerAddress.Contains("://") ? null
-                    : "Server address should not contain a protocol (only IP or domain name)"),
+            (new[] { nameof(ColibriConfig.ServerAddress) }, ServerAddressError),
             (new[] { nameof(ColibriConfig.WebServerPort) },
                 config => IsPort(config.WebServerPort) ? null
                     : "Web server port invalid (must be a number between 1 - 65535, default 9211)"),
@@ -384,6 +382,30 @@ namespace HCIKonstanz.Colibri.Setup
         };
 
         private static bool IsPort(int port) => port > 0 && port <= 65535;
+
+        /// <summary>
+        /// What is wrong with the server address, or null. It is a host name or an IP address
+        /// only: an address with a path or a port used to be saved, and the client then failed to
+        /// resolve it, with an error about DNS.
+        /// </summary>
+        /// <remarks>Internal for the EditMode tests.</remarks>
+        internal static string ServerAddressError(ColibriConfig config)
+        {
+            var address = config.Host;
+            if (address.Length == 0)
+                return "Server address must not be empty!";
+            if (address.Contains("://"))
+                return "Server address should not contain a protocol (only IP or domain name)";
+            if (address.Contains("/") || address.Any(char.IsWhiteSpace))
+                return "Server address must be an IP address or a domain name only, without a path or spaces";
+
+            // A host name has no colon, and an IPv6 address has two or more, or brackets: one
+            // colon is a port. So is a colon after the closing bracket.
+            var colons = address.Count(c => c == ':');
+            if ((colons == 1 && !address.StartsWith("[")) || address.Contains("]:"))
+                return "Server address must not contain a port: enter the ports in their own fields";
+            return null;
+        }
 
         /// <summary>What keeps the configuration from being saved; empty if nothing does.</summary>
         internal static List<string> ConfigurationErrors(ColibriConfig config)

@@ -637,8 +637,8 @@ namespace HCIKonstanz.Colibri.Networking
             // what RunConnectionLoop reports and waits on.
             var config = ColibriConfig.Load();
 
-            _serverAddress = config.ServerAddress;
-            _appName = config.AppName;
+            _serverAddress = config.Host;
+            _appName = config.App;
             _tcpPort = config.TcpServerPort;
             _useTls = config.IsSSL;
             _allowSelfSignedCertificate = config.AllowSelfSignedCertificate;
@@ -1061,7 +1061,7 @@ namespace HCIKonstanz.Colibri.Networking
                     if (!_hasReportedMissingConfig)
                     {
                         _hasReportedMissingConfig = true;
-                        Debug.LogError(ColibriConfig.NOT_CONFIGURED_MESSAGE);
+                        Debug.LogError(string.IsNullOrWhiteSpace(app) ? ColibriConfig.NOT_CONFIGURED_MESSAGE : ColibriConfig.NO_SERVER_ADDRESS_MESSAGE);
                     }
 
                     if (!await Delay(RECONNECT_DELAY_MIN_MS, token).ConfigureAwait(false))

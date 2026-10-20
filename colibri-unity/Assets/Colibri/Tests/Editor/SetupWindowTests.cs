@@ -92,6 +92,10 @@ namespace HCIKonstanz.Colibri.Tests
             {
                 ("an empty App Name", config => config.AppName = " "),
                 ("an address with a protocol", config => config.ServerAddress = "http://colibri.example.org"),
+                ("an empty address", config => config.ServerAddress = "  "),
+                ("an address with a port", config => config.ServerAddress = "192.168.0.10:9212"),
+                ("an IPv6 address with a port", config => config.ServerAddress = "[2001:db8::1]:9212"),
+                ("an address with a path", config => config.ServerAddress = "colibri.example.org/log"),
                 ("TCP port 0", config => config.TcpServerPort = 0),
                 ("two equal ports", config => config.VoiceServerPort = config.WebServerPort),
                 ("a sampling rate of 8000", config => config.VoiceServerSamplingRate = 8000),
@@ -244,6 +248,26 @@ namespace HCIKonstanz.Colibri.Tests
             foreach (var field in typeof(ColibriConfig).GetFields(BindingFlags.Public | BindingFlags.Instance))
                 Assert.That(field.GetValue(_config), Is.EqualTo(field.GetValue(_edited)), field.Name);
             Assert.That(_config.name, Is.EqualTo("ColibriConfig"), "The asset's name has to stay the file's");
+        }
+
+        /// <summary>A host name, an IPv4 or IPv6 address, with or without the spaces around it, is a server address.</summary>
+        [TestCase("colibri.example.org")]
+        [TestCase(" 192.168.0.10 ")]
+        [TestCase("2001:db8::1")]
+        [TestCase("[2001:db8::1]")]
+        [TestCase("::1")]
+        public void AServerAddressIsAHostNameOrAnIPAddress(string address)
+        {
+            var config = ScriptableObject.CreateInstance<ColibriConfig>();
+            try
+            {
+                config.ServerAddress = address;
+                Assert.That(SetupWindow.ServerAddressError(config), Is.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(config);
+            }
         }
     }
 }

@@ -313,6 +313,69 @@ namespace HCIKonstanz.Colibri.E2E
             yield return Peer.ExpectNothing(Channel);
         }
 
+        /// <summary>
+        /// An avatar with a SyncTransform for its body and one for its hand. Each part used to
+        /// make its own random id, so every client built another avatar for each part it did not
+        /// know, without end. The hand's update can come first: the whole avatar is built once,
+        /// from the body's id, and nothing goes back.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AnObjectWithTwoPartsIsBuiltOnceFromAnUpdateOfEitherPart()
+        {
+            var templateObject = Spawn("avatar-template");
+            templateObject.SetActive(false);
+            var template = templateObject.AddComponent<SyncTransform>();
+            var handObject = new GameObject("Hand");
+            handObject.transform.SetParent(templateObject.transform, false);
+            handObject.AddComponent<SyncTransform>();
+            var manager = Spawn<SyncTransformManager>("avatar-manager");
+            manager.Template = template;
+            yield return null;
+            yield return LetInitialStateArrive();
+
+            var id = Guid.NewGuid().ToString();
+            Peer.Send(Channel, "model::update", new JObject { { "id", id + "/Hand" }, { "position", new JArray(1f, 2f, 3f) } });
+            Peer.Send(Channel, "model::update", new JObject { { "id", id }, { "position", new JArray(4f, 5f, 6f) } });
+
+            yield return E2EServer.WaitUntil(() => Instances(id).Any(s => s.transform.position == new Vector3(4f, 5f, 6f)),
+                $"The avatar '{id}' was never built, or never took its body's update");
+
+            var body = Instances(id).Single();
+            var hand = Instances(id + "/Hand").Single();
+            Assert.That(hand.transform.parent, Is.EqualTo(body.transform), "The hand is not the built avatar's own");
+            Assert.That(hand.transform.position, Is.EqualTo(new Vector3(1f, 2f, 3f)), "The hand never took its update");
+
+            yield return Peer.ExpectNothing(Channel);
+            Assert.That(Instances(id), Has.Length.EqualTo(1));
+        }
+
+        /// <summary>
+        /// A placed object saved switched off, a door revealed later say, never woke on the other
+        /// clients, so it did not listen for its updates: the manager built a second door, or
+        /// warned that it had no Template. Shown on another client, it is switched on here, and
+        /// sends nothing back: its values from the scene went over the server's.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator APlacedObjectSavedSwitchedOffIsShownWhenAnotherClientShowsIt()
+        {
+            var id = Guid.NewGuid().ToString();
+            var door = Spawn("door");
+            door.SetActive(false);
+            var sync = door.AddComponent<SyncTransform>();
+            sync.Id = id;
+            door.transform.position = new Vector3(7f, 0f, 0f);
+            Spawn<SyncTransformManager>("door-manager");
+            yield return null;
+            yield return LetInitialStateArrive();
+
+            Peer.Send(Channel, "model::update", new JObject { { "id", id }, { "active", true } });
+
+            yield return E2EServer.WaitUntil(() => door.activeSelf, "The door was never shown");
+            yield return Peer.ExpectNothing(Channel);
+            Assert.That(Instances(id), Has.Length.EqualTo(1), "The manager built a second door");
+            Assert.That(door.transform.position, Is.EqualTo(new Vector3(7f, 0f, 0f)));
+        }
+
         private IEnumerator SpawnManagerWithInactiveTemplate()
         {
             var templateObject = Spawn("inactive-transform-template");

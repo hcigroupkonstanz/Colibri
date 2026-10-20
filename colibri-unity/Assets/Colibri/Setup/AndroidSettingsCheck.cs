@@ -52,7 +52,7 @@ namespace HCIKonstanz.Colibri.Setup
         {
             return FindIssues(
                 EditorUserBuildSettings.activeBuildTarget,
-                config.ServerAddress,
+                config.Host,
                 config.IsSSL,
                 PlayerSettings.insecureHttpOption,
                 EditorUserBuildSettings.development,
@@ -194,7 +194,7 @@ namespace HCIKonstanz.Colibri.Setup
                 return;
 
             AndroidSettingsCheck.LogIssues(AndroidSettingsCheck.FindIssues(
-                target, config.ServerAddress, config.IsSSL, httpOption, development, forceInternetPermission));
+                target, config.Host, config.IsSSL, httpOption, development, forceInternetPermission));
         }
     }
 }

@@ -56,7 +56,9 @@ creates a `Player`, the manager creates the copy on this client from its `Templa
 
 1. Write the model script. It inherits from `SyncBehaviour<T>`, where `T` is the class itself, e.g.
    `Player : SyncBehaviour<Player>`.
-2. Write the manager script. It inherits from `SyncBehaviourManager<T>` with the same `T` and needs no code.
+2. Write the manager script. It inherits from `SyncBehaviourManager<T>` with the same `T` and needs no code. If it
+   needs `Start`, `OnEnable` or `OnDestroy`, override them and call the base method, e.g.
+   `protected override void Start() { base.Start(); … }`.
 3. Make a prefab with the model script.
 4. Add the manager script to the scene, e.g. on an empty GameObject, and set its `Template` to the prefab.
 
@@ -64,9 +66,35 @@ For objects placed in the scene, give each one a fixed `Id` in the Inspector, e.
 the object with the same `Id`. An object with an empty `Id` gets a new random `Id` when it starts. That is right for
 objects you create at runtime with `Instantiate`, but not for placed objects: each client would have its own object.
 
+To give an object you create at runtime a fixed `Id`, set it in the model's `Awake` before `base.Awake()`, and only when
+it is empty. The copies on the other clients already have the creator's `Id` then:
+
+```csharp
+protected override void Awake()
+{
+    if (string.IsNullOrEmpty(Id))
+        Id = $"player-{SystemInfo.deviceUniqueIdentifier}";
+    base.Awake();
+}
+```
+
+You can also change `Id` or `ModelId` later, e.g. right after `Instantiate` or once you know which user the object
+stands for. From the next frame on, the object syncs under the new ones: it takes the server's state for the new `Id`,
+or sends its own if the server has none.
+
+- If this client created the object under the old `Id`, that model is deleted on all other clients.
+- Synced parts below the object keep their `Id`. Change theirs too if needed.
+- `ModelDestroyed` and `ModelCreated` are raised for the object, as it leaves the old model and joins the new one.
+- A copy that a manager created of another client's object keeps its `Id`. Changing it logs an error.
+
 - The `Template` can also be an inactive object in the scene. An active one would sync as an object of its own.
 - The manager creates the copies at the top level of the scene hierarchy. It activates each copy, so the copy runs
   `Awake`, and then applies the synchronized values.
+- An object can have more than one synced component, e.g. a `SyncTransform` on the head and on each hand of an
+  avatar. Leave their `Id` empty. The components on the object's top GameObject share its `Id`, and a component on a
+  child adds its path, e.g. `<Id>/LeftHand`. Set the manager's `Template` to a component on the top GameObject.
+- A synced component you add at runtime with `AddComponent` below another synced object counts as a part of that
+  object. If each client adds one, give each an `Id` of its own, or they become one object.
 - Without a matching manager in the scene, the console warns
   `No generic Colibri SyncManager found (without ModelId) - synchronization of newly created objects may be restricted`.
 - By the way: `SyncTransform` is also a `SyncBehaviour`, and `[SyncTransformManager]` is its manager.
@@ -98,10 +126,12 @@ public class MyClass : SyncBehaviour<MyClass>
 - A property needs both a getter and a setter. A field must not be `readonly`.
 - Member names are compared without regard to case. Two `[Sync]` members whose names differ only in case are an
   error.
+- A `[Sync]` member must not be called `Id`, `ID` or `id`: `id` is the name of the model's own `Id`.
 - To sync an object of your own class, sync a `JObject`. Convert with
   `JObject.FromObject(value, ColibriJson.Serializer)` and back with `ToObject<MyType>(ColibriJson.Serializer)`. See
   [Sending other types as JSON](./messages.md#sending-other-types-as-json).
-- An array or `JObject` counts as changed only when you assign a new one. Changing an element in place is not sent.
+- An array or `JObject` is compared by its contents: changing an element in place is sent, and assigning an equal
+  one is not. A `Color` is compared as it is sent, with 8 bits a channel.
 - A member with an unsupported type, or one that breaks these rules, is reported at startup:
   `Colibri: cannot synchronize '<class>.<member>' …`. Follow the message.
 

@@ -36,6 +36,11 @@ namespace HCIKonstanz.Colibri.Communication
         private int microphoneSamplingRate;
         private bool broadcast = false;
 
+        // The microphone recorded from, null for the default one. Chosen once, in InitBroadcast:
+        // MicrophoneID is an index into this device's list, so one chosen in the Editor can be out
+        // of range on a headset. It threw there, and voice was off for good.
+        private string microphoneDevice;
+
         // Networking
         private VoiceServerConnection voiceServerConnection;
         private VoiceFramer framer;
@@ -45,28 +50,82 @@ namespace HCIKonstanz.Colibri.Communication
         // Opus codec, null when voice goes out as PCM
         private OpusEncoder opusEncoder;
 
+#if UNITY_ANDROID
+        // Android: waiting for the microphone permission, and when it was last checked. The
+        // permission callbacks may run on another thread, so they only set the flags below, and
+        // Update acts on them.
+        private bool waitingForPermission;
+        private float permissionCheckedAt;
+        private bool permissionAskedAgain;
+        private volatile bool permissionGranted;
+        private volatile bool permissionDismissed;
+#endif
+
         private void Start()
         {
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
             {
-                PermissionCallbacks microphonePermissionCallbacks = new PermissionCallbacks();
-                microphonePermissionCallbacks.PermissionGranted += OnMicrophonePermissionGranted;
-                microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
-#if UNITY_2023_1_OR_NEWER
-                // This event only exists from Unity 2023.1 on. Unguarded, it was a compile error
-                // in every Android build on 2022.3, the oldest version the package supports.
-                microphonePermissionCallbacks.PermissionRequestDismissed += OnMicrophonePermissionDenied;
-#endif
-                Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
+                waitingForPermission = true;
+                RequestMicrophonePermission();
                 return;
             }
 #endif
             InitBroadcast();
         }
 
+#if UNITY_ANDROID
+        private void RequestMicrophonePermission()
+        {
+            PermissionCallbacks microphonePermissionCallbacks = new PermissionCallbacks();
+            microphonePermissionCallbacks.PermissionGranted += _ => permissionGranted = true;
+            microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
+#if UNITY_2023_1_OR_NEWER
+            // This event only exists from Unity 2023.1 on. Unguarded, it was a compile error
+            // in every Android build on 2022.3, the oldest version the package supports.
+            microphonePermissionCallbacks.PermissionRequestDismissed += _ => permissionDismissed = true;
+#endif
+            Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
+        }
+
+        // Android cancels a request while another one is shown, and the user can close the dialog:
+        // either used to leave voice off for the session. Asked once more, and after that, see Update.
+        private void OnMicrophonePermissionDismissed()
+        {
+            if (!permissionAskedAgain)
+            {
+                permissionAskedAgain = true;
+                RequestMicrophonePermission();
+                return;
+            }
+            Debug.LogWarning(DEBUG_HEADER + "The microphone permission request was closed without an answer. Voice starts once the "
+                + "permission is granted, e.g. in the device's settings for this app.");
+        }
+#endif
+
         private void Update()
         {
+#if UNITY_ANDROID
+            if (permissionDismissed)
+            {
+                permissionDismissed = false;
+                OnMicrophonePermissionDismissed();
+            }
+
+            // Granted by the request, later in the device's settings or by another request, voice
+            // starts then. Checked once a second: the check goes through Java.
+            if (permissionGranted)
+            {
+                permissionGranted = false;
+                InitBroadcast();
+            }
+            else if (waitingForPermission && Time.unscaledTime - permissionCheckedAt >= 1f)
+            {
+                permissionCheckedAt = Time.unscaledTime;
+                if (Permission.HasUserAuthorizedPermission(Permission.Microphone))
+                    InitBroadcast();
+            }
+#endif
             if (isInitialized && broadcast)
             {
                 SendRecordedSamples();
@@ -78,18 +137,39 @@ namespace HCIKonstanz.Colibri.Communication
             opusEncoder?.Destroy();
         }
 
-        private void OnMicrophonePermissionGranted(string permissionName)
-        {
-            InitBroadcast();
-        }
 
         private void OnMicrophonePermissionDenied(string permissionName)
         {
-            Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: Microphone permission NOT granted");
+            Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: Microphone permission NOT granted. Voice starts "
+                + "once it is granted, e.g. in the device's settings for this app.");
+        }
+
+        /// <summary>
+        /// The microphone to record from, null for the default one. Meta Quest and other Android
+        /// devices use the default one, as they always did, decided at runtime: the build target
+        /// used to decide, so the Editor with the Android target ignored MicrophoneID too.
+        /// </summary>
+        private string ChooseMicrophone(string[] devices)
+        {
+            if (Application.platform == RuntimePlatform.Android)
+                return null;
+            if (MicrophoneID >= 0 && MicrophoneID < devices.Length)
+                return devices[MicrophoneID];
+
+            Debug.LogWarning(DEBUG_HEADER + "Microphone ID " + MicrophoneID + " is not a microphone of this device, which has "
+                + devices.Length + ". Using the default one.");
+            return null;
         }
 
         private void InitBroadcast()
         {
+#if UNITY_ANDROID
+            // From the permission callback or the check in Update, whichever comes first.
+            waitingForPermission = false;
+#endif
+            if (isInitialized)
+                return;
+
             // As VoiceServerConnection has it: frames are counted at this rate, and at 0 they would
             // hold no samples.
             int configuredSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
@@ -101,19 +181,20 @@ namespace HCIKonstanz.Colibri.Communication
                 Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: No recording device found");
                 return;
             }
+            microphoneDevice = ChooseMicrophone(recordingDevices);
             if (Debugging)
             {
                 for (int i = 0; i < recordingDevices.Length; i++)
                 {
                     Debug.Log(DEBUG_HEADER + "Recording device found: " + recordingDevices[i] + " ID: " + i);
                 }
-                Debug.Log(DEBUG_HEADER + "Using recording device: " + recordingDevices[MicrophoneID] + " ID: " + MicrophoneID);
+                Debug.Log(DEBUG_HEADER + "Using recording device: " + (microphoneDevice ?? "the default one"));
             }
 
             // Get supported sampling rates of the selected recording device
             int minSupportedSamplingRate;
             int maxSupportedSamplingRate;
-            Microphone.GetDeviceCaps(recordingDevices[MicrophoneID], out minSupportedSamplingRate, out maxSupportedSamplingRate);
+            Microphone.GetDeviceCaps(microphoneDevice, out minSupportedSamplingRate, out maxSupportedSamplingRate);
             if (Debugging) Debug.Log(DEBUG_HEADER + "Sampling rates supported: " + minSupportedSamplingRate + " - " + maxSupportedSamplingRate);
 
             // Decide on sampling rate. A microphone that takes any rate reports 0 to 0, and its
@@ -156,13 +237,9 @@ namespace HCIKonstanz.Colibri.Communication
 
                 // Start recording using selected recording device
                 Debug.Log(DEBUG_HEADER + "Start voice broadcasting");
-#if UNITY_ANDROID
-                recordingAudioClip = Microphone.Start(null, true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
-#else
-                recordingAudioClip = Microphone.Start(Microphone.devices[MicrophoneID], true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
-#endif
+                recordingAudioClip = Microphone.Start(microphoneDevice, true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
                 if (Debugging) Debug.Log(DEBUG_HEADER + "Channel count: " + recordingAudioClip.channels);
-                lastRecordingSamplePosition = Microphone.GetPosition(null);
+                lastRecordingSamplePosition = Microphone.GetPosition(microphoneDevice);
 
                 // A new one for every broadcast, so that none of the last broadcast's audio goes
                 // out with this one.
@@ -182,11 +259,7 @@ namespace HCIKonstanz.Colibri.Communication
             if (broadcast)
             {
                 broadcast = false;
-#if UNITY_ANDROID
-                Microphone.End(null);
-#else
-                Microphone.End(Microphone.devices[MicrophoneID]);
-#endif
+                Microphone.End(microphoneDevice);
             }
         }
 
@@ -216,11 +289,7 @@ namespace HCIKonstanz.Colibri.Communication
             int differenceSinceLastAdd = 0;
 
             // Get sample count since last adding
-#if UNITY_ANDROID
-            int currentSamplePosition = Microphone.GetPosition(null);
-#else
-            int currentSamplePosition = Microphone.GetPosition(Microphone.devices[MicrophoneID]);
-#endif
+            int currentSamplePosition = Microphone.GetPosition(microphoneDevice);
             if (currentSamplePosition > lastRecordingSamplePosition)
             {
                 differenceSinceLastAdd = currentSamplePosition - lastRecordingSamplePosition;

@@ -8,6 +8,7 @@ using HCIKonstanz.Colibri.Synchronization;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
 namespace HCIKonstanz.Colibri.Tests
@@ -48,6 +49,34 @@ namespace HCIKonstanz.Colibri.Tests
         {
             [Sync]
             public JObject Data;
+
+            public void Wake() => Awake();
+        }
+
+        private class ResyncValuesModel : SyncBehaviour<ResyncValuesModel>
+        {
+            private readonly List<Vector3> _points = new List<Vector3> { Vector3.one };
+
+            /// <summary>A new array in every read, as a getter over a list makes one.</summary>
+            [Sync]
+            public Vector3[] Points
+            {
+                get => _points.ToArray();
+                set
+                {
+                    _points.Clear();
+                    _points.AddRange(value);
+                }
+            }
+
+            [Sync]
+            public int[] Scores = { 1, 2 };
+
+            [Sync]
+            public Color Tint = Color.white;
+
+            [Sync]
+            public JObject Data = new JObject { { "a", 1 } };
 
             public void Wake() => Awake();
         }
@@ -1280,6 +1309,256 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(sync.GetComponent<Rigidbody>().isKinematic, Is.False);
         }
 
+
+        /// <summary>
+        /// The client that held the physics restarted while others stayed connected: the server
+        /// still names its previous run. It takes the physics back and sends this run's id, where
+        /// it used to give it up, so that nobody simulated the body any more.
+        /// </summary>
+        [Test]
+        public void AClientThatHeldThePhysicsInItsPreviousRunTakesItBack()
+        {
+            PlayerPrefs.SetString("Colibri.PhysicsClientId", "the previous run");
+            PhysicsClient.ResetForPlaySession();
+            try
+            {
+                var sync = SpawnBall(placed: true);
+                sync.OnModelUpdate(new JObject { { "id", sync.Id }, { "physicsid", "the previous run" } });
+                Assert.That(sync.PhysicsAuthority, Is.False, "Taken back inside the update, the claim is never sent");
+
+                FixedStep(sync);
+                Poll(sync);
+
+                Assert.That(sync.PhysicsAuthority, Is.True);
+                Assert.That(Sent(sync)?["physicsid"]?.Value<string>(), Is.EqualTo(PhysicsClient.Id));
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
+                PhysicsClient.ResetForPlaySession();
+            }
+        }
+
+        /// <summary>
+        /// Written at the start of a run, a second instance on the same machine read the first
+        /// one's live id as its previous run, and took the physics of everything it simulated.
+        /// </summary>
+        [Test]
+        public void ARunsIdIsKeptForTheNextRunOnlyAsItEnds()
+        {
+            PlayerPrefs.SetString("Colibri.PhysicsClientId", "the previous run");
+            PhysicsClient.ResetForPlaySession();
+            try
+            {
+                var id = PhysicsClient.Id;
+                Assert.That(PlayerPrefs.GetString("Colibri.PhysicsClientId", ""), Is.EqualTo("the previous run"));
+
+                PhysicsClient.SaveRun();
+                Assert.That(PlayerPrefs.GetString("Colibri.PhysicsClientId", ""), Is.EqualTo(id));
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
+                PhysicsClient.ResetForPlaySession();
+            }
+        }
+
+        [Test]
+        public void AnotherClientsPhysicsIsNotTakenAfterARestart()
+        {
+            PlayerPrefs.SetString("Colibri.PhysicsClientId", "the previous run");
+            PhysicsClient.ResetForPlaySession();
+            try
+            {
+                var sync = SpawnBall(placed: true);
+                sync.OnModelUpdate(new JObject { { "id", sync.Id }, { "physicsid", "another client's" } });
+                FixedStep(sync);
+
+                Assert.That(sync.PhysicsAuthority, Is.False);
+            }
+            finally
+            {
+                PlayerPrefs.DeleteKey("Colibri.PhysicsClientId");
+                PhysicsClient.ResetForPlaySession();
+            }
+        }
+
+        /// <summary>
+        /// An Id set right after Instantiate, which runs Awake: the object used to listen under the
+        /// old one and send under the new one, and never synced. It moves to the new one, deletes
+        /// the model it created under the old one, and announces itself once the server has
+        /// nothing for the new one.
+        /// </summary>
+        [Test]
+        public void AnObjectCreatedHereFollowsANewIdAndAnnouncesItself()
+        {
+            var model = SpawnModel();
+            model.OnModelUpdate(Bare(model.Id));
+            var oldId = model.Id;
+            model.Label = "mine";
+
+            model.Id = "player-" + System.Guid.NewGuid();
+            Poll(model);
+
+            Assert.That(model.Id, Is.Not.EqualTo(oldId));
+            Assert.That(LocallyDeletedModels.Contains(model.Channel, oldId), Is.True, "The model created under the old Id was not deleted");
+            Assert.That(Sent(model), Is.Null, "Sent before the server answered for the new Id");
+
+            model.OnModelUpdate(Bare(model.Id));
+            var sent = Sent(model);
+            Assert.That(sent?["id"]?.Value<string>(), Is.EqualTo(model.Id));
+            Assert.That(sent?["label"]?.Value<string>(), Is.EqualTo("mine"));
+        }
+
+        /// <summary>A placed object's old Id may be other clients' too: it is left, not deleted.</summary>
+        [Test]
+        public void APlacedObjectFollowsANewIdAndTakesTheServersState()
+        {
+            var model = Spawn<ResyncModel>("placed");
+            model.Id = "placed-" + System.Guid.NewGuid();
+            model.Wake();
+            model.OnModelUpdate(Bare(model.Id));
+            var oldId = model.Id;
+
+            model.Id = "placed-" + System.Guid.NewGuid();
+            Poll(model);
+            model.OnModelUpdate(new JObject { { "id", model.Id }, { "label", "from the server" } });
+            Poll(model);
+
+            Assert.That(LocallyDeletedModels.Contains(model.Channel, oldId), Is.False);
+            Assert.That(model.Label, Is.EqualTo("from the server"));
+            Assert.That(Sent(model), Is.Null);
+        }
+
+        [Test]
+        public void AnObjectFollowsANewModelIdToItsChannel()
+        {
+            var model = SpawnModel();
+            model.OnModelUpdate(Bare(model.Id));
+
+            model.ModelId = "red";
+            Poll(model);
+            model.OnModelUpdate(Bare(model.Id));
+
+            Assert.That(model.Channel, Does.EndWith("_red"));
+            Assert.That(Sent(model)?["id"]?.Value<string>(), Is.EqualTo(model.Id), "It did not announce itself on the new channel");
+        }
+
+        /// <summary>A model script that sets Id in Awake gave a copy another object's Id: a copy keeps its own.</summary>
+        [Test]
+        public void ACopyOfAnotherClientsObjectKeepsItsId()
+        {
+            var model = Spawn<ResyncModel>("copy");
+            model.Id = "theirs-" + System.Guid.NewGuid();
+            ((ISyncedObject)model).MarkAsCopy();
+            model.Wake();
+            var id = model.Id;
+
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("a copy of another client's object, was changed"));
+            model.Id = "mine";
+            Poll(model);
+
+            Assert.That(model.Id, Is.EqualTo(id));
+        }
+
+        /// <summary>
+        /// Arrays were compared by reference: a getter that builds a new array made a change in
+        /// every poll, sent at the send-rate limit for good, and every receiver sent it back.
+        /// </summary>
+        [Test]
+        public void AnArrayBuiltAnewInEveryReadIsNoChange()
+        {
+            var model = Spawn<ResyncValuesModel>("values");
+            model.Wake();
+            model.OnModelUpdate(Bare(model.Id));
+
+            Poll(model);
+            Poll(model);
+
+            Assert.That(Sent(model), Is.Null);
+        }
+
+        [Test]
+        public void AnArrayOrJObjectChangedInPlaceIsAChange()
+        {
+            var model = Spawn<ResyncValuesModel>("values");
+            model.Wake();
+            model.OnModelUpdate(Bare(model.Id));
+
+            model.Scores[0] = 5;
+            model.Data["a"] = 2;
+            Poll(model);
+
+            var sent = Sent(model);
+            Assert.That(sent?["scores"]?.ToObject<int[]>(), Is.EqualTo(new[] { 5, 2 }));
+            Assert.That(sent?["data"]?["a"]?.Value<int>(), Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// A color goes on the wire with 8 bits a channel. Set again in every frame, Color.gray
+        /// differed from the rounded one another client applied, and the two sent it back and
+        /// forth for good.
+        /// </summary>
+        [Test]
+        public void AColorSetAgainAfterItsRoundedValueArrivedIsNoChange()
+        {
+            var model = Spawn<ResyncValuesModel>("values");
+            model.Wake();
+            model.OnModelUpdate(new JObject { { "id", model.Id }, { "tint", "#808080FF" } });
+
+            model.Tint = Color.gray;
+            Poll(model);
+
+            Assert.That(Sent(model), Is.Null);
+        }
+
+        /// <summary>
+        /// A world-space SyncTransform below another moved with it when the parent's update was
+        /// applied, read that as its own change and sent it back: nested SyncTransforms echoed
+        /// old poses and drifted.
+        /// </summary>
+        [Test]
+        public void AChildThatMovedWithItsParentsUpdateSendsNothing()
+        {
+            var parent = Spawn<ResyncTransform>("body");
+            var child = new GameObject("hand").AddComponent<ResyncTransform>();
+            child.transform.SetParent(parent.transform, false);
+            child.transform.localPosition = new Vector3(0f, 1f, 0f);
+            parent.Wake();
+            child.Wake();
+            parent.OnModelUpdate(Bare(parent.Id));
+            child.OnModelUpdate(Bare(child.Id));
+
+            parent.OnModelUpdate(new JObject { { "id", parent.Id }, { "position", new JArray(5f, 0f, 0f) } });
+            Poll(child);
+
+            // The premise: Unity moves a child with its parent (the test harness on stubs does not).
+            Assume.That(child.transform.position, Is.EqualTo(new Vector3(5f, 1f, 0f)));
+            Assert.That(Sent(child), Is.Null, "The child sent the pose its parent's update gave it");
+        }
+
+        /// <summary>
+        /// The hand's update came before the body's, in one batch: the body's then moved the hand
+        /// on by the body's move, and the hand was off until its next update.
+        /// </summary>
+        [Test]
+        public void AChildKeepsItsOwnUpdatesPoseWhenItsParentsUpdateComesAfterIt()
+        {
+            var parent = Spawn<ResyncTransform>("body");
+            var child = new GameObject("hand").AddComponent<ResyncTransform>();
+            child.transform.SetParent(parent.transform, false);
+            parent.Wake();
+            child.Wake();
+            parent.OnModelUpdate(Bare(parent.Id));
+            child.OnModelUpdate(Bare(child.Id));
+
+            child.OnModelUpdate(new JObject { { "id", child.Id }, { "position", new JArray(1f, 2f, 3f) } });
+            parent.OnModelUpdate(new JObject { { "id", parent.Id }, { "position", new JArray(4f, 5f, 6f) } });
+            Poll(child);
+
+            Assert.That(child.transform.position, Is.EqualTo(new Vector3(1f, 2f, 3f)));
+            Assert.That(Sent(child), Is.Null);
+        }
 
         /*
          *  Without a server, a placed body waited for its first answer for good. Once this client
