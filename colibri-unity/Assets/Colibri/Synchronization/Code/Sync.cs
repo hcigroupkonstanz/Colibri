@@ -12,27 +12,16 @@ namespace HCIKonstanz.Colibri.Synchronization
     {
         private static WebServerConnection _connection;
 
-        /// <summary>
-        /// A registered callback, together with the Unity object it belongs to. Keeping the owner
-        /// next to the delegate is what lets a listener disappear along with the component that
-        /// registered it - see <see cref="ListenerOwner"/> for how the owner is found and why.
-        /// </summary>
+        // A callback with the Unity object it belongs to, so the listener goes away with that object.
         private readonly struct Listener<T>
         {
             public readonly Action<T> Callback;
 
-            /// <summary>
-            /// Model listeners only: the id whose state was requested when the listener was added,
-            /// or null for the listener that asked for every model on the channel. Kept so the
-            /// same request can be made again after a reconnect.
-            /// </summary>
+            // Model listeners only: the id of the model, or null for a listener of every model on the channel.
+            // Requested again after a reconnect.
             public readonly string FetchId;
 
-            /// <summary>
-            /// A SyncBehaviour's model listener only: told each time the request for
-            /// <see cref="FetchId"/> is made again after a reconnect, with the round of answers
-            /// it is part of. See <see cref="RequestModelsAgain(double)"/>.
-            /// </summary>
+            // SyncBehaviour model listeners only: called with the round when FetchId is requested again after a reconnect.
             public readonly Action<ReconnectRound> RequestedAgain;
 
             private readonly UnityEngine.Object _owner;
@@ -44,12 +33,9 @@ namespace HCIKonstanz.Colibri.Synchronization
                 FetchId = fetchId;
                 RequestedAgain = requestedAgain;
                 _owner = ListenerOwner.Of(callback);
-                // Resolved once, here: after the owner is destroyed, `_owner == null` can no
-                // longer tell "belongs to a destroyed object" from "belongs to nothing at all".
                 _isOwned = !ReferenceEquals(_owner, null);
             }
 
-            /// <summary>True once the Unity object this listener belonged to has been destroyed.</summary>
             public bool IsOrphaned => _isOwned && _owner == null;
         }
 
@@ -74,14 +60,10 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static readonly Dictionary<string, List<Listener<JObject>>> _modelUpdateListeners = new Dictionary<string, List<Listener<JObject>>>();
         private static readonly Dictionary<string, List<Listener<JObject>>> _modelDeleteListeners = new Dictionary<string, List<Listener<JObject>>>();
 
-        /// <summary>
-        /// The live connection, creating it on first use. Null only while the application is
-        /// shutting down, when there is nothing left to send to.
-        /// </summary>
+        // Null while the application is quitting.
         private static WebServerConnection Connection()
         {
-            // Unity's ==, so the previous Play session's destroyed connection is replaced rather
-            // than reused - see SingletonBehaviour.
+            // A destroyed connection (an earlier Play session's, say) is replaced.
             if (_connection == null)
             {
                 _connection = WebServerConnection.Instance;
@@ -92,9 +74,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 _connection.OnConnected += OnConnected;
                 _connection.OnDisconnected += OnDisconnected;
 
-                // The answers of a round still open were asked for on the connection replaced
-                // here, and never come on this one; nor does the end of the deletes in question,
-                // which went with its queue.
+                // The replaced connection's rounds never get their answers on this one, and its queued deletes are gone.
                 if (_reconnectRound != null)
                 {
                     _reconnectRound.IsOver = true;
@@ -103,15 +83,13 @@ namespace HCIKonstanz.Colibri.Synchronization
                 EndAnswerRounds();
                 ForgetUnreadDeletes();
 
-                // Nor has this one heard from the server yet, and it makes no requests again at
-                // its first connection.
+                // The heard-from state belongs to the replaced connection.
                 _heardStamps = 0;
                 _heardAt = double.NegativeInfinity;
                 _heardAtHeld = false;
 
-                // Without a server from here on, unless something else made the connection and
-                // connected it before: the [RemoteLogger], say, whose OnConnected came before this
-                // class listened.
+                // Connected already if something else created the connection first (the [RemoteLogger], say):
+                // its OnConnected fired before this class subscribed.
                 _withoutServerSince = _connection.Status == ConnectionStatus.Connected
                     ? double.PositiveInfinity
                     : Time.unscaledTimeAsDouble;
@@ -119,22 +97,17 @@ namespace HCIKonstanz.Colibri.Synchronization
             return _connection;
         }
 
-        /// <summary>
-        /// Since when this client has been without a server, on SyncTicker's clock: since it took up
-        /// its connection, or noticed that the connection was gone. Positive infinity while
-        /// connected. NaN at the start of a session: without a connection taken up then, it counts
-        /// from when <see cref="StopsWaitingForServer"/> is first asked.
-        /// </summary>
+        // Since when this client has had no server, on SyncTicker's clock: from taking up the connection or
+        // noticing it gone. Positive infinity while connected; NaN from the session start until a connection is taken
+        // up or StopsWaitingForServer is first asked.
         private static double _withoutServerSince = double.NaN;
 
         private static bool _hasWarnedAboutNoServer;
 
         /// <summary>
-        /// For a placed body that waits for the server's state before it is simulated (see
-        /// GenericSyncTransform): whether it stops waiting at <paramref name="now"/>, on
-        /// SyncTicker's clock. It does once this client has been without a server for the connect
-        /// timeout, and is not in the middle of a connect attempt. The first body that stops
-        /// waiting in a session says so in the console.
+        /// Whether a placed body waiting for the server's state (see GenericSyncTransform) is simulated without it at
+        /// <paramref name="now"/> (SyncTicker's clock): once this client has been without a server for the connect
+        /// timeout and is neither connected nor connecting. The first body to do so warns once per session.
         /// </summary>
         internal static bool StopsWaitingForServer(double now)
         {
@@ -145,11 +118,9 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (now - _withoutServerSince < timeout)
                 return false;
 
-            // Nor while the connection is up or trying. It comes up on a worker thread, and
-            // OnConnected follows only in the next Update, after this frame's FixedUpdates. An
-            // attempt gives up after the connect timeout itself, and may have started later than
-            // the time counted from, the start of the frame in which Awake took up the connection:
-            // seconds later in a frame that loads a scene.
+            // Not while connected or connecting. The connection comes up on a worker thread but OnConnected only
+            // follows in the next Update, and an attempt can start later than _withoutServerSince (seconds later in a
+            // frame that loads a scene) and gives up after the connect timeout itself.
             var connection = _connection;
             if (!ReferenceEquals(connection, null))
             {
@@ -170,42 +141,13 @@ namespace HCIKonstanz.Colibri.Synchronization
             return true;
         }
 
-        /// <summary>
-        /// When this client last noticed that its connection was gone, on SyncTicker's clock
-        /// (<c>Time.unscaledTimeAsDouble</c>); negative infinity before it ever has.
-        /// </summary>
+        // When the last outage was noticed, on SyncTicker's clock; negative infinity before the first.
         private static double _disconnectedAt = double.NegativeInfinity;
 
-        /// <summary>
-        /// Notes when the outage was noticed, and sends again the deletes that may have gone into
-        /// the dead link.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// A synced object destroyed in the moment the Wi-Fi drops writes its model::delete into a
-        /// link that is already dead, and nothing sent it again: the reconnect asks only for the
-        /// objects this client still has. The server and every other client kept the object, and
-        /// the answers after the reconnect offered it to this client's managers again, which
-        /// LocallyDeletedModels holds off for a minute only.
-        /// </para>
-        /// <para>
-        /// So a delete made after this client last heard from the server, or in the second before,
-        /// when it may still have been on its way, goes out again. It waits for the next
-        /// connection and goes ahead of the requests made again there, as a delete made during the
-        /// outage does. One that did arrive is deleted again, which changes nothing unless another
-        /// client has created the object anew meanwhile, with the same id: then that one goes, as
-        /// it would for a delete made during the outage.
-        /// </para>
-        /// <para>
-        /// The server has read those deletes once the answers to the reconnect's requests are in
-        /// (see <see cref="ReconnectRound"/>), and the ones made during the outage, or while the
-        /// answers come in, are no different. If the link drops again before, they may have gone
-        /// into that link as well, and all of them go out again, however old: like a delete made
-        /// during the outage, which goes out however old, the server may never have had them. A
-        /// minute is all LocallyDeletedModels remembers, and an outage at the edge of Wi-Fi range
-        /// can last longer.
-        /// </para>
-        /// </remarks>
+        // Sends again the deletes the server may not have read: those made since it was last heard from, less a second
+        // for those in flight. A delete made as the link drops is lost, since the reconnect only requests the objects
+        // this client still has. They queue ahead of the requests made after the reconnect. One that did arrive is
+        // repeated and removes an object another client has since created under the same id.
         private static void OnDisconnected() => OnDisconnected(Time.unscaledTimeAsDouble);
 
         /// <summary><see cref="OnDisconnected()"/>, with the outage noticed at <paramref name="now"/>.</summary>
@@ -217,11 +159,10 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             var madeAtTheDrop = LocallyDeletedModels.Since(LastHeardAt(now) - 1, now);
 
-            // Until the requests go out again: see _heardAtHeld.
+            // Held until the requests go out again (see _heardAtHeld).
             _heardAtHeld = true;
 
-            // From here until the answers are in, every delete sent is one the server may not have
-            // read.
+            // From here until the answers are in, every delete sent counts as unread.
             _unreadDeletes ??= new List<(string Channel, string Id)>();
             if (madeAtTheDrop != null)
             {
@@ -233,12 +174,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 SendCommand(channel, "model::delete", new JObject { { "id", id } });
         }
 
-        /// <summary>
-        /// The deletes the server may not have read, oldest first: from when this client notices an
-        /// outage, those it sends again then and every one it sends afterwards, until the answers to
-        /// the requests made again after the reconnect are in (see <see cref="ReconnectRound"/>).
-        /// Null while none is in question.
-        /// </summary>
+        // Deletes the server may not have read, oldest first: those sent again at an outage and every one sent
+        // since, until the answers to the requests made after the reconnect are in (see ReconnectRound). Null while
+        // none is in question. If the link drops again meanwhile they all go out again, however old: the
+        // LocallyDeletedModels window is a minute and an outage can last longer.
         private static List<(string Channel, string Id)> _unreadDeletes;
         private static readonly HashSet<(string Channel, string Id)> _unreadDeleteKeys = new HashSet<(string Channel, string Id)>();
 
@@ -248,11 +187,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 _unreadDeletes.Add((channel, id));
         }
 
-        /// <summary>
-        /// For a model asked for afresh: the id is in use again on the server, and a delete of it
-        /// sent once more would remove the object this client has now, there and on every other
-        /// client.
-        /// </summary>
+        // The id is in use again (asked for afresh): sending its delete once more would remove the new object
+        // here and on every other client.
         private static void ForgetUnreadDelete(string channel, string id)
         {
             if (_unreadDeletes != null && _unreadDeleteKeys.Remove((channel, id)))
@@ -265,54 +201,33 @@ namespace HCIKonstanz.Colibri.Synchronization
             _unreadDeleteKeys.Clear();
         }
 
-        /// <summary>
-        /// When this client last heard from the server, on SyncTicker's clock, how many times the
-        /// connection had heard from it then, and when this was last asked (see
-        /// <see cref="LastHeardAt"/>).
-        /// </summary>
+        // When the server was last heard from (SyncTicker's clock), the connection's liveness stamp count then,
+        // and when LastHeardAt was last asked.
         private static double _heardAt = double.NegativeInfinity;
         private static long _heardStamps;
         private static double _heardAskedAt = double.NegativeInfinity;
 
-        /// <summary>
-        /// Whether <see cref="LastHeardAt"/> keeps the time the connection that died last heard
-        /// from the server: from when this client notices the outage until it makes the requests
-        /// again after the reconnect.
-        /// </summary>
-        /// <remarks>
-        /// The next connection hears from the server as soon as it is accepted, a frame or so
-        /// before the requests go out. The values a member sent into the dead link are kept for
-        /// the answers to those requests (see SentValues), and a value sent in that frame, counted
-        /// as sent after the server was last heard from again, pushed them out: the answer holding
-        /// one was taken for another client's change if the link dropped again before it came.
-        /// </remarks>
+        // Freezes LastHeardAt from an outage until the requests go out again. The next connection hears from the
+        // server a frame before those requests, and a value sent in that frame would count as sent after the server
+        // was last heard from, pushing out the values SentValues keeps for the answers.
         private static bool _heardAtHeld;
 
         /// <summary>
-        /// When this client last heard from the server, on SyncTicker's clock, as of
-        /// <paramref name="now"/>: any bytes count, and the server heartbeats every 100 ms, so
-        /// while the connection works that was a moment ago. What is sent after it may be going
-        /// into a link that has died (see SentValues). <paramref name="now"/> without a connection;
-        /// negative infinity before this connection has heard from the server at all. Held from
-        /// an outage until the requests go out again (see <see cref="_heardAtHeld"/>).
+        /// When the server was last heard from, on SyncTicker's clock, as of <paramref name="now"/>. Any received
+        /// bytes count and the server heartbeats every 100 ms. Values sent after it may have gone into a dead link
+        /// (see SentValues). <paramref name="now"/> without a connection, negative infinity before anything was
+        /// heard, held during an outage (see <see cref="_heardAtHeld"/>).
         /// </summary>
-        /// <remarks>
-        /// SyncTicker asks once a frame. When the connection has heard from the server since the
-        /// last time, its time since the last heartbeat is taken off <paramref name="now"/>, but no
-        /// further back than that last time. The connection times the heartbeats on the system
-        /// clock, which Unity's clock need not keep pace with: the system clock is set now and then,
-        /// and may run on while a headset sleeps. Taken off in full, its time could put the
-        /// last-heard time minutes back, and the deletes made in those minutes went out again. Nor
-        /// does <paramref name="now"/> alone do: after a frame that took seconds, such as a scene
-        /// loaded synchronously, it lay seconds after the last heartbeat, and a delete made just
-        /// before that frame, which the link may have died with, did not go out again.
-        /// </remarks>
         internal static double LastHeardAt(double now)
         {
             var connection = _connection;
             if (connection == null)
                 return now;
 
+            // Asked once a frame (SyncTicker). The age of the last heartbeat is taken off now, but not past the previous
+            // ask: the connection times heartbeats on the system clock, which is set now and then and runs on while a
+            // headset sleeps, so it need not follow Unity's clock. now alone is too late after a long frame, such as a
+            // synchronous scene load.
             var stamps = connection.LivenessStamps;
             if (stamps != _heardStamps && !_heardAtHeld)
             {
@@ -325,54 +240,30 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// The requests made again after one reconnect, from when they go out until the answers
-        /// to all of them have arrived: the stretch in which a SyncBehaviour compares what it
-        /// receives with what it sent before the outage (see SyncBehaviour's OnModelUpdate), and
-        /// in which the deletes sent again ahead of the requests may not have reached the server.
+        /// The requests made again after one reconnect, from when they go out until the answers to all of them have
+        /// arrived. During it a SyncBehaviour compares what it receives with what it sent before the outage (see
+        /// SyncBehaviour's OnModelUpdate), and the deletes sent again ahead of the requests may not have reached
+        /// the server.
         /// </summary>
-        /// <remarks>
-        /// <para>
-        /// On the wire an answer is an ordinary model::update, and so is an update that another
-        /// client sends meanwhile. The server relays those to this client as soon as it accepts the
-        /// connection, so they arrive before the answers, between them and after them, and nothing
-        /// in them tells them apart. Nor can the answers be counted off: an update from another
-        /// client would take the place of one, and the answer it stood in for would then be applied
-        /// as if it were news, putting back a value from before the outage.
-        /// </para>
-        /// <para>
-        /// A SyncBehaviour that keeps changes of its own at its first answer opens a round of its
-        /// own, for the answers still on their way then (see <see cref="AskForEndOfAnswers"/>).
-        /// </para>
-        /// <para>
-        /// What can be told is when the answers are over. The server handles one client's messages
-        /// in the order they were sent and writes its answers to that client in the same order, so
-        /// the answer to a request sent after all the others comes after all of theirs. That last
-        /// request asks for an id that no model has, on a channel that holds no models
-        /// (<see cref="ReconnectRoundChannel"/>), and the bare <c>{ id }</c> it is answered with can
-        /// be nothing else. The server needs nothing new for this: it answers any model::request.
-        /// </para>
-        /// <para>
-        /// Whatever arrives before that answer was sent by the server before it read the request,
-        /// and so before it read anything this client sends in reply to an answer. Updates from
-        /// other clients in that stretch hold the server's values at the time just as the answers
-        /// do, and are judged with them. Once it has arrived, the server has read everything this
-        /// client queued ahead of the request, the deletes sent again included.
-        /// </para>
-        /// </remarks>
+        // An answer is an ordinary model::update, so it cannot be told from an update relayed from another client, and
+        // answers cannot be counted. What can be told is the end: the server handles one client's messages in order and
+        // answers in the same order, so the answer to a final request comes after all the others. That request asks for
+        // an id no model has, on a channel with no models (ReconnectRoundChannel), so its bare { id } answer is
+        // unmistakable. Whatever arrives before it was sent before the server read the request, so before anything this
+        // client sends in reply; relayed updates in that stretch hold the server's values like the answers and are
+        // judged with them. Once it arrives, the server has read everything queued ahead of the request, the resent
+        // deletes included.
+        // A SyncBehaviour that keeps changes of its own at its first answer opens a round of its own (see
+        // AskForEndOfAnswers).
         internal sealed class ReconnectRound
         {
-            /// <summary>
-            /// When this client noticed the outage, on SyncTicker's clock: the one before this
-            /// reconnect, or an earlier one if the link dropped again before that one's round was
-            /// over. Negative infinity for a round an object opened at its first answer, which
-            /// follows no outage: everything the object sends counts.
-            /// </summary>
+            // When the outage was noticed, on SyncTicker's clock: an earlier one if the link dropped again before the
+            // previous round was over. Negative infinity for a round an object opened at its first answer, which
+            // follows no outage: everything the object sends counts.
             internal readonly double DisconnectedAt;
 
-            /// <summary>The id the last request asks for, whose answer ends the round.</summary>
             internal readonly string EndMarkerId = Guid.NewGuid().ToString();
 
-            /// <summary>Whether the answers are all in.</summary>
             internal bool IsOver;
 
             internal ReconnectRound(double disconnectedAt) => DisconnectedAt = disconnectedAt;
@@ -384,42 +275,33 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         internal const string ReconnectRoundChannel = "colibri::reconnect";
 
-        /// <summary>The round whose answers are still coming in, if any.</summary>
         private static ReconnectRound _reconnectRound;
 
         /// <summary>The id whose answer ends the current round; null when none is open. For the EditMode tests.</summary>
         internal static string ReconnectRoundEndMarker => _reconnectRound?.EndMarkerId;
 
-        /// <summary>
-        /// The rounds objects opened at their first answer (see <see cref="AskForEndOfAnswers"/>),
-        /// by the id their last request asks for, until its answer arrives.
-        /// </summary>
+        // Rounds an object opened at its first answer (see AskForEndOfAnswers), by the id their last request asks for,
+        // until it is answered.
         private static readonly Dictionary<string, ReconnectRound> _answerRounds = new Dictionary<string, ReconnectRound>();
 
         /// <summary>
-        /// For a SyncBehaviour that keeps changes of its own at its first answer, and sends them in
-        /// place of the server's values (see its "Changes made before the first answer"): one more
-        /// request, sent now, ahead of those changes, and the round its answer ends. The answer to
-        /// every request this client sent before comes ahead of it, a manager's request for its
-        /// whole channel included, and so does every update the server relayed before it read the
-        /// request. Each of those holds what the server had before it read the changes.
+        /// For a SyncBehaviour that keeps changes of its own at its first answer: sends one more request now, ahead of
+        /// those changes, and returns the round its answer ends. That answer comes after the answer to every earlier
+        /// request, a manager's whole-channel one included, and after every update the server relayed before it read
+        /// the request: all of them hold what the server had before it read the changes.
         /// </summary>
         internal static ReconnectRound AskForEndOfAnswers()
         {
             var round = new ReconnectRound(double.NegativeInfinity);
 
-            // Noted once sent: a connection put in place of a destroyed one on the way ends the
-            // rounds asked for on that one.
+            // Added after sending: SendCommand may replace the connection, which ends the rounds of the old one.
             SendCommand(ReconnectRoundChannel, "model::request", new JObject { { "id", round.EndMarkerId }, { "again", true } });
             _answerRounds[round.EndMarkerId] = round;
             return round;
         }
 
-        /// <summary>
-        /// Ends every round objects opened at their first answer. The answers that end them were
-        /// asked for on a connection that is gone, and after a reconnect the requests made again
-        /// open the round those objects are in.
-        /// </summary>
+        // These rounds' end markers were requested on a connection that is gone. After a reconnect the requests made
+        // again open the round those objects are in.
         private static void EndAnswerRounds()
         {
             foreach (var round in _answerRounds.Values)
@@ -428,46 +310,36 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// After a reconnect, every model this client holds may be stale: whatever other clients
-        /// changed - or created - while it was offline never reached it, and nothing used to ask
-        /// again. <c>model::request</c> was sent once, when a listener registered, so a Wi-Fi blip
-        /// left the client showing old state until each object happened to change once more.
-        ///
-        /// So on every reconnect the same requests go out again, from the registry here rather than
-        /// from each SyncBehaviour. They queue behind anything sent during the outage, so the server
-        /// answers with this client's own offline changes already applied. Not on the first
-        /// connection: that is what the requests made at registration were queued for.
+        /// After a reconnect, requests every model again: changes other clients made during the outage never reached
+        /// this client. Not on the first connection, which the requests made at registration cover.
         /// </summary>
         /// <remarks>Internal for the EditMode tests, which stand in for the connection coming up with it.</remarks>
         internal static void OnConnected()
         {
-            // A body that waits for the server's state waits for its answer now: see StopsWaitingForServer.
+            // A body waiting for the server's state now waits for its answer (see StopsWaitingForServer).
             _withoutServerSince = double.PositiveInfinity;
 
             var connection = _connection;
             if (connection == null || connection.ConnectedSessions < 2)
                 return;
 
+            // Queued behind anything sent during the outage, so the answers include this client's own offline changes.
             RequestModelsAgain();
         }
 
         /// <summary>
-        /// Asks again for every model a listener asked for. A request for one object says
-        /// <c>again: true</c>: this client held the object before the outage, and it is not putting
-        /// it into the scene now. The server answers it with <c>model::delete</c> if another client
-        /// deleted the object meanwhile, and keeps the object deleted. A request without it - what a
-        /// listener sends when it registers - says the object is in this client's scene now, or being
-        /// created, and makes the server forget such a delete: the id is in use again.
+        /// Requests again every model a listener is registered for. A request for one object says <c>again: true</c>:
+        /// this client held it before the outage and is not putting it into the scene now, so the server answers
+        /// <c>model::delete</c> if another client deleted it meanwhile, and keeps its tombstone. Without it, as when a
+        /// listener registers, the object is in this client's scene or being created, and the server drops the tombstone.
         /// </summary>
         /// <remarks>Internal for the EditMode tests, which stand in for a reconnect with it.</remarks>
         internal static void RequestModelsAgain() => RequestModelsAgain(_disconnectedAt);
 
         /// <summary>
-        /// <see cref="RequestModelsAgain()"/>. One more request follows them all, whose answer marks
-        /// the end of theirs, and each SyncBehaviour whose object was among the models asked for is
-        /// told about the round of answers it is part of (see <see cref="ReconnectRound"/>),
-        /// including when the connection was lost (<paramref name="disconnectedAt"/>, on
-        /// SyncTicker's clock).
+        /// <see cref="RequestModelsAgain()"/> with the outage noticed at <paramref name="disconnectedAt"/> (SyncTicker's
+        /// clock). One more request follows them all, whose answer ends the round, and each SyncBehaviour among the
+        /// requested models is told which round its answers belong to (see <see cref="ReconnectRound"/>).
         /// </summary>
         /// <remarks>Internal for the EditMode tests, which set the time of the outage with it.</remarks>
         internal static void RequestModelsAgain(double disconnectedAt)
@@ -486,10 +358,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     continue;
                 }
 
-                // A listener that asked for every model on the channel (a SyncBehaviourManager)
-                // asks again; one that asked for its own object (a SyncBehaviour) does too - the
-                // server answers an id it does not know with a bare { id }, and only a request for
-                // that id gets that answer.
+                // A SyncBehaviour asks for its own id as well as the manager's whole-channel request: only a request for
+                // that id gets the server's bare { id } answer for a model it does not have.
                 var requestedAll = false;
                 var requestedIds = new HashSet<string>();
                 foreach (var listener in channelListeners)
@@ -513,32 +383,28 @@ namespace HCIKonstanz.Colibri.Synchronization
                 }
             }
 
-            // A round still open lost its answers to this outage: the link dropped again soon after
-            // the last reconnect. A change lost at the drop before that is still in question, so
-            // the new round counts from that earlier outage. Counted from this one, the lost change
-            // could lie before the window, and the answer, which still holds the value from before
-            // it, would be applied after all. OnDisconnected has sent that one's deletes again too.
+            // A round still open lost its answers: the link dropped again soon after the last reconnect. A change lost at
+            // the earlier drop is still in question, so the new round counts from that outage. Counted from this one, that
+            // change would predate DisconnectedAt and the stale answer would be applied.
             if (_reconnectRound != null)
             {
                 disconnectedAt = Math.Min(disconnectedAt, _reconnectRound.DisconnectedAt);
                 _reconnectRound.IsOver = true;
             }
 
-            // So did a round an object opened at its first answer. The object is in this one now,
-            // and what it sent in place of the server's values is judged as any other value sent.
+            // Same for a round an object opened at its first answer: the object is in the new round now, and what it sent
+            // in place of the server's values is judged like any other value sent.
             EndAnswerRounds();
 
-            // After every other request, on every channel: its answer comes after all of theirs.
-            // Sent even when no object was asked for again: its answer also says that the server
-            // has read the deletes sent again ahead of the requests. And only an answered round
-            // ends: one left open would carry its outage over to a round much later, which would
-            // judge as lost what other clients changed in between.
+            // After every other request, on every channel, so its answer comes after all of theirs. Sent even when no model
+            // was requested: its answer also says the server has read the deletes sent again, and a round that is never
+            // answered would carry its outage into a much later one and judge as lost what other clients changed in between.
             var round = new ReconnectRound(disconnectedAt);
             _reconnectRound = round;
             SendCommand(ReconnectRoundChannel, "model::request", new JObject { { "id", round.EndMarkerId }, { "again", true } });
 
-            // What is sent from here on goes out after the requests, and their answers cannot hold
-            // it: hearing from the server on this connection counts again.
+            // Values sent from here on go out after the requests, so the answers cannot hold them: hearing from the
+            // server counts again.
             _heardAtHeld = false;
 
             if (toTell == null)
@@ -548,11 +414,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 tell(round);
         }
 
-        /// <summary>
-        /// The answer to the request that ends a <see cref="ReconnectRound"/>. One with an earlier
-        /// round's id answers a request that a failed write kept for this connection; that round is
-        /// over already.
-        /// </summary>
+        // The answer that ends a round. An id from an earlier round answers a request a failed write kept for this
+        // connection; that round is over already.
         private static void EndReconnectRound(JToken data)
         {
             if (!(data is JObject answer) || !answer.TryGetValue("id", out var id) || id.Type != JTokenType.String)
@@ -573,30 +436,20 @@ namespace HCIKonstanz.Colibri.Synchronization
             round.IsOver = true;
             _reconnectRound = null;
 
-            // The server has read them, with everything queued ahead of the request. One sent
-            // after it may still be on its way, but from here on, like any other, it goes out
-            // again only if made around when the server was last heard from (see OnDisconnected).
+            // The server has read everything queued ahead of the request, the resent deletes included. Later deletes are
+            // resent only if made around when the server was last heard from (see OnDisconnected).
             ForgetUnreadDeletes();
         }
 
-        /*
-         *  Every message that arrives goes through here, so nothing in it may throw: an exception
-         *  leaving this method skips every other handler of the message, and every message still
-         *  queued behind it that frame. A payload that cannot be read as the type its command
-         *  names is reported and dropped; a listener that throws is reported and the rest are
-         *  still called.
-         *
-         *  The conversions below keep exactly the leniency they always had (JToken.Value<T>() and
-         *  the explicit casts accept "5" for an int, 1 for a bool, ...). Only what used to throw
-         *  is new: that is now one warning instead of an exception.
-         */
-
-        /// <remarks>Internal so the EditMode tests can deliver a message without a socket.</remarks>
+        // A payload that cannot be read as its command's type is reported and dropped rather than thrown, and a
+        // listener that throws is reported without skipping the channel's other listeners.
+        // The conversions are as lenient as JToken.Value<T>() and the explicit casts ("5" for an int, 1 for a bool).
+        // Internal so the EditMode tests can deliver a message without a socket.
         internal static void OnServerMessage(string channel, string command, JToken data)
         {
             RecordTraffic(true, channel, command);
 
-            // Colibri's own, and nothing a listener asked for: see ReconnectRound.
+            // Colibri's own channel; never reaches listeners (see ReconnectRound).
             if (channel == ReconnectRoundChannel)
             {
                 EndReconnectRound(data);
@@ -660,9 +513,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     break;
 
                 case "model::update":
-                    // Not routed through Invoke<T>: these are Colibri's own plumbing, so a model
-                    // message arriving with nothing listening is not a type mismatch worth
-                    // reporting - it is just a model this client does not have.
+                    // Not through Invoke<T>: a model message with nothing listening is not a type mismatch,
+                    // only a model this client does not have.
                     if (data is JObject updated)
                         Dispatch(channel, command, _modelUpdateListeners, updated, track: false);
                     break;
@@ -674,12 +526,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        /// <summary>
-        /// Converts and delivers one message. The payload is only read when something on the
-        /// channel listens for this type: every client sees every channel its app uses, so a
-        /// malformed value on a channel this one ignores is not worth a warning here - nor worth
-        /// the conversion.
-        /// </summary>
+        // Converts only if this type has a listener on the channel: a channel this client ignores needs neither the
+        // conversion nor a warning about a malformed value.
         private static void Deliver<T>(string channel, string command, JToken data,
             Dictionary<string, List<Listener<T>>> listeners, Func<JToken, T> convert)
         {
@@ -692,8 +540,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             T value;
             try
             {
-                // ParsePayload never hands over a C# null, but a caller other than the socket
-                // might; it means the same as a JSON null.
+                // ParsePayload never returns a C# null, but other callers might; it means JSON null.
                 value = convert(data ?? JValue.CreateNull());
             }
             catch (Exception e)
@@ -706,11 +553,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             Invoke(channel, command, listeners, value);
         }
 
-        /// <summary>
-        /// Arrays are read element by element, and only out of a JSON array. Enumerating any other
-        /// token "works" - a number or null yields no elements at all - which used to hand the
-        /// listener an empty array for a payload that was nothing of the kind.
-        /// </summary>
+        // Only a JSON array is read. Enumerating any other token yields no elements, which would hand the listener an
+        // empty array for a payload that is not an array.
         private static TElement[] ToArray<TElement>(JToken token, Func<JToken, TElement> readElement)
         {
             if (!(token is JArray array))
@@ -743,17 +587,12 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private static void ReportMismatch<T>(string channel)
         {
-            // Nothing is listening for this type on this channel. That is only worth reporting
-            // when *something else* is - a channel with no listeners at all is normal, since
-            // every client sees every channel its app uses.
+            // Reported only if the channel has listeners of another type; a channel without listeners is normal.
             if (ChannelListenerRegistry.TryDescribeMismatch(channel, typeof(T), out var message))
                 Debug.LogWarning(message);
         }
 
-        /// <summary>
-        /// Calls everything still listening on the channel, dropping the listeners whose objects
-        /// have been destroyed on the way past. Returns false when the channel had nobody left.
-        /// </summary>
+        // Calls the channel's listeners, pruning those whose owner was destroyed. False when none is left.
         private static bool Dispatch<T>(string channel, string command, Dictionary<string, List<Listener<T>>> listeners, T val, bool track)
         {
             if (!listeners.TryGetValue(channel, out var channelListeners))
@@ -762,8 +601,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             Prune(channel, channelListeners, track);
             if (channelListeners.Count == 0)
             {
-                // Left in place, an empty list would keep answering the lookup above, and every
-                // future message on this channel would be dropped without a word.
+                // Not left empty: it would keep answering the lookup above, and later messages on this channel would be
+                // dropped without a word.
                 listeners.Remove(channel);
                 return false;
             }
@@ -777,8 +616,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 }
                 catch (Exception e)
                 {
-                    // One listener's bug is that listener's problem: the others on the channel
-                    // still get the message, and so does everything queued behind it.
+                    // One listener's exception must not stop the others or the messages queued behind it.
                     Debug.LogError($"Colibri: a listener for {command} on channel '{channel}' threw an exception. "
                         + $"The other listeners still received the message.\n{e}");
                 }
@@ -787,7 +625,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return true;
         }
 
-        /// <summary>Removes the listeners whose owning object is gone. See <see cref="ListenerOwner"/>.</summary>
+        // Drops listeners whose owner was destroyed (see ListenerOwner); track also updates ChannelListenerRegistry.
         private static void Prune<T>(string channel, List<Listener<T>> channelListeners, bool track)
         {
             for (var i = channelListeners.Count - 1; i >= 0; i--)
@@ -802,10 +640,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
-        /*
-         *  Traffic log, for the Colibri Status window. Compiled out of release builds entirely,
-         *  so neither the buffer nor the calls that fill it cost a shipped build anything.
-         */
+        // Traffic log for the Colibri Status window. The buffer and the calls that fill it are compiled out of
+        // release builds.
 
         public struct TrafficEntry
         {
@@ -821,24 +657,16 @@ namespace HCIKonstanz.Colibri.Synchronization
         private const float DefaultTrafficRetentionSeconds = 10f;
 
         /// <summary>
-        /// How long an entry stays in the log. It is a "what is happening right now" list, so an
-        /// idle channel should empty out rather than leave the last twenty messages on screen
-        /// with ages counting up indefinitely.
+        /// How long an entry stays in the log, so an idle channel empties out instead of showing the last messages with
+        /// ever-growing ages. Settable for the test suite.
         /// </summary>
-        /// <remarks>
-        /// Settable only so the test suite can shorten it - a test that has to sit out the real
-        /// ten seconds to watch an entry expire is one nobody will keep running.
-        /// </remarks>
         internal static float TrafficRetentionSeconds = DefaultTrafficRetentionSeconds;
 
         private static readonly TrafficEntry[] _traffic = new TrafficEntry[TrafficLogSize];
         private static int _trafficCount;
 
-        /// <summary>
-        /// Entries survive Play mode with domain reload disabled, and their timestamps are
-        /// <c>realtimeSinceStartup</c> - which keeps running in edit mode. Without this the next
-        /// session opened showing the last one's messages, dated from before it started.
-        /// </summary>
+        // With domain reload disabled the log survives Play mode, and realtimeSinceStartup keeps running in edit mode,
+        // so the next session would start with the last one's messages, dated from before it began.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetTraffic()
         {
@@ -862,8 +690,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 {
                     var entry = _traffic[(_trafficCount - i) % TrafficLogSize];
 
-                    // Newest first, so the first entry past the window means every entry after it
-                    // is older still.
+                    // Newest first: once one is past the window, all the rest are older still.
                     if (entry.Time < oldest)
                         yield break;
 
@@ -937,21 +764,13 @@ namespace HCIKonstanz.Colibri.Synchronization
          */
 
         /// <summary>
-        /// A Play session starts without the previous one's listeners. With domain reload disabled
-        /// these dictionaries survive from one session to the next, and so did every listener in
-        /// them that belongs to no Unity object - a static method, a lambda that captures nothing.
-        /// One the new session never registers kept being called, and the types of the old
-        /// session's listeners kept counting for the type-mismatch warning. Listeners owned by an
-        /// object went with it (see <see cref="ListenerOwner"/>), but only once the next message on
-        /// their channel swept them out.
+        /// Starts a Play session without the previous one's listeners. With domain reload disabled the dictionaries
+        /// survive, and so would every listener owned by no Unity object (a static method, a lambda that captures
+        /// nothing): still called, and still counted for the type-mismatch warning.
         /// </summary>
         /// <remarks>
-        /// What this clears was registered in an earlier Play session or in edit mode; entering Play
-        /// mode with domain reload enabled, the default, starts without those too. Only another
-        /// SubsystemRegistration callback could register before this runs - they come before any
-        /// other RuntimeInitializeOnLoadMethod, any scene load and any Awake - and none in Colibri
-        /// does. In a player it runs once, at startup, on empty dictionaries. Internal for the
-        /// EditMode tests, which stand in for the start of a session with it.
+        /// No other SubsystemRegistration callback in Colibri registers a listener, so nothing registered earlier is lost
+        /// here. Internal for the EditMode tests, which stand in for the start of a session with it.
         /// </remarks>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetListeners()
@@ -976,13 +795,11 @@ namespace HCIKonstanz.Colibri.Synchronization
             _modelUpdateListeners.Clear();
             _modelDeleteListeners.Clear();
 
-            // The per-channel counts behind the type-mismatch warning, which describe the same
-            // listeners.
+            // Per-channel counts behind the type-mismatch warning.
             ChannelListenerRegistry.Clear();
 
-            // The previous session's outage and the deletes it sent again, on a clock that has gone
-            // on running since, its rounds of answers, which no object of this session is part of,
-            // and when its connection last heard from the server, as last asked and held.
+            // Outage and heard-from state of the previous session: its clock has run on since, and no object of this
+            // session is in its rounds.
             _disconnectedAt = double.NegativeInfinity;
             ForgetUnreadDeletes();
             _reconnectRound = null;
@@ -992,22 +809,17 @@ namespace HCIKonstanz.Colibri.Synchronization
             _heardAskedAt = double.NegativeInfinity;
             _heardAtHeld = false;
 
-            // When the previous session went without a server, and whether it said so.
             _withoutServerSince = double.NaN;
             _hasWarnedAboutNoServer = false;
         }
 
-        // `track` is off for the model channels: they are Colibri's own SyncBehaviour plumbing,
-        // they never go through Invoke<T>, and listing them would only bury the channels the
-        // application code actually registered.
+        // track is off for the model channels: Colibri's own plumbing, which never goes through Invoke<T> and would
+        // only bury the application's channels in the registry.
         private static void AddListener<T>(string channel, Dictionary<string, List<Listener<T>>> listeners, Action<T> listener,
             bool track = true, string fetchId = null, Action<ReconnectRound> requestedAgain = null)
         {
-            // Ensures the connection is in the scene and that this class is subscribed to it - on
-            // every registration, not only a channel's first. A channel's entry below can outlive
-            // the connection it was subscribed to: destroying the connection's GameObject leaves
-            // it in place, and so, before ResetListeners, did the end of a Play session with
-            // domain reload disabled. A client that only listens then never got a connection again.
+            // Ensure the connection is in the scene and subscribed to, on every registration: a channel's entry outlives
+            // a destroyed connection GameObject, and a client that only listens would never get a connection again.
             Connection();
 
             if (!listeners.TryGetValue(channel, out var channelListeners))
@@ -1017,17 +829,12 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
             else
             {
-                // Registering is the other natural moment to sweep: reloading a scene registers
-                // everything again, and without this the previous scene's listeners would pile up
-                // on a channel that nothing happens to send on.
+                // Sweep on registration too: a scene reload registers everything again, and the old scene's listeners would
+                // pile up on a channel nothing sends on.
                 Prune(channel, channelListeners, track);
 
-                // Already listening. Delegates are equal when they call the same method on the
-                // same object, so this is a listener that belongs to nothing that is ever destroyed
-                // - a static method, or a lambda that captures nothing, which the compiler creates
-                // once and hands out again - or the same object registering the same method twice.
-                // Registered in Start, the first kind used to be added again on every scene
-                // reload, and every message was delivered to it twice, then three times, ...
+                // Skip a duplicate (same method, same object). Nothing prunes a static method or a lambda that captures
+                // nothing (the compiler caches it), so it would be added again on every scene reload.
                 for (var i = 0; i < channelListeners.Count; i++)
                 {
                     if (channelListeners[i].Callback.Equals(listener) && channelListeners[i].FetchId == fetchId)
@@ -1121,16 +928,15 @@ namespace HCIKonstanz.Colibri.Synchronization
             SendCommand(channel, "model::request", null);
         }
 
-        /// <summary>Asks the server for every model of the channel again, as registering a listener for it does.</summary>
+        /// <summary>Requests every model of the channel, as registering a listener for it does.</summary>
         internal static void RequestModels(string channel) => SendCommand(channel, "model::request", null);
 
         public static void AddModelUpdateListener(string channel, Action<JObject> listener, string fetchInitialStateId)
             => AddModelUpdateListener(channel, listener, fetchInitialStateId, requestedAgain: null);
 
         /// <summary>
-        /// The overload above, for a SyncBehaviour: <paramref name="requestedAgain"/> is told each
-        /// time the model is asked for again after a reconnect (see
-        /// <see cref="RequestModelsAgain(double)"/>).
+        /// The overload above, for a SyncBehaviour: <paramref name="requestedAgain"/> is called with the round each time
+        /// the model is requested again after a reconnect.
         /// </summary>
         internal static void AddModelUpdateListener(string channel, Action<JObject> listener, string fetchInitialStateId,
             Action<ReconnectRound> requestedAgain)
@@ -1141,12 +947,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Listens for one model's updates like the overload above, but asks the server for nothing
-        /// now. For an object a SyncBehaviourManager builds from another client's update, which
-        /// carries the model's state already: the request the overload above sends says that this
-        /// client has the object in its scene now, or is creating it, and the server lifts the
-        /// tombstone of a model of that id deleted a moment ago. After a reconnect the model is
-        /// asked for again like every other one (see <see cref="RequestModelsAgain()"/>).
+        /// Like the overload above but sends no request. For an object a SyncBehaviourManager builds from a remote
+        /// update, which already carries the state: that request would lift the server's tombstone for a model of this
+        /// id deleted a moment ago. Requested again after a reconnect like every other model.
         /// </summary>
         internal static void AddModelUpdateListenerWithoutRequest(string channel, Action<JObject> listener, string id,
             Action<ReconnectRound> requestedAgain)
@@ -1160,22 +963,11 @@ namespace HCIKonstanz.Colibri.Synchronization
 
 
 
-        /*
-         *  Generic listener registration.
-         *
-         *  Receive is overloaded once per supported type, which makes
-         *      Sync.Receive("MyChannel", MyHandler)
-         *  ambiguous and forces a cast onto every call site. Naming the type instead -
-         *      Sync.Receive<float>("MyChannel", MyHandler)
-         *  - is unambiguous, because supplying type arguments rules the overloads out.
-         *
-         *  Dispatch is a pattern match on the delegate, so there is no reflection involved and
-         *  the compiler still sees the same typed calls as before.
-         *
-         *  There is deliberately no Send<T>: Sync.Send("ch", value) already resolves without a
-         *  cast, so a generic version would buy nothing and would turn today's compile error on
-         *  an unsupported type into a runtime message.
-         */
+        // Receive is overloaded once per supported type, so Sync.Receive("MyChannel", MyHandler) is ambiguous and every
+        // call site needs a cast. Sync.Receive<float>("MyChannel", MyHandler) is not: type arguments rule the overloads
+        // out. It dispatches by pattern match on the delegate, no reflection.
+        // There is deliberately no Send<T>: Sync.Send("ch", value) resolves without a cast, and a generic version would
+        // turn the compile error for an unsupported type into a runtime message.
 
         private const string SupportedTypes = "bool, int, float, string, Vector2, Vector3, Quaternion, Color, JToken and arrays of those";
 

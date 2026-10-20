@@ -19,23 +19,20 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private readonly List<T> _existingObjects = new List<T>();
 
-        // Placed objects switched off since their scene loaded, by id. Unity runs Awake only on an
-        // active object, so these do not listen for their own updates.
+        // Placed objects that have not run Awake yet (inactive since their scene loaded), by id.
+        // Neither live nor in _existingObjects: an update for one would look like an unknown model and be built again.
         private readonly Dictionary<string, T> _dormantObjects = new Dictionary<string, T>();
         private bool _isCreatingObject;
         private bool _warnedNoTemplate;
         private bool _warnedUnknownPart;
 
-        // Ids of other clients' objects whose copy took another Id as it woke: see OnModelUpdate.
+        // Ids of remote objects that could not be built: the copy took another Id in Awake.
         private readonly HashSet<string> _unbuildable = new HashSet<string>();
 
         private bool _isListening;
 
-        // The manager starts listening in Start, after its Template is set, and stops in
-        // OnDestroy. Both used to be private: a manager script with a Start of its own hid the
-        // manager's, which then never ran, and the manager synced nothing, without a word. Now
-        // hiding one warns (CS0114), and should Start not run anyway, the manager starts a frame
-        // later and says why. Override them and call the base method.
+        // Listens from Start (after Template is set) until OnDestroy. Override and call base, do not hide:
+        // if Start does not run, OnEnable starts listening a frame later and warns.
         protected virtual void OnEnable()
         {
             if (!_isListening)
@@ -63,14 +60,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             _isListening = true;
 
-            // Switched-off objects too. Each one raised ModelCreated in its Awake, before this
-            // manager listened, and a script that hides an object in its own Awake or Start may
-            // run before this Start. Left out, such an object never sent its state, so no other
-            // client knew it, and they built it at the template's values once it was shown; and if
-            // the server held its model already, the answer to this manager's request below built
-            // a second object of its id here. Only objects that have woken, though: one switched off
-            // since its scene loaded runs Awake once it is switched on, and comes to OnModelCreated
-            // then, like any new object.
+            // Includes inactive objects: one that woke and was then hidden raised ModelCreated before
+            // this manager listened. One that has not run Awake is skipped; it reaches OnModelCreated when it wakes.
             var existingBehaviours = UnityCompat.FindAll<T>(FindObjectsInactive.Include)
                 .Where(o => o.HasAwoken)
                 .Where(o => o.ModelId == Template?.ModelId || (Template == null && String.IsNullOrEmpty(o.ModelId)))
@@ -110,16 +101,13 @@ namespace HCIKonstanz.Colibri.Synchronization
             Sync.RemoveModelUpdateListener(Channel, OnModelUpdate);
             SceneManager.sceneLoaded -= OnSceneLoaded;
 
-            // Static events do not unsubscribe themselves. Missing this leaks a handler - and its
-            // destroyed manager - into the next Play session whenever domain reload is disabled.
+            // Static events: with domain reload disabled, a handler survives into the next Play session.
             SyncBehaviour<T>.ModelCreated -= OnModelCreated;
             SyncBehaviour<T>.ModelDestroyed -= OnModelDestroyed;
         }
 
-        // A manager that outlives a scene load, kept with DontDestroyOnLoad say, lost the copies it
-        // had built with the old scene, which sent no delete (see SyncBehaviour.OnDestroy). It asked
-        // for the channel's models only in Start, so they came back only once they changed again.
-        // A manager in the new scene asks in its own Start.
+        // Copies built into the old scene are destroyed on a Single load without a delete, so a manager
+        // that survives it (DontDestroyOnLoad) requests the channel's models again. Others do so in Start.
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (StoppedListening())
@@ -128,8 +116,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 Sync.RequestModels(Channel);
         }
 
-        // A destroyed manager whose OnDestroy did not run, hidden by one of the manager script's
-        // own, would still be called.
+        // True for a destroyed manager whose OnDestroy was hidden, so it never unsubscribed; unsubscribes now.
         private bool StoppedListening()
         {
             if (this)
@@ -154,9 +141,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             _existingObjects.Add(model as T);
 
-            // A part of a copy another manager built of another client's object, e.g. the
-            // SyncTransform next to a Player: it asks for its own state. Its full state sent from
-            // here went over the owner's newer values, or put the template's on the server.
+            // A part of a copy another manager built (e.g. the SyncTransform next to a Player) requests
+            // its own state. A full state sent from here would overwrite the owner's newer values.
             if (((ISyncedObject)model).IsCopy)
                 return;
             model.TriggerSync();
@@ -178,30 +164,24 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (_existingObjects.Any(t => t.Id == id))
                 return;
 
-            // This client deleted the object a moment ago, and the update is one another client
-            // sent before the server had the delete. Built from it, the deleted object was back on
-            // this client, with the template's values for every member the update did not carry,
-            // and nothing was going to delete it again.
+            // A remote update sent before the server had this client's delete. Building from it would bring
+            // the object back with template values for every member the update lacks.
             if (LocallyDeletedModels.Contains(Channel, id) || _unbuildable.Contains(id))
                 return;
 
-            // In this scene already, built with the object it is part of (it asks for its own
-            // state then) or placed in it.
+            // Live already: placed in the scene, or built with the object it is part of (it requests its own state).
             if (SyncedIds.IsLive(id))
                 return;
 
-            // A part below the top of an object, such as an avatar's hand: the whole object is
-            // built, from its top's id, unless it is here already, or placed and switched off,
-            // without this part.
+            // A part below an object's anchor (an avatar's hand) builds the whole object, from the anchor's id.
+            // Not if that object exists already, live or placed and inactive, even without this part.
             var anchorId = SyncedIds.AnchorOfPart(id, prefix => SyncedIds.IsLive(prefix) || _dormantObjects.ContainsKey(prefix)
                 || (Template && SyncedIds.TemplateHasPart(Template, typeof(T), prefix, id)));
             if (anchorId != null && (SyncedIds.IsLive(anchorId) || _dormantObjects.ContainsKey(anchorId)))
                 return;
 
-            // A placed object of this scene that is switched off here. Shown on another client
-            // (SyncTransform's active: true), it is switched on here too, and takes the update.
-            // Any other update waits until it is shown: it asks for its state as it wakes. Treated
-            // as unknown, it was built a second time from a Template, or a warning asked for one.
+            // A placed object that is inactive here. A remote update with active: true (SyncTransform) switches it
+            // on, if its parent is active, and applies. Any other update is dropped: it requests its state on waking.
             if (_dormantObjects.TryGetValue(id, out var dormant))
             {
                 if (!dormant)
@@ -214,9 +194,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     if (data.TryGetValue("active", out var active) && active.Type == JTokenType.Boolean && active.Value<bool>()
                         && (parent == null || parent.gameObject.activeInHierarchy))
                     {
-                        // Woken without TriggerSync: it asks for its state as it wakes, and the
-                        // update is applied as its first answer. A full state sent from here put
-                        // its values from the scene file over everything the update did not carry.
+                        // Woken under _isCreatingObject, so OnModelCreated does not TriggerSync: it requests
+                        // its state as it wakes, and this update is applied as its first answer.
                         _dormantObjects.Remove(id);
                         _isCreatingObject = true;
                         try
@@ -235,9 +214,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 }
             }
 
-            // A manager without a template is how objects placed in the scene are synced, so it is
-            // only worth a word once a model arrives that it would have to build - and then once,
-            // not for every update of every such model.
+            // No Template is normal for a manager of placed objects: warn once, and only for a model it
+            // would have to build.
             if (!Template)
             {
                 if (!_warnedNoTemplate)
@@ -250,8 +228,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             }
 
-            // Built as an object of its own, a part the Template does not have became a second
-            // object, which followed that part.
+            // A part of another client's object that the Template lacks must not be built as an object of its own.
             if (anchorId == null && SyncedIds.LooksLikeRuntimePart(id))
             {
                 if (!_warnedUnknownPart)
@@ -271,23 +248,15 @@ namespace HCIKonstanz.Colibri.Synchronization
             T go = null;
             GameObject holder = null;
 
-            // Restored in finally: applying the state can throw - a [Sync] setter in
-            // application code, a value that cannot be read - and the exception leaves through
-            // Sync's dispatch, which reports it. Left behind, _isCreatingObject stayed true,
-            // so no object created on this client afterwards ever sent its state, and the
-            // template kept the remote model's id.
+            // Restored in finally: applying the update can throw (a [Sync] setter in application code), and
+            // Sync's dispatch catches it, so nothing above would reset this state.
             try
             {
                 Template.enabled = false;
 
-                // Built below a holder that is switched off, so that every part has its id, and
-                // knows it is a copy, before any part wakes. A part that woke first took an id of
-                // its own: the one a model script sets in Awake, this client's device id say, and
-                // the copy synced as another object. The template's own component takes the id
-                // the update names; the others take what the creator's SyncedIds.Assign gave them,
-                // unless they have an Id of their own. A copy is not deleted when its scene
-                // unloads (see SyncBehaviour.OnDestroy), and other managers add their parts of it
-                // without sending them back (see OnModelCreated).
+                // Built below an inactive holder so that every part has its id and is marked as a copy before
+                // any part wakes. One that woke first would take an id from its own Awake (a device id, say)
+                // and sync as another object. A part without an Id gets what SyncedIds.Assign gave it on the creator.
                 holder = new GameObject("[Colibri copy being built]");
                 holder.SetActive(false);
                 go = Instantiate(Template, holder.transform);
@@ -302,25 +271,19 @@ namespace HCIKonstanz.Colibri.Synchronization
                     part.MarkAsCopy();
                 }
 
-                // At the top level of the scene, where it wakes. Templates are often kept switched
-                // off in the scene, and a clone starts out as its template is. A clone that is off
-                // never runs Awake: it never registers for its own updates or with the ticker, so
-                // it stayed exactly as this first update left it - and an object hidden elsewhere
-                // (active: false) could never be shown again. Switched on first, Awake runs and
-                // latches the template's values; the state applied next is then latched too, so
-                // none of it is echoed back, and it decides whether the object ends up visible.
+                // Out of the holder, where it wakes. A clone of an inactive template never runs Awake (no listener,
+                // no ticker), so it is switched on first. Awake latches the template's values; the update applied
+                // next is latched too, so it is not echoed, and decides whether the object ends up active.
                 go.transform.SetParent(null, false);
                 if (!go.gameObject.activeSelf)
                     go.gameObject.SetActive(true);
 
-                // An Id changed after base.Awake() is set back, as the poll would, before the
-                // copy's part is looked up by it.
+                // Restores an Id changed after base.Awake() now rather than at the next poll, for the lookup below.
                 foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
                     part.KeepRegisteredId();
 
-                // A model script that sets Id in its own Awake gave the copy another Id. Kept,
-                // the copy synced as some other object, and every further update for this id
-                // built yet another one, dozens a second. It goes again, without a delete.
+                // The copy took another Id in Awake: discard it without a delete. Kept, it would sync as
+                // another object and every further update for this id would build another copy.
                 var target = go.GetComponentsInChildren<T>(true).FirstOrDefault(p => p.Id == id);
                 if (!target)
                 {
@@ -334,9 +297,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     return;
                 }
 
-                // Known before its state is applied, so that a throw there cannot make the
-                // next update for this id build a second object. The clone's other parts of this
-                // manager's type too: each asks for its own state, and none is built again.
+                // Known before the update is applied, so a throw there cannot build a second object. Includes
+                // the clone's other parts of this type; they request their own state.
                 foreach (var part in go.GetComponentsInChildren<T>(true))
                 {
                     if (part.ModelId == Template.ModelId && !_existingObjects.Contains(part))

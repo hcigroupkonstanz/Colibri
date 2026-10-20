@@ -6,26 +6,22 @@ using Object = UnityEngine.Object;
 namespace HCIKonstanz.Colibri.Synchronization
 {
     /// <summary>
-    /// The single per-frame driver behind every <see cref="SyncBehaviour{T}"/> in the scene.
-    ///
-    /// Change detection used to be one reactive subscription per synced attribute, i.e. five
-    /// per <c>SyncTransform</c>. This is one <c>Update</c> and one <c>LateUpdate</c> for the
-    /// whole application, no matter how many objects are synchronized: <c>Update</c> polls every
-    /// synced attribute for changes, <c>LateUpdate</c> flushes each object's accumulated changes
-    /// as a single message. Splitting the two guarantees that a frame's changes are all collected
-    /// before any of them go out.
-    ///
-    /// The flush is also where the send-rate limit (<see cref="SyncSettings.MaxSendRate"/>) is
-    /// applied, per object: every registered object is flushed in every frame, so changes it holds
-    /// back go out once their interval is up even if the object never changes again.
+    /// The per-frame driver for every <see cref="SyncBehaviour{T}"/>: <c>Update</c> polls all synced
+    /// attributes for changes, <c>LateUpdate</c> flushes each object's changes as a single message, so
+    /// a frame's changes are all collected before any go out.
     /// </summary>
+    /// <remarks>
+    /// The flush applies the send-rate limit (<see cref="SyncSettings.MaxSendRate"/>) per object. Every
+    /// registered object is flushed every frame, so held-back changes go out once the interval is up
+    /// even if the object never changes again.
+    /// </remarks>
     internal sealed class SyncTicker : MonoBehaviour
     {
         internal interface ITickable
         {
             /// <summary>
-            /// Slot in the ticker's list, or -1 while unregistered. Owned by <see cref="SyncTicker"/>;
-            /// implementations only have to store it and initialize it to -1.
+            /// Slot in the ticker's list, or -1 while unregistered. Owned by the ticker; implementations
+            /// only store it, initialized to -1.
             /// </summary>
             int TickIndex { get; set; }
 
@@ -33,12 +29,11 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             /// <param name="now">The ticker's clock, in seconds.</param>
             /// <param name="interval">
-            /// The send-rate limit as an interval, 1 / <see cref="SyncSettings.MaxSendRate"/>
-            /// seconds; 0 for no limit.
+            /// The send-rate limit as an interval (1 / <see cref="SyncSettings.MaxSendRate"/>); 0 for no limit.
             /// </param>
             /// <param name="heardAt">
-            /// When this client last heard from the server, on the same clock: what is sent after
-            /// it may be going into a link that has died (see <see cref="SentValues"/>).
+            /// When the server was last heard from, on the same clock. Anything sent after it may have gone
+            /// into a dead link (see <see cref="SentValues"/>).
             /// </param>
             void FlushUpdate(double now, double interval, double heardAt);
         }
@@ -47,12 +42,11 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static bool _hasEmptySlots;
         private static SyncTicker _instance;
 
-        // The objects whose exception has been logged, so that one failing every frame is
-        // reported once.
+        // Objects whose exception was already logged, so one that fails every frame is reported once.
         private static readonly HashSet<ITickable> _reported = new HashSet<ITickable>();
 
-        // Statics survive Play mode when domain reload is disabled, which would otherwise leave
-        // the list full of destroyed components from the previous session.
+        // Statics survive Play mode with domain reload disabled and would keep the previous session's
+        // destroyed components.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetState()
         {
@@ -64,18 +58,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             DestroyStrayTickers();
         }
 
-        /// <summary>
-        /// Cleans up tickers left behind by an earlier Play session.
-        /// </summary>
-        /// <remarks>
-        /// The ticker GameObject used to carry <c>HideFlags.DontSave</c>, which does not only keep
-        /// it out of the saved scene - it also exempts it from being destroyed when Play mode ends.
-        /// One survived every Play session, still enabled, and since they all drive the same static
-        /// list, the *n*-th session ran PollChanges and FlushUpdate n times per frame: duplicate
-        /// messages on the wire and a sync cost that grew every time the play button was pressed.
-        /// The flag is gone, but a project that has already accumulated them needs them clearing,
-        /// and they outlive a domain reload.
-        /// </remarks>
+        // Removes tickers that survived an earlier Play session (HideFlags.DontSave does that). Each would
+        // drive the same static list and send every update again.
         private static void DestroyStrayTickers()
         {
             foreach (var stray in Resources.FindObjectsOfTypeAll<SyncTicker>())
@@ -85,12 +69,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        /// <summary>
-        /// How many objects the ticker is currently driving, ignoring slots that have been cleared
-        /// but not yet compacted. Exists for the end-to-end suite: "one ticker" and "one entry per
-        /// synced object" are the two halves of the leak that made the *n*-th Play session send
-        /// every update n times, and neither is observable from the public API.
-        /// </summary>
+        // Objects being driven, skipping cleared slots that are not compacted yet. For tests.
         internal static int RegisteredCount
         {
             get
@@ -110,8 +89,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (tickable.TickIndex >= 0)
                 return;
 
-            // Nothing ticks outside Play mode, and registering there would leave an entry that
-            // ResetState clears while the object still believes it is registered.
+            // Nothing ticks outside Play mode, and ResetState would clear the entry while the object
+            // still believes it is registered.
             if (!Application.isPlaying)
                 return;
 
@@ -126,8 +105,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (index < 0)
                 return;
 
-            // Cleared rather than removed: Deregister runs from OnDisable/OnDestroy, which can
-            // happen in the middle of a tick, and RemoveAt would shift the indices under the loop.
+            // Cleared, not removed: IsLive calls this from inside the tick loops, and RemoveAt would shift
+            // their indices.
             _tickables[index] = null;
             tickable.TickIndex = -1;
             _hasEmptySlots = true;
@@ -139,24 +118,17 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (_instance)
                 return;
 
-            // Deliberately not a SingletonBehaviour: that one creates its GameObject on any
-            // property access, including from an editor window.
-            //
-            // No HideFlags: DontDestroyOnLoad already keeps this out of any saved scene, and
-            // HideFlags.DontSave additionally survives Play mode - see DestroyStrayTickers.
+            // Not a SingletonBehaviour: that creates its GameObject on any Instance access, including
+            // from an editor window.
+            // No HideFlags: DontDestroyOnLoad already keeps it out of saved scenes, and HideFlags.DontSave
+            // would survive Play mode (see DestroyStrayTickers).
             var go = new GameObject("[Colibri SyncTicker]");
             _instance = go.AddComponent<SyncTicker>();
             DontDestroyOnLoad(go);
         }
 
-        /*
-         *  Each object on its own. An exception out of one object's poll or flush - a [Sync]
-         *  getter in application code, or an object destroyed without leaving the list because its
-         *  script's own OnDestroy hid SyncBehaviour's - used to leave the loop, so every object
-         *  after it in the list stopped syncing, every frame, with one error in the console.
-         */
-
-        /// <summary>Whether the slot holds an object to tick; takes a destroyed one off the list.</summary>
+        // Takes a destroyed object off the list; one whose script hides SyncBehaviour's OnDestroy
+        // never deregistered itself.
         private static bool IsLive(ITickable tickable)
         {
             if (tickable == null)
@@ -180,6 +152,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 + $"syncing. This is logged once per object.\n{exception}", context);
         }
 
+        // Poll and Flush catch per object, so one that fails does not stop the objects after it.
         private static void Poll(ITickable tickable)
         {
             try
@@ -206,7 +179,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void Update()
         {
-            // Index loop over the raw list: no enumerator, no defensive copy, no allocation.
+            // Index loop: tolerates Register/Deregister during the tick and allocates nothing.
             for (var i = 0; i < _tickables.Count; i++)
             {
                 var tickable = _tickables[i];
@@ -217,11 +190,9 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void LateUpdate()
         {
-            // Read once per frame, so every object is flushed against the same clock and limit,
-            // and against the same moment the server was last heard from, which Sync notes on this
-            // clock as it is asked here.
-            // Unscaled, or a game paused with timeScale = 0 would stop sending; and the double,
-            // which still resolves milliseconds after the app has been running for days.
+            // Read once per frame so every object is flushed against the same clock, limit and last-heard time.
+            // Unscaled so timeScale = 0 does not stop sending; double because a float stops resolving
+            // milliseconds after days of runtime.
             var now = Time.unscaledTimeAsDouble;
             var interval = SyncSettings.SendInterval;
             var heardAt = Sync.LastHeardAt(now);
@@ -237,32 +208,17 @@ namespace HCIKonstanz.Colibri.Synchronization
                 Compact();
         }
 
-        /*
-         *  The last changes before the app stops. The server keeps the objects for the clients
-         *  that stay, so whatever the send-rate limit is still holding back - up to one interval
-         *  of the last motion - has to go out now, or they keep the object where it was a moment
-         *  earlier. This object is always active, which the synced objects themselves need not be,
-         *  so it receives these messages for all of them.
-         */
+        // The messages below send what the rate limit still holds back before the app stops, so the clients
+        // that stay do not see the object where it was a moment earlier. This object is always active,
+        // unlike the synced ones, so it receives them for all of them.
 
-        /// <summary>
-        /// Leaving Play mode or a desktop app. Unity sends this to every active object before it
-        /// tears any of them down.
-        /// </summary>
-        /// <remarks>
-        /// Best effort: this hands the updates to the connection, whose socket writes complete on
-        /// a worker thread, and the connection closes its socket in its own OnDisable during the
-        /// same teardown. An update can still be lost in between.
-        /// </remarks>
+        // Best effort: socket writes complete on a worker thread, and the connection's OnDisable waits only
+        // briefly (QUIT_DRAIN_TIMEOUT_MS) for them before closing the socket, so an update can still be lost.
         private void OnApplicationQuit() => SendPendingChanges();
 
-        /// <summary>
-        /// The way out on Android, and so on Quest, where Unity may never call OnApplicationQuit:
-        /// taking the headset off or leaving the app pauses it, no further frame runs to send what
-        /// is held, and the system may end the paused process later. The process is still alive
-        /// while paused, and the socket writes run on a worker thread, so what is handed to the
-        /// connection here does go out.
-        /// </summary>
+        // Android (Quest) may never call OnApplicationQuit: the app is paused, no further frame runs, and the
+        // system may end the process later. Socket writes run on a worker thread, so what is handed to the
+        // connection here goes out.
         private void OnApplicationPause(bool paused)
         {
             if (paused)
@@ -272,11 +228,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        /// <summary>
-        /// Losing focus is what Unity's documentation says to rely on as the exit on Android. It
-        /// also happens while the app goes on running - a Quest's system menu, another window
-        /// clicked on a desktop - and then the early send has merely skipped the limit once.
-        /// </summary>
+        // Unity documents focus loss as the exit signal on Android. It also fires while the app keeps
+        // running (Quest system menu, another desktop window); the early send then only skips the limit once.
         private void OnApplicationFocus(bool focused)
         {
             if (!focused)
@@ -284,11 +237,12 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Polls every object and sends each one's waiting update now, whatever the send-rate
-        /// limit says. Polled first, because a change made in this frame after the ticker's own
-        /// Update - by a script that runs later, or in LateUpdate - would otherwise only be seen
-        /// in a next frame that may never come.
+        /// Polls every object and sends its waiting update now, ignoring the send-rate limit.
         /// </summary>
+        /// <remarks>
+        /// Polls first: a change made after the ticker's Update (a later script, LateUpdate) would
+        /// otherwise wait for a frame that may never come.
+        /// </remarks>
         internal static void SendPendingChanges()
         {
             for (var i = 0; i < _tickables.Count; i++)

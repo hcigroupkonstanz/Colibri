@@ -6,38 +6,35 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Synchronization
 {
     /// <summary>
-    /// What <see cref="SyncedIds"/> needs of a SyncBehaviour, whatever its type: found on a
-    /// GameObject with GetComponents&lt;ISyncedObject&gt;().
+    /// Non-generic view of a SyncBehaviour, so components of any type are found with
+    /// GetComponents&lt;ISyncedObject&gt;().
     /// </summary>
     internal interface ISyncedObject
     {
         string Id { get; }
 
-        /// <summary>Whether the object made its id on this client: the server holds nothing for it yet.</summary>
+        // Id generated on this client: the server holds nothing for it yet.
         bool MadeItsId { get; }
 
-        /// <summary>Sets an empty id, before or during the object's Awake.</summary>
+        // No-op if the id is set already.
         void TakeId(string id, bool madeHere);
 
-        /// <summary>Marks a part of a copy that a manager built from another client's update.</summary>
+        // Part of a copy built from a remote update: keeps its Id.
         void MarkAsCopy();
 
-        /// <summary>Marks a part of a copy that is destroyed again at once: it sends no delete.</summary>
+        // Part of a copy that is destroyed at once: sends no delete.
         void MarkDiscarded();
 
-        /// <summary>
-        /// Takes the pose it has now as no change of its own: an update another client sent moved
-        /// a synced object above it, and it with it.
-        /// </summary>
+        // A remote update moved a synced parent and this object with it: latches the pose so it is not sent
+        // as a change.
         void LatchMovedWithParent();
 
-        /// <summary>Whether the object is a part of a copy a manager built.</summary>
         bool IsCopy { get; }
 
-        /// <summary>The Id the object registered with in Awake; null before Awake.</summary>
+        // Null before Awake.
         string RegisteredId { get; }
 
-        /// <summary>Sets an Id or ModelId changed since Awake back, with an error.</summary>
+        // Restores the registered Id and ModelId if they changed, and logs an error.
         void KeepRegisteredId();
     }
 
