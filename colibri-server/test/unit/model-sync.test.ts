@@ -3,7 +3,7 @@ import { Subject, Subscription } from 'rxjs';
 import { ConnectionPool, NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/command-hooks/connection-pool.js';
 import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
 import { ModelSynchronization } from '../../src/server/modules/command-hooks/model-sync.js';
-import { Payload } from '../../src/server/modules/core/payload.js';
+import { MAX_PAYLOAD_DEPTH, Payload } from '../../src/server/modules/core/payload.js';
 import { Service } from '../../src/server/modules/core/service.js';
 import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
 
@@ -80,6 +80,23 @@ describe('ModelSynchronization', () => {
         server.sent.map(s => `${s.command} ${s.payload} -> ${s.clients.map(c => c.id).join(',')}`);
 
     const debugLines = (): string[] => logs.filter(l => l.level === LogLevel.Debug).map(l => l.message);
+
+    // Stored, a model this deep failed every later model::request on the channel: answering one
+    // writes it out with JSON.stringify, which overflows the stack.
+    it('ignores an update nested deeper than MAX_PAYLOAD_DEPTH, and logs it', () => {
+        const sender = server.connect(makeClient('sender'));
+        const other = server.connect(makeClient('other'));
+        const deep = JSON.parse('['.repeat(5000) + ']'.repeat(5000));
+
+        send(sender, 'model::update', { id: 'cube', x: deep });
+        send(other, 'model::request', {});
+
+        expect(store.getModel('appA', 'objects', 'cube')).toBeUndefined();
+        expect(server.sent.filter(s => s.command === 'model::update')).toEqual([]);
+        const errors = logs.filter(l => l.level === LogLevel.Error).map(l => l.message);
+        expect(errors).toEqual([expect.stringContaining('Ignoring a model::update for \'cube\' on channel \'objects\'')]);
+        expect(errors[0]).toContain(`nests deeper than ${MAX_PAYLOAD_DEPTH} levels`);
+    });
 
     // An update that arrives after the object was deleted - another client's, sent before the
     // delete reached it, or one the server itself held back and passed on late - used to create

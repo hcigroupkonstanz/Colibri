@@ -42,6 +42,24 @@ describe('RingBuffer', () => {
         expect(buffer.last(100)).toEqual([1, 2, 3, 4, 5]);
     });
 
+    it('shift() removes the oldest entry, before and after the buffer wrapped', () => {
+        const buffer = new RingBuffer<number>(3);
+        [1, 2, 3, 4].forEach(n => buffer.push(n));
+
+        expect(buffer.shift()).toBe(2);
+        expect(buffer.toArray()).toEqual([3, 4]);
+        buffer.push(5);
+        buffer.push(6);
+        expect(buffer.toArray()).toEqual([4, 5, 6]);
+        expect(buffer.shift()).toBe(4);
+        expect(buffer.shift()).toBe(5);
+        expect(buffer.shift()).toBe(6);
+        expect(buffer.shift()).toBeUndefined();
+        expect(buffer.length).toBe(0);
+        buffer.push(7);
+        expect(buffer.toArray()).toEqual([7]);
+    });
+
     it('rejects a non-positive capacity', () => {
         expect(() => new RingBuffer<number>(0)).toThrow();
     });

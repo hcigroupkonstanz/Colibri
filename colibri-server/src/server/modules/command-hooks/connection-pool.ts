@@ -67,7 +67,7 @@ export const MAX_UNHANDLED_COMMAND_WARNINGS = 1000;
 // bound above bounds memory too; two names that only differ further on count as one.
 const MAX_NAME_IN_WARNING = 200;
 
-const abbreviate = function (name: string): string {
+export const abbreviate = function (name: string): string {
     return name.length > MAX_NAME_IN_WARNING ? `${name.slice(0, MAX_NAME_IN_WARNING)}...` : name;
 };
 
@@ -183,7 +183,14 @@ export class ConnectionPool extends Service {
             if (this.runWildcardHandler(wildcard, message)) handled = true;
         }
 
-        if (!handled) this.reportUnhandled(message);
+        if (!handled) {
+            // Contained like a handler (see runHandler): it reads the message, too.
+            try {
+                this.reportUnhandled(message);
+            } catch (err) {
+                this.logHandlerError(message, err);
+            }
+        }
     }
 
     // Every handler runs on input straight off the network, and a synchronous throw out of the

@@ -17,6 +17,7 @@ import {
     rateLimitStartWarning,
     warnsAtEnd,
 } from '../../src/server/modules/networking/inbound-limits.js';
+import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/core/payload.js';
 
 describe('inbound limits', () => {
     // The policy shared by the TCP backlog limit and the per-client rate limit: only the bulk of a
@@ -165,6 +166,8 @@ describe('inbound limits', () => {
             ['null', null],
             ['a string', 'cube'],
             ['nothing', undefined],
+            // A held update is written out again with JSON.stringify, which overflows on this.
+            ['a model nested deeper than MAX_PAYLOAD_DEPTH', { id: 'cube', x: JSON.parse('['.repeat(MAX_PAYLOAD_DEPTH) + ']'.repeat(MAX_PAYLOAD_DEPTH)) }],
         ])('refuses %s', (_case, value) => {
             expect(asModelUpdate(value)).toBeUndefined();
         });

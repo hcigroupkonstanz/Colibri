@@ -6,6 +6,10 @@ import { randomUUID } from 'crypto';
 
 const LOGGING_APP = 'colibri';
 const MAX_LOG_SIZE = 20000;
+// The history is bounded by size as well as by count: at 20,000 lines of a few MiB each (a
+// client's RemoteLogger sends whatever it logs), the count alone let it fill the server's heap.
+// Typical lines take a fraction of this; only long ones make older lines go early.
+export const MAX_LOG_CHARS = 8 * 1024 * 1024;
 
 interface WebMessage {
     id: string;
@@ -76,6 +80,9 @@ export class WebLog extends Service {
     // MAX_LOG_SIZE too. It used to keep every key ever logged, each pinning its evicted
     // message: 100k distinct lines left 100k entries behind a 20k-entry history.
     private readonly recentByKey = new Map<string, WebMessage>();
+
+    // The total length of the messages in logMessages, against MAX_LOG_CHARS.
+    private logChars = 0;
 
     public constructor(private socketio: SocketIOServer) {
         super();
@@ -195,14 +202,24 @@ export class WebLog extends Service {
         // Once full, push() overwrites the oldest entry, so that one leaves recentByKey first.
         if (this.logMessages.length >= MAX_LOG_SIZE) {
             const evicted = this.logMessages.at(0);
-            if (evicted) {
-                const evictedKey = messageKey(evicted);
-                if (this.recentByKey.get(evictedKey) === evicted) this.recentByKey.delete(evictedKey);
-            }
+            if (evicted) this.forget(evicted);
         }
 
         this.logMessages.push(webMsg);
         this.recentByKey.set(key, webMsg);
+        this.logChars += webMsg.message.length;
+
+        // The newest line stays, however long: ClientLogger already cut it down.
+        while (this.logChars > MAX_LOG_CHARS && this.logMessages.length > 1) {
+            const evicted = this.logMessages.shift();
+            if (evicted) this.forget(evicted);
+        }
+    }
+
+    private forget(evicted: WebMessage): void {
+        const evictedKey = messageKey(evicted);
+        if (this.recentByKey.get(evictedKey) === evicted) this.recentByKey.delete(evictedKey);
+        this.logChars -= evicted.message.length;
     }
 
     // Broadcast/sync traffic is governed exclusively by showBroadcastTraffic, never by levels,
