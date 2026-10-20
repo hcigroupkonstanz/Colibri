@@ -93,6 +93,15 @@ void (async () => {
             transform.position = position;
             registerTransform(transform);
         },
+        delete: ([id = '']) => {
+            const transform = find(id);
+            if (!id || !transform) {
+                console.log('Usage: delete <id>');
+                return;
+            }
+            // Deletes it for every client: Unity destroys the GameObject.
+            transform.delete();
+        },
         exit: () => {
             rl.close();
             process.exit();
@@ -106,6 +115,7 @@ void (async () => {
     console.log('  scale <id> <x> <y> <z>    scale an object');
     console.log('  hide <id>, show <id>      hide or show an object');
     console.log('  create <id> <x> <y> <z>   create an object from the web');
+    console.log('  delete <id>               delete an object for every client');
     console.log('  exit');
     console.log(' ');
 

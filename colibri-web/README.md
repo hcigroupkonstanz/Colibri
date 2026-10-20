@@ -201,7 +201,7 @@ clients.
 - To sync with a Unity `SyncBehaviour`, set `name` to the Unity class name in lower case, e.g. `'player'` for the
   `Player` in the [Unity README](../colibri-unity/README.md#syncbehaviour). Property names are compared in lower
   case, so `score` matches Unity's `Score` ([details](https://colibri.hci.uni-konstanz.de/web/syncmodel)).
-- The web client cannot delete an object for the other clients. `delete()` only stops syncing it on this client.
+- `delete()` deletes an object for every client.
 
 ### Monitoring
 
