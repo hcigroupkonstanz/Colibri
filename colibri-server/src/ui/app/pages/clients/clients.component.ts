@@ -42,15 +42,15 @@ export interface Sort {
 /** Where a client's TLS is terminated: by this server, or by a trusted reverse proxy in front of it. */
 export type TlsEnd = 'server' | 'proxy';
 
-// TLS terminated by a proxy, by what says so: for a web client the proxy's X-Forwarded-Proto, for a
-// Unity client the operator's TCP_TLS_AT_PROXY, as its PROXY protocol header does not say.
+// A proxy's TLS comes from the transport's own signal: X-Forwarded-Proto for web, and TCP_TLS_AT_PROXY
+// for TCP, as the server does not read TLS from a PROXY header.
 const TLS_TITLES = {
     server: 'Encrypted: TLS',
     tcp: 'TLS terminated by a trusted proxy (TCP_TLS_AT_PROXY)',
     web: 'TLS terminated by a trusted proxy (X-Forwarded-Proto)'
 } as const;
 
-/** The server's own TLS first: a client connected to it directly uses that. */
+/** This server's own TLS is checked first, so a direct TLS client is never shown as proxied. */
 export const tlsEnd = function (row: ClientRow): TlsEnd | null {
     return row.tls ? 'server' : row.tlsAtProxy ? 'proxy' : null;
 };
@@ -65,11 +65,11 @@ export interface ClientView {
     id: string;
     app: string;
     appColor: string;
-    /** Its name, or for a web client, named by its address, the start of its id. */
+    /** The name. A web client named by its address shows the start of its id instead. */
     label: string;
     labelTitle: string;
     byId: boolean;
-    /** Its own address, behind a trusted proxy the one the proxy named. */
+    /** The client's address. Behind a trusted proxy, the one the proxy reported. */
     address: string;
     transport: 'TCP' | 'Web';
     tls: TlsEnd | null;
@@ -88,7 +88,7 @@ export interface ClientView {
     truncated: boolean;
 }
 
-/** The sort in the address: the column, after a - for the largest first. */
+/** Parses the sort query value: a column key, with a leading '-' for descending. Null for an unknown key. */
 export const parseSort = function (value: string | null): Sort | null {
     if (!value) return null;
     const descending = value.startsWith('-');
@@ -100,10 +100,10 @@ const sortValue = function (row: ClientRow, key: SortKey): string | number | nul
     switch (key) {
         case 'app': return row.app.toLowerCase();
         case 'name': return row.name.toLowerCase();
-        // unencrypted, then TLS at a proxy, then TLS to this server
+        // Within a transport: unencrypted, then TLS at a proxy, then TLS to this server
         case 'transport': return `${row.transport}${row.tls ? 2 : row.tlsAtProxy ? 1 : 0}`;
         case 'version': return row.version;
-        // the longest connected first, as the largest number
+        // Negated, so the longest connected has the largest value.
         case 'connected': return -row.connectedAt;
         case 'latency': return row.latency;
         case 'in': return row.in;
@@ -153,7 +153,7 @@ export class ClientsComponent {
     /** What the throughput chart counts: the messages the clients sent, or those sent to them. */
     direction = computed<Direction>(() => this.params().get('throughput') === 'out' ? 'out' : 'in');
 
-    /** Every app with a client connected, and the one filtered to. */
+    /** Apps with a connected client. The filtered app stays in the list at 0, so the select can show it. */
     appOptions = computed(() => {
         const counts = new Map<string, number>();
         for (const client of this.feed.data()?.clients ?? []) counts.set(client.app, (counts.get(client.app) ?? 0) + 1);
@@ -162,7 +162,7 @@ export class ClientsComponent {
         return [ ...counts ].map(([ name, clients ]) => ({ name, clients })).sort((a, b) => a.name.localeCompare(b.name));
     });
 
-    /** How a phone sorts, without the headers: one way for each column, as its first click. */
+    /** Phone sort choices: one per column, in the direction its first header click gives. */
     sortOptions = [
         { value: '', label: 'By app' },
         { value: 'name', label: 'By name' },
@@ -176,9 +176,8 @@ export class ClientsComponent {
     ];
 
     /**
-     * The order of the rows while the mouse is over them. Sorted by latency or rate, they trade
-     * places with nearly every refresh, and the row under the pointer, about to have its Log link
-     * clicked, would move away.
+     * Row order while the mouse is over the table. Sorted by a live value, the rows would reshuffle
+     * on nearly every refresh and move the one under the pointer before its Log link is clicked.
      */
     private heldOrder = signal<ReadonlyArray<string> | null>(null);
 
@@ -192,7 +191,7 @@ export class ClientsComponent {
         const sorted = sortClients(shown, this.sort());
         const held = this.heldOrder();
         if (held) {
-            // new clients after the others, in their sorted order
+            // Clients that joined since the order was held go last, in their sorted order.
             const at = new Map(held.map((id, i) => [ id, i ]));
             sorted.sort((a, b) => (at.get(a.id) ?? held.length) - (at.get(b.id) ?? held.length));
         }
@@ -227,7 +226,7 @@ export class ClientsComponent {
         });
     });
 
-    /** 12 connected: 8 TCP, 4 web. */
+    /** The count line above the table. It says so when the server has cut the client list short. */
     summary = computed(() => {
         const snapshot = this.feed.data();
         if (!snapshot) return '';
@@ -242,12 +241,12 @@ export class ClientsComponent {
 
     adminPages = computed(() => this.feed.data()?.adminPages ?? 0);
 
-    // by its name in the template, so that a test's stand-in answers too
+    // Matched by template reference (#throughput), so a test's stand-in answers too.
     private throughputChart = viewChild<ThroughputChartComponent>('throughput');
 
     /**
-     * What the throughput chart shows, and its total now: the chart's, which keeps a client's last
-     * rate through a second the server had none.
+     * The hint beside the Throughput title. Its total is the chart's, which keeps a client's last
+     * rate for a second the server has none, so the total does not dip.
      */
     throughputHint = computed(() => {
         const what = this.direction() === 'in' ? 'Messages per second each client sent' : 'Messages per second sent to each client';
@@ -260,7 +259,7 @@ export class ClientsComponent {
         return this.app() ? `No clients of ${this.app()} connected.` : 'No clients connected.';
     });
 
-    /** Narrow screens sort with a list instead of the headers. */
+    /** The phone sort list's value, mirroring the sort in the URL. */
     sortChoice = computed(() => {
         const sort = this.sort();
         return sort ? `${sort.descending ? '-' : ''}${sort.key}` : '';
@@ -269,7 +268,7 @@ export class ClientsComponent {
     private scrolledTo = signal<string | null>(null);
 
     constructor() {
-        // the client a link from the log points at, once it is listed
+        // Scrolls the linked row into view once: scrolledTo stops it from scrolling on every refresh.
         afterRenderEffect(() => {
             const id = this.marked();
             if (!id || this.scrolledTo() === id || !this.rows().some(row => row.id === id)) return;
@@ -279,7 +278,7 @@ export class ClientsComponent {
         });
     }
 
-    /** Keeps the rows where they are while the mouse is over them; see heldOrder. */
+    /** Freezes the row order while a mouse is over the table. Touch and pen input do not. */
     holdOrder(event: PointerEvent): void {
         if (event.pointerType === 'mouse') this.heldOrder.set(this.rows().map(row => row.id));
     }
@@ -292,12 +291,13 @@ export class ClientsComponent {
         return this.navigate({ app: app || null, client: null });
     }
 
-    /** The first click sorts a column A to Z, or for numbers the largest first; the second reverses. */
+    /** The first click sorts A to Z, or largest first for numbers and the limit column. The second reverses. */
     sortBy(key: SortKey): Promise<boolean> {
         const column = COLUMNS.find(c => c.key === key)!;
         const current = this.sort();
         const firstDescending = column.num === true || key === 'limit';
         const descending = current?.key === key ? !current.descending : firstDescending;
+        // Ascending by app is the default, so it needs no sort parameter in the URL.
         const isDefault = key === 'app' && !descending;
         return this.navigate({ sort: isDefault ? null : `${descending ? '-' : ''}${key}` });
     }

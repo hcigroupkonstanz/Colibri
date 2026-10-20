@@ -9,6 +9,7 @@ import { LEVEL_TAGS, appColor, highlight, isAddress, messageText, shortId, sourc
     templateUrl: './log-message.component.html',
     styleUrls: ['./log-message.component.scss'],
     imports: [DatePipe, RouterLink],
+    // DatePipe has no root provider, so inject(DatePipe) needs this one.
     providers: [DatePipe],
     changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -17,9 +18,9 @@ export class LogMessageComponent {
     private datePipe = inject(DatePipe);
 
     public log = input.required<LogMessage>();
-    /** Lower-case text to highlight in the message. */
+    /** Text to highlight in the message. Must be lower case. */
     public search = input('');
-    /** Whether it is the error or warning Previous and Next went to last. */
+    /** Marks the row that Previous and Next went to last. */
     public current = input(false);
 
     public expanded = signal(false);
@@ -34,10 +35,11 @@ export class LogMessageComponent {
     parts = computed(() => highlight(messageText(this.log()), this.search()));
     utc = computed(() => new Date(this.log().created).toISOString());
     clientId = computed(() => {
+        // The server writes UNKNOWN for a client without an id.
         const id = this.log().metadata?.['clientId'];
         return typeof id === 'string' && id !== 'UNKNOWN' ? id : null;
     });
-    /** A web client by the start of its id: its name, the address, is the same for all on one host. */
+    /** Web clients on one host share an address as their name, so they are labelled by the start of their id, if known. */
     clientLabel = computed(() => {
         const client = this.source().client ?? '';
         const id = this.clientId();
@@ -48,7 +50,7 @@ export class LogMessageComponent {
         `${this.log().count + 1} times, first at ${this.datePipe.transform(this.log().first, 'HH:mm:ss.SSS')}`);
 
     onRowClick(): void {
-        // a click that ends a text selection is not meant to open the row
+        // A click that ends a text selection does not toggle the row.
         if (window.getSelection()?.type === 'Range') return;
         this.expanded.update(open => !open);
     }

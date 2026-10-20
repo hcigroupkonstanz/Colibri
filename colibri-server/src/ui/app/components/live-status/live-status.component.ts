@@ -3,7 +3,7 @@ import { SocketIOService } from '../../services';
 
 const LABELS = { connected: 'Live', connecting: 'Connecting', reconnecting: 'Offline' } as const;
 
-/** "Live" by a green dot while the page is updated every second; grey while it is not connected. */
+/** Shows the socket connection state. Live feeds (AdminService.feed) arrive every second only while it is connected. */
 @Component({
     selector: 'app-live-status',
     template: '<span class="live" [class.off]="!connected()" [title]="title()">{{ label() }}</span>',

@@ -9,15 +9,12 @@ export interface LogMessage {
     group: string;
     /** When the line last occurred. */
     created: number;
-    /** When the line first occurred: the same as `created` until it repeats. */
+    /** When the line first occurred; equals `created` until it repeats. */
     first: number;
-    /** How often the line repeated: 0 for a line that occurred once. */
+    /** Number of repeats: 0 for a line that occurred once. */
     count: number;
     metadata: Record<string, unknown>;
-    /**
-     * Set on a row the page adds itself where the connection to the server was lost and back:
-     * `first` is when it was lost, `created` when it was back.
-     */
+    /** Marks a row the page adds itself for a reconnect: `first` is when the connection was lost, `created` when it was back. */
     reconnect?: true;
 }
 
@@ -35,10 +32,10 @@ export const LOG_LEVELS: ReadonlyArray<{ value: number; label: string }> = [
     { value: 3, label: 'Debug' }
 ];
 
-/** As many lines as the server sends in a history. */
+/** The most lines the server sends in a history. */
 export const MAX_MESSAGES = 10000;
 
-/** How long live lines are collected before the page shows them, in ms. */
+/** Batching window for live lines, in ms. */
 export const FLUSH_INTERVAL = 100;
 
 const decode = function (text: string): string {
@@ -49,17 +46,17 @@ const decode = function (text: string): string {
     }
 };
 
-// Whether the address is the log page's: on the way to another page, it is that page's.
+// While navigating away from the log page, location is already the next page's.
 const isLogPath = function (): boolean {
     return location.pathname.endsWith('/log');
 };
 
-/** The level names in the address: ?levels=error,warn. */
+/** Level names in the query, indexed by level: ?levels=error,warn. */
 const LEVEL_NAMES: ReadonlyArray<string> = [ 'error', 'warn', 'info', 'debug' ];
 
 /**
- * The log's filters as the address holds them, so that a reload or a shared link shows the same:
- * the app in the hash, as before, the rest in the query. Left out at their defaults.
+ * The log filters as kept in the address, so a reload or shared link restores them: the app in
+ * the hash, the rest in the query. Defaults are left out.
  */
 export interface LogAddress {
     filter: string;
@@ -74,7 +71,7 @@ export const readAddress = function (search: string, hash: string): LogAddress {
     for (const part of search.replace(/^\?/, '').split('&')) {
         if (!part) continue;
         const at = part.indexOf('=');
-        // a + in a query is a space, as a form writes it
+        // '+' is a space in a query
         const [ key, value ] = at < 0 ? [ part, '' ] : [ part.slice(0, at), part.slice(at + 1) ];
         params.set(decode(key.replace(/\+/g, ' ')), decode(value.replace(/\+/g, ' ')));
     }
@@ -112,15 +109,15 @@ export class LogService {
     private readonly socketio = inject(SocketIOService);
 
     private readonly _messages = signal<ReadonlyArray<LogMessage>>([]);
-    /** The loaded lines in the order they last occurred, oldest first. */
+    /** Ordered by last occurrence, oldest first. */
     public readonly messages = this._messages.asReadonly();
 
     private readonly _loading = signal(true);
-    /** Whether the history for the current filters is still on its way. */
+    /** True until the history for the current filters has arrived. */
     public readonly loading = this._loading.asReadonly();
 
     private readonly _apps = signal<ReadonlySet<string>>(new Set());
-    /** Every app seen in a log line since the page loaded, whatever the filters. */
+    /** Apps seen in log lines since the page loaded; kept across filter changes. */
     public readonly apps = this._apps.asReadonly();
 
     private readonly initial = isLogPath() ? readAddress(location.search, location.hash) : readAddress('', '');
@@ -128,24 +125,22 @@ export class LogService {
     public readonly filter = signal<string>(this.initial.filter);
     public readonly levels = signal<ReadonlySet<number>>(new Set(this.initial.levels));
     public readonly showBroadcastTraffic = signal(this.initial.showBroadcastTraffic);
-    /** Whether the routine connect and disconnect lines are shown. */
+    /** Show the routine connect and disconnect lines. */
     public readonly showConnections = signal(this.initial.showConnections);
 
-    /** Text to look for in the loaded lines. Unlike the filters above, the page applies it itself. */
+    /** Text to find in the loaded lines. Unlike the filters above, which the server applies, the page applies it. */
     public readonly search = signal(this.initial.search);
 
-    // When the page was opened, by the browser's clock.
     private readonly openedLocally = Date.now();
     private readonly _openedAt = signal(this.openedLocally);
     /**
-     * When the page was opened, by the server's clock, which stamps the lines: "New errors" counts
-     * the errors since. A browser whose clock is a few minutes off would count errors from before
-     * or miss new ones. The browser's own clock until the first history says what the server's reads.
+     * Page open time on the server's clock, the one that stamps the lines, so "New errors" is not
+     * skewed by the browser's clock. The browser's clock until the first history arrives.
      */
     public readonly openedAt = this._openedAt.asReadonly();
     private serverClockKnown = false;
 
-    /** How many of the loaded lines there are of each level. */
+    /** Loaded lines per level, indexed by level; reconnect rows excluded. */
     public readonly levelCounts = computed(() => {
         const counts = LOG_LEVELS.map(() => 0);
         for (const message of this._messages()) {
@@ -158,13 +153,12 @@ export class LogService {
         this.levels.set(new Set(values));
     }
 
-    // Whether the log page is open: only then is the address the log's.
+    // The address belongs to the log only while its page is open.
     private pageOpen = false;
 
     /**
-     * Called by the log page when it opens. A link with filters in it, such as one from the Clients
-     * page, sets them; a link without, such as the page's tab, keeps the filters and puts them back
-     * in the address, or a reload or a copied link would lose them.
+     * Called when the log page opens. Filters in the address (a link from the Clients page)
+     * replace the current ones; without them the current filters are written to the address.
      */
     public openPage(): void {
         this.pageOpen = true;
@@ -190,14 +184,14 @@ export class LogService {
         this.search.set(address.search);
         this.showBroadcastTraffic.set(address.showBroadcastTraffic);
         this.showConnections.set(address.showConnections);
-        // a new set only for other levels: a new one would request the log again
+        // Keep the Set unless the levels differ: a new Set triggers a log request.
         const levels = this.levels();
         if (levels.size !== address.levels.length || address.levels.some(l => !levels.has(l))) this.setLevels(address.levels);
     }
 
-    // The query is replaced, so that each key typed is not a step back. A new app is a new entry, as
-    // it always was: the browser's back button goes back to the previous app. `replace` replaces
-    // the app too, for a page opened without one in its address.
+    // The query is replaced, not pushed, so typing adds no history entries. A changed app (hash) is
+    // a new entry, so Back returns to the previous app; `replace` replaces the app too, for a page
+    // opened without one in its address.
     private updateAddress(replace = false): void {
         if (!this.pageOpen || !isLogPath()) return;
         const { search, hash } = writeAddress({
@@ -209,7 +203,7 @@ export class LogService {
         });
         const currentHash = location.hash.length > 1 ? location.hash : '';
         if (location.search !== search || (replace && currentHash !== hash)) {
-            // the whole path: a bare ?query resolves against <base href>
+            // Full path: a bare ?query resolves against <base href>.
             history.replaceState(history.state, '', `${location.pathname}${search}${replace ? hash : currentHash}`);
         }
         if (!replace && currentHash !== hash) location.hash = hash;
@@ -220,8 +214,8 @@ export class LogService {
     private flushTimer: ReturnType<typeof setTimeout> | undefined;
 
     private lastRequest = 0;
-    // The request whose history has not arrived yet. Live lines are dropped until it has: they
-    // were filtered by the previous preferences, and the history holds every one that matches.
+    // The request whose history is outstanding. Live lines are dropped until it arrives: they
+    // may match the previous filters, and the history has every line matching the current ones.
     private awaiting: number | null = null;
 
     constructor() {
@@ -256,16 +250,15 @@ export class LogService {
             untracked(() => this.updateAddress());
         });
 
-        // the browser's back and forward buttons, a link to another app's log opened on this page,
-        // or the address edited by hand
+        // Back/forward, a link to another app's log, or a hand-edited address.
         const follow = () => {
             if (this.pageOpen && isLogPath()) this.applyAddress();
         };
         window.addEventListener('popstate', follow);
         window.addEventListener('hashchange', follow);
 
-        // The lines from before stay. The history fills in what was logged meanwhile, below a
-        // row that marks the gap; after a server restart that is the new server's whole log.
+        // Existing lines stay. The history adds what was logged meanwhile after a row marking the
+        // gap; after a server restart that is the new server's whole log.
         this.socketio.reconnected$.subscribe(({ lostAt, at }) => {
             this.add([ {
                 id: `reconnect-${at}`,
@@ -307,8 +300,8 @@ export class LogService {
         this.add(history.messages ?? []);
     }
 
-    // Lines arrive one socket event each, hundreds a second with sync traffic shown. Adding them
-    // in batches copies the list once per batch rather than once per line.
+    // Live lines arrive one event each, hundreds a second with sync traffic shown; batching
+    // copies the list once per batch instead of once per line.
     private queue(message: LogMessage): void {
         this.pending.push(message);
         if (this.flushTimer === undefined) {
@@ -331,8 +324,8 @@ export class LogService {
         this._messages.set([]);
     }
 
-    // A line the list already has is a repeat: the server sends the merged entry again with
-    // the new count and time. It moves to the end, where the history puts it too.
+    // A known id is a repeat: the server resends the merged entry with the new count and time.
+    // It moves to the end, as in the history.
     private add(batch: ReadonlyArray<LogMessage>): void {
         const moved = new Set<string>();
         const added = new Map<string, LogMessage>();
@@ -346,7 +339,7 @@ export class LogService {
                 added.delete(message.id);
             }
 
-            // A new object, not the old one changed: rows only re-render for a new reference.
+            // Store the new object, never mutate: rows re-render only for a new reference.
             this.byId.set(message.id, message);
             added.set(message.id, message);
 

@@ -1,6 +1,6 @@
 // How the admin pages write durations, sizes and rates.
 
-/** 45 s, 12 min, 2 h 5 min, 3 d 4 h: the two largest units, the second left out at 0. */
+/** 45 s, 12 min, 2 h 5 min, 3 d 4 h. Seconds are dropped from one minute up, minutes from one day up, and a zero remainder is left out. */
 export const duration = function (seconds: number): string {
     const s = Math.max(0, Math.floor(seconds));
     if (s < 60) return `${s} s`;
@@ -12,7 +12,7 @@ export const duration = function (seconds: number): string {
     return h % 24 === 0 ? `${d} d` : `${d} d ${h % 24} h`;
 };
 
-/** A size in bytes as B, KiB or MiB, with one decimal below 10. */
+/** A size in bytes as B, KiB, MiB or GiB, with one decimal below 10. GiB is the top unit. */
 export const bytes = function (value: number): string {
     if (value < 1024) return `${value} B`;
     const units = [ 'KiB', 'MiB', 'GiB' ];
@@ -35,7 +35,7 @@ export const decimal = function (value: number | null): string {
     return value === null ? '-' : value.toFixed(1);
 };
 
-/** A file name part made of the name: letters, digits, dots, dashes and underscores. */
+/** Makes a name safe as a file name part: runs of characters other than ASCII letters, digits, dots, dashes and underscores become '_'. Cut to 64 characters. */
 export const fileNamePart = function (name: string): string {
     return name.replace(/[^\w.-]+/g, '_').slice(0, 64);
 };
@@ -50,6 +50,6 @@ export const download = function (name: string, text: string, type: string): voi
     document.body.appendChild(link);
     link.click();
     link.remove();
-    // after the click has started the download
+    // Revoke only after the click has started the download.
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 };

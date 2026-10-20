@@ -4,17 +4,16 @@ import * as d3 from 'd3';
 import { BoxplotStats, boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
 
 const margin = { top: 12, right: 12, bottom: 28, left: 44 };
-/** What the Clients page's charts show: the server sends this much of the past when the page opens. */
+/** The span of the charts' time axis, in ms. The server's history snapshot goes 2 s further back. */
 export const TIME_RANGE_MILLIS = 120 * 1000;
 const barWidth = 24;
 const boxplotPadding = 5;
-// A box narrower than this is not readable; fewer than this many pixels of chart get no boxes.
+// Below this many pixels per client, a box is too narrow to read, so none are drawn.
 const minBand = 14;
 const minBoxplotChartWidth = 600;
 
 // Nord hues (https://www.nordtheme.com/docs/colors-and-palettes), made lighter or stronger: each at
-// 3:1 or more on the card. No red or yellow, which mean errors and warnings. In this order, each
-// is easy to tell from the next, and the first four from each other.
+// 3:1 or more on the card. No red or yellow, which mean errors and warnings.
 const colors = [
     '#df8f48', // orange
     '#c595db', // purple
@@ -26,16 +25,12 @@ const colors = [
     '#90e1ea', // cyan
 ];
 
-/** The colour of a client's slot (ColibriClient.slot), in the chart and its table. */
+/** The colour of a client's slot (ColibriClient.slot), in the charts and the Clients table. */
 export const clientColor = function (slot: number): string {
     return colors[slot % colors.length];
 };
 
-/**
- * The time axis at `now`: always the whole TIME_RANGE_MILLIS, and the second it slides left by until
- * the next update. It used to grow with the samples, from 10 s; the server now sends the window's
- * samples when the page opens.
- */
+/** The time axis at `now`: TIME_RANGE_MILLIS, plus the one second the chart slides across between updates. */
 export const timeDomain = function (now: number): [number, number] {
     return [ now - TIME_RANGE_MILLIS - 1000, now ];
 };
@@ -46,8 +41,8 @@ const timeLabel = function (value: Date | d3.NumberValue): string {
 };
 
 /**
- * The median of each second of a client's samples, at their mean time. The 100 ms samples of a few
- * clients drew a solid band, with each client's colour lost in it.
+ * The median of each second of a client's samples, at their mean time. Drawing every 100 ms sample
+ * would fill the plot with a solid band.
  */
 export const perSecond = function (samples: ReadonlyArray<[number, number]>): [number, number][] {
     const medians: [number, number][] = [];
@@ -65,10 +60,9 @@ export const perSecond = function (samples: ReadonlyArray<[number, number]>): [n
 };
 
 /**
- * How wide each client's box is, or why there are none. The boxes take at most 40% of the plot.
- * They used to shrink with every client, to 4px, and on a phone left the lines a third of the
- * screen: below 600px there are none, and where a box each does not fit, none either. The table
- * lists each client's latency.
+ * The band of each client's box (box plus padding), 0 when no boxes are drawn, and why. The boxes
+ * take at most 40% of the plot. Charts under minBoxplotChartWidth get none, and so do charts where
+ * a band would be under minBand.
  */
 export const boxLayout = function (chartWidth: number, plotWidth: number, clients: number): { band: number; hidden: 'narrow' | 'count' | null } {
     if (chartWidth < minBoxplotChartWidth) return { band: 0, hidden: 'narrow' };
@@ -77,7 +71,7 @@ export const boxLayout = function (chartWidth: number, plotWidth: number, client
     return { band, hidden: null };
 };
 
-// a clipPath id of its own for each chart on the page
+// Each chart needs its own clipPath id: SVG ids are global to the page.
 let clipIds = 0;
 
 interface Line {
@@ -148,7 +142,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
 
         this.animateChart();
 
-        // the size of its box, not of the window: the card changes width without a window resize
+        // Observe the element, not the window: the card can change size without a window resize.
         this.resizeObserver = new ResizeObserver(() => {
             this.measure();
             this.animateChart();
@@ -171,8 +165,8 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
             .append('g')
             .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
-        // A sample that arrives during the slide lies up to a second past the right end of the
-        // time axis, and its segment was drawn over the first client's box until the next slide.
+        // Clip the lines to the line area: a sample that arrives during the slide can lie up to a second
+        // past the right end of the time axis, over the boxes.
         const clipId = `latency-clip-${++clipIds}`;
         this.lineClip = this.svg.append('clipPath').attr('id', clipId).append('rect').attr('y', -2);
 
@@ -195,12 +189,11 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         this.width = el.clientWidth;
         this.height = el.clientHeight;
         this.svg?.attr('width', this.width).attr('height', this.height);
-        // 2px over the top and bottom for the stroke of a line at either end of the scale
+        // Clip 2px past the plot at top and bottom, so strokes at the scale ends are not cut.
         this.lineClip?.attr('height', Math.max(0, this.height - margin.top - margin.bottom) + 4);
         this.axisBottom?.attr('transform', `translate(${margin.left}, ${this.height - margin.bottom})`);
     }
 
-    // The boxplots on the right take at most 40% of the plot, the line chart the rest.
     private layout(): { plotWidth: number; band: number } {
         const plotWidth = Math.max(0, this.width - margin.left - margin.right);
         const { band, hidden } = boxLayout(this.width, plotWidth, this.clients().length);
@@ -252,7 +245,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         const { band } = this.layout();
         const boxWidth = Math.max(4, band - boxplotPadding);
 
-        // coloured by the client's slot, the same as in the table under the chart
+        // Coloured by the client's slot, as in the Clients table.
         const lines: Line[] = clients
             .map(client => ({ client, color: clientColor(client.slot) }))
             .filter(line => line.client.latency.length > 0);
@@ -285,8 +278,8 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                 .attr('transform', d => `translate(${(xScale(d.id) || 0) - boxWidth / 2}, 0)`)
                 .attr('color', d => d.color)
                 .attr('class', 'plot')
-                // one plot at a time: boxplot() adds its groups only where none of the selection has
-                // them yet, so a client joining later got an empty plot
+                // One plot at a time: boxplot() adds its groups only when the selection has none,
+                // so a plot added later would get none.
                 .each(function () {
                     d3.select(this).call(draw);
                 });

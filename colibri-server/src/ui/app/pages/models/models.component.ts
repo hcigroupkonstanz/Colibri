@@ -9,10 +9,10 @@ import { AdminService, ModelRow, ModelSnapshot, ModelsSnapshot } from '../../ser
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
 import { bytes, count, download, duration, fileNamePart } from '../../format';
 
-/** Models a page of the list shows. */
+/** Rows per page of the models list. */
 export const MODELS_PAGE_SIZE = 50;
 
-/** Deleted ids shown until all are asked for. */
+/** Deleted ids shown by default; the "Show all" button lifts the limit. */
 export const DELETED_SHOWN = 10;
 
 /** How long typing in the filter pauses before the list is asked for, in ms. */
@@ -34,7 +34,7 @@ export interface JsonPart {
 
 const JSON_TOKEN = /("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
 
-/** Splits formatted JSON into keys, strings, numbers and literals, to colour them. */
+/** Splits formatted JSON into parts by kind. Joined, the parts give back the input exactly. */
 export const jsonParts = function (json: string): JsonPart[] {
     if (json.length > HIGHLIGHT_LIMIT) return [ { text: json, kind: null } ];
 
@@ -99,7 +99,7 @@ export class ModelsComponent implements OnDestroy {
     /** Whether the list and the open model are updated every second. */
     live = computed(() => this.params().get('live') === '1');
 
-    /** The model the detail shows. */
+    /** The open model, from the URL. Its app and channel default to the list's. */
     open = computed<ModelKey | null>(() => {
         const id = this.params().get('model');
         if (id === null) return null;
@@ -220,7 +220,7 @@ export class ModelsComponent implements OnDestroy {
         return 'The server holds no synced models.';
     });
 
-    /** The open model's snapshot, once it is the one asked for. */
+    /** The detail's snapshot, once it is for the open model: the feed keeps the last answer until the next. */
     model = computed(() => {
         const data = this.detail.data();
         const open = this.open();
@@ -252,14 +252,14 @@ export class ModelsComponent implements OnDestroy {
             });
         });
 
-        // Below 1100px the open model replaces the list: opening one hides the link that opened it,
-        // and closing it removes the Back button. Either left the keyboard on the page's body.
+        // Below 1100px the open model replaces the list: opening hides the focused link, and closing
+        // removes the Back button. keepFocus moves focus to the title or back to the row.
         let shown: ModelKey | null | undefined;
         effect(() => {
             const open = this.open();
             const closed = shown;
             shown = open;
-            // not on the page's first model, or none: nothing had the focus to lose
+            // First run, at page load: nothing had focus to lose.
             if (closed === undefined) return;
             afterNextRender(() => this.keepFocus(open, closed), { injector: this.injector });
         });
@@ -326,12 +326,12 @@ export class ModelsComponent implements OnDestroy {
     @HostListener('document:keydown.escape', [ '$event' ])
     close(event?: Event): void {
         if (!this.open()) return;
-        // Escape in the filter clears it, and in an open list closes the list
+        // Escape in the filter or a select belongs to that control, so the model stays open.
         if (event?.target instanceof Element && event.target.closest('input[type="search"], [role="combobox"], [role="listbox"]')) return;
         void this.navigate({ model: null, modelApp: null, modelChannel: null }, false);
     }
 
-    /** The value as a .json file; its start, cut at 512 KiB, as a -partial.txt, since that is no valid JSON. */
+    /** Saves the model as .json, or as -partial.txt if the server cut it short: that is not valid JSON. */
     downloadModel(): void {
         const model = this.model();
         if (!model?.json) return;

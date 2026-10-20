@@ -1,8 +1,8 @@
 import { definePreset } from '@primeng/themes';
 import Material from '@primeng/themes/material';
 
-// PrimeNG's dark colour scheme, always on (the app-dark class on <html>), with the surfaces taken
-// from Nord so that its select and overlay match the rest of the page instead of being white.
+// Dark only: index.html sets app-dark on <html>, so PrimeNG never switches to its light scheme.
+// Surfaces are Nord so the select and overlay match the page.
 export default definePreset(Material, {
     semantic: {
         primary: {
