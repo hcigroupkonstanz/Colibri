@@ -402,6 +402,16 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   that has only an AAAA record. With an A record as well, colibri-unity 2.0.0 connects and sends
   voice over IPv4, so TCP and voice come from the same address, as the voice check needs. See
   [Configuration](https://colibri.hci.uni-konstanz.de/server/configuration#all-variables).
+- **IPv6 and IPv4 by default.** `WEBSERVER_HOST`, `TCP_HOST` and `VOICE_HOST` default to `::`
+  instead of 1.x's `0.0.0.0`, so a server without Docker is reachable over IPv6 without settings,
+  and so is a container on a Docker network with IPv6. Web and TCP hand `::` to `listen()` as no
+  host: Node then listens on `::` with IPv4 as well, or on `0.0.0.0` on a system without IPv6.
+  Voice falls back to `0.0.0.0` on `EAFNOSUPPORT`, and also where IPv6 UDP sockets take no IPv4
+  (`net.ipv6.bindv6only=1`), since libuv leaves that setting alone for UDP and Unity clients send
+  voice over IPv4 whenever the server name has an A record. Each fallback is a warning in the log.
+  An IPv4 client of a dual-stack port is named by its IPv4 address, not `::ffff:<IPv4 address>`,
+  in the log, on the monitoring page and in `colibri::clients`. IPv6 hosts are in brackets in
+  the log and on the _Server_ page: `[::]:9211`.
 
 ### Load and lost connections
 

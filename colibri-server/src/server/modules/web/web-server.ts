@@ -8,6 +8,7 @@ import { Subscription } from 'rxjs';
 import { Service, TlsCredentialSource, TlsCredentials } from '../core/index.js';
 import { MAX_FRAME_LENGTH, REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
+import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost } from '../networking/addresses.js';
 
 // Requests whose JSON body was empty; see hasEmptyJsonBody.
 const emptyJsonBodies = new WeakSet<http.IncomingMessage>();
@@ -137,10 +138,12 @@ export class WebServer extends Service {
 
         // start server
         this.server = this.tls ? this.createHttpsServer(this.tls) : http.createServer(this.app);
-        this.server.listen(this.webPort, this.hostname, () => {
+        this.server.listen(this.webPort, listenHost(this.hostname), () => {
+            const ipv4Only = fellBackToIPv4(this.hostname, this.server.address());
             this.logInfo(
-                `Web server listening on ${this.hostname}:${this.webPort}${this.tls ? ', HTTPS and WSS only' : ''}`
+                `Web server listening on ${hostPort(ipv4Only ? '0.0.0.0' : this.hostname, this.webPort)}${this.tls ? ', HTTPS and WSS only' : ''}`
             );
+            if (ipv4Only) this.logWarning(ipv4OnlyWarning('WEBSERVER_HOST', 'web port'));
         });
 
         return this.server;

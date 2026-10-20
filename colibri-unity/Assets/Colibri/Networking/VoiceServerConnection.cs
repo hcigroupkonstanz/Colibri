@@ -214,13 +214,13 @@ namespace HCIKonstanz.Colibri.Networking
                 samplingRate = config.VoiceServerSamplingRate > 0 ? config.VoiceServerSamplingRate : DEFAULT_SAMPLING_RATE;
                 UseAppName(config.AppName);
 
-                // The server's voice socket is IPv4 unless VOICE_HOST is an IPv6 address, and
-                // nothing comes back from a server that does not listen on IPv6. Said so that a
-                // silent voice chat over IPv6 has an explanation in the log.
+                // colibri-server listens for voice on IPv6 by default (VOICE_HOST ::), but not with
+                // VOICE_HOST 0.0.0.0 or behind a proxy on IPv4 only, and then nothing comes back.
+                // Said so that a silent voice chat over IPv6 has an explanation in the log.
                 if (address.AddressFamily == AddressFamily.InterNetworkV6)
                 {
                     Debug.Log($"Colibri voice: '{host}' has no IPv4 address, sending voice over IPv6 to [{address}]:{config.VoiceServerPort}. "
-                        + "The server has to listen for voice on IPv6: VOICE_HOST=:: or a proxy in front of it.");
+                        + "The server has to listen for voice on IPv6: VOICE_HOST=:: (the default), and a proxy in front of it on IPv6 as well.");
                 }
 
                 shutdown = new CancellationTokenSource();
@@ -293,17 +293,18 @@ namespace HCIKonstanz.Colibri.Networking
         /// device has a route to.
         /// </summary>
         /// <remarks>
-        /// IPv4 first because the server's voice socket is IPv4 unless VOICE_HOST is an IPv6
-        /// address (voice-server.ts). Taking the first address regardless broke on Windows, where
-        /// "localhost" commonly resolves to ::1 before 127.0.0.1: every packet went to an IPv6
-        /// address that nothing listened on, and no voice ever reached the server. An IPv4-mapped
-        /// IPv6 address is as good as the IPv4 address inside it. IPv6 is for a name with no IPv4
-        /// address at all, such as a server whose IPv4 address is behind carrier-grade NAT. A
-        /// link-local IPv6 address without a scope (an interface) cannot be sent to, and is
-        /// skipped. So is an IPv6 address without a route: on Wi-Fi with IPv4 only, which gives
-        /// a device a link-local IPv6 address and nothing more, every send to it failed at once.
-        /// IPv4 is taken without asking, as before IPv6 was an option: a device still joining
-        /// Wi-Fi has no route yet, and starts sending once it has one.
+        /// IPv4 first because every server takes voice over IPv4, but not every one over IPv6: not
+        /// with VOICE_HOST 0.0.0.0, nor behind a proxy on IPv4 only (voice-server.ts). Taking the
+        /// first address regardless broke on Windows, where "localhost" commonly resolves to ::1
+        /// before 127.0.0.1: every packet went to an IPv6 address that nothing listened on, and no
+        /// voice ever reached the server. An IPv4-mapped IPv6 address is as good as the IPv4
+        /// address inside it. IPv6 is for a name with no IPv4 address at all, such as a server
+        /// whose IPv4 address is behind carrier-grade NAT. A link-local IPv6 address without a
+        /// scope (an interface) cannot be sent to, and is skipped. So is an IPv6 address without a
+        /// route: on Wi-Fi with IPv4 only, which gives a device a link-local IPv6 address and
+        /// nothing more, every send to it failed at once. IPv4 is taken without asking, as before
+        /// IPv6 was an option: a device still joining Wi-Fi has no route yet, and starts sending
+        /// once it has one.
         /// </remarks>
         /// <param name="hasRoute">Whether the device has a route to an IPv6 address; see <see cref="WebServerConnection.HasRoute"/>.</param>
         /// <returns>An IPv4 or IPv6 address, or null when there is none voice can be sent to.</returns>
