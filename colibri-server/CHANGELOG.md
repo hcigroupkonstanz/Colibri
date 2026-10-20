@@ -41,6 +41,8 @@ Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log na
 - Load limits per client (`CLIENT_MESSAGE_RATE_LIMIT`) protect the server from clients that send too much.
 - A warning when an app has more than 8 clients, usually because several projects use the same app name.
 - Support for reverse proxies with `TRUSTED_PROXIES`, so the log shows the clients' real addresses.
+- `PROXY_TLS_ADDRESSES` shows the certificate of a reverse proxy that handles TLS on the monitoring page, with a
+  warning before it expires.
 - `STORE_MAX_MB` limits the size of the data store. Off by default.
 - `store-export.js` prints the data store as JSON, for backups.
 

@@ -154,6 +154,17 @@ this is the server's full detail.
   Unity clients through a proxy show without TLS, the TCP row says *unencrypted, proxy TLS
   undeclared*, and the setting *Not declared*. Set without `TCP_PROXY_PROTOCOL`, it has no effect,
   and the server warns at startup. It takes only `true` or `false`.
+- **The proxy's certificate.** With TLS at the proxy the server never sees the certificate its
+  clients get, and with TLS from the proxy to the server as well the Server page showed the
+  server's own, which clients never see. New `PROXY_TLS_ADDRESSES` (`host[:port]`, 443 by default)
+  names where the proxy serves TLS. `ProxyCertificateCheck` connects to each at startup and every
+  hour as a client would (`rejectUnauthorized: false`, then `authorized` and `authorizationError`,
+  which cover the certificate authorities and the host name), groups the addresses by
+  certificate, and logs each change: a new certificate, one clients would refuse, one about to
+  expire (the same rules as `TLS_CERT`'s), an unreachable address. The Server page shows a *Proxy
+  TLS certificate* section per certificate, and titles the server's own *TLS certificate (this
+  server)* when there are both. The addresses are a setting, never a request's Host header, which
+  a client could point anywhere.
 - **TCP port:** with new `TCP_PROXY_PROTOCOL=true`, a connection from a trusted peer must start
   with a PROXY protocol header, version 1 (nginx's `proxy_protocol on`) or 2. It is read ahead of a
   TLS handshake, also when it arrives in pieces. The client it names is the one in every log line

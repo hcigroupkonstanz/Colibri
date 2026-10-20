@@ -116,12 +116,13 @@ With both set, the web and Unity ports use [TLS](#tls). Voice is not encrypted.
 
 ### Reverse proxy variables
 
-| Variable             | Default | Description                                                                                                                                                                           |
-| -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRUSTED_PROXIES`    | empty   | Addresses of [reverse proxies](#running-behind-a-reverse-proxy) in front of the server, separated by commas, so that the log shows the clients' own addresses. IP addresses, ranges such as `172.30.0.0/24`, and `loopback`, `linklocal`, `uniquelocal`. |
-| `TCP_PROXY_PROTOCOL` | `false` | `true`: the proxy in front of the Unity port sends the PROXY protocol, which names the Unity client. Needs `TRUSTED_PROXIES`.                                                          |
-| `TCP_TLS_AT_PROXY`   | `false` | `true`: the proxy in front of the Unity port handles TLS. Only changes what the monitoring page shows. Needs `TCP_PROXY_PROTOCOL=true`.                                               |
-| `BASE_URL`           | empty   | Path of the monitoring page behind a reverse proxy, e.g. `/colibri`                                                                                                                  |
+| Variable              | Default | Description                                                                                                                                                                                                                                              |
+| --------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRUSTED_PROXIES`     | empty   | Addresses of [reverse proxies](#running-behind-a-reverse-proxy) in front of the server, separated by commas, so that the log shows the clients' own addresses. IP addresses, ranges such as `172.30.0.0/24`, and `loopback`, `linklocal`, `uniquelocal`. |
+| `TCP_PROXY_PROTOCOL`  | `false` | `true`: the proxy in front of the Unity port sends the PROXY protocol, which names the Unity client. Needs `TRUSTED_PROXIES`.                                                                                                                            |
+| `TCP_TLS_AT_PROXY`    | `false` | `true`: the proxy in front of the Unity port handles TLS. Only changes what the monitoring page shows. Needs `TCP_PROXY_PROTOCOL=true`.                                                                                                                  |
+| `PROXY_TLS_ADDRESSES` | empty   | Where the proxy serves TLS, separated by commas, e.g. `colibri.example.org, colibri.example.org:9212`, so that the monitoring page shows its certificate ([TLS at a reverse proxy](#tls-at-a-reverse-proxy)). Port 443 unless given.                     |
+| `BASE_URL`            | empty   | Path of the monitoring page behind a reverse proxy, e.g. `/colibri`                                                                                                                                                                                      |
 
 ## Changing ports
 
@@ -276,6 +277,37 @@ _Server supports SSL/TLS?_ as well. See [Running behind a reverse proxy](#runnin
 
 TLS costs little: about 10 to 15 percent more data between Unity and the server, a little more processor time, and no
 measurable delay.
+
+The server does not see the proxy's certificate. To show it on the monitoring page, with a warning before it expires,
+set `PROXY_TLS_ADDRESSES` to the addresses where the proxy serves TLS:
+
+```sh
+PROXY_TLS_ADDRESSES=colibri.example.org, colibri.example.org:9212
+```
+
+The server connects to each address at startup and once an hour, as a client would, and checks the certificate against
+the usual certificate authorities and the address's name. The log reports a certificate that clients would refuse, one
+that is about to expire, and an address the server cannot reach.
+
+**Docker:** the server has to reach the proxy under its public name. If that name leads elsewhere from inside the
+container, for example to an IPv4 address behind carrier-grade NAT, map it to the host:
+
+```yaml
+services:
+    colibri:
+        extra_hosts:
+            - "colibri.example.org:host-gateway"
+```
+
+### TLS between proxy and server
+
+The proxy can use TLS towards the server as well, for example when it runs on another machine. Set `TLS_CERT` and
+`TLS_KEY` on the server, and have the proxy connect with TLS: in nginx, `proxy_pass https://…` for the web port, and
+`proxy_ssl on;` in the `stream` server for the Unity port. The PROXY protocol header still comes first.
+
+Clients only see the proxy's certificate. With `PROXY_TLS_ADDRESSES`, the monitoring page shows both: _TLS
+certificate (this server)_ and _Proxy TLS certificate_. To accept only one certificate in a Unity app (_Server certificate
+SHA-256_), use the fingerprint of the proxy's.
 
 ## Running behind a reverse proxy
 

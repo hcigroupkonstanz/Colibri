@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { AdminService, BuildInfo, ServerSnapshot, SettingValue } from '../../services';
+import { AdminService, BuildInfo, ServerSnapshot, SettingValue, TlsInfo } from '../../services';
 import { LiveStatusComponent } from '../../components/live-status/live-status.component';
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
 import { bytes, count, duration } from '../../format';
@@ -36,7 +36,7 @@ const SHOWN = new Set([
     'WEBSERVER_HOST', 'WEBSERVER_PORT', 'BASE_URL', 'TCP_HOST', 'TCP_PORT', 'VOICE_HOST', 'VOICE_PORT',
     'VOICE_SAMPLING_RATE', 'VOICE_RECORDING', 'TCP_IDLE_TIMEOUT_SECONDS', 'TCP_INBOUND_BACKLOG_LIMIT',
     'CLIENT_MESSAGE_RATE_LIMIT', 'CLIENT_MESSAGE_RATE_BURST', 'APP_CLIENT_WARNING_THRESHOLD',
-    'MODEL_TOMBSTONE_SECONDS', 'STORE_EXPIRY_DAYS', 'STORE_MAX_MB', 'TRUSTED_PROXIES', 'TCP_PROXY_PROTOCOL', 'TCP_TLS_AT_PROXY'
+    'MODEL_TOMBSTONE_SECONDS', 'STORE_EXPIRY_DAYS', 'STORE_MAX_MB', 'TRUSTED_PROXIES', 'TCP_PROXY_PROTOCOL', 'TCP_TLS_AT_PROXY', 'PROXY_TLS_ADDRESSES'
 ]);
 
 const text = function (value: SettingValue | undefined): string {
@@ -101,10 +101,32 @@ const TCP_TLS_UNDECLARED = 'Set TCP_TLS_AT_PROXY=true if the proxy terminates TL
 /** On hover: TCP_TLS_AT_PROXY set without TCP_PROXY_PROTOCOL. */
 const TCP_TLS_NO_EFFECT = 'No effect without TCP_PROXY_PROTOCOL: Unity clients through the proxy are not identified';
 
+/** On hover: a proxy certificate that clients would refuse. */
+const PROXY_UNTRUSTED = 'Clients that check certificates refuse it at this address: the reason is OpenSSL\'s or Node\'s, '
+    + 'checked against Node\'s certificate authorities and the address\'s host name';
+
+/** A certificate's names, issuer, validity and fingerprint, with a warning when it is about to expire. */
+const certificateFacts = function (cert: TlsInfo, at: number, format: (time: number) => string): Fact[] {
+    const days = Math.floor((cert.validTo - at) / DAY);
+    const expiry: Fact = { label: 'Valid until', value: format(cert.validTo) };
+    if (cert.validTo <= at) Object.assign(expiry, { tone: 'err', note: 'expired' });
+    else if (days < EXPIRY_WARNING_DAYS) Object.assign(expiry, { tone: 'warn', note: days === 0 ? 'expires today' : `expires in ${plural(days, 'day', 'days')}` });
+    else expiry.note = `in ${plural(days, 'day', 'days')}`;
+
+    return [
+        { label: 'Names', value: cert.names, mono: true },
+        { label: 'Issuer', value: cert.issuer, note: cert.selfSigned ? 'self-signed' : undefined },
+        { label: 'Valid from', value: format(cert.validFrom), tone: cert.validFrom > at ? 'err' : undefined, note: cert.validFrom > at ? 'not yet valid' : undefined },
+        expiry,
+        { label: 'SHA-256 fingerprint', value: cert.fingerprint256, mono: true }
+    ];
+};
+
 export const serverSections = function (s: ServerSnapshot, format: (time: number) => string): Section[] {
     const set = s.settings;
     const tls = s.tls;
     const proxies = Array.isArray(set['TRUSTED_PROXIES']) ? set['TRUSTED_PROXIES'] : [];
+    const proxyAddresses = Array.isArray(set['PROXY_TLS_ADDRESSES']) ? set['PROXY_TLS_ADDRESSES'] : [];
 
     // TLS terminated by a reverse proxy in front of this server, which then sees only the proxy's
     // unencrypted connections. Web: by what trusted proxies reported in X-Forwarded-Proto for the web
@@ -188,27 +210,47 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
                     mono: proxies.length > 0, tone: proxies.length > 0 ? undefined : 'off'
                 },
                 onOff('PROXY protocol on TCP', set['TCP_PROXY_PROTOCOL'] === true, 'TCP_PROXY_PROTOCOL'),
-                tcpTerminationFact
+                tcpTerminationFact,
+                {
+                    label: 'Proxy TLS addresses', variable: 'PROXY_TLS_ADDRESSES', value: proxyAddresses.length > 0 ? proxyAddresses.join(', ') : 'None',
+                    mono: proxyAddresses.length > 0, tone: proxyAddresses.length > 0 ? undefined : 'off'
+                }
             ]
         }
     ];
 
+    // The server's own certificate, and the proxy's: both when the proxy starts TLS of its own to
+    // the server, and clients only ever see the proxy's.
+    const proxyTls = s.proxyTls;
     if (tls) {
-        const days = Math.floor((tls.validTo - s.at) / DAY);
-        const expiry: Fact = { label: 'Valid until', value: format(tls.validTo) };
-        if (tls.validTo <= s.at) Object.assign(expiry, { tone: 'err', note: 'expired' });
-        else if (days < EXPIRY_WARNING_DAYS) Object.assign(expiry, { tone: 'warn', note: days === 0 ? 'expires today' : `expires in ${plural(days, 'day', 'days')}` });
-        else expiry.note = `in ${plural(days, 'day', 'days')}`;
-
         sections.push({
-            id: 'certificate', title: 'TLS certificate', facts: [
-                { label: 'Names', value: tls.names, mono: true },
-                { label: 'Issuer', value: tls.issuer, note: tls.selfSigned ? 'self-signed' : undefined },
-                { label: 'Valid from', value: format(tls.validFrom), tone: tls.validFrom > s.at ? 'err' : undefined, note: tls.validFrom > s.at ? 'not yet valid' : undefined },
-                expiry,
-                { label: 'SHA-256 fingerprint', value: tls.fingerprint256, mono: true }
+            id: 'certificate', title: proxyTls ? 'TLS certificate (this server)' : 'TLS certificate',
+            facts: certificateFacts(tls, s.at, format)
+        });
+    }
+    if (proxyTls && proxyTls.length === 0) {
+        sections.push({
+            id: 'proxy-certificate-0', title: 'Proxy TLS certificate', facts: [
+                { label: 'Addresses', variable: 'PROXY_TLS_ADDRESSES', value: proxyAddresses.join(', '), mono: true },
+                { label: 'Status', value: 'Checking', tone: 'off' }
             ]
         });
+    }
+    for (const [ i, entry ] of (proxyTls ?? []).entries()) {
+        const cert = entry.certificate;
+        const facts: Fact[] = [ { label: 'Addresses', variable: 'PROXY_TLS_ADDRESSES', value: entry.addresses.join(', '), mono: true } ];
+        if (cert) {
+            // The check runs once an hour; a certificate that has expired since is refused already.
+            const trustError = cert.validTo <= s.at ? 'expired' : cert.trusted ? null : cert.trustError ?? 'refused';
+            facts.push(trustError === null
+                ? { label: 'Trusted', value: 'Yes', tone: 'ok' }
+                : { label: 'Trusted', value: 'No', tone: 'err', note: trustError, title: PROXY_UNTRUSTED });
+            facts.push(...certificateFacts(cert, s.at, format));
+        } else {
+            facts.push({ label: 'Connection', value: 'Failed', tone: 'err', note: entry.error ?? undefined });
+        }
+        facts.push({ label: 'Checked', value: format(entry.checkedAt) });
+        sections.push({ id: `proxy-certificate-${i}`, title: 'Proxy TLS certificate', facts });
     }
 
     const rate = number(set['CLIENT_MESSAGE_RATE_LIMIT']);

@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { readTlsFiles } from './modules/core/tls-files.js';
+import { parseProxyTlsAddresses } from './modules/core/proxy-certificate.js';
 import { parseTrustedProxies } from './modules/networking/trusted-proxies.js';
 
 // automatically load .env file. Quietly: dotenv 17 otherwise prints an "injected env"
@@ -87,6 +88,7 @@ if (tcpProxyProtocol && trustedProxies.length === 0) {
 // does not say, so the operator does. Without TCP_PROXY_PROTOCOL it has no effect; see
 // configurationWarnings.
 const tcpTlsAtProxy = parseBoolean('TCP_TLS_AT_PROXY', process.env.TCP_TLS_AT_PROXY, false);
+const proxyTlsAddresses = parseProxyTlsAddresses(process.env.PROXY_TLS_ADDRESSES);
 
 // The default ports are 9211, 9212 and 9213, not 1.x's 9011, 9012 and 9013: a 1.x and a 2.x
 // server can then run side by side on one host, and a client of one version does not reach a
@@ -169,6 +171,9 @@ export const Config = {
     // Whether a Unity client whose connection starts with such a header reached the proxy over TLS,
     // as the admin UI shows it. The header does not say.
     TCP_TLS_AT_PROXY: tcpTlsAtProxy,
+    // Where the proxy in front of the server serves TLS, whose certificates the monitoring page
+    // shows (see ProxyCertificateCheck); empty: nowhere.
+    PROXY_TLS_ADDRESSES: proxyTlsAddresses,
 };
 
 type TcpTlsAtProxySettings = Pick<typeof Config, 'TRUSTED_PROXIES' | 'TCP_PROXY_PROTOCOL' | 'TCP_TLS_AT_PROXY'>;

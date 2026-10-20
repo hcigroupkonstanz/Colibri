@@ -492,6 +492,7 @@ describe('admin UI topics', () => {
             startedAt: Date.now() - 90_500,
             settings: { TCP_PORT: 9212, TRUSTED_PROXIES: [ 'loopback' ], TCP_PROXY_PROTOCOL: true },
             tls: undefined,
+            proxyTls: undefined,
             tcpTlsAtProxy: false,
             voice: { listening: true, recording: false, samplingRate: 48000, clients: 2 },
             store: new DataStore(),
@@ -532,6 +533,30 @@ describe('admin UI topics', () => {
             // the admin page asking, with no other web client
             expect(serverSnapshot(sources({ webClients: [ web('a1', 'colibri', true) ] })).tlsAtProxy).toEqual({ web: true, tcp: false });
             expect(serverSnapshot(sources()).tlsAtProxy).toEqual({ web: false, tcp: false });
+        });
+
+        it('passes on the proxy\'s certificates, with the addresses that presented them, and the ones it could not check', () => {
+            expect(serverSnapshot(sources()).proxyTls).toBeNull();
+            expect(serverSnapshot(sources({ proxyTls: [] })).proxyTls).toEqual([]);
+
+            const proxyTls = serverSnapshot(sources({
+                proxyTls: [
+                    { addresses: [ 'colibri.example.org:443', 'colibri.example.org:9212' ], checkedAt: 1_700_000_000_000,
+                        certificate: { ...info, trusted: true } },
+                    { addresses: [ 'colibri.example.org:9012' ], checkedAt: 1_700_000_000_000, error: 'connect ECONNREFUSED' },
+                ],
+            })).proxyTls;
+
+            expect(proxyTls).toEqual([
+                {
+                    addresses: [ 'colibri.example.org:443', 'colibri.example.org:9212' ], checkedAt: 1_700_000_000_000, error: null,
+                    certificate: {
+                        names: info.names, issuer: info.issuer, selfSigned: false, fingerprint256: info.fingerprint256,
+                        validFrom: info.validFrom.getTime(), validTo: info.validTo.getTime(), trusted: true, trustError: null,
+                    },
+                },
+                { addresses: [ 'colibri.example.org:9012' ], checkedAt: 1_700_000_000_000, certificate: null, error: 'connect ECONNREFUSED' },
+            ]);
         });
 
         // Declared by the operator, so it holds with no Unity client connected, and apart from web.

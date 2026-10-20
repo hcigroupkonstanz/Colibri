@@ -26,6 +26,15 @@ export interface TlsInfo {
     fingerprint256: string;
 }
 
+/** A certificate the proxy presents at PROXY_TLS_ADDRESSES, and whether clients would trust it there. */
+export interface ProxyTlsInfo {
+    addresses: string[];
+    checkedAt: number;
+    certificate: (TlsInfo & { trusted: boolean; trustError: string | null }) | null;
+    /** Why an address could not be checked. */
+    error: string | null;
+}
+
 export interface VoiceStatus {
     listening: boolean;
     recording: boolean;
@@ -52,6 +61,12 @@ export interface ServerSnapshot extends Snapshot {
     /** The settings in effect, by the variables that set them. */
     settings: Record<string, SettingValue>;
     tls: TlsInfo | null;
+    /**
+     * The certificates of the proxy in front of the server, one entry per certificate, and one per
+     * address that could not be checked. Empty until the first check; null without
+     * PROXY_TLS_ADDRESSES.
+     */
+    proxyTls: ProxyTlsInfo[] | null;
     /**
      * TLS that ends at a trusted proxy in front of the server. `web`: a web client or admin page
      * connected now, this one included, reached the proxy over TLS, by its X-Forwarded-Proto.

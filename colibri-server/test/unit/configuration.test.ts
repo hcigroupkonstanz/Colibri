@@ -154,6 +154,19 @@ describe('Config', () => {
         });
     });
 
+    describe('PROXY_TLS_ADDRESSES', () => {
+        it('is empty by default, and takes host names with ports', async () => {
+            expect((await loadConfig({ PROXY_TLS_ADDRESSES: undefined })).PROXY_TLS_ADDRESSES).toEqual([]);
+            expect((await loadConfig({ PROXY_TLS_ADDRESSES: 'colibri.example.org, colibri.example.org:9212' })).PROXY_TLS_ADDRESSES)
+                .toEqual([ { host: 'colibri.example.org', port: 443 }, { host: 'colibri.example.org', port: 9212 } ]);
+        });
+
+        it('refuses to start with an entry that is no address, naming it', async () => {
+            await expect(loadConfig({ PROXY_TLS_ADDRESSES: 'https://colibri.example.org' }))
+                .rejects.toThrow('Invalid PROXY_TLS_ADDRESSES: "https://colibri.example.org"');
+        });
+    });
+    
     describe('data store', () => {
         it('defaults to deleting values not written for 30 days, and takes 0 to keep them', async () => {
             expect((await loadConfig({ STORE_EXPIRY_DAYS: undefined })).STORE_EXPIRY_DAYS).toBe(30);
