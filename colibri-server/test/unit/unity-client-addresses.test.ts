@@ -1,26 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { Subject } from 'rxjs';
-import { UnityClient, UnityClientAddresses, UnityClientLeft, normalizeAddress } from '../../src/server/modules/web/unity-client-addresses.js';
+import { UnityClient, UnityClientAddresses, UnityClientLeft } from '../../src/server/modules/web/unity-client-addresses.js';
 import { voiceAppId } from '../../src/server/modules/web/voice-packet.js';
 
 const LAB = voiceAppId('lab');
 const OTHER = voiceAppId('other');
-
-describe('normalizeAddress', () => {
-    it.each([
-        [ '::ffff:192.0.2.1', '192.0.2.1' ],
-        [ '::FFFF:192.0.2.1', '192.0.2.1' ],
-        [ '192.0.2.1', '192.0.2.1' ],
-        [ '::1', '::1' ],
-        [ '2001:db8::1', '2001:db8::1' ],
-        // Not an IPv4 address after the prefix.
-        [ '::ffff:c000:201', '::ffff:c000:201' ],
-        [ '::ffff:', '::ffff:' ],
-        [ '', '' ],
-    ])('turns "%s" into "%s"', (address, normalized) => {
-        expect(normalizeAddress(address)).toBe(normalized);
-    });
-});
 
 describe('UnityClientAddresses', () => {
     const create = (current: UnityClient[] = []) => {

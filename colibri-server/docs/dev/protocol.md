@@ -827,8 +827,9 @@ Each write is committed to `store.db` before it is answered. Names are sorted by
 colibri-unity's voice chat sends each audio frame to the voice port (`VOICE_PORT`, UDP 9213) as one
 datagram: an 11-byte header, then the audio. All integers are little-endian.
 
-The voice port takes IPv4, and with `VOICE_HOST=::` IPv6 as well; there an IPv4 client's address
-appears as `::ffff:<IPv4 address>` in the log. Another IPv6 `VOICE_HOST` takes only that address.
+The voice port takes IPv6 and IPv4 with `VOICE_HOST=::`, the default, and IPv4 only with
+`VOICE_HOST=0.0.0.0`. The log names an IPv4 client by its IPv4 address on either. Another IPv6
+`VOICE_HOST` takes only that address.
 colibri-unity sends to an IPv4 address of the server when the server address has one, and to an
 IPv6 address only when it has none.
 

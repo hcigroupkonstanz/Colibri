@@ -26,6 +26,8 @@ Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log na
   values is not listed, and `GET` and `DELETE` of it answer `404`.
 - The server forgets a deleted object only after `MODEL_TOMBSTONE_SECONDS` (10 minutes), so an old update from
   another client can no longer bring it back.
+- The web, Unity and voice ports listen on IPv6 and IPv4 (`::`) instead of IPv4 only (`0.0.0.0`). Without IPv6, the
+  server listens on IPv4. `WEBSERVER_HOST`, `TCP_HOST` and `VOICE_HOST` set to `0.0.0.0` keep IPv4 only.
 
 ### Added
 

@@ -46,6 +46,12 @@ const text = function (value: SettingValue | undefined): string {
     return `${value}`;
 };
 
+// An IPv6 host in brackets, as in a URL: [::]:9211, not :::9211.
+const hostPort = function (host: SettingValue | undefined, port: SettingValue | undefined): string {
+    const name = text(host);
+    return `${name.includes(':') ? `[${name}]` : name}:${text(port)}`;
+};
+
 const number = function (value: SettingValue | undefined): number | null {
     return typeof value === 'number' ? value : null;
 };
@@ -167,14 +173,14 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
         {
             id: 'network', title: 'Network', facts: [
                 {
-                    label: 'Web', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', value: `${text(set['WEBSERVER_HOST'])}:${text(set['WEBSERVER_PORT'])}`, mono: true,
+                    label: 'Web', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', value: hostPort(set['WEBSERVER_HOST'], set['WEBSERVER_PORT']), mono: true,
                     note: scheme, title: webTlsAtProxy ? WEB_TLS_AT_PROXY : undefined
                 },
                 {
-                    label: 'TCP', variable: 'TCP_HOST, TCP_PORT', value: `${text(set['TCP_HOST'])}:${text(set['TCP_PORT'])}`, mono: true,
+                    label: 'TCP', variable: 'TCP_HOST, TCP_PORT', value: hostPort(set['TCP_HOST'], set['TCP_PORT']), mono: true,
                     note: tcpNote, title: tcpTitle
                 },
-                { label: 'Voice', variable: 'VOICE_HOST, VOICE_PORT', value: `${text(set['VOICE_HOST'])}:${text(set['VOICE_PORT'])}`, mono: true, note: 'UDP' },
+                { label: 'Voice', variable: 'VOICE_HOST, VOICE_PORT', value: hostPort(set['VOICE_HOST'], set['VOICE_PORT']), mono: true, note: 'UDP' },
                 { label: 'Base URL', variable: 'BASE_URL', value: text(set['BASE_URL']) || '/', mono: true },
                 tlsFact,
                 {

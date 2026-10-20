@@ -92,6 +92,14 @@ describe('serverSections', () => {
         expect(fact(s, 'network', 'Web')?.note).toBe('HTTPS and WSS');
     });
 
+    it('puts an IPv6 host in brackets', () => {
+        const hosts = (s: ServerSnapshot) => [ 'Web', 'TCP', 'Voice' ].map(label => fact(s, 'network', label)?.value);
+
+        expect(hosts(snapshot())).toEqual([ '0.0.0.0:9211', '0.0.0.0:9212', '0.0.0.0:9213' ]);
+        const settings = { ...snapshot().settings, WEBSERVER_HOST: '::', TCP_HOST: '2001:db8::1', VOICE_HOST: 'colibri.example.org' };
+        expect(hosts(snapshot({ settings }))).toEqual([ '[::]:9211', '[2001:db8::1]:9212', 'colibri.example.org:9213' ]);
+    });
+
     describe('TLS terminated by this server or by a proxy', () => {
         const certificate = { names: 'colibri.example.org', issuer: 'Example CA', selfSigned: false, validFrom: 0, validTo: 200 * DAY, fingerprint256: 'AB:CD' };
         const rows = (s: ServerSnapshot) => ({
