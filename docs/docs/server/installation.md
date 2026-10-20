@@ -9,7 +9,7 @@ The Colibri server passes messages and synchronized objects between the Unity an
 provides the data store and voice chat, and shows a monitoring page in the browser. This page explains how to run
 your own server.
 
-:::warning No authentication
+:::warning[No authentication]
 Colibri has no authentication. Anyone who can reach the server can join any app on it, read and change its data, and
 read the log on the monitoring page. Run your own server on a trusted network, for example your lab's network or a
 VPN.
@@ -193,7 +193,7 @@ docker compose pull
 docker compose up -d
 ```
 
-:::warning Pin the version
+:::warning[Pin the version]
 Always name a version in `image:`. Without one, or with `latest`, the next pull can switch your server to another
 major version without notice, for example from Colibri 1 to Colibri 2. Clients of the old version then cannot connect
 any more.

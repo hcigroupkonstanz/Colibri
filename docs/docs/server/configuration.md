@@ -343,7 +343,7 @@ proxy_protocol on;
 If that `stream` server handles TLS (`listen 9212 ssl`), also set `TCP_TLS_AT_PROXY=true`. Then the monitoring page
 shows these Unity clients as _TLS (proxy)_. Nothing else depends on it.
 
-:::warning Order matters
+:::warning[Order matters]
 First restart the server with `TCP_PROXY_PROTOCOL=true`, then reload nginx with `proxy_protocol on`. Until both are
 done, every Unity connection through the proxy fails. In this order, the log says clearly which header is missing.
 :::
