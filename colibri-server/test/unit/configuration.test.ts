@@ -80,6 +80,21 @@ describe('Config', () => {
         });
     });
 
+    describe('hosts', () => {
+        // :: listens on IPv6 and IPv4. 1.x listened on IPv4 only.
+        it('default to :: for web, TCP and voice', async () => {
+            const config = await loadConfig({ WEBSERVER_HOST: undefined, TCP_HOST: undefined, VOICE_HOST: undefined });
+
+            expect([ config.WEBSERVER_HOST, config.TCP_HOST, config.VOICE_HOST ]).toEqual([ '::', '::', '::' ]);
+        });
+
+        it('take 0.0.0.0 for IPv4 only when set', async () => {
+            const config = await loadConfig({ WEBSERVER_HOST: '0.0.0.0', TCP_HOST: '0.0.0.0', VOICE_HOST: '0.0.0.0' });
+
+            expect([ config.WEBSERVER_HOST, config.TCP_HOST, config.VOICE_HOST ]).toEqual([ '0.0.0.0', '0.0.0.0', '0.0.0.0' ]);
+        });
+    });
+
     describe('inbound limits', () => {
         it('default to dropping past a backlog of 2000 TCP messages', async () => {
             const config = await loadConfig({ TCP_INBOUND_BACKLOG_LIMIT: undefined });
@@ -149,6 +164,26 @@ describe('Config', () => {
         it('refuses to start with an entry that is no address, naming it', async () => {
             await expect(loadConfig({ PROXY_TLS_ADDRESSES: 'https://colibri.example.org' }))
                 .rejects.toThrow('Invalid PROXY_TLS_ADDRESSES: "https://colibri.example.org"');
+        });
+    });
+    
+    describe('data store', () => {
+        it('defaults to deleting values not written for 30 days, and takes 0 to keep them', async () => {
+            expect((await loadConfig({ STORE_EXPIRY_DAYS: undefined })).STORE_EXPIRY_DAYS).toBe(30);
+            expect((await loadConfig({ STORE_EXPIRY_DAYS: '0' })).STORE_EXPIRY_DAYS).toBe(0);
+            expect((await loadConfig({ STORE_EXPIRY_DAYS: '7' })).STORE_EXPIRY_DAYS).toBe(7);
+        });
+
+        it('defaults to no size limit, and takes one in MiB', async () => {
+            expect((await loadConfig({ STORE_MAX_MB: undefined })).STORE_MAX_MB).toBe(0);
+            expect((await loadConfig({ STORE_MAX_MB: '512' })).STORE_MAX_MB).toBe(512);
+        });
+
+        it.each([
+            [ 'STORE_EXPIRY_DAYS', '-1' ], [ 'STORE_EXPIRY_DAYS', '1.5' ], [ 'STORE_EXPIRY_DAYS', 'never' ],
+            [ 'STORE_MAX_MB', '-1' ], [ 'STORE_MAX_MB', '1GB' ],
+        ])('refuses to start with %s "%s"', async (name, raw) => {
+            await expect(loadConfig({ [name]: raw })).rejects.toThrow(name);
         });
     });
 

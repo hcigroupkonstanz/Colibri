@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, Server as HttpServer } from 'http';
 import { AddressInfo } from 'net';
+import { networkInterfaces } from 'os';
 import { Subscription, filter, firstValueFrom, tap } from 'rxjs';
 import { io as connectClient, Socket as ClientSocket } from 'socket.io-client';
 import { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
@@ -487,6 +488,8 @@ describe('SocketIOServer rate limit', () => {
 
 // Behind a reverse proxy every client comes from the proxy's address; a trusted one names the client
 // in X-Forwarded-For. These clients connect from 127.0.0.1, standing in for the proxy.
+const hasIPv6Loopback = Object.values(networkInterfaces()).some(addresses => addresses?.some(a => a.address === '::1'));
+
 describe('SocketIOServer behind a reverse proxy', () => {
     let http: HttpServer;
     let server: SocketIOServer;
@@ -496,9 +499,9 @@ describe('SocketIOServer behind a reverse proxy', () => {
     let logSubscription: Subscription;
     let connected: NetworkClient[];
 
-    const start = async function (trustProxy?: TrustProxy): Promise<void> {
+    const start = async function (trustProxy?: TrustProxy, host = '127.0.0.1'): Promise<void> {
         http = createServer();
-        await new Promise<void>(resolve => http.listen(0, '127.0.0.1', resolve));
+        await new Promise<void>(resolve => http.listen(0, host, resolve));
         port = (http.address() as AddressInfo).port;
 
         server = new SocketIOServer();
@@ -585,6 +588,20 @@ describe('SocketIOServer behind a reverse proxy', () => {
         await connect('198.51.100.7');
 
         expect(tlsAtProxy()).toEqual({ '198.51.100.7': false });
+    });
+
+    // WEBSERVER_HOST=:: reports an IPv4 client as ::ffff:127.0.0.1.
+    it.skipIf(!hasIPv6Loopback)('names an IPv4 client of a dual-stack server by its IPv4 address', async () => {
+        await start(compileTrustedProxies(['loopback']), '::');
+
+        await connect(undefined);
+        await connect('198.51.100.7');
+
+        expect(connected.map(c => c.name)).toEqual(['127.0.0.1', '198.51.100.7']);
+        expect(logged(LogLevel.Debug).filter(l => l.startsWith('New client'))).toEqual([
+            expect.stringMatching(/connected to app ".+" from 127\.0\.0\.1$/),
+            expect.stringMatching(/connected to app ".+" from 198\.51\.100\.7 through 127\.0\.0\.1$/),
+        ]);
     });
 
     it('ignores X-Forwarded-For from a peer it does not trust', async () => {

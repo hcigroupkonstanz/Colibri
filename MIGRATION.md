@@ -32,10 +32,16 @@ them as described under [Unity](#unity).
    and `VOICE_PORT`.
 3. **Compose file from the Colibri 1 README:** remove `tty: true`. Otherwise warnings and errors are mixed into the
    normal log output. The new [compose file](colibri-server/README.md#docker-recommended) also limits the log size.
-4. **Data directory:** your data in `./data` keeps working. The server now runs as user `node` (uid 1000) and takes
+4. **Data directory:** your data in `./data` keeps working. On the first start, the server imports `store.json` into
+   `store.db` and renames it to `store.json.imported-<date>`. Imported values are deleted 30 days later unless they
+   are written again; set `STORE_EXPIRY_DAYS=0` to keep them for good. To go back to Colibri 1 later, export the store
+   first ([Backup](https://colibri.hci.uni-konstanz.de/server/configuration#backup)) and put the file into the old
+   data folder as `store.json`. The server now runs as user `node` (uid 1000) and takes
    over the data directory on startup. If you start the container with `--user` (or `user:` in compose), give the
    directory to that user first, e.g. `sudo chown -R 1001:1001 ./data` for `--user 1001:1001`.
-5. **Without Docker:** the server needs Node.js 24 or newer.
+5. **Without Docker:** the server needs Node.js 24 or newer. If the machine has a
+   public IPv6 address, make sure the firewall covers IPv6, or set `WEBSERVER_HOST`, `TCP_HOST` and `VOICE_HOST` to
+   `0.0.0.0`.
 
 If you use voice chat through a UDP proxy, add the proxy to `TRUSTED_PROXIES`, or publish 9213/udp directly.
 Otherwise the server drops the voice.

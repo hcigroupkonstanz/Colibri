@@ -68,8 +68,9 @@ brackets, e.g. `2001:db8::1` or `[2001:db8::1]`.
   one does not work, the console shows `Colibri: no connection to …, trying …` and Colibri tries the next one.
 - Once connected, the console shows the address in use:
   `Colibri: connected to colibri.example.org:9212 (192.0.2.10) as app '…'`.
-- colibri-server listens on IPv4 only by default. For a server name that has only IPv6 addresses, the server must
-  also listen on IPv6. See the server's [configuration](../server/configuration.md).
+- colibri-server listens on IPv6 and IPv4 by default. For a server name that has only IPv6 addresses, Docker or a
+  reverse proxy in front of the server must also listen on IPv6. See the server's
+  [configuration](../server/configuration.md#ipv6).
 - [Voice chat](./voice-chat.md) uses the server's IPv4 address when it has one. If the IPv4 address does not answer
   but the IPv6 address does, the client connects over IPv6 while voice chat still uses IPv4, and nobody hears this
   client. Make the IPv4 address reachable, or remove it from DNS.

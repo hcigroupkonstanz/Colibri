@@ -21,6 +21,7 @@ const snapshot = (overrides: Partial<ServerSnapshot> = {}): ServerSnapshot => ({
         VOICE_HOST: '0.0.0.0', VOICE_PORT: 9213, VOICE_SAMPLING_RATE: 48000, VOICE_RECORDING: false,
         TCP_IDLE_TIMEOUT_SECONDS: 10, TCP_INBOUND_BACKLOG_LIMIT: 2000, CLIENT_MESSAGE_RATE_LIMIT: 1000,
         CLIENT_MESSAGE_RATE_BURST: 2000, APP_CLIENT_WARNING_THRESHOLD: 8, MODEL_TOMBSTONE_SECONDS: 600,
+        STORE_EXPIRY_DAYS: 30, STORE_MAX_MB: 0,
         TRUSTED_PROXIES: [], TCP_PROXY_PROTOCOL: false
     },
     tls: null,
@@ -29,7 +30,7 @@ const snapshot = (overrides: Partial<ServerSnapshot> = {}): ServerSnapshot => ({
     voice: { listening: true, recording: false, samplingRate: 48000, clients: 0 },
     counts: {
         tcpClients: 3, webClients: 2, adminPages: 1, apps: 2, models: 1234, modelApps: 2, modelChannels: 3,
-        deletedModels: 4, storeApps: 1, storeKeys: 7
+        deletedModels: 4, storeApps: 1, storeKeys: 7, storeBytes: 1536
     },
     ...overrides
 });
@@ -42,7 +43,7 @@ describe('serverSections', () => {
         const s = snapshot();
         expect(fact(s, 'server', 'Uptime')?.value).toBe('1 h 2 min');
         expect(fact(s, 'counts', 'Synced models')).toEqual(expect.objectContaining({ value: '1,234', note: 'in 3 channels of 2 apps', link: '/models' }));
-        expect(fact(s, 'counts', 'REST store')).toEqual(expect.objectContaining({ value: '7 values', note: 'in 1 app' }));
+        expect(fact(s, 'counts', 'REST store')).toEqual(expect.objectContaining({ value: '7 values', note: 'in 1 app, 1.5 KiB' }));
     });
 
     it('shows the commit after the version, short, with the full hash and the build time on hover', () => {
@@ -72,6 +73,10 @@ describe('serverSections', () => {
         expect(fact(s, 'limits', 'Burst')?.value).toBe('Off');
         expect(fact(s, 'limits', 'TCP idle timeout')?.value).toBe('Off');
         expect(fact(s, 'limits', 'TCP inbound backlog')?.value).toBe('2,000 messages');
+        expect(fact(s, 'limits', 'REST store values kept')).toEqual(expect.objectContaining({ value: '30 days after their last write', variable: 'STORE_EXPIRY_DAYS' }));
+        expect(fact(s, 'limits', 'REST store size')).toEqual(expect.objectContaining({ value: 'Off', variable: 'STORE_MAX_MB' }));
+        expect(fact(snapshot({ settings: { ...s.settings, STORE_EXPIRY_DAYS: 0, STORE_MAX_MB: 512 } }), 'limits', 'REST store values kept')?.value).toBe('Off');
+        expect(fact(snapshot({ settings: { ...s.settings, STORE_MAX_MB: 512 } }), 'limits', 'REST store size')?.value).toBe('512 MiB');
         expect(fact(s, 'network', 'Trusted proxies')?.value).toBe('None');
         expect(fact(s, 'network', 'TLS')?.value).toBe('Off');
     });
@@ -86,6 +91,14 @@ describe('serverSections', () => {
         expect(fact(snapshot({ tls: { ...tls, validTo: 99 * DAY } }), 'certificate', 'Valid until')).toEqual(expect.objectContaining({ tone: 'err', note: 'expired' }));
         expect(fact(snapshot({ tls: { ...tls, validTo: 200 * DAY } }), 'certificate', 'Valid until')?.tone).toBeUndefined();
         expect(fact(s, 'network', 'Web')?.note).toBe('HTTPS and WSS');
+    });
+  
+    it('puts an IPv6 host in brackets', () => {
+        const hosts = (s: ServerSnapshot) => [ 'Web', 'TCP', 'Voice' ].map(label => fact(s, 'network', label)?.value);
+
+        expect(hosts(snapshot())).toEqual([ '0.0.0.0:9211', '0.0.0.0:9212', '0.0.0.0:9213' ]);
+        const settings = { ...snapshot().settings, WEBSERVER_HOST: '::', TCP_HOST: '2001:db8::1', VOICE_HOST: 'colibri.example.org' };
+        expect(hosts(snapshot({ settings }))).toEqual([ '[::]:9211', '[2001:db8::1]:9212', 'colibri.example.org:9213' ]);
     });
 
     describe('the proxy\'s certificate (PROXY_TLS_ADDRESSES)', () => {
@@ -159,6 +172,7 @@ describe('serverSections', () => {
             expect(sectionsOf(snapshot({ tls: own })).map(x => x.title)).toEqual([ 'TLS certificate' ]);
         });
     });
+    
 
     describe('TLS terminated by this server or by a proxy', () => {
         const certificate = { names: 'colibri.example.org', issuer: 'Example CA', selfSigned: false, validFrom: 0, validTo: 200 * DAY, fingerprint256: 'AB:CD' };

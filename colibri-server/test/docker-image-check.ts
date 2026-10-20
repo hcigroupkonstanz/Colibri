@@ -4,8 +4,8 @@
  *
  * The runtime runs as the unprivileged `node` user (uid 1000), and a data directory that user
  * cannot write is the one failure nothing else here would notice: `PUT /api/store` still
- * answers 201, the server keeps everything in memory, and the EACCES that says otherwise used
- * to land only in the admin UI's in-memory log. Docker creates a missing bind-mount source as
+ * answers 201, the server keeps everything in memory, and what said otherwise used to land
+ * only in the admin UI's in-memory log. Docker creates a missing bind-mount source as
  * root, and colibri-server 1.x ran as root, so both a first deployment and an upgrade hit it.
  *
  *   npm run test:docker
@@ -174,9 +174,14 @@ const adminLogAnswers = function (web: string): Promise<boolean> {
     });
 };
 
-const readStoreFile = async function (container: string): Promise<string> {
-    const result = await docker([ 'exec', container, 'cat', `${DATA_DIR}/store.json` ]);
+// The data store as store-export.js prints it, or '' if there is no store.db to read.
+const readStore = async function (container: string): Promise<string> {
+    const result = await docker([ 'exec', container, 'node', 'dist/server/store-export.js' ]);
     return result.code === 0 ? result.stdout : '';
+};
+
+const dataFiles = async function (container: string): Promise<string[]> {
+    return (await dockerOk([ 'exec', container, 'ls', '-A', DATA_DIR ])).split('\n').filter(Boolean);
 };
 
 const serverUid = async function (container: string): Promise<string> {
@@ -334,6 +339,11 @@ const runDeployment = async function (image: string, deployment: Deployment): Pr
         const res = await fetch(`${web}/api/store/${app}/${key}`);
         const body = res.status === 200 ? await res.json() : undefined;
         check('loads the store.json that was already there', JSON.stringify(body) === JSON.stringify(value), `HTTP ${res.status}`);
+        if (deployment.writable) {
+            const files = await dataFiles(container);
+            check('imports it into store.db and renames it', files.includes('store.db') && !files.includes('store.json')
+                && files.some(file => file.startsWith('store.json.imported-')), files.join(' '));
+        }
     }
 
     const value = { saved: deployment.name };
@@ -344,12 +354,8 @@ const runDeployment = async function (image: string, deployment: Deployment): Pr
     });
     check('PUT /api/store answers 201', put.status === 201, `HTTP ${put.status}`);
 
-    // Past the REST API's save debounce.
-    let stored = '';
-    for (let i = 0; i < 20 && !stored.includes(deployment.name); i++) {
-        await sleep(250);
-        stored = await readStoreFile(container);
-    }
+    // In store.db as soon as the PUT is answered.
+    const stored = await readStore(container);
 
     const logs = await logsOf(container);
     if (deployment.chownFails) {
@@ -360,18 +366,19 @@ const runDeployment = async function (image: string, deployment: Deployment): Pr
     check('the entrypoint promises no warning from the server that does not come',
         !logs.includes('message below') || logs.includes('DATA_ROOT is not writable'), logs.slice(0, 1500));
     if (deployment.writable) {
-        check('writes store.json', stored.includes(deployment.name), stored || '(no store.json)');
+        check('writes store.db', stored.includes(deployment.name), stored || '(no store.db)');
         check('logs no permission error', !/EACCES|EPERM|not writable/.test(logs), logs.slice(-1500));
     } else {
         const failure = deployment.failure ?? { code: 'EACCES', advice: 'chown -R 1000:1000' };
-        check('does not pretend to have written store.json', !stored.includes(deployment.name));
+        check('does not pretend to have written store.db', !stored.includes(deployment.name));
         check(`says on stderr that DATA_ROOT is not writable, naming the path, the uid, ${failure.code} and its fix`,
             logs.includes(`DATA_ROOT is not writable: ${DATA_DIR}`) && logs.includes('uid 1000') && logs.includes(failure.code) && logs.includes(failure.advice),
             logs.slice(-2500));
         if (failure.code !== 'EACCES') {
             check(`does not advise chown for ${failure.code}`, !logs.includes('chown -R'), logs.slice(-2500));
         }
-        check('reports the failed save in the log', new RegExp(`${failure.code}: .*store\\.json\\.tmp`).test(logs), logs.slice(-1500));
+        check('says the data store keeps its values in memory', logs.includes(`Could not open ${DATA_DIR}/store.db`)
+            && logs.includes('keeps its values in memory'), logs.slice(-1500));
         const get = await fetch(`${web}/api/store/image-check/value`);
         check('keeps serving the value from memory', get.status === 200 && JSON.stringify(await get.json()) === JSON.stringify(value));
     }
