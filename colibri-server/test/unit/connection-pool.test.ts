@@ -216,6 +216,20 @@ describe('ConnectionPool', () => {
             expect(handler).toHaveBeenCalledTimes(2);
         });
 
+        // A numeric channel from a Socket.IO client used to end the server here: the report of a
+        // message nobody handles reads the channel as a string, outside any try/catch.
+        it('covers the report of a message nobody handles too', async () => {
+            const server = new FakeServer();
+            new ConnectionPool(server);
+
+            server.messagesSource.next({ channel: 5 as unknown as string, command: 'chat', origin: makeClient('a1', 'appA') });
+            server.messagesSource.next({ channel: 'c', command: 'chat', origin: makeClient('a1', 'appA') });
+            await settle();
+
+            expect(unhandled).toEqual([]);
+            expect(logs.filter(l => l.level === LogLevel.Error)).toHaveLength(1);
+        });
+
         it('covers a throwing onMessage predicate too', async () => {
             const server = new FakeServer();
             const pool = new ConnectionPool(server);

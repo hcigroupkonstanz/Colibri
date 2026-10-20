@@ -2,8 +2,9 @@ import { Server as SocketIoServer, Socket as SocketIoSocket, Event as SocketIoEv
 import { Server as HttpServer } from 'http';
 import { Observable, Subject } from 'rxjs';
 
-import { CONNECTION_LINE, Metadata, Payload, Service } from '../core/index.js';
+import { CONNECTION_LINE, MAX_PAYLOAD_DEPTH, Metadata, Payload, Service, nestsDeeperThan } from '../core/index.js';
 import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks/index.js';
+import { abbreviate } from '../command-hooks/connection-pool.js';
 import {
     COLIBRI_CHANNEL,
     MAX_FIELD_LENGTH,
@@ -408,14 +409,44 @@ export class SocketIOServer extends Service implements NetworkServer {
         this.clientConnectedStream.next(client);
         this.clientStream.next(this.clients);
 
-        socket.use(([channel, content]: SocketIoEvent, next) => {
+        // Once per client: a client that sends one malformed event usually sends it in a loop.
+        let reportedMalformed = false;
+        const ignoreMalformed = (reason: string): void => {
+            if (reportedMalformed) return;
+            reportedMalformed = true;
+            this.logError(
+                `Ignoring malformed events from client '${client.name}' (${client.id}, app '${client.app}'): ${reason}. Logged once per client.`,
+                false,
+                aboutClient(client)
+            );
+        };
+
+        // Every client event ends here: `next` is never called, so none reaches Socket.IO's own
+        // listeners. Those are the 'error' and 'disconnect' handlers below, and a client naming
+        // its event 'error' or 'disconnect' would otherwise run them with whatever it sent; a
+        // deeply nested payload on 'error' made the handler's JSON.stringify throw, which ended
+        // the whole server.
+        socket.use(([channel, content]: SocketIoEvent) => {
+            // socket.io-parser takes any JSON value as the event name, e.g. a number sent from
+            // plain JavaScript as `sendMessage(roomNumber, ...)`. Every handler expects a string;
+            // a number reached ConnectionPool's channel.startsWith and ended the whole server.
+            if (typeof channel !== 'string' || channel === '') {
+                ignoreMalformed(`the channel must be a non-empty string, not ${typeof channel === 'string' ? 'empty' : typeof channel}`);
+                return;
+            }
+
             // An event emitted with no argument at all (`socket.emit('foo')`) leaves
             // `content` undefined; reading `.command` off it used to throw, and while
             // Socket.IO catches that synchronously it still drops the client.
             const body = (content ?? {}) as { command?: unknown; payload?: unknown };
             if (typeof body.command !== 'string') {
-                this.logError(`Ignoring malformed event on channel '${channel}' from client ${client.id}: no command`, false, aboutClient(client));
-                next();
+                ignoreMalformed(`an event on channel '${abbreviate(channel)}' has no command`);
+                return;
+            }
+            // Relayed to Unity, stored or logged, a deeper one is written out with JSON.stringify
+            // or Socket.IO's encoder, and both overflow the stack (see MAX_PAYLOAD_DEPTH).
+            if (nestsDeeperThan(body.payload)) {
+                ignoreMalformed(`a payload on channel '${abbreviate(channel)}' nests deeper than ${MAX_PAYLOAD_DEPTH} levels`);
                 return;
             }
 
@@ -435,11 +466,12 @@ export class SocketIOServer extends Service implements NetworkServer {
                 this.releaseHeld(client);
                 this.messageStream.next(msg);
             }
-            next();
         });
 
-        socket.on('error', error => {
-            this.logError(JSON.stringify(error), false);
+        // Only Socket.IO's own errors get here (see socket.use above). JSON.stringify of an Error
+        // gave '{}'.
+        socket.on('error', (error: unknown) => {
+            this.logError(`Socket.IO error for client ${client.id}: ${error instanceof Error ? error.message : String(error)}`, false, aboutClient(client));
         });
 
         socket.on('disconnect', () => {

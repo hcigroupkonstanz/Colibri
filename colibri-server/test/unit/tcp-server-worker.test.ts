@@ -369,6 +369,22 @@ describe('TCPServerWorker', () => {
             expect(logs().filter(l => l.includes('without app'))).toEqual([]);
         });
 
+        // A peer that kept sending before its handshake was never closed, and each message logged
+        // an ERROR line: a loop of them stalled the main thread.
+        it('closes a connection that sends a message before its handshake, warning once a minute per address', () => {
+            const first = connect();
+            for (let i = 0; i < 3; i++) first.socket.emit('data', encodeMessageFrame(wireMessage('chan', 'broadcast::json', '{}')));
+            const second = connect();
+            second.socket.emit('data', encodeMessageFrame(wireMessage('chan', 'broadcast::json', '{}')));
+
+            expect(first.socket.ended).toBe(true);
+            expect(second.socket.ended).toBe(true);
+            expect(posted.filter(p => p.channel === 'clientMessage$')).toHaveLength(0);
+            const closing = logs().filter(l => l.includes('before a handshake naming its app'));
+            expect(closing).toHaveLength(1);
+            expect(logs().filter(l => l.includes('without app'))).toEqual([]);
+        });
+
         it('ignores anything the peer sends after being refused', () => {
             const { socket } = connect();
             socket.emit('data', encodeHandshakeFrame('1', 'appA', 'old-client'));
@@ -1011,6 +1027,22 @@ describe('TCPServerWorker', () => {
                 { id: 'a', isOn: true, x: 3 },
                 { id: 'b', x: 1 },
             ]);
+        });
+
+        // Held, a deep update was written out again with JSON.stringify as it went, which
+        // overflowed the stack: the worker died and took every Unity client with it.
+        it('drops a model update nested deeper than MAX_PAYLOAD_DEPTH instead of holding it', () => {
+            configure({ inboundBacklogLimit: 1 });
+            const socket = handshaked();
+            send(socket, 'objects', 'model::update', '{"id":"a","x":1}');
+            const depth = 25_000;
+            send(socket, 'objects', 'model::update', `{"id":"deep","tree":${'['.repeat(depth)}${']'.repeat(depth)}}`);
+            send(socket, 'objects', 'model::update', '{"id":"b","x":1}');
+
+            caughtUp();
+            expect(() => internals.tick()).not.toThrow();
+
+            expect(relayedUpdates()).toEqual([{ id: 'a', x: 1 }, { id: 'b', x: 1 }]);
         });
 
         it('passes held updates on ahead of the next message once there is room', () => {

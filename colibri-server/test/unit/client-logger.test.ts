@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Subject } from 'rxjs';
 import { ConnectionPool, NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/command-hooks/connection-pool.js';
-import { ClientLogger } from '../../src/server/modules/command-hooks/client-logger.js';
+import { ClientLogger, MAX_CLIENT_LOG_CHARS } from '../../src/server/modules/command-hooks/client-logger.js';
 import { Service } from '../../src/server/modules/core/service.js';
 import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
 import { Payload } from '../../src/server/modules/core/payload.js';
@@ -61,6 +61,13 @@ describe('ClientLogger', () => {
 
         expect(captured).toHaveLength(1);
         expect(captured[0]!.message).toBe('[c1] hello world');
+    });
+
+    // RemoteLogger sends whatever the app logs; whole megabytes a line filled the server's heap.
+    it('cuts a long line to MAX_CLIENT_LOG_CHARS and says how much is left out', () => {
+        const captured = logOne('info', Payload.fromValue('x'.repeat(MAX_CLIENT_LOG_CHARS + 1000)));
+
+        expect(captured[0]!.message).toBe(`[c1] ${'x'.repeat(MAX_CLIENT_LOG_CHARS)} [... 1000 more characters]`);
     });
 
     it('keeps the newlines in a stack trace instead of escaping them', () => {

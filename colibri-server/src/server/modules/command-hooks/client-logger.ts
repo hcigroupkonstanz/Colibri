@@ -1,6 +1,16 @@
 import { Service } from '../core/index.js';
 import { ConnectionPool, NetworkMessage } from './connection-pool.js';
 
+// A client's log line is cut to this many characters. RemoteLogger sends whatever the app logs, a
+// whole JSON dump or a megabyte string included, and every line is printed and kept in the admin
+// UI's history (see WebLog): a few such lines a second filled the server's heap within minutes.
+export const MAX_CLIENT_LOG_CHARS = 8 * 1024;
+
+const truncate = function (text: string): string {
+    if (text.length <= MAX_CLIENT_LOG_CHARS) return text;
+    return `${text.slice(0, MAX_CLIENT_LOG_CHARS)} [... ${text.length - MAX_CLIENT_LOG_CHARS} more characters]`;
+};
+
 export class ClientLogger extends Service {
     public get serviceName(): string { return 'ClientLogger'; }
     public get groupName(): string { return 'hook'; }
@@ -38,7 +48,7 @@ export class ClientLogger extends Service {
                 clientId: m.origin?.id || 'UNKNOWN',
             };
 
-            const text = ClientLogger.readLogText(m);
+            const text = truncate(ClientLogger.readLogText(m));
 
             switch (m.command) {
                 case 'info':

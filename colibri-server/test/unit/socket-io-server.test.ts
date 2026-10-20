@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, Server as HttpServer } from 'http';
 import { AddressInfo } from 'net';
+import { Subscription, config as rxjsConfig, filter, firstValueFrom, tap } from 'rxjs';
 import { networkInterfaces } from 'os';
-import { Subscription, filter, firstValueFrom, tap } from 'rxjs';
 import { io as connectClient, Socket as ClientSocket } from 'socket.io-client';
 import { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
 import { MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeMessageFrame } from '../../src/server/modules/networking/protocol.js';
 import { MAX_HELD_OBJECTS } from '../../src/server/modules/networking/inbound-limits.js';
 import { Service } from '../../src/server/modules/core/service.js';
+import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/core/payload.js';
 import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
-import { NetworkClient, NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
+import { ConnectionPool, NetworkClient, NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
 import { TrustProxy, compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
 
 interface ColibriEvent {
@@ -207,6 +208,102 @@ describe('SocketIOServer', () => {
             expect(connected.map(c => c.app)).toEqual(['appA']);
             expect(server.hasRecipients('appA')).toBe(true);
             expect(logged(LogLevel.Error)).toEqual([]);
+        });
+
+        describe('sending a malformed event', () => {
+            const received = function (channel: string): Promise<NetworkMessage> {
+                return firstValueFrom(server.messages$.pipe(filter(m => m.channel === channel)));
+            };
+
+            // A number from plain JavaScript, `sendMessage(roomNumber, ...)`, reached
+            // ConnectionPool's channel.startsWith and ended the whole server.
+            it('ignores one on a channel that is not a string, logging it once, and stays connected', async () => {
+                const pool = new ConnectionPool(server);
+                const unhandled: unknown[] = [];
+                rxjsConfig.onUnhandledError = err => unhandled.push(err);
+                try {
+                    const { socket } = connect({ app: 'appA', version: PROTOCOL_VERSION });
+                    await nextColibriEvent(socket);
+                    const relayed: unknown[] = [];
+                    server.messages$.subscribe(m => relayed.push(m.channel));
+
+                    socket.emit(5 as unknown as string, { command: 'chat', payload: 'hi' });
+                    socket.emit(5 as unknown as string, { command: 'chat', payload: 'hi' });
+                    const next = received('myChannel');
+                    socket.emit('myChannel', { command: 'broadcast::string', payload: 'still here' });
+                    await next;
+
+                    expect(relayed).toEqual(['myChannel']);
+                    expect(unhandled).toEqual([]);
+                    expect(socket.connected).toBe(true);
+                    expect(logged(LogLevel.Error)).toEqual([
+                        expect.stringMatching(/^Ignoring malformed events from client .*: the channel must be a non-empty string, not number\. Logged once per client\.$/),
+                    ]);
+                    expect(pool).toBeDefined();
+                } finally {
+                    rxjsConfig.onUnhandledError = null;
+                }
+            });
+
+            it('logs one with no command once, however many it sends', async () => {
+                const { socket } = connect({ app: 'appA', version: PROTOCOL_VERSION });
+                await nextColibriEvent(socket);
+
+                for (let i = 0; i < 5; i++) socket.emit('myChannel', { payload: i });
+                const next = received('myChannel');
+                socket.emit('myChannel', { command: 'broadcast::string', payload: 'ok' });
+                await next;
+
+                expect(logged(LogLevel.Error)).toEqual([expect.stringContaining('an event on channel \'myChannel\' has no command')]);
+            });
+
+            // A raw Socket.IO EVENT frame: socket.io-client refuses to emit reserved names, and it
+            // cannot encode a payload as deep as the ones below either.
+            const sendRaw = function (socket: ClientSocket, channel: string, payloadJson: string): void {
+                (socket.io as unknown as { engine: { write(msg: string): void } }).engine.write(
+                    `2[${JSON.stringify(channel)},{"command":"broadcast::json","payload":${payloadJson}}]`
+                );
+            };
+
+            // Socket.IO used to pass every client event on to the socket's own listeners: an event
+            // named 'error' ran the server's error handler with the client's payload. (socket.io-parser
+            // itself refuses 'disconnect' and the other names it reserves.)
+            it('relays an event named error like any other, and runs no server listener', async () => {
+                const channel = 'error';
+                const { socket } = connect({ app: 'appA', version: PROTOCOL_VERSION });
+                await nextColibriEvent(socket);
+
+                const next = received(channel);
+                sendRaw(socket, channel, '{"hello":"world"}');
+                const msg = await next;
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                expect(msg.payload?.asValue()).toEqual({ hello: 'world' });
+                expect(socket.connected).toBe(true);
+                expect(server.hasRecipients('appA')).toBe(true);
+                expect(logged(LogLevel.Error)).toEqual([]);
+            });
+
+            // 6000 levels overflowed JSON.stringify in the 'error' handler and ended the server.
+            it.each(['error', 'myChannel'])('ignores a payload nested deeper than MAX_PAYLOAD_DEPTH on %s', async (channel) => {
+                const { socket } = connect({ app: 'appA', version: PROTOCOL_VERSION });
+                await nextColibriEvent(socket);
+                const relayed: string[] = [];
+                server.messages$.subscribe(m => relayed.push(m.channel));
+
+                const depth = 6000;
+                sendRaw(socket, channel, '['.repeat(depth) + ']'.repeat(depth));
+                sendRaw(socket, channel, '['.repeat(MAX_PAYLOAD_DEPTH) + ']'.repeat(MAX_PAYLOAD_DEPTH));
+                const next = received('done');
+                socket.emit('done', { command: 'broadcast::string', payload: '' });
+                await next;
+
+                expect(relayed).toEqual([channel, 'done']);
+                expect(socket.connected).toBe(true);
+                expect(logged(LogLevel.Error)).toEqual([
+                    expect.stringContaining(`a payload on channel '${channel}' nests deeper than ${MAX_PAYLOAD_DEPTH} levels`),
+                ]);
+            });
         });
 
         // The admin log's Connections switch hides these.

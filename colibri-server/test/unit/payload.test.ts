@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Payload } from '../../src/server/modules/core/payload.js';
+import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../../src/server/modules/core/payload.js';
 
 describe('Payload', () => {
     it('fromString: asString() returns the raw string without parsing', () => {
@@ -128,5 +128,37 @@ describe('Payload', () => {
             expect(first).toBe(second);
             spy.mockRestore();
         });
+    });
+});
+
+describe('nestsDeeperThan', () => {
+    const nested = (depth: number): unknown => JSON.parse('['.repeat(depth) + ']'.repeat(depth));
+
+    it('counts each array or object level, the outermost as 1', () => {
+        expect(nestsDeeperThan(nested(3), 3)).toBe(false);
+        expect(nestsDeeperThan(nested(4), 3)).toBe(true);
+        expect(nestsDeeperThan({ a: [{ b: {} }] }, 3)).toBe(true);
+        expect(nestsDeeperThan({ a: [{ b: 1 }] }, 3)).toBe(false);
+    });
+
+    it.each([['a number', 5], ['a string', 'x'], ['null', null], ['nothing', undefined]])('takes %s as depth 0', (_case, value) => {
+        expect(nestsDeeperThan(value, 0)).toBe(false);
+    });
+
+    // The very values it is there to catch overflow anything that recurses.
+    it('handles a value far too deep for JSON.stringify', () => {
+        const deep = nested(200000);
+        expect(() => JSON.stringify(deep)).toThrow(RangeError);
+
+        expect(nestsDeeperThan(deep)).toBe(true);
+    });
+
+    it('lets the default depth through', () => {
+        expect(nestsDeeperThan(nested(MAX_PAYLOAD_DEPTH))).toBe(false);
+        expect(nestsDeeperThan(nested(MAX_PAYLOAD_DEPTH + 1))).toBe(true);
+    });
+
+    it('counts binary data as one value', () => {
+        expect(nestsDeeperThan({ data: Buffer.alloc(1 << 20) }, 2)).toBe(false);
     });
 });

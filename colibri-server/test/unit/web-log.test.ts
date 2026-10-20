@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { config, Subject } from 'rxjs';
-import { WebLog } from '../../src/server/modules/web/web-log.js';
+import { MAX_LOG_CHARS, WebLog } from '../../src/server/modules/web/web-log.js';
 import { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
 import { NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
 import { Payload, Service } from '../../src/server/modules/core/index.js';
@@ -95,6 +95,24 @@ describe('WebLog', () => {
         expect(server.broadcasts).toHaveLength(4);
         expect(server.broadcasts.map(b => (b.message.payload!.asValue<{ message: string }>()).message))
             .toEqual(['err', 'warn', 'info', 'debug']);
+    });
+
+    // 20,000 lines of a few MiB each used to stay in the history and fill the server's heap.
+    it('drops the oldest lines once the history holds more than MAX_LOG_CHARS', async () => {
+        const server = new FakeSocketIOServer();
+        const webLog = new WebLog(server as unknown as SocketIOServer);
+        await webLog.init();
+        const admin = makeClient('admin1', 'colibri');
+        server.connectClient(admin);
+
+        const emitter = new Emitter();
+        const line = MAX_LOG_CHARS / 4;
+        for (let i = 0; i < 6; i++) emitter.emitInfo(`${i}${'x'.repeat(line - 1)}`);
+        emitter.emitInfo('short');
+        requestLog(server, admin, {});
+
+        const kept = server.histories[0]!.messages.map(m => m.message[0]);
+        expect(kept).toEqual(['3', '4', '5', 's']);
     });
 
     it('honors a level filter set via requestLog, without broadcasting suppressed levels at all', async () => {

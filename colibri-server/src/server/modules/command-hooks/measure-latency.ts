@@ -45,6 +45,9 @@ export class MeasureLatency extends Service {
                 // hrtime nanoseconds can exceed Number.MAX_SAFE_INTEGER, in which case
                 // JSON.parse hands back a rounded float that BigInt() rejects outright -
                 // truncating keeps the sample instead of discarding it over a few nanos.
+                // Anything but a finite number or a string of up to 20 digits is no timestamp:
+                // BigInt() of a string of millions of digits blocked the main thread for seconds.
+                if (typeof ping === 'number' ? !Number.isFinite(ping) : typeof ping !== 'string' || !/^\d{1,20}$/.test(ping)) return;
                 const pingNanos = typeof ping === 'number' ? BigInt(Math.trunc(ping)) : BigInt(ping);
                 const now = hrtime.bigint();
                 const latency = Number(now - pingNanos) / 1000000;
