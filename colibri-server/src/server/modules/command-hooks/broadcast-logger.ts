@@ -10,9 +10,8 @@ export class BroadcastLogger extends Service {
         pool.onMessage(msg => msg.command.startsWith('broadcast::'), this.logBroadcast.bind(this));
     }
 
-    // Message text deliberately excludes the payload value: WebLog dedups log entries by
-    // exact (message, group, level) match, and embedding the synced value would make every
-    // tick's text unique, defeating dedup under continuous sync traffic.
+    // Keep the synced value out of the text: WebLog merges repeats of the same text from the
+    // same client, so a value in it would make every tick's line unique.
     private logBroadcast(msg: NetworkMessage): void {
         const name = msg.origin?.name ?? 'UNKNOWN';
         this.logDebug(

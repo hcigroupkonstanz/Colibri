@@ -5,11 +5,11 @@
 //
 //   version and codec  the header version (VOICE_HEADER_VERSION) in the high 4 bits, the codec
 //                      (VoiceCodec) in the low 4 bits
-//   appId              voiceAppId() of the client's app name; the relay passes a packet on only
-//                      to the voice clients with the same appId
+//   appId              voiceAppId() of the client's app name. The relay forwards a packet only
+//                      to voice clients with the same appId.
 //
-// The fields up to the codec byte are where Colibri 1.x has them. A 1.x client's header ends
-// there (7 bytes, no appId), and its codec byte is 0 or 1, so its header version reads as 0.
+// The first 7 bytes match Colibri 1.x. A 1.x packet has no appId, and its codec byte (0 or 1)
+// reads as version 0, which the server drops.
 
 export enum VoiceCodec {
     PCM = 0,
@@ -21,7 +21,8 @@ export const VOICE_HEADER_LENGTH = 11;
 export const VOICE_VERSION_AND_CODEC_OFFSET = 6;
 export const VOICE_APP_ID_OFFSET = 7;
 
-// 32-bit FNV-1a: small, and the same in C# and TypeScript, with published test values.
+// 32-bit FNV-1a. colibri-unity's VoicePacketCodec.AppId must compute the same hash, or the relay
+// drops its packets.
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 
@@ -43,8 +44,8 @@ export interface VoicePacket {
     data: Uint8Array;
 }
 
-// The server only relays packets as they came, so this is for tests and tools, and for the
-// protocol vectors colibri-unity's encoder is checked against.
+// The relay forwards received bytes unchanged, so only tests call this. test/emit-protocol-vectors.ts
+// uses it to write the vectors colibri-unity's encoder is checked against.
 export const encodeVoicePacket = function (packet: VoicePacket): Buffer {
     const buffer = Buffer.allocUnsafe(VOICE_HEADER_LENGTH + packet.data.length);
     buffer.writeInt16LE(packet.userId, 0);

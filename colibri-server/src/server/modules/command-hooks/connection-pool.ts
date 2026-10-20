@@ -16,11 +16,11 @@ export interface NetworkClient {
     metadata: Record<string, unknown>;
 }
 
-// What a transport may do with a message for a client that is not keeping up with what it is sent.
-// - 'relay', the default: traffic relayed between clients, the latest of which is all that counts.
-//   It may be dropped for a recipient too far behind (see TCPServerWorker.writeToClient).
-// - 'reply': the server's answer to one client's own request, such as the models a model::request
-//   asked for. Nothing would ever send it again, so it is queued rather than dropped.
+// How a transport treats a message for a client that is falling behind.
+// 'relay' (default): traffic between clients, where only the latest counts; dropped for a recipient
+// too far behind (TCPServerWorker.writeToClient).
+// 'reply': the server's answer to one client's own request (model::request). Nothing resends it, so it
+// is queued instead; only a separate backlog limit drops it.
 export type Delivery = 'relay' | 'reply';
 
 export abstract class NetworkServer {
@@ -30,41 +30,36 @@ export abstract class NetworkServer {
     public abstract get clientDisconnected$(): Observable<NetworkClient>;
     public abstract broadcast(message: NetworkMessage, clients: ReadonlyArray<NetworkClient>, delivery?: Delivery): void;
 
-    // Optional fast path for "broadcast to every client of one app": transports that can
-    // group clients server-side (Socket.IO rooms) encode the packet once for the whole
-    // group instead of once per recipient. Transports without such a grouping simply don't
-    // implement this, and ConnectionPool falls back to the per-client broadcast() above.
-    //
-    // Implementations must early-out on an app with no recipient *before* touching
-    // message.payload - resolving a payload across transports costs a JSON parse or
-    // stringify, and every client connect/disconnect broadcasts to app 'colibri', which
-    // in practice has clients on exactly one of the two transports.
+    // Optional fast path for broadcasting to one app. A transport that groups clients (Socket.IO rooms)
+    // encodes the packet once per group; without it ConnectionPool falls back to broadcast().
+    // Implementations must return before touching message.payload when the app has no recipient:
+    // resolving a payload across transports costs a JSON parse or stringify, and every client
+    // connect/disconnect broadcasts to app 'colibri', whose clients in practice sit on one transport.
     public broadcastToApp?(message: NetworkMessage, app: string, exceptClientId?: string): void;
 }
 
 export type MessageHandler = (message: NetworkMessage) => void;
 
-// Past this many clients in one app, the pool warns that the app may be shared by accident. A
-// typical app has a handful of devices plus a browser or two; separate projects that all kept the
-// same App Name (a sample's default, say) end up as one app of dozens of clients instead.
+// Past this many clients in one app, the pool warns that the app may be shared by accident, e.g.
+// separate projects that all kept the same default App Name. A typical app has a handful of devices
+// plus a browser or two.
 export const DEFAULT_APP_CLIENT_WARNING_THRESHOLD = 8;
 
-// The app the admin UI joins. However many are open, they are not an application's clients.
+// The app the admin UI joins. Not an application's clients, so exempt from the size and
+// unhandled-command warnings.
 const ADMIN_APP = 'colibri';
 
-// Colibri's own channels: 'colibri' (latency replies, protocol messages) and 'colibri::*' (the
-// client list, and the log requests WebLog takes straight off the Socket.IO server). Messages on
-// them are plumbing, whichever hook does or does not handle them.
+// Colibri's own channels: 'colibri' (latency pings and echoes, protocol messages) and 'colibri::*' (client
+// list, log requests that WebLog takes straight off the Socket.IO server). Never reported as unhandled.
 const COLIBRI_CHANNEL = 'colibri';
 const COLIBRI_CHANNEL_PREFIX = 'colibri::';
 
-// How many distinct (app, channel, command) combinations the pool warns about as unhandled before
-// it says it stops - a bound on the memory behind "once per combination", and on the log, for a
-// client that makes up a new command for every message.
+// Bound on the distinct (app, channel, command) combinations warned about as unhandled, so a client
+// that invents a new command per message cannot grow the memory or the log without limit.
 export const MAX_UNHANDLED_COMMAND_WARNINGS = 1000;
 
-// A channel or command may be up to 64 KiB. Only this much of one is remembered or logged, so the
-// bound above bounds memory too; two names that only differ further on count as one.
+// A channel or command can be up to 65535 bytes (MAX_FIELD_LENGTH). Only this much is kept or logged;
+// names that only differ after it count as one.
 const MAX_NAME_IN_WARNING = 200;
 
 export const abbreviate = function (name: string): string {
@@ -80,41 +75,33 @@ export class ConnectionPool extends Service {
     public serviceName = 'ConnectionPool';
     public groupName = 'colibri';
 
-    // See DEFAULT_APP_CLIENT_WARNING_THRESHOLD; 0 turns the warning off.
+    // 0 disables the warning.
     public appClientWarningThreshold = DEFAULT_APP_CLIENT_WARNING_THRESHOLD;
-    // Apps warned about since they last had appClientWarningThreshold clients or fewer, so the
-    // warning is given once each time an app grows past the threshold, not once per client.
+    // Apps warned about since they last had appClientWarningThreshold clients or fewer: one warning
+    // per growth past the threshold, not per client.
     private readonly appsOverThreshold = new Set<string>();
 
     private readonly servers: NetworkServer[];
-    // Maintained from clientConnected$/clientDisconnected$ so emit() can find a client's
-    // owning server in O(1) instead of an O(servers * clients) scan-and-find.
+    // The next three are maintained from clientConnected$/clientDisconnected$.
+    // Owning server of a client, for emit() and clientsForApp().
     private readonly serverByClientId = new Map<string, NetworkServer>();
-    // Same source, keyed by app: the broadcast() fallback for a transport without
-    // broadcastToApp resolves its recipients from here instead of scanning that
-    // transport's entire client list per broadcast.
+    // Recipients for the broadcast() fallback, so it does not scan a transport's whole client list.
     private readonly clientsByApp = new Map<string, Set<NetworkClient>>();
-    // The client object each id was last reported connected as. A transport may report the
-    // same id connected again in another app (a TCP re-handshake); the object it replaces has
-    // to leave its app's Set, which only this lookup can find.
+    // The client object each id was last reported as. A transport may report an id connected again in
+    // another app (TCP re-handshake), and the object it replaces has to leave its app's Set.
     private readonly clientById = new Map<string, NetworkClient>();
 
-    // Every command-hook used to subscribe to the `messages$` getter below independently,
-    // each rebuilding its own merge() of every transport's messages$ - N subscribers meant
-    // N independent merge/filter chains evaluated per message. Now there is exactly one
-    // merge() subscription (in the constructor), dispatching into these handler lists:
-    // handlersByCommand gives hooks that only care about an exact command O(1) routing,
-    // and wildcardHandlers covers the few that need a channel filter or command prefix.
+    // The constructor's single merge() subscription dispatches into these. handlersByCommand routes an
+    // exact command by lookup; wildcardHandlers covers channel filters and command prefixes.
     private readonly handlersByCommand = new Map<string, MessageHandler[]>();
     private readonly wildcardHandlers: WildcardHandler[] = [];
 
-    // Per app, the "channel \0 command" pairs already warned about as unhandled, and how many
-    // that is across every app (see MAX_UNHANDLED_COMMAND_WARNINGS). An app's entries go when its
-    // last client leaves, so the next run of an app that still sends them is told again.
+    // Per app, the "channel \0 command" keys already warned about as unhandled, and their count across
+    // all apps (see MAX_UNHANDLED_COMMAND_WARNINGS). An app's entries go when its last client leaves,
+    // so its next run is warned again.
     private readonly unhandledWarned = new Map<string, Set<string>>();
     private unhandledWarnedCount = 0;
-    // Set once the count reached the bound and that was said; cleared when apps leaving bring it
-    // back under the bound.
+    // Set once the bound was reached and logged; cleared when the count falls back under it.
     private unhandledWarningsStopped = false;
 
     public get clientConnected$(): Observable<NetworkClient> {
@@ -153,8 +140,7 @@ export class ConnectionPool extends Service {
         merge(...servers.map(c => c.messages$)).subscribe(message => this.dispatch(message));
     }
 
-    // Exact-command dispatch, e.g. ModelSynchronization's 'model::update' handler - the
-    // busiest message in an object-sync server.
+    // Exact-command dispatch, e.g. 'model::update', the busiest message in an object-sync server.
     public onCommand(command: string, handler: MessageHandler): void {
         let handlers = this.handlersByCommand.get(command);
         if (!handlers) {
@@ -164,9 +150,7 @@ export class ConnectionPool extends Service {
         handlers.push(handler);
     }
 
-    // For subscribers whose filter isn't a single exact command (a channel check, or a
-    // command prefix like 'broadcast::*') - still one shared dispatch loop, just without
-    // the further command-indexed lookup.
+    // For a filter that is not one exact command (a channel check, a prefix like 'broadcast::*').
     public onMessage(predicate: (message: NetworkMessage) => boolean, handler: MessageHandler): void {
         this.wildcardHandlers.push({ predicate, handler });
     }
@@ -184,7 +168,7 @@ export class ConnectionPool extends Service {
         }
 
         if (!handled) {
-            // Contained like a handler (see runHandler): it reads the message, too.
+            // Contained like a handler (runHandler): it reads the message too.
             try {
                 this.reportUnhandled(message);
             } catch (err) {
@@ -193,12 +177,10 @@ export class ConnectionPool extends Service {
         }
     }
 
-    // Every handler runs on input straight off the network, and a synchronous throw out of the
-    // merge() subscription above is not contained: RxJS rethrows it asynchronously, it reaches
-    // the process-wide uncaughtException handler, and that shuts the whole server down. Caught
-    // here, one handler failing on one malformed message costs exactly that - the other handlers
-    // still see the message, and the next message is dispatched as normal. The payload is left
-    // out of the log line on purpose: it can be megabytes.
+    // Handlers run on input from the network. A throw out of the merge() subscription reaches the
+    // uncaughtException handler and shuts the server down, so each handler is contained: a malformed
+    // message fails one handler, not the others or later messages.
+    // The payload stays out of the log line: it can be megabytes.
     private runHandler(handler: MessageHandler, message: NetworkMessage): void {
         try {
             handler(message);
@@ -207,8 +189,8 @@ export class ConnectionPool extends Service {
         }
     }
 
-    // Whether the wildcard handler took the message: its predicate matched (or threw, which is
-    // reported as the handler's error, not as a message nobody handles).
+    // Whether the handler took the message: its predicate matched, or threw (logged as a handler
+    // error, not as unhandled).
     private runWildcardHandler(wildcard: WildcardHandler, message: NetworkMessage): boolean {
         try {
             if (!wildcard.predicate(message)) return false;
@@ -228,15 +210,12 @@ export class ConnectionPool extends Service {
         );
     }
 
-    // A message no hook handles reaches nobody: the server relays only broadcast::* and the model
-    // commands. Sent with SendMessage(channel, 'myCommand', ...) - an easy mistake to make, and the
-    // natural way to try messaging the other clients - it used to vanish with nothing logged at
-    // all, so all anybody saw was that it never arrived. Said once per app, channel and command,
-    // not per message: a client making that mistake usually makes it in a loop.
+    // The server relays only broadcast::* and the model commands, so a message no hook handles (e.g.
+    // SendMessage(channel, 'myCommand', ...) meant for the other clients) reaches nobody. Warned once
+    // per app, channel and command: a client making this mistake usually makes it in a loop.
     private reportUnhandled(message: NetworkMessage): void {
         const app = message.origin?.app ?? '';
-        // The admin UI's own requests, and Colibri's channels, are answered by whatever owns them -
-        // WebLog takes 'colibri::log' straight off the Socket.IO server, for one.
+        // Answered by whatever owns them, e.g. WebLog for 'colibri::log'.
         if (app === ADMIN_APP || message.channel === COLIBRI_CHANNEL || message.channel.startsWith(COLIBRI_CHANNEL_PREFIX)) return;
 
         const channel = abbreviate(message.channel);
@@ -285,17 +264,15 @@ export class ConnectionPool extends Service {
             }
 
             const clients = this.clientsForApp(app, connection, message.origin?.id);
-            // Skipping the call rather than passing an empty list matters: a transport's
-            // broadcast() may serialize the payload (or ship it across a worker boundary)
-            // before it ever looks at the recipient list.
+            // Not called with an empty list: a transport's broadcast() may serialize the payload or
+            // ship it across a worker boundary before it looks at the recipients.
             if (clients.length === 0) continue;
 
             connection.broadcast(message, clients);
         }
     }
 
-    // Answers one client's own request: delivered as a reply, which is never dropped for being
-    // behind (see Delivery).
+    // Answer to one client's own request, sent as a 'reply' (see Delivery).
     public emit(message: NetworkMessage, client: NetworkClient): void {
         this.serverByClientId.get(client.id)?.broadcast(message, [ client ], 'reply');
     }
@@ -346,11 +323,9 @@ export class ConnectionPool extends Service {
         if (this.unhandledWarnedCount < MAX_UNHANDLED_COMMAND_WARNINGS) this.unhandledWarningsStopped = false;
     }
 
-    // Every message in an app is relayed to each of its other clients, so the server's work grows
-    // with the square of an app's size: in a load test, 60 clients in one app at only 3 objects x
-    // 30 Hz took the server to seconds of latency, where the same clients split into apps of four
-    // were no trouble at all. Nothing else would tell anyone why - every client is connected and
-    // nothing is refused - so this is said in the log, counted across both transports.
+    // A relayed message goes to all other clients of its app, so server work grows with the square of
+    // the app's size. Nothing is refused, so nothing else says why latency grows. Counted across both
+    // transports.
     private checkAppSize(app: string, size: number): void {
         if (this.appClientWarningThreshold <= 0 || size <= this.appClientWarningThreshold) return;
         if (app === ADMIN_APP || this.appsOverThreshold.has(app)) return;

@@ -4,10 +4,7 @@ import { LogMessage, LogLevel, Metadata } from './log-message.js';
 export abstract class Service {
     public static readonly Current: Service[] = [];
 
-    // Every instance's log calls publish here directly, instead of a consumer (WebLog)
-    // snapshotting Service.Current at its own init() time and merging each instance's own
-    // output$ - that snapshot missed any service constructed after the consumer's init()
-    // ran. A single static bus makes coverage independent of construction order.
+    // One static bus, so a subscriber to output$ also gets logs from services built after it subscribed.
     private static readonly logBus$ = new Subject<LogMessage>();
     public static readonly output$: Observable<LogMessage> = Service.logBus$.asObservable();
 

@@ -1,10 +1,10 @@
 import { Service } from './service.js';
 
 /**
- * @deprecated No current caller reaches these static methods - use a `Service` subclass's
- * own `logError`/`logInfo`/etc. instead, which attaches the right `serviceName`/`groupName`
- * to the log entry. Note `ErrorHandler.initialize()` below still self-registers a `Service`
- * at import time regardless of whether any static method is ever called.
+ * Logs through one shared service, 'Internal Error' in group 'core'.
+ *
+ * @deprecated Use the log methods of your own `Service` subclass instead. Its entries carry
+ * its own serviceName and groupName.
  */
 export class ErrorHandler extends Service {
     private static _instance: ErrorHandler;
@@ -33,4 +33,6 @@ export class ErrorHandler extends Service {
     }
 }
 
+// Runs on import. The constructor adds the instance to Service.Current, even if no static
+// method is ever called.
 ErrorHandler.initialize();

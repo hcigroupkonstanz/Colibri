@@ -23,13 +23,8 @@ export class ModelSynchronization extends Service {
         });
     }
 
-    // A model::request comes in three forms:
-    // - {} asks for every model of the channel.
-    // - { id } is a fresh request: the sender has this object in its scene now, or is creating it
-    //   (a SyncBehaviour placed in a scene that has just loaded, colibri-web's registerModel).
-    // - { id, again: true } asks again, after a reconnect, for an object the sender held before
-    //   the outage (colibri-unity's Sync.RequestModelsAgain, colibri-web's reconnect).
-    // Any other field is ignored.
+    // Payload {} requests every model of the channel, { id } is a fresh request for one model.
+    // { id, again: true } is a repeat request after a reconnect, for a model the sender held before.
     public sendInitialState(msg: NetworkMessage): void {
         if (!msg.origin) {
             this.logError('Cannot send initial state to unknown client', false);
@@ -46,9 +41,8 @@ export class ModelSynchronization extends Service {
                 const deletion = model ? undefined : this.store.deletion(app, msg.channel, id);
 
                 if (deletion && payload.again === true) {
-                    // The sender held a copy before its outage, and another client deleted the
-                    // model meanwhile: the relayed delete never reached it, so it is told now, or it
-                    // keeps a copy nobody else has. The tombstone stays, for whoever else returns.
+                    // The model was deleted while the sender was disconnected, so the relayed delete never reached it.
+                    // The tombstone stays for other clients that return.
                     this.logDebug(
                         `Answering client '${msg.origin.name}' (${msg.origin.id}, app '${app}') with model::delete for '${id}' ` +
                             `on channel '${msg.channel}': it asked again after a reconnect, and that model was deleted meanwhile`
@@ -62,9 +56,8 @@ export class ModelSynchronization extends Service {
                 }
 
                 if (deletion) {
-                    // A fresh request: the sender has the object in its scene now, e.g. a scene with
-                    // placed objects of fixed ids loaded again, by the client that unloaded it or by
-                    // any other. The id is in use again, so its updates are no longer ignored.
+                    // A fresh request means the sender has the object in its scene again, so the id is in use
+                    // and its updates must no longer be ignored.
                     this.logDebug(
                         `Client '${msg.origin.name}' (${msg.origin.id}, app '${app}') has '${id}' on channel '${msg.channel}', ` +
                             'which was deleted a moment ago, in its scene again: updates to it are taken from now on'
@@ -72,8 +65,7 @@ export class ModelSynchronization extends Service {
                     this.store.forgetDeletion(app, msg.channel, id);
                 }
 
-                // An id the server has no model for is answered with the bare id: the requester's
-                // copy is all there is, and the full state it sends then creates the model here.
+                // No model for this id: the bare id tells the requester the server holds nothing.
                 this.connectionPool.emit({
                     channel: msg.channel,
                     command: 'model::update',
@@ -105,8 +97,8 @@ export class ModelSynchronization extends Service {
                 this.logError('Cannot update model without "id" attribute', false);
                 return;
             }
-            // Stored, it would be written out again for every model::request on the channel, and
-            // JSON.stringify overflows the stack on deep nesting: each of those requests would fail.
+            // Stored, it would be serialized for every model::request on the channel, and JSON.stringify
+            // overflows the stack on deep nesting.
             if (nestsDeeperThan(payload)) {
                 this.logError(
                     `Ignoring a model::update for '${payload.id}' on channel '${msg.channel}' from client '${msg.origin.name}' ` +
@@ -116,11 +108,8 @@ export class ModelSynchronization extends Service {
                 return;
             }
 
-            // An update to a model deleted a moment ago would create it afresh, here and in every
-            // other client (see DataStore.removeModel): one another client sent before the delete
-            // reached it, say. A client that creates the object again on purpose, the one that
-            // deleted it included, sends a fresh model::request { id } first, and that lifts the
-            // tombstone (see sendInitialState).
+            // A late update, sent before its sender received the delete, would recreate the model (see DataStore.removeModel).
+            // A client that recreates the object on purpose sends a fresh model::request first, which lifts the tombstone.
             if (this.store.deletion(msg.origin.app, msg.channel, payload.id)) {
                 this.logDebug(
                     `Ignoring a model::update for '${payload.id}' on channel '${msg.channel}' from client '${msg.origin.name}' ` +

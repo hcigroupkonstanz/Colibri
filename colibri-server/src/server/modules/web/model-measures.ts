@@ -1,36 +1,34 @@
-// What the admin UI's model snapshots measure and format of a model: its size and its value as
-// indented JSON. Both cost time on the main thread in proportion to the model's size, so how much of
-// that is done is bounded per second for all pages together, not per snapshot, and does not grow
-// with how large the models are or how often they change.
+// Size and indented JSON of models for the admin UI snapshots. Measuring costs main thread time in
+// proportion to the model, so it is budgeted per second for all pages together; formatting stops at
+// a fixed length.
 import { ModelEntry } from '../command-hooks/index.js';
 
-// How many bytes of models are measured a second, for all pages together: about 20 ms of the main
-// thread. The budget holds at most one second's worth.
+// Bytes measured per second for all pages together, about 20 ms of main thread. The bucket holds at
+// most one second's worth.
 export const MODEL_BYTES_PER_SECOND = 2 * 1024 * 1024;
 
-// How long the size of a model that has changed since it was measured is shown before it is
-// measured again. A model that changes every frame would otherwise be measured on every refresh.
-// Measuring stalls the main thread for about 10 ms a MiB, so a large model waits longer.
+// How long the old size of a changed model is shown before it is measured again, so a model that
+// changes every frame is not measured on every refresh. Measuring costs about 10 ms a MiB, so large
+// models wait longer.
 export const MODEL_SIZE_REFRESH_MILLIS = 10_000;
 export const LARGE_MODEL_BYTES = 1024 * 1024;
 export const LARGE_MODEL_SIZE_REFRESH_MILLIS = 60_000;
 
-// How much of a model's formatted JSON the model topic carries.
+// In characters, not bytes.
 export const MAX_MODEL_JSON_LENGTH = 512 * 1024;
 
-// How many models' formatted JSON is kept, for the models the pages have open.
+// Formatted JSON is kept for the models the pages have open.
 export const FORMATTED_MODELS_KEPT = 8;
 
 interface Size {
     bytes: number;
-    // The model's version, and performance.now(), when it was measured.
+    // Model version and performance.now() at measuring.
     version: number;
     at: number;
 }
 
 export interface FormattedJson {
     json: string;
-    // Whether json is only the start of the value, cut at MAX_MODEL_JSON_LENGTH.
     truncated: boolean;
 }
 
@@ -39,13 +37,14 @@ interface Formatted extends FormattedJson {
 }
 
 /**
- * Measures and formats models for the admin UI's snapshots, one instance for all of them. Read
- * only: what it keeps of a model lives here, not in the store.
+ * Measures and formats models for the admin UI snapshots. The measuring budget is per instance, so
+ * all pages share one. What it caches lives here, not in the store.
  */
 export class ModelMeasures {
     private readonly sizes = new WeakMap<Readonly<ModelEntry>, Size>();
-    // Oldest used first, at most FORMATTED_MODELS_KEPT.
+    // Least recently used first, at most FORMATTED_MODELS_KEPT.
     private readonly formatted = new Map<Readonly<ModelEntry>, Formatted>();
+    // Token bucket for the measuring budget, in bytes.
     private tokens: number;
     private refilledAt: number;
 
@@ -55,9 +54,9 @@ export class ModelMeasures {
     }
 
     /**
-     * The model's size as compact JSON, in bytes: measured afresh when the budget allows, otherwise
-     * the size it had when it was last measured, at most MODEL_SIZE_REFRESH_MILLIS before (or
-     * LARGE_MODEL_SIZE_REFRESH_MILLIS for a large one), or null if it has not been measured yet.
+     * The model's size as compact JSON, in bytes. Measured when the budget allows, and for a changed
+     * model only once its refresh interval has passed; otherwise the last measured size, or null if
+     * it was never measured.
      */
     public bytes(entry: Readonly<ModelEntry>, now = performance.now()): number | null {
         const known = this.sizes.get(entry);
@@ -66,8 +65,8 @@ export class ModelMeasures {
             if (known.version === entry.version || now - known.at < refresh) return known.bytes;
         }
 
-        // A model is measured once the budget holds as much as it took last time, or the budget is
-        // full. One larger than the budget leaves it in debt, which the following seconds pay off.
+        // Measure once the budget covers the last size, capped at a full budget. A model larger than
+        // what is left leaves it negative, which later refills pay off.
         const left = this.refill(now);
         if (left <= 0 || left < Math.min(known?.bytes ?? 0, this.bytesPerSecond)) return known?.bytes ?? null;
 
@@ -98,12 +97,12 @@ export class ModelMeasures {
     }
 }
 
-// Numbers, booleans and null: what a long array of samples or vertices holds.
+// What long arrays (samples, vertices) mostly hold.
 const isScalar = function (value: unknown): boolean {
     return typeof value === 'number' || typeof value === 'boolean' || value === null;
 };
 
-// How many scalars in a row one JSON.stringify call writes at most: a few KiB.
+// Longest run of scalars for one JSON.stringify call; bounds how far a run can write past maxLength.
 const SCALAR_RUN = 512;
 
 // What JSON.stringify leaves out of an object and writes as null in an array.
@@ -111,7 +110,7 @@ const isSkipped = function (value: unknown): boolean {
     return value === undefined || typeof value === 'function' || typeof value === 'symbol';
 };
 
-// A value as JSON.stringify sees it: after its toJSON, and unboxed.
+// The value as JSON.stringify sees it: after toJSON, boxed primitives unwrapped.
 const prepare = function (value: unknown, key: string | number): unknown {
     let prepared = value;
     if (prepared !== null && typeof prepared === 'object' && typeof (prepared as { toJSON?: unknown }).toJSON === 'function') {
@@ -122,9 +121,9 @@ const prepare = function (value: unknown, key: string | number): unknown {
 };
 
 /**
- * JSON.stringify(value, null, 2), cut to maxLength characters. It stops writing once it has that
- * many, so its cost grows with maxLength, not with the value: a model of 50 MB costs as much as one
- * of 512 KiB. It also stops a value that contains itself, where JSON.stringify throws.
+ * JSON.stringify(value, null, 2) cut to maxLength characters. Stops writing once past maxLength, so
+ * the cost depends on maxLength, not on the value. A value that contains itself is cut instead of
+ * throwing.
  */
 export const formatJson = function (value: unknown, maxLength: number): FormattedJson {
     const parts: string[] = [];
@@ -132,15 +131,14 @@ export const formatJson = function (value: unknown, maxLength: number): Formatte
     const newlines: string[] = [];
     const newline = (depth: number): string => (newlines[depth] ??= '\n' + '  '.repeat(depth));
 
-    // Each of these returns whether maxLength has been passed, so that nothing more is written.
+    // Each writer returns true once maxLength is passed; callers then stop.
     const write = (text: string): boolean => {
         parts.push(text);
         length += text.length;
         return length > maxLength;
     };
 
-    // A string longer than what is left is escaped only as far as the cut, plus a character: the
-    // escaped start of a string is the start of the escaped string.
+    // Escape only the part that can fit: the escaped prefix of a string is a prefix of the escaped string.
     const writeString = (text: string): boolean => {
         const left = maxLength - length;
         return write(JSON.stringify(text.length > left ? text.slice(0, left + 1) : text));
@@ -148,7 +146,7 @@ export const formatJson = function (value: unknown, maxLength: number): Formatte
 
     const writeValue = (item: unknown, depth: number): boolean => {
         if (typeof item === 'string') return writeString(item);
-        // as JSON.stringify writes a number, without the call
+        // Same output as JSON.stringify, without the call.
         if (typeof item === 'number') return write(Number.isFinite(item) ? String(item) : 'null');
         if (item === null || typeof item !== 'object') return write(JSON.stringify(item) ?? 'null');
 
@@ -158,8 +156,8 @@ export const formatJson = function (value: unknown, maxLength: number): Formatte
             const separator = ',' + newline(depth + 1);
             for (let i = 0; i < item.length;) {
                 const before = i > 0 ? separator : newline(depth + 1);
-                // A run of scalars is written by JSON.stringify, several times faster at it, and
-                // then put one to a line: none of them holds a comma.
+                // A run of scalars goes through one JSON.stringify call, which is faster than element
+                // by element, one per line. Their text holds no comma, so replacing commas is safe.
                 let end = i;
                 while (end < item.length && end - i < SCALAR_RUN && isScalar(item[end])) end++;
                 if (end > i) {

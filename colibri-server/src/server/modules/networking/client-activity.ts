@@ -1,43 +1,39 @@
-// What the admin UI's client view shows of a client's traffic, on either transport.
+// Per-client traffic for the admin UI's client view, on either transport.
 
-// Which load limit holds a client's updates back: its own message rate (CLIENT_MESSAGE_RATE_LIMIT),
-// or, for a TCP client, the main thread falling behind (TCP_INBOUND_BACKLOG_LIMIT).
+// What holds back a client's model updates or drops its broadcasts: its message rate
+// (CLIENT_MESSAGE_RATE_LIMIT) or, for a TCP client, the main thread falling behind
+// (TCP_INBOUND_BACKLOG_LIMIT).
 export type LoadLimit = 'rate' | 'backlog';
 
 export interface ClientActivity {
-    // Messages a second it sent and was sent, over the last RATE_WINDOW_MILLIS. null until a full
-    // window has passed since it connected. The heartbeats, the latency pings and their echoes are
-    // not messages here.
+    // Messages per second received and sent over the last RATE_WINDOW_MILLIS; null until one full
+    // window has passed. Heartbeats and latency pings (and their echoes) are not counted.
     in: number | null;
     out: number | null;
-    // The limit holding its model updates back, or dropping its broadcasts, now; null if none is.
+    // The limit in effect now, if any.
     limit: LoadLimit | null;
-    // How many objects it has model updates held back for.
+    // Objects with model updates held back.
     held: number;
-    // Its last rates, oldest first (see TrafficMeter.history); only when asked for.
+    // Oldest first (see TrafficMeter.history); only when requested.
     history?: RateSample[];
 }
 
-// One of a client's rates: [Date.now() of its sample, messages a second in, out].
+// [Date.now() of the sample, messages per second in, out].
 export type RateSample = [number, number, number];
 
-// How often a transport turns its per-client message counts into rates.
+// Interval at which a transport samples its per-client message counts.
 export const RATE_WINDOW_MILLIS = 1000;
 
-// How many of its rates a client keeps, at least a second apart: a little over the 2 minutes the
-// admin UI's throughput chart shows, which a page opened later shows at once.
+// Rates kept per client, at least a second apart: a little over the 2 minutes of the admin UI's
+// throughput chart, so a page opened later is full at once.
 export const RATE_HISTORY_LENGTH = 125;
 
-// A client's message counts, and its rates over the last window. The transport counts each message
-// with a plain increment and calls sample() about once a window, so the cost per message is that
-// increment, whether or not anyone looks at the rates.
-//
-// Each sample also keeps its rates, the last RATE_HISTORY_LENGTH of them, so that the admin UI's
-// throughput chart is full when a page opens. They are kept whether or not a page is open: the
-// transports sample every client each second anyway, and keeping a sample is three numbers in a
-// ring. Sampling only while a page is open would leave the chart empty again for the first page
-// after a quiet spell, and asking the TCP worker for its rates each second would cost a message
-// both ways. The worker sends them only when asked, for a page's first snapshot.
+// Message counts and rates of one client. The transport counts messages with plain increments and
+// calls sample() about once per RATE_WINDOW_MILLIS.
+// The history is kept with or without an admin page open: it is three numbers per sample, and
+// sampling only for open pages would leave the chart empty for the first page after a quiet spell.
+// The TCP worker sends its history only when requested (a page's first snapshot): asking for it
+// each second would cost a message each way.
 export class TrafficMeter {
     public received = 0;
     public sent = 0;
@@ -47,13 +43,13 @@ export class TrafficMeter {
     private sampledReceived = 0;
     private sampledSent = 0;
 
-    // When, in, out: three numbers per sample, in a ring of RATE_HISTORY_LENGTH.
+    // [when, in, out] per sample, in a ring of RATE_HISTORY_LENGTH.
     private readonly rates = new Float64Array(RATE_HISTORY_LENGTH * 3);
     private samples = 0;
 
     public constructor(private sampledAt: number) {}
 
-    // `sent`: for a transport that counts what it sends some other way (see SocketIOServer).
+    // `sent`: for a transport that does not count sends in this.sent (see SocketIOServer.sentTo).
     public sample(now: number, sent = this.sent): void {
         const elapsed = now - this.sampledAt;
         if (elapsed < RATE_WINDOW_MILLIS) return;
@@ -71,8 +67,8 @@ export class TrafficMeter {
         this.samples += 1;
     }
 
-    // The rates it keeps, oldest first, each at the Date.now() of its sample. `now` is the present
-    // on the clock sample() is given, `wallNow` the same instant by Date.now().
+    // Oldest first, each at the Date.now() of its sample. `now` is the present on sample()'s clock,
+    // `wallNow` the same instant by Date.now().
     public history(now: number, wallNow = Date.now()): RateSample[] {
         const history: RateSample[] = [];
         for (let n = Math.max(0, this.samples - RATE_HISTORY_LENGTH); n < this.samples; n++) {
