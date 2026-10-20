@@ -84,7 +84,7 @@ const config: Config = {
         },
         {type: 'docSidebar', sidebarId: 'serverSidebar', label: 'Server', position: 'left'},
         {type: 'docsVersionDropdown', position: 'right'},
-        {href: monitoring, label: 'Monitoring', position: 'right'},
+        {href: monitoring, label: 'Public Server', position: 'right'},
         {href: github, label: 'GitHub', position: 'right'},
       ],
     },
