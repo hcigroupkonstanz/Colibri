@@ -15,10 +15,12 @@ More to follow.
 
 ## Features
 
-Colibri focuses on three key areas:
+Colibri focuses on four key areas:
 
 - **Low Barrier:** Setup and development are as simple as possible, with little to no configuration or code required.
 - **Multi-Platform:** Colibri synchronizes data between different platforms.
+- **All Tools on Board:** Besides messages and synchronized objects, Colibri brings a data store, monitoring in the
+  browser and voice chat.
 - **Lab Conditions:** XR research prototypes usually run under ideal lab conditions. Colibri therefore puts low
   latency and high throughput first, at the cost of bandwidth and security.
 
