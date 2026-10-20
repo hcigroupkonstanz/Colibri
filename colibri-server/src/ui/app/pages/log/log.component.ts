@@ -8,24 +8,23 @@ import { LEVEL_TAGS, matchesSearch, messageText, sourceOf } from '../../componen
 import { download, fileNamePart } from '../../format';
 
 /**
- * How many lines are on the page at first, and how many more each "Show older lines" adds: half
- * as many on a phone, upright or sideways. The rows have the height their text needs, so they
- * are not virtualized, and a page of 10,000 rows would take seconds to build on a phone.
+ * Lines shown at first and added by each "Show older lines"; half as many on a phone. Rows are
+ * not virtualized (their height follows their text), so this bounds the DOM size.
  */
 export const PAGE_SIZE = 1000;
 const screenPageSize = (): number => window.matchMedia?.(PHONE).matches ? PAGE_SIZE / 2 : PAGE_SIZE;
 
-/** How close to the end, in px, still counts as at the end. */
+/** Distance from the end, in px, that still counts as at the end. */
 const END_SLACK = 24;
 
-/** Whether a line is an error or a warning, which Previous and Next go through. */
+/** Error or warning: the lines Previous and Next step through. */
 const isProblem = (line: LogMessage): boolean => !line.reconnect && (line.level === 0 || line.level === 1);
 
-/** Whether a key press is meant for a field or a list, not for the page. */
+/** The key press is for a form control or popup, not for the page shortcuts. */
 const typing = (event: KeyboardEvent): boolean =>
     event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], [role="menu"]') !== null;
 
-/** Whether an event is on a line, or on "Show older lines" above them. */
+/** The event is on a line or on the "Show older lines" button. */
 const onLine = (event: Event): boolean =>
     event.target instanceof Element && event.target.closest('app-log-message, .older') !== null;
 
@@ -49,11 +48,10 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     private scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
     private toolbar = viewChild.required(LogToolbarComponent);
 
-    /** Whether the page scrolls to new lines as they arrive. */
     following = signal(true);
 
-    // While paused, the page shows the lines it had then: new lines, repeats moving to the end and
-    // the oldest lines making room would all shift what is being read.
+    // Snapshot taken on pause. New lines, repeats moving to the end and eviction of the oldest
+    // would shift the lines being read.
     private frozen = signal<ReadonlyArray<LogMessage> | null>(null);
     private frozenIds = computed(() => new Set(this.frozen()?.map(line => line.id)));
     private readonly pageSize = screenPageSize();
@@ -76,7 +74,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     hidden = computed(() => this.matches().length - this.rows().length);
     olderStep = computed(() => Math.min(this.pageSize, this.hidden()));
 
-    /** How many lines arrived since the page was paused, not counting repeats of lines it shows. */
+    /** Lines that arrived since pausing; repeats of lines in the snapshot and reconnect rows do not count. */
     newLines = computed(() => {
         if (!this.frozen()) return 0;
         const shown = this.frozenIds();
@@ -87,13 +85,13 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         return count;
     });
 
-    /** The error or warning Previous and Next went to last. */
+    /** Id of the error or warning that Previous and Next went to last. */
     current = signal<string | null>(null);
 
-    /** The errors and warnings among the lines, oldest first. */
+    /** Ids of the errors and warnings among the matches, oldest first. */
     private problems = computed(() => this.matches().filter(isProblem).map(line => line.id));
 
-    /** The errors since the page was opened, oldest first. */
+    /** Ids of the errors created since the page was opened, oldest first. */
     private newErrors = computed(() => {
         const openedAt = this.log.openedAt();
         return this.matches().filter(line => !line.reconnect && line.level === 0 && line.created >= openedAt).map(line => line.id);
@@ -111,7 +109,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         };
     });
 
-    /** The rows that start a new day, which get the date above them. */
+    /** Ids of the rows that start a new day; the template puts a date header above them. */
     dayStarts = computed(() => {
         const starts = new Set<string>();
         let previous = '';
@@ -141,10 +139,9 @@ export class LogComponent implements AfterViewInit, OnDestroy {
 
     constructor() {
         afterNextRender(() => {
-            // by then the address is this page's, not the one it came from
+            // By now location.search and location.hash are this page's, not the previous page's.
             this.log.openPage();
-            // The keys below work with the focus in the log. On a page just loaded, nothing has the
-            // focus yet: the log takes it, so that they work from the start.
+            // The shortcuts need focus in the log, which a freshly loaded page does not have.
             if (document.activeElement === null || document.activeElement === document.body) {
                 this.scroller().nativeElement.focus({ preventScroll: true });
             }
@@ -155,7 +152,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
             if (this.following()) this.scrollToEnd();
         });
 
-        // The server sends a new history for new filters; the paused lines were filtered by the old.
+        // New filters make the server send a new history, so a frozen snapshot would be stale.
         effect(() => {
             this.log.filter();
             this.log.levels();
@@ -166,13 +163,13 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     }
 
     ngAfterViewInit(): void {
-        // a new height (a rotated phone, the filters opening) would leave the end out of view
+        // A new height (rotated phone, filters opening) would leave the end out of view.
         this.resizeObserver = new ResizeObserver(() => {
             if (this.following()) this.scrollToEnd();
         });
         this.resizeObserver.observe(this.scroller().nativeElement);
 
-        // passive, so that the browser never waits for these before it scrolls
+        // Passive: the browser does not wait for these handlers before it scrolls.
         const el = this.scroller().nativeElement;
         el.addEventListener('wheel', this.onWheel, { passive: true });
         el.addEventListener('touchstart', this.onTouchStart, { passive: true });
@@ -202,9 +199,9 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     }
 
     /**
-     * To the next or previous error or warning, round from the last to the first. The first goes
-     * from what is in view: Next to the first at or below its top, Previous to the last at or
-     * above its end, which, at the end of the log, is the latest.
+     * Goes to the next or previous error or warning, wrapping around; 'first-error' goes to the
+     * first error since the page was opened. Without a current one among the matches, Next takes the
+     * first at or below the top of the view and Previous the last at or above its end.
      */
     navigate(step: NavStep): void {
         if (step === 'first-error') {
@@ -231,7 +228,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         this.goTo(target);
     }
 
-    // Pauses, so that the line stays where it is, and shows as many older lines as it takes.
+    // Pauses so the line stays put, and shows as many older lines as it takes to reach it.
     private goTo(id: string): void {
         this.pause();
         const matches = this.matches();
@@ -248,15 +245,14 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         }, { injector: this.injector });
     }
 
-    // Scrolls the log, and only the log, to have the row in its middle. scrollIntoView() scrolled
-    // the page around it as well, which on a phone held sideways pushed the toolbar out of view.
+    // Centers the row in the log. Not scrollIntoView(), which scrolls the page around it as well.
     private center(row: HTMLElement): void {
         const el = this.scroller().nativeElement;
         const top = row.getBoundingClientRect().top - el.getBoundingClientRect().top;
         el.scrollTop += top - (el.clientHeight - row.offsetHeight) / 2;
     }
 
-    // The first and last line at least partly in view, by their place in matches().
+    // Indexes in matches() of the first and last line at least partly in view; the whole range if none is.
     private inView(index: ReadonlyMap<string, number>): [ number, number ] {
         const el = this.scroller().nativeElement;
         const box = el.getBoundingClientRect();
@@ -273,10 +269,9 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         return top === Infinity ? [ 0, index.size - 1 ] : [ top, bottom ];
     }
 
-    // '/' to the search, n and p to the next and previous error or warning, as in many developer
-    // tools, and e to the first new error. Only with the focus in the log or its toolbar: single
-    // character keys that worked anywhere on the page would also take a key meant for something
-    // else, or a word said to speech input (WCAG 2.1.4).
+    // '/' focuses the search, n and p step through errors and warnings, e goes to the first new
+    // error. Host listener, so only with focus in the log or its toolbar: single-character
+    // shortcuts anywhere on the page would clash with other keys and speech input (WCAG 2.1.4).
     @HostListener('keydown', [ '$event' ])
     onKey(event: KeyboardEvent): void {
         if (event.ctrlKey || event.metaKey || event.altKey || typing(event)) return;
@@ -291,7 +286,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         this.navigate(step);
     }
 
-    /** The loaded lines that match the filters and the search, as a file. */
+    /** Saves the loaded lines that match the filters and the search as a file. */
     download(format: 'text' | 'json'): void {
         const search = this.search();
         const lines = this.log.messages().filter(line => !line.reconnect && (!search || matchesSearch(line, search)));
@@ -325,8 +320,8 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         this.limit.update(limit => limit + this.pageSize);
     }
 
-    // Any way of scrolling up pauses: wheel, touch, keys or the scroll bar. The height check tells
-    // them from the list changing size under the scroll position. Back at the end, it follows again.
+    // Scrolling up pauses (wheel, touch, keys and scroll bar alike); back at the end it follows again.
+    // An unchanged scrollHeight tells a user scroll from the list resizing under the scroll position.
     onScroll(): void {
         const el = this.scroller().nativeElement;
         const sameContent = el.scrollHeight === this.lastHeight;
@@ -342,8 +337,8 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         this.lastHeight = el.scrollHeight;
     }
 
-    // The wheel and a finger pause at once, before the first scroll event: under a busy stream, the
-    // next batch of lines would otherwise scroll back to the end under the reader.
+    // Wheel and touch pause before the first scroll event; on a busy stream the next batch would
+    // otherwise scroll back to the end first.
     private onWheel = (event: WheelEvent): void => {
         const el = this.scroller().nativeElement;
         if (event.deltaY < 0 && el.scrollHeight > el.clientHeight) this.pause();
@@ -355,26 +350,26 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         this.touchY = event.touches[0]?.clientY ?? 0;
     };
 
-    // a finger moving down scrolls the log up
+    // A finger moving down scrolls the log up.
     private onTouchMove = (event: TouchEvent): void => {
         const el = this.scroller().nativeElement;
         const y = event.touches[0]?.clientY ?? 0;
         if (y > this.touchY + 8 && el.scrollHeight > el.clientHeight) this.pause();
     };
 
-    // Pressing the mouse on a line is the start of reading, selecting or opening it.
+    // A mouse press (primary button) on a line starts reading, selecting or opening it.
     onPointerDown(event: PointerEvent): void {
         if (event.pointerType === 'mouse' && event.button === 0 && onLine(event)) this.pause();
     }
 
-    // A tap opens a line, and the lines stay still while it is read. Not a button of the empty
-    // state: "Clear search" left the log paused.
+    // Opening a line or showing older lines pauses, so the view stays put. onLine() leaves out the
+    // empty state's buttons.
     onClick(event: MouseEvent): void {
         if (!onLine(event)) return;
         this.pause();
 
-        // Once paused, the "Jump to latest" button covers the bottom of the log, where the newest
-        // line, the one opened most, is. Its scroll-padding makes this move the line above it.
+        // "Jump to latest" shows once paused and covers the bottom of the log, where the newest line
+        // is; scroll-padding-bottom on the paused scroller keeps this scroll clear of it.
         const line = (event.target as Element).closest('app-log-message');
         if (line) afterNextRender(() => line.scrollIntoView({ block: 'nearest' }), { injector: this.injector });
     }
@@ -389,7 +384,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
 
 const pad = (value: number, length = 2): string => `${value}`.padStart(length, '0');
 
-/** A time as the browser's local yyyy-MM-dd HH:mm:ss.SSS, as the page shows it. */
+/** Local time as yyyy-MM-dd HH:mm:ss.SSS, the format the page shows. */
 const localTime = function (time: number): string {
     const d = new Date(time);
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
@@ -399,7 +394,7 @@ const fileStamp = function (date: Date): string {
     return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 };
 
-/** One line of the text download: time, level, source and message, continued lines indented. */
+/** One line of the text download; continuation lines of a message are indented. */
 export const textLine = function (line: LogMessage): string {
     const source = sourceOf(line);
     const id = line.metadata?.['clientId'];

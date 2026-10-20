@@ -3,21 +3,17 @@ using System;
 namespace HCIKonstanz.Colibri.Networking
 {
     /// <summary>
-    /// The TLS handshake on the TCP connection failed. Not terminal: the server may be switched to
-    /// TLS, or given another certificate, at any time, so the connection keeps being retried with
-    /// the usual backoff.
+    /// The TLS handshake on the TCP connection failed. Not terminal: the connection retries with the
+    /// usual backoff, so a server switched to TLS or given a new certificate is picked up without a restart.
     /// </summary>
     internal sealed class TlsHandshakeException : Exception
     {
         internal enum Failure
         {
             /// <summary>
-            /// The server did not take part in the handshake: it hung up, answered with something
-            /// that is not TLS, or said nothing in time. Almost always a server without TLS.
+            /// Hung up, sent something that is not TLS, or timed out. Almost always a server without TLS.
             /// </summary>
             NoTlsAnswer,
-
-            /// <summary>The server's certificate was rejected; the message says why.</summary>
             CertificateRejected,
         }
 

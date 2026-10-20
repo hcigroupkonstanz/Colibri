@@ -4,25 +4,17 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Core
 {
     /// <summary>
-    /// Shutdown bookkeeping shared by every <see cref="SingletonBehaviour{T}"/>.
+    /// Shutdown state shared by every <see cref="SingletonBehaviour{T}"/>.
     /// </summary>
-    /// <remarks>
-    /// Deliberately a non-generic class: Unity only scans non-generic types for
-    /// <see cref="RuntimeInitializeOnLoadMethodAttribute"/>, so the same hook written on
-    /// <c>SingletonBehaviour&lt;T&gt;</c> would silently never run.
-    /// </remarks>
+    // Non-generic because Unity only scans non-generic types for RuntimeInitializeOnLoadMethod.
     internal static class SingletonLifetime
     {
         /// <summary>
-        /// True from the moment the application starts shutting down. Creating a singleton then
-        /// would only leak a GameObject that nothing is left to tear down.
+        /// True once the application is shutting down; singletons are no longer created then.
         /// </summary>
-        /// <remarks>
-        /// Raised by <see cref="Application.quitting"/>, which Unity sends when Play mode ends and
-        /// when a player quits, before the scenes are torn down and whatever the state of any
-        /// object - unlike OnApplicationQuit, which inactive GameObjects never receive. Settable
-        /// within the assembly so that tests can stand in for the end of Play mode.
-        /// </remarks>
+        // Set from Application.quitting, which fires whatever the state of any object
+        // (OnApplicationQuit skips inactive GameObjects).
+        // Settable so tests can simulate the end of Play mode.
         public static bool IsQuitting { get; internal set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -30,8 +22,7 @@ namespace HCIKonstanz.Colibri.Core
         {
             IsQuitting = false;
 
-            // Statics survive Play mode when domain reload is disabled, and so does this
-            // subscription - hence the unsubscribe first, or the n-th session holds n handlers.
+            // Without domain reload the subscription survives Play mode; unsubscribe first so handlers do not stack.
             Application.quitting -= OnQuitting;
             Application.quitting += OnQuitting;
         }
@@ -49,13 +40,8 @@ namespace HCIKonstanz.Colibri.Core
         {
             get
             {
-                // Unity's ==, not ReferenceEquals: with domain reload disabled this field still
-                // holds the *previous* Play session's component. That object is destroyed, so it
-                // compares equal to null - which is precisely the signal to build a new one.
-                //
-                // A plain "have I ever created this?" flag cannot see that difference. Latching
-                // one made the second Play session hand back the destroyed connection: no
-                // GameObject in the scene, no Update, no socket, and not one line in the console.
+                // No created latch: without domain reload this holds the previous Play session's
+                // destroyed component, which must count as null.
                 if (_instance != null)
                     return _instance;
 
@@ -64,9 +50,10 @@ namespace HCIKonstanz.Colibri.Core
 
                 try
                 {
-                    // An instance placed in the scene by hand wins over creating one.
+                    // try searching scene for available instance
                     _instance = FindAnyObjectByType<T>();
 
+                    // No singleton found in scene, create a new one
                     if (_instance == null)
                         _instance = new GameObject($"[{typeof(T).Name}]").AddComponent<T>();
                 }

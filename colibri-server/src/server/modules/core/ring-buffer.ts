@@ -1,10 +1,7 @@
-// Fixed-capacity FIFO: push() is O(1) even once full (overwrites the oldest slot instead
-// of shift()ing every remaining element), and at()/last() give O(1) random access to
-// recent entries without materializing the whole buffer - the shape both measure-latency's
-// per-client samples and WebLog's message history need. shift() drops the oldest entry early,
-// for a buffer that is bounded by something besides its count (WebLog's by size, too).
+/** Fixed-capacity FIFO. `push` is O(1) and overwrites the oldest entry once full; `at` indexes without copying. */
 export class RingBuffer<T> {
     private readonly items: (T | undefined)[] = [];
+    // Slot of the oldest entry.
     private start = 0;
     private count = 0;
 
@@ -28,7 +25,7 @@ export class RingBuffer<T> {
         }
     }
 
-    // Removes and returns the oldest entry.
+    /** Removes and returns the oldest entry, for buffers that are also bounded by something other than count. */
     public shift(): T | undefined {
         if (this.count === 0) {
             return undefined;
@@ -40,7 +37,7 @@ export class RingBuffer<T> {
         return item;
     }
 
-    // Index 0 is the oldest surviving entry, length - 1 is the most recent.
+    /** Index 0 is the oldest entry, `length - 1` the newest. */
     public at(index: number): T | undefined {
         if (index < 0 || index >= this.count) {
             return undefined;
@@ -48,7 +45,7 @@ export class RingBuffer<T> {
         return this.items[(this.start + index) % this.capacity];
     }
 
-    // The n most recent entries, oldest first.
+    /** The `n` newest entries, oldest first. */
     public last(n: number): T[] {
         const result: T[] = [];
         for (let i = Math.max(0, this.length - n); i < this.length; i++) {
@@ -60,7 +57,7 @@ export class RingBuffer<T> {
         return result;
     }
 
-    // Full contents, oldest first.
+    /** All entries, oldest first. */
     public toArray(): T[] {
         return this.last(this.length);
     }

@@ -2,16 +2,22 @@ import { Subject, merge } from 'rxjs';
 import { buffer, auditTime, share, map, filter } from 'rxjs/operators';
 
 /**
- * @deprecated Not used by any current command-hook; retained for compatibility with older
- * client integrations that may still model entities this way. Prefer `DataStore`'s plain
- * `SyncModel` records for new synchronized state.
+ * Base class for model objects whose property changes are emitted in batches on `modelChanges$`.
+ * @deprecated Not used by any current command-hook. Prefer `DataStore`'s plain `SyncModel`
+ * records for new synchronized state.
  */
 export abstract class Serializable<T> {
     public id: string;
 
+    // Set only for the duration of update(). changeSource flushes synchronously there, so the
+    // batch picks up this value.
     private currentChangeSource: unknown = null;
     private readonly changeSource = new Subject<unknown>();
     protected readonly modelChanges = new Subject<string>();
+    /**
+     * Emits `{ changes, source }` batches of distinct changed property names, each tagged with the
+     * source of the update() call that flushed it, or null when the 1 ms timer flushed it.
+     */
     public readonly modelChanges$ = this.modelChanges.pipe(
         buffer(
             merge(
@@ -32,11 +38,16 @@ export abstract class Serializable<T> {
         this.id = id;
     }
 
+    /** Completes `modelChanges$`, so subscribers get no further batches. */
     public delete(): void {
         this.modelChanges.complete();
     }
 
 
+    /**
+     * Assigns each key of `updates` except `id`, then flushes the pending changes as one batch
+     * tagged with `source`.
+     */
     public update(updates: Partial<T>, source: unknown): void {
         this.currentChangeSource = source;
         for (const key of Object.keys(updates)) {
@@ -49,6 +60,10 @@ export abstract class Serializable<T> {
         this.currentChangeSource = null;
     }
 
+    /**
+     * Returns `id` plus the named attributes, read from their `_` fields, or every `_` field when
+     * none are named.
+     */
     public toJson(attributes: string[] = []): {[key: string]: unknown} {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const json: any = { id: this.id };

@@ -3,9 +3,7 @@ import { Colibri, Message, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected, whenColibriCreated } from './lifecycle';
 import { SyncModel } from './SyncModel';
 
-// SyncModel's own toJson(), update() and detach(), not what a model class puts under these names. A
-// model class with an update() of its own, to move the model each frame say, took over how the
-// changes other clients sent were applied: nothing they changed ever arrived, and nothing said so.
+// Calls SyncModel's own toJson(), update() and detach(), as a model class may define methods of the same name.
 const toJsonOf = <T>(model: SyncModel<T>, attributes?: string[]): Partial<T> =>
     SyncModel.prototype.toJson.call(model, attributes) as Partial<T>;
 const updateOf = <T>(model: SyncModel<T>, updates: Partial<T>): void => {
@@ -21,34 +19,26 @@ interface ModelSyncMsg<T extends SyncModel<T>> extends Message {
 }
 
 interface ModelSyncRegistration<T> {
-    /**
-     * The channel to sync on. **Recommended.** Defaults to the class name lowercased, which a
-     * minifying production build changes - so without this, two builds of the same app, or a
-     * minified web build and Unity, can silently stop syncing with each other.
-     */
+    /** The channel to sync on. Recommended: the default, the lowercased class name, changes when minified. */
     name?: string;
     type: { new (id: string): T };
 }
 
 type ModelSync<T> = [Observable<T[]>, (model: T) => void];
 
-// Runs `action` against the Colibri instance now, or as soon as `new Colibri()` constructs one.
-// Sending through SendMessage instead would drop the message, with nothing but a warning, when
-// RegisterModelSync runs first - which, in a module-level `const [models$] = RegisterModelSync(...)`,
-// is the usual order rather than a mistake.
+// Runs `action` now, or once `new Colibri()` has constructed the instance. SendMessage drops
+// messages sent before that, and a module-level RegisterModelSync usually runs first.
 const withColibri = (action: (colibri: Colibri) => void) => {
     const colibri = Colibri.getInstance(false);
     if (colibri) action(colibri);
     else whenColibriCreated(action);
 };
 
-// Channels already warned about, so that registering the same type again (on every render of a
-// component, say) does not repeat it.
+// Warn once per channel: the same type may be registered again, e.g. on every render.
 const warnedMinifiedNames = new Set<string>();
 
-// A production bundler renames classes - typically to one or two letters, or to something with a
-// `$` in it - so a channel derived from the class name differs between two builds of the same
-// app, and between a minified web build and Unity, and they silently stop syncing.
+// Minifiers rename classes, typically to one or two letters or something with a '$', so a channel
+// derived from the class name stops matching other builds and Unity.
 const warnIfMinified = (className: string, channel: string) => {
     if ((channel.length > 2 && !channel.includes('$')) || warnedMinifiedNames.has(channel)) return;
     warnedMinifiedNames.add(channel);
@@ -60,55 +50,42 @@ const warnIfMinified = (className: string, channel: string) => {
     );
 };
 
-// Whether a model::update carries nothing but the id - which is how the server answers a request
-// for a model it does not have. A change always has a field in it; only a model with no synced
-// fields at all is ever sent like this.
+// A model::update with nothing but the id is the server's answer for a model it does not have.
 const isBare = (modelData: object) => Object.keys(modelData).every(key => key === 'id');
 
-// For each channel, whether a RegisterModelSync on it has a model of its own with a given id: every
-// RegisterModelSync on the channel receives the server's answer to a request one of them sent, on
-// the same connection, and a bare { id } there is that instance's answer, not a model.
+// Per channel, each registration's check for an own model with a given id. Every registration on a
+// channel receives the answers to the others' requests, and a bare id may be one of those.
 const ownOnChannel = new Map<string, Set<(id: string) => boolean>>();
 
-// For each channel, how each RegisterModelSync on it starts keeping the fields it sends out of every
-// update until the answer for an id (see guardFrom): every one of them receives the answers to the
-// requests the others send.
+// Per channel, each registration's guard (see guardFrom): all of them receive the answers to the
+// others' requests.
 const guardsOnChannel = new Map<string, Set<(end: string) => void>>();
 
-// The channel the requests that tell when the answers to the earlier ones are over go out on (see
-// askForEnd), the one colibri-unity uses after a reconnect. No model is ever put on it.
+// Channel for the askForEnd requests, the same one colibri-unity uses after a reconnect. It never has models.
 const END_CHANNEL = 'colibri::reconnect';
 
-// How many of those requests this page has sent, so that each asks for an id of its own.
 let endRequests = 0;
 
-// Asks for an id nobody has, on a channel with no models, and returns it. The server handles one
-// client's messages in the order they come and answers them in that order, so its answer, the bare
-// id, comes after the answers to every request this client sent before.
+// Requests an id nobody has, on a channel without models, and returns it. The server answers one
+// client's requests in order, so the bare-id answer marks the end of the answers to earlier requests.
 const askForEnd = (colibri: Colibri) => {
     const id = `colibri-web-${++endRequests}`;
     colibri.sendMessage(END_CHANNEL, 'model::request', { id, again: true });
     return id;
 };
 
-// How much of what an own model's fields were is kept, to tell whether the last change this client
-// sent for one reached the server (see lostChanges). Per field, the newest value, and of the ones
-// before it this many from each side of when this client last heard from the server: the latest
-// ones up to then, and the first ones after (see keepKnown). Of those, only the ones still the
-// latest at most KNOWN_VALUES_MS before the connection stopped working count. A change sent any
-// earlier arrived for certain, so the server showing the value it replaced means another client set
-// that again.
+// History kept per field to spot changes lost in a dead connection (see keepKnown, lostChanges).
+// An earlier value counts only if it was still current within KNOWN_VALUES_MS before the outage:
+// a change sent before that has arrived for certain.
 const KNOWN_VALUES_KEPT = 8;
 const KNOWN_VALUES_MS = 10_000;
 
-// How long an id this client deleted is not listed again from an update, as colibri-unity's
-// LocallyDeletedModels does: another client's update relayed before the server had the delete
-// still comes after it. The server ignores every later one for the id while it remembers the
-// delete (MODEL_TOMBSTONE_SECONDS).
+// How long updates for an id deleted here are ignored, as in colibri-unity's LocallyDeletedModels:
+// a remote update relayed before the server had the delete can still arrive after it. Later ones
+// are ignored by the server (MODEL_TOMBSTONE_SECONDS).
 const DELETED_HERE_MS = 60_000;
 
-// How long, at most, updates for an id deleted here and registered again are taken for ones relayed
-// before the server had the delete (see sendAfresh), when the answer that ends that does not come.
+// Fallback for sendAfresh: how long updates for the id are dropped if the bare-id answer never comes.
 const AFRESH_ANSWER_MS = 10_000;
 
 export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyncRegistration<T>): ModelSync<T> => {
@@ -117,7 +94,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
     const models = new BehaviorSubject<T[]>([]);
 
-    // Ids this client deleted, and when (see DELETED_HERE_MS), the oldest first.
+    // Ids deleted here and when (see DELETED_HERE_MS), oldest first.
     const deletedHere = new Map<string, number>();
     const rememberDeletedHere = (id: string) => {
         const now = Date.now();
@@ -128,7 +105,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         deletedHere.delete(id);
         deletedHere.set(id, now);
     };
-    // Ids this client deleted and then registered again, and since when (see sendAfresh).
+    // Ids deleted here and registered again, and when (see sendAfresh).
     const afresh = new Map<string, number>();
 
     const recentlyDeletedHere = (id: string) => {
@@ -139,36 +116,29 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return false;
     };
 
-    // The models this client registered itself with registerModel, as opposed to those the server
-    // told it about. Only these are this client's to send again (see below).
+    // Models passed to registerModel, as opposed to ones created from remote updates. Only these are
+    // asked for by id and sent in full.
     const ownModels = new WeakSet<T>();
 
-    // Own models asked for by id, on registerModel or after a reconnect, whose answer has not
-    // arrived yet - and the instance that asked, which is the one to answer through.
+    // Own models asked for by id (registerModel, reconnect) and not answered yet, with the instance that asked.
     const awaitingAnswer = new Map<string, Colibri>();
 
-    // Own models the server has answered for, on this connection or an earlier one: those this
-    // client held before an outage, and asks for again after it.
+    // Own models the server has answered for, on this or an earlier connection (see askFor).
     const answered = new WeakSet<T>();
 
-    // From a reconnect until everything else is asked for, the instance to ask through.
+    // Instance to send the request for every model through, until it is sent (see catchUpOnceAnswered).
     let catchingUpThrough: Colibri | undefined;
 
-    // Own models whose wait for an answer a model::delete ended (see onDelete), or that one removed
-    // while their answer may still have been on its way (see answerMayFollow). That delete may
-    // have been relayed from another client just before the answer, and a server that does not
-    // remember deletes (MODEL_TOMBSTONE_SECONDS=0) still answers with the bare id, which must not
-    // become a model of its own.
+    // Ids deleted while their answer was, or may still have been, on its way (see forget). A bare-id
+    // answer, e.g. from a server with MODEL_TOMBSTONE_SECONDS=0, must not become a model.
     const deletedWhileAwaited = new Set<string>();
 
-    // Changes to own models held back instead of sent, by the property names SyncModel reports
-    // them under: made while the connection was down, or since registering the model or since a
-    // reconnect but before the server answered for it (see registerModel).
+    // Property names of changes to own models that are held back instead of sent: made while
+    // disconnected or before the server's answer for the model (see registerModel).
     const heldChanges = new WeakMap<T, Set<string>>();
 
-    // Changes to models, own ones made while nothing was held back, waiting for SyncModel to report
-    // them (it buffers for 1 ms) to go out together. An update that arrives before then leaves them
-    // as they are (see applyUpdate).
+    // Changes waiting for SyncModel's 1 ms buffer to report them, so they go out together. A remote
+    // update does not overwrite them (see applyUpdate).
     const changesToSend = new WeakMap<T, Set<string>>();
 
     const noteChangeToSend = (model: T, change: string) => {
@@ -177,17 +147,14 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         else changesToSend.set(model, new Set([change]));
     };
 
-    // Own models asked for again after sending the changes held back for them (see takeAnswer),
-    // until the answers to that are over: by id, the fields sent that replaced a value the server
-    // showed, as they were sent (JSON), and that value (JSON, or none); the properties the changes
-    // were sent for; the last value an update showed for each of those fields since; and the id
-    // asked for by the request sent after it (see askForEnd).
+    // Own models asked for again after sending their held changes (see sendOnTop), until the answers
+    // to that are over (see endWait).
     interface Confirmation {
-        sent: Map<string, string>;
-        replaced: Map<string, string | undefined>;
-        props: string[];
-        shown: Map<string, unknown>;
-        end: string;
+        sent: Map<string, string>; // JSON of the fields sent that differ from what the server showed
+        replaced: Map<string, string | undefined>; // the server's JSON for those fields, if it had one
+        props: string[]; // property names of the held changes
+        shown: Map<string, unknown>; // latest value an update has shown for each sent field
+        end: string; // askForEnd id
     }
     const confirming = new Map<string, Confirmation>();
 
@@ -197,50 +164,41 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return confirmation;
     };
 
-    // For each field of an own model, by the name it is sent under, the values it had, oldest first:
-    // the last one the server showed this client (see applyUpdate), then the ones this client sent
-    // since (see sendUpdate) that keepKnown keeps - as JSON, with when, and whether it was this
-    // client's. See lostChanges.
+    // Per own model and field name (as sent), the values the field had, oldest first: the last one the
+    // server showed (see applyUpdate), then those sent since that keepKnown keeps (see sendUpdate).
     interface KnownValue {
         json: string;
         at: number;
-        sent: boolean;
+        sent: boolean; // sent by this client, otherwise shown by the server
     }
     const knownValues = new WeakMap<T, Map<string, KnownValue[]>>();
 
-    // Own models asked for again on a reconnect, until the answers are over (see roundEnd): every
-    // update for one until then is checked for changes lost in the connection that died (see
-    // lostChanges). For each, the values those updates showed, and the fields found lost, which keep
-    // their value and take nothing more from them.
+    // Own models asked for again on a reconnect, until the answers are over (see roundEnd). Their
+    // updates are checked for changes lost in the dead connection (see lostChanges): per id, the
+    // values shown, and the fields found lost, which keep their value.
     interface AfterOutage {
         shown: Map<string, unknown>;
         lost: Set<string>;
     }
     const askedAfterOutage = new Map<string, AfterOutage>();
 
-    // While own models asked for again on a reconnect wait for the answers: the id asked for by the
-    // request sent after theirs, whose answer comes after all of theirs (see takeAnswer).
+    // While reconnect requests are unanswered: the askForEnd id sent after them (see takeAnswer).
     let roundEnd: string | undefined;
 
-    // While updates made before the server had what this client sends now may still arrive (see
-    // guardFrom): the ids asked for by the requests whose answers come after them, oldest first.
+    // askForEnd ids whose answers end the window for stale updates (see guardFrom), oldest first.
     let guardEnds: string[] = [];
 
-    // For each model, own or not, the fields kept out of every update for it, by the names they are
-    // sent under, each until the answer for the last id in guardEnds when it was sent. A later answer
-    // is too late: another client may set the field once the server has this client's value, and its
-    // update can come before that answer.
+    // Per model, the field names (as sent) kept out of updates until the answer for the last guardEnds id
+    // at the time they were sent. Longer would drop another client's later change to the same field.
     let keptOut = new WeakMap<T, Map<string, string>>();
 
-    // Own models settled by an update that need not have been their answer (see takeAnswer), by id:
-    // the id in guardEnds whose answer comes after theirs. Until it comes, the answer may still be on
-    // its way.
+    // Own models settled by an update that may not have been their answer (see takeAnswer), mapped to
+    // the guardEnds id whose answer comes after theirs.
     const answerMayFollow = new Map<string, string>();
 
-    // When this client last heard from the server before the connection was lost (see lastHeardFrom).
+    // When the server was last heard from before the last outage (see lastHeardFrom).
     let lastHeardBeforeOutage = 0;
 
-    // From a disconnect until the next connect.
     let disconnected = false;
 
     const hasOwn = (id: string) => models.value.some(m => m.id === id && ownModels.has(m));
@@ -255,21 +213,11 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     if (guards) guards.add(guard);
     else guardsOnChannel.set(name, new Set([guard]));
 
-    // Asks the server for an own model by id; onUpdate or onDelete takes the answer. The server
-    // answers with what it has - or, for a model it does not have, a bare { id }, and only then
-    // does onUpdate send the model's full state. What the server does have is applied rather than
-    // overwritten, since it is what every other client has - except what this client changed
-    // itself since registering the model or while it waited, which it sends instead.
-    //
-    // A model the server has answered for is asked for `again: true`: one this client held before
-    // an outage, or one asked for again to see that the server has the changes sent for it (see
-    // takeAnswer). Another client may have deleted it meanwhile, and after an outage the delete it
-    // relayed never arrived here. The server remembers a delete for a while
-    // (MODEL_TOMBSTONE_SECONDS) and answers such a request with model::delete, which onDelete
-    // applies. Asked for without the flag, as a model this client has right now (registerModel,
-    // or one registered while the connection was down), the server forgets that delete and
-    // answers with the bare id: the model is in use again. Once that while is over, a deleted model
-    // looks the same as one the server forgot, and is sent again.
+    // Asks the server for an own model by id; the answer arrives through onUpdate or onDelete.
+    // `again: true`, for a model already answered for, makes the server reply model::delete if another
+    // client deleted it meanwhile, as a relayed delete may not have reached this client. Without it, the
+    // server lifts that delete and answers a bare id. After MODEL_TOMBSTONE_SECONDS the server has
+    // forgotten the delete, and this client sends the model again.
     const askFor = (colibri: Colibri, model: T) => {
         awaitingAnswer.set(model.id, colibri);
         colibri.sendMessage(
@@ -279,12 +227,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         );
     };
 
-    // For an id this client deleted a moment ago and now registers again. The request without the
-    // flag lifts the server's memory of the delete, and the model goes out in full right after it,
-    // without waiting for the answer: the server has nothing for the id. Waited for, an update
-    // another client sent before the server had the delete, relayed after it, was taken for that
-    // answer: it settled the new model with the deleted object's values, and the model was never
-    // sent. So until the answer, the bare id, updates for it are dropped (see onUpdate).
+    // For an id deleted here a moment ago and registered again: the request lifts the server's delete,
+    // and the full model follows at once since the server has nothing for the id. Until the bare-id
+    // answer, updates for the id are dropped (see onUpdate): a remote update sent before the server
+    // had the delete would be taken for the answer.
     const sendAfresh = (colibri: Colibri, model: T) => {
         colibri.sendMessage(name, 'model::request', { id: model.id });
         afresh.set(model.id, Date.now());
@@ -293,9 +239,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         sendUpdate(colibri, model, toJsonOf(model));
     };
 
-    // At first and after a reconnect, everything else is asked for once every own model asked for
-    // has its answer, so that that answer has what was sent in between. What is sent after it is
-    // not in it (see guardFrom). True if it asked.
+    // Requests every model once all own models have their answer, so that answer includes what was
+    // sent in between (see guardFrom for what is sent after). Returns whether it asked.
     const catchUpOnceAnswered = () => {
         if (!catchingUpThrough || awaitingAnswer.size > 0) return false;
         const colibri = catchingUpThrough;
@@ -305,15 +250,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return true;
     };
 
-    // From now until the answer to a request sent now, the fields this client sends for a model are
-    // kept out of every update for it. The answer to a request sent before, made before the server had
-    // them, may still be on its way: the server answers a request, for every model or for an own
-    // model's id (see takeAnswer), with what it has when it reads that request, and reads a change
-    // sent just after it only then. Applied, that answer undid the change on this client alone, for
-    // good, since the server relays an update to every client but the one that sent it. Every update
-    // that arrives before the answer to the request sent now was made before the server read these
-    // fields, another client's too, so what it shows for them is older. Every RegisterModelSync on
-    // the channel receives the answers to this one's requests, so each of them does the same.
+    // Keeps the fields this client sends out of updates until the answer to a request sent now. An
+    // earlier request is answered with what the server had when it read it, which may predate these
+    // fields; applied, that undoes them on this client only, as the server does not relay an update
+    // back to its sender. Every registration on the channel receives the answer, so all of them guard.
     const guardFrom = (colibri: Colibri) => {
         const end = askForEnd(colibri);
         for (const guardOnChannel of guardsOnChannel.get(name) ?? []) guardOnChannel(end);
@@ -330,8 +270,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const keptOutOf = (model: T) =>
         [...(keptOut.get(model) ?? [])].filter(([, end]) => guardEnds.includes(end)).map(([key]) => key);
 
-    // The answer for `end` has come, and with it those to the requests sent before; or, without
-    // `end`, none of them is going to.
+    // The answer for `end` has come, and with it those for earlier requests; without `end`, none will come.
     const endGuard = (end?: string) => {
         guardEnds = end === undefined ? [] : guardEnds.slice(guardEnds.indexOf(end) + 1);
         if (guardEnds.length > 0) return;
@@ -339,38 +278,28 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         answerMayFollow.clear();
     };
 
-    // initial data fetch - and the same again after every reconnect, since an update relayed while
-    // this client was disconnected is gone for it, and only asking again brings it back. The
-    // server answers with one model::update per model it has, which onUpdate applies to the
-    // model with that id where there is one, so this catches up without duplicating anything.
+    // initial data fetch
+    // Repeated after every reconnect, since remote updates relayed meanwhile are lost. Applied to the
+    // model with the same id, so nothing is duplicated.
     //
-    // The server may have lost this client's own models meanwhile, though: it forgets every model
-    // of an app when the app's last client leaves, and when it restarts. Nothing sent them again,
-    // so a client that joined later never saw them. So after a reconnect each own model is asked
-    // for by id first (see askFor), and everything else only once they all have their answer.
-    //
-    // The first time too, everything is asked for only once the models registered by then have
-    // their answer: those registered before `new Colibri()`, or in the same block of code as this.
-    // Asked for first, the answer for every model came first, carried the id as well, and was
-    // taken for the answer to the request for the id; the real one came next, without the changes
-    // this client had sent in between, and undid them here.
+    // The server forgets an app's models when its last client leaves and on restart, so own models are
+    // asked for by id first (see askFor), and everything else once all are answered. Also on the first
+    // fetch: the answer for every model carries an own model's id too and would be taken for its answer.
     withColibri(colibri => {
         catchingUpThrough = colibri;
+        // Deferred so that models registered in the same block of code, or before `new Colibri()`, are asked for first.
         setTimeout(catchUpOnceAnswered, 0);
         onColibriDisconnected(colibri, () => {
             disconnected = true;
-            // The answers to the requests sent on this connection are not going to come. Ended here
-            // rather than on the reconnect, by when another RegisterModelSync on the channel may
-            // have sent the next one (see guardFrom).
+            // Answers to the requests on this connection will not come. Ended here, not on reconnect:
+            // by then another registration on the channel may have sent the next one (see guardFrom).
             endGuard();
-            // Not before the answers to asking again after the last reconnect are over: the
-            // connection died again before that, and a change lost in the one before is still in
-            // question, so it is judged from when this client last heard from the server then.
+            // Not updated while the last reconnect's answers are pending: changes lost in the earlier
+            // outage are still in question, so they are judged from then.
             if (askedAfterOutage.size === 0) lastHeardBeforeOutage = lastHeardFrom(colibri) ?? Date.now();
-            // A delete sent since this client last heard from the server may have gone into a
-            // connection that was dead already: Socket.IO notices that only after its ping timeout,
-            // and loses what it sent until then. Sent again, as colibri-unity does, Socket.IO holds it
-            // until the reconnect. A delete that did arrive arrives twice, which changes nothing.
+            // A delete sent after the last message from the server may have gone into a connection that was
+            // already dead (Socket.IO loses what it sends until its ping timeout). Sent again, as colibri-unity
+            // does; Socket.IO holds it until the reconnect. A delete that did arrive arrives twice, harmlessly.
             const since = (lastHeardFrom(colibri) ?? Date.now()) - 1000;
             for (const [id, at] of deletedHere) {
                 if (at >= since) colibri.sendMessage(name, 'model::delete', { id });
@@ -378,9 +307,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         });
         onColibriReconnected(colibri, () => {
             disconnected = false;
-            // Whatever was asked on the connection before this one is not going to be answered.
-            // The changes sent before a model was asked for again may not have arrived either, so
-            // they are held back again, to go out with the answer.
+            // Requests from the previous connection will not be answered. Changes sent for models still
+            // being confirmed may not have arrived, so they are held again and go out with the answer.
             awaitingAnswer.clear();
             deletedWhileAwaited.clear();
             askedAfterOutage.clear();
@@ -401,7 +329,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         });
     });
 
-    // Register for updates (RegisterChannel itself waits for `new Colibri()` if it has to)
+    // Register for updates
     RegisterChannel(name, (payload: Message) => {
         if (payload.command === 'model::update') {
             onUpdate((payload as ModelSyncMsg<T>).payload);
@@ -412,10 +340,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         }
     });
 
-    // The answer to a request that tells when the answers to the earlier ones are over (see
-    // askForEnd): after a reconnect or asking an own model again (see takeAnswer), or to stop keeping
-    // fields out (see guardFrom). Every RegisterModelSync receives each one sent on this connection,
-    // and takes only its own.
+    // Answers to askForEnd requests (see roundEnd, guardEnds, endWait). Every registration receives
+    // each one sent on this connection and acts only on the ids it waits for.
     RegisterChannel(END_CHANNEL, (message: Message) => {
         if (message.command !== 'model::update') return;
         const id = (message.payload as { id?: unknown } | undefined)?.id;
@@ -432,8 +358,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const id = modelData.id;
         const afreshSince = id === undefined ? undefined : afresh.get(id);
         if (id !== undefined && afreshSince !== undefined) {
-            // Until the answer, the bare id, an update is one another client sent before the server
-            // had the delete (see sendAfresh).
+            // Until the bare-id answer, updates are ones sent before the server had the delete (see
+            // sendAfresh).
             const waiting = Date.now() - afreshSince < AFRESH_ANSWER_MS;
             if (isBare(modelData) || !waiting) afresh.delete(id);
             if (isBare(modelData) || waiting) return;
@@ -445,54 +371,34 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             return;
         }
 
-        // The answer to another RegisterModelSync on this channel, which has its own model with
-        // the id. Listed here, it became a model with no fields, which nothing ever filled in: the
-        // full state that instance sends in reply is relayed to every client but this one.
+        // The answer to another registration on this channel that has an own model with this id. Not
+        // listed: the full state it sends in reply is not relayed to this client, so the model would stay empty.
         if (!model && id !== undefined && isBare(modelData) && ownElsewhere(id)) return;
         applyUpdate(model, modelData);
     };
 
     const ownElsewhere = (id: string) => [...(ownOnChannel.get(name) ?? [])].some(has => has !== hasOwn && has(id));
 
-    // The first update for an own model after its request settles it. One with fields in it means
-    // the server has the model - the server stores an update before it relays it - and is applied
-    // like any other, save for what this client changed while it waited: that is sent instead,
-    // once the rest is applied, as it would have been when it was made. A bare one means the
-    // server has nothing for it: send all of it. No model any more - deleted since it was asked
-    // for - means nothing to send.
+    // The first update for an own model after its request settles it. With fields, the server has the
+    // model (it stores an update before relaying it): applied as usual, except fields this client
+    // changed while waiting, which are sent on top. A bare id means the server has nothing: send the
+    // whole model. No model any more (deleted meanwhile): nothing to send.
     //
-    // That first update need not be the answer, though. The answer to the request for every model
-    // has the id in it too, and comes first when it was asked before the id; and an update another
-    // client made is relayed as it comes. The answer itself then follows, made before the server
-    // had the changes sent in between, and put the old values back here only: this client showed
-    // them while the server and every other client had its own. So when changes are sent in place
-    // of values the server had, the model is asked for again, with one more request after that
-    // (see askForEnd); the changes made from then on are held back too, and what was sent is kept
-    // out of every update until the answer to that one, when every answer made before the server
-    // had it has come (see endWait). When the changes are what the server had anyway, or there are
-    // none, nothing is asked: an answer still on its way has the same values for them, or ones
-    // another client set since. A change made after that goes out at once, though, and that answer,
-    // made before the server had it, undid it here only. So what this client sends from then on is
-    // kept out of every update until the answer to one more request (see guardFrom); asking for
-    // every model, when that comes next, does the same.
+    // That update need not be the answer: the answer to the request for every model carries the id
+    // too, and a remote update can arrive first. The real answer, made before the server had the
+    // changes sent meanwhile, would then revert them on this client only. So changes that replace
+    // server values are followed by another request for the model and an askForEnd request; later
+    // changes are held and the sent fields kept out of updates until its answer (see endWait).
+    // Otherwise guardFrom keeps the fields sent later out of updates until one more answer.
     //
-    // After a reconnect, what the server answers for a model it had answered for before may also
-    // show that a change this client sent before the outage never reached the server (see
-    // lostChanges). Which update is that answer cannot be told either, and the server relays an
-    // update another client made to the new connection as soon as it accepts it, so one made just
-    // then comes first. Taken for the answer, it settled the model without checking the field lost,
-    // which it did not have, and the answer itself then put the old value back. So, as colibri-unity
-    // does, one more request follows those (see roundEnd), on a channel with no models, for an id
-    // nobody has. The server handles one client's messages in the order they come and answers them
-    // in that order, so its answer, the bare id, comes after every one of theirs. Until it comes,
-    // each update for such a model is checked, and applied save for what was held back and the
-    // fields found lost. Then the model is settled as on an answer, those fields sent again with
-    // what was held (see endRound).
+    // After a reconnect the answer may also show a change sent before the outage that never arrived
+    // (see lostChanges), and is again indistinguishable from a remote update. One more request follows
+    // (see roundEnd), updates before its answer are checked, then the model is settled (see endRound).
     const takeAnswer = (id: string, asker: Colibri, model: T | undefined, modelData: Partial<T>) => {
         if (model) answered.add(model);
 
-        // A model whose detach() was called since it was asked for: that ended what it sends, so it
-        // takes what comes like a model another client registered, and sends nothing.
+        // detach() was called since the request: it takes updates like a non-own model and sends
+        // nothing.
         if (model && !ownModels.has(model)) {
             askedAfterOutage.delete(id);
             awaitingAnswer.delete(id);
@@ -538,20 +444,20 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         awaitingAnswer.delete(id);
         const held = releaseHeldChanges(model);
         applyUpdate(model, withoutChanges(modelData, model, held));
-        // Deleted by a subscriber of the list as it emitted: nothing more to send for it.
+        // Deleted by a subscriber while the list emitted: nothing more to send.
         if (!models.value.includes(model)) {
             catchUpOnceAnswered();
             return;
         }
         if (sendOnTop(id, asker, model, modelData, held, [])) return;
         if (!catchUpOnceAnswered()) guardFrom(asker);
-        // Either sends a request whose answer comes after the one for this model.
+        // Whichever of the two calls ran sent a request whose answer comes after this model's.
         const end = guardEnds.at(-1);
         if (end !== undefined) answerMayFollow.set(id, end);
     };
 
-    // The answers to asking again after a reconnect are over (see takeAnswer): each own model asked
-    // for is settled with what they showed.
+    // The answers to the reconnect requests are over (see takeAnswer): settles each own model with
+    // the values the updates showed.
     const endRound = () => {
         roundEnd = undefined;
         const asked = [...askedAfterOutage];
@@ -563,12 +469,12 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             if (!asker || !model) continue;
 
             awaitingAnswer.delete(id);
-            // detach() was called on it since an update for it came: that ended what it sends.
+            // detach() was called since: it sends nothing.
             if (!ownModels.has(model)) continue;
             const held = releaseHeldChanges(model);
-            // What the server showed for those is what it still holds. Should the value sent again
-            // below be lost as well, in a connection that dies soon after, the next answer is told by
-            // it, however long before the change itself was made.
+            // Remember what the server still holds for the lost fields, stamped now: should the value sent
+            // again below be lost too, the next outage's answer is judged against it, however long ago the
+            // change was made.
             if (lost.size > 0)
                 remember(model, Object.fromEntries([...lost].map(key => [key, shown.get(key)])) as Partial<T>);
             sendOnTop(id, asker, model, Object.fromEntries(shown) as Partial<T>, held, [...lost]);
@@ -576,10 +482,9 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         catchUpOnceAnswered();
     };
 
-    // Sends, on top of what the server showed for an own model (`shown`), what this client changed
-    // while it waited for the answer (`held`, as property names) and the fields found lost in the
-    // connection that died (`lost`, see lostChanges), with the values it has now. When they replace
-    // values the server had, the model is asked for again (see takeAnswer), and this is true.
+    // Sends the held changes (property names) and the lost fields (see lostChanges) with their current
+    // values, on top of what the server showed (`shown`). True if that replaces server values, in which
+    // case the model is asked for again (see takeAnswer).
     const sendOnTop = (id: string, asker: Colibri, model: T, shown: Partial<T>, held: string[], lost: string[]) => {
         if (held.length === 0 && lost.length === 0) return false;
         // toJson() with no properties named is all of them.
@@ -588,7 +493,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         for (const key of lost) sent[key] = current[key];
         sendUpdate(asker, model, sent as Partial<T>);
 
-        // A field without a JSON value (undefined) is not sent at all, so no update shows it.
+        // An undefined field is not sent, so no update shows it.
         const differs = new Map<string, string>();
         for (const [key, value] of Object.entries(sent)) {
             const json = JSON.stringify(value) as string | undefined;
@@ -605,17 +510,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return true;
     };
 
-    // The answers to asking an own model again are over (see takeAnswer): every one made before the
-    // server had what was sent has come, and the last update that showed a field sent has what the
-    // server has for it. The value sent means it arrived. Another value is another client's, set
-    // since, and is applied. The value it replaced, or none, means it has not arrived yet: the
-    // server holds back the updates of a client over its limit (CLIENT_MESSAGE_RATE_LIMIT), but
-    // never a request. Or another client set it back meanwhile. Either way it is sent again.
+    // Every answer made before the server had the sent fields has come (see takeAnswer), so the last
+    // update that showed a field has what the server holds. The value sent: it arrived. Another value:
+    // another client set it since, applied. The value it replaced, or none: it has not arrived (the
+    // server holds back updates over CLIENT_MESSAGE_RATE_LIMIT, but never requests) or another client
+    // set it back; sent again.
     //
-    // Then the changes made meanwhile go out, without asking once more: nothing made before the
-    // server had them can come any more. Asked again, a model that changes all the time, a tracked
-    // pose say, stayed asked for, one update a round trip went out, and everything else was never
-    // asked for.
+    // The changes made meanwhile then go out without asking again: nothing stale can come any more.
     const endWait = (id: string) => {
         const confirmation = endConfirmation(id);
         const asker = awaitingAnswer.get(id);
@@ -640,22 +541,21 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const current = toJsonOf(model) as Record<string, unknown>;
         const update: Record<string, unknown> = held.length > 0 ? toJsonOf(model, held) : { id };
         for (const key of again) update[key] = current[key];
-        // Not for a model whose detach() was called since: that ended what it sends.
+        // detach() was called since: it sends nothing.
         if (ownModels.has(model) && Object.keys(update).length > 1) sendUpdate(asker, model, update as Partial<T>);
         catchUpOnceAnswered();
     };
 
-    // Sends an update for an own model, and remembers the values it sent (see lostChanges).
+    // Sends an update for an own model and records it for lostChanges and guardFrom.
     const sendUpdate = (colibri: Colibri, model: T, update: Partial<T>) => {
         colibri.sendMessage(name, 'model::update', update);
         remember(model, update, lastHeardFrom(colibri) ?? Number.POSITIVE_INFINITY);
         keepOut(model, update);
     };
 
-    // Remembers the values `fields` has for an own model (see knownValues): sent by this client, after
-    // what it knew of each field before, when it last heard from the server at `heardAt` (see
-    // keepKnown); or, without `heardAt`, shown by the server, in place of that. A field without a JSON
-    // value (undefined) is not sent at all, so there is nothing to remember for it.
+    // Records `fields` in knownValues: as sent by this client if `heardAt` (when it last heard from the
+    // server) is given, otherwise as shown by the server, which replaces the history. Undefined fields
+    // are not sent at all, so they are skipped.
     const remember = (model: T, fields: Partial<T>, heardAt?: number) => {
         let known = knownValues.get(model);
         if (!known) knownValues.set(model, (known = new Map<string, KnownValue[]>()));
@@ -668,16 +568,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         }
     };
 
-    // What is kept of a field's values, oldest first, when this client last heard from the server at
-    // `heardAt`. The server's latency probe comes every 100 ms, so a connection that dies stops
-    // working at most about that long after `heardAt`, and the last value that reached the server,
-    // the one its answer after the reconnect has, was sent shortly before or after `heardAt`. Every
-    // value sent later went into the dead link, one for each key typed while Socket.IO takes up to
-    // most of a minute to notice, and only the newest of those counts: it is what the server should
-    // have. So what is kept is the latest KNOWN_VALUES_KEPT values up to `heardAt`, the first
-    // KNOWN_VALUES_KEPT after it, and the newest. While the connection works, this client hears from
-    // the server all the time, and a value dropped from in between was replaced by a later one that
-    // reached the server as well.
+    // Trims a field's values (oldest first) to the latest KNOWN_VALUES_KEPT up to `heardAt`, the first
+    // KNOWN_VALUES_KEPT after it, and the newest. The server's latency probe comes every 100 ms, so the
+    // connection died about when `heardAt` was: the last value that reached the server was sent around
+    // then, and later ones went into the dead link, where only the newest counts.
     const keepKnown = (values: KnownValue[], heardAt: number): KnownValue[] => {
         const split = values.findIndex(v => v.at > heardAt);
         if (split < 0) return values.slice(-KNOWN_VALUES_KEPT);
@@ -686,21 +580,15 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return [...values.slice(0, split).slice(-KNOWN_VALUES_KEPT), ...after.slice(0, KNOWN_VALUES_KEPT), ...newest];
     };
 
-    // The fields of an own model that an update after asking for it again on a reconnect, before the
-    // answers are over (see takeAnswer), shows with a value they had before the last change this
-    // client sent for them: that change never reached the server. Socket.IO notices a connection
-    // that died without closing (Wi-Fi dropping out, say) only once its ping timeout has run out, and
-    // whatever is sent until then is lost. Applied, the answer undid the change on this client alone,
-    // and nobody else ever saw it; so for these fields, the value this client has is kept and sent
-    // again instead.
+    // Fields of an own model that an update in the reconnect round shows with a value from before this
+    // client's last change: that change never reached the server (Socket.IO loses what is sent into a
+    // dead connection until its ping timeout). Applied, the update would revert it on this client only,
+    // so the value is kept and sent again.
     //
-    // Any other value is applied as it always was: one the field never had here is another client's,
-    // set while this one was away, and so is one the server showed again after this client's last
-    // change for the field. An earlier value counts only while it was still the latest at most
-    // KNOWN_VALUES_MS before the outage, counted back from when this client last heard from the
-    // server rather than from now, since Socket.IO may take most of a minute to notice that it no
-    // longer does: the change that replaced it any earlier arrived for certain, so the server showing
-    // it again means another client set it again.
+    // Any other value is applied: one the field never had is another client's, and so is one shown again
+    // after this client's last change. An earlier value counts only if it was still current
+    // KNOWN_VALUES_MS before the outage, counted from lastHeardBeforeOutage since Socket.IO notices the
+    // outage late: a change that replaced it earlier arrived for certain.
     const lostChanges = (model: T, modelData: Partial<T>, held: string[]): string[] => {
         const known = knownValues.get(model);
         if (!known) return [];
@@ -729,9 +617,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return Object.fromEntries(Object.entries(modelData).filter(([key]) => !drop.has(key))) as Partial<T>;
     };
 
-    // A change SyncModel has not reported yet is left as it is: the update was made before the server
-    // had the change, which reaches the server after it. Applied over it, the update undid the
-    // change, and the report sent the update's value in its place.
+    // Fields with a change SyncModel has not reported yet keep their value: the update predates the
+    // change, and applying it would make the report send the update's value instead.
     const applyUpdate = (model: T | undefined, modelData: Partial<T>) => {
         if (model) {
             const unsent = [...(changesToSend.get(model) ?? [])];
@@ -776,8 +663,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return held;
     };
 
-    // `modelData` without the fields that `changes` - property names, as SyncModel reports them -
-    // are sent as.
+    // `modelData` without the fields that the property names in `changes` are sent as.
     const withoutChanges = (modelData: Partial<T>, model: T, changes: string[]): Partial<T> => {
         if (changes.length === 0) return modelData;
         const changed = new Set(Object.keys(toJsonOf(model, changes)).filter(key => key !== 'id'));
@@ -790,9 +676,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         forget(id, model);
     };
 
-    // A model this client deleted: gone from the list and from everything waiting for it, as for a
-    // delete from another client, and deleted on the server, which tells every other client. Only
-    // the instance listed for the id stands for it: one registerModel replaced no longer does.
+    // Deletes a model here as for a remote delete, then on the server. Ignored unless it is the
+    // instance listed for its id: a model replaced by registerModel no longer stands for it.
     const deleteHere = (model: T) => {
         if (models.value.find(m => m.id === model.id) !== model) return;
         rememberDeletedHere(model.id);
@@ -808,11 +693,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         askedAfterOutage.delete(id);
         models.next(models.value.filter(m => m.id !== id));
 
-        // A request for an own model can be answered with model::delete instead of the model: the
-        // server's answer for one another client deleted while this client was away. That settles
-        // the model as much as an update would, and after a reconnect, once every own model is
-        // settled, everything else is still to be asked for. Left waiting, the id kept that from
-        // ever happening, and every other model stayed as it was before the outage.
+        // model::delete can answer a request for an own model (another client deleted it during an
+        // outage). That settles the model like an update, so catching up must not keep waiting for it.
         endConfirmation(id);
         const answerEnd = answerMayFollow.get(id);
         answerMayFollow.delete(id);
@@ -825,19 +707,12 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         }
     };
 
-    // The server may already have a model with this id: one another client created, or this
-    // client before the page was reloaded, kept while another client of the app stayed connected.
-    // Sending the model in full straight away overwrote that copy on the server and every other
-    // client, while the answer to the request for every model, already on its way, overwrote this
-    // client's copy with the old one, so the two ended up apart. So the model is asked for by id
-    // first, the way Unity's SyncBehaviour does it (see askFor): what the server has wins, and the
-    // model is sent in full only when the server has nothing for it.
+    // The server may already have a model with this id (created by another client, or by this one before
+    // a reload). So the model is asked for by id first, as Unity's SyncBehaviour does (see askFor): what
+    // the server has wins, and the full model is sent only if it has nothing.
     //
-    // The id can also be listed already: as the copy the server told this client about, or as
-    // another instance registered earlier. Both used to stay, and every later update for the id went
-    // to whichever came first, so the instance registered last never received one. Now the instance
-    // registered last replaces the listed one, in place, and the listed one is ended with detach():
-    // it no longer sends its changes. Registering the instance already listed does nothing.
+    // If the id is already listed, from a remote update or an earlier instance, the new instance replaces
+    // it in place and the listed one is detached. Registering the listed instance does nothing.
     const registerModel = (model: T) => {
         const listed = models.value.find(m => m.id === model.id);
         if (listed === model) return;
@@ -848,16 +723,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             );
         }
 
-        // Whether a change is held back is decided as it is made, not once SyncModel reports it
-        // 1 ms later: an answer that came in between was applied over it, and the report then sent
-        // the server's old value in its place, to every client.
+        // Hold-back is decided when the change is made, not when SyncModel reports it 1 ms later: an answer
+        // arriving in between would be applied over it.
         //
-        // Held back until the server has answered for the model, and then sent on top of what it
-        // has: a change made since registering (before `new Colibri()` included), or after a
-        // reconnect but before the answer, which the answer would otherwise undo. Also one made
-        // while disconnected, which Socket.IO would buffer and send on the reconnect ahead of the
-        // request for the model: to a server that had forgotten the model, that change alone
-        // became all of it, the answer had fields in it, and the rest was never sent again.
+        // Held until the server has answered for the model, then sent on top of what it has: changes made
+        // before `new Colibri()`, or after a reconnect but before the answer, would otherwise be undone by it.
+        // Also changes made while disconnected: Socket.IO sends them on reconnect ahead of the model's
+        // request, and to a server that forgot the model they would become all of it.
         const mustHold = () => !Colibri.getInstance(false) || disconnected || awaitingAnswer.has(model.id);
         model.modelChanges.subscribe(change => {
             if (mustHold()) holdChanges(model, [change]);
@@ -873,13 +745,12 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
                     else sendUpdate(colibri, model, toJsonOf(model, changes));
                 }
 
-                // A change of a model another client created made the list emit, one of this
-                // client's own did not: a page that renders the list never showed it. Held back
-                // or sent, the model has changed here.
+                // Emit for own models too, held back or sent: the model has changed here, and a page rendering the
+                // list has to show it.
                 if (models.value.includes(model)) models.next([...models.value]);
             },
-            // delete() and detach() end the stream: this client sends nothing more for the model - so
-            // neither a held change, nor the whole model again after a reconnect.
+            // delete() and detach() end the stream: nothing more is sent for the model, neither held changes
+            // nor the whole model after a reconnect.
             complete: () => {
                 ownModels.delete(model);
                 heldChanges.delete(model);

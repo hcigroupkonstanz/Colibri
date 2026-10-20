@@ -9,36 +9,28 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
     internal delegate byte[] VoiceFrameEncoder(byte[] pcm, int frameSamples, out string error);
 
     /// <summary>
-    /// Cuts recorded audio into the frames voice packets carry. A packet's frameSize counts
-    /// samples at the voice server's sampling rate, so the audio is resampled to that rate first,
-    /// as one stream, and then cut into frames of exactly <see cref="FrameSamples"/> samples. What
-    /// does not fill a frame waits for the next chunk. VoiceBroadcast used to cut frames at the
-    /// microphone's rate and resample each on its own: 20 ms at 44.1 kHz was 880 samples, and 958
-    /// after resampling, a frame size Opus refuses.
-    ///
-    /// Every frame is encoded once, sent, and gone, whatever the encoder does. VoiceBroadcast kept
-    /// a frame Opus failed on and tried it again in the same loop, and as it failed every time,
-    /// the app hung.
-    ///
-    /// Free of any <c>UnityEngine</c> dependency, so plain NUnit EditMode tests exercise it.
+    /// Cuts recorded audio into frames of exactly <see cref="FrameSamples"/> samples at the voice
+    /// server's sampling rate, which is what a packet's frameSize counts. The audio is resampled
+    /// as one stream before it is cut; what does not fill a frame waits for the next chunk. Every
+    /// frame is encoded and sent once, whatever the encoder does. No <c>UnityEngine</c>
+    /// dependency, so plain NUnit EditMode tests cover it.
     /// </summary>
     internal sealed class VoiceFramer
     {
         /// <summary>
         /// The longest frame a voice packet carries as PCM: a UDP datagram holds 65507 bytes, the
-        /// header and 2 bytes per sample. It also keeps the frame size within the header's i16.
+        /// header and 2 bytes per sample. Also keeps the frame size within the header's i16.
         /// </summary>
         internal const int MaxFrameSamples = (65507 - VoicePacketCodec.HeaderSize) / 2;
 
-        // What Opus encodes (RFC 6716): these sampling rates, and frames of 2.5, 5, 10, 20, 40 or
-        // 60 ms, here in half milliseconds. It refuses every other frame.
+        // What Opus encodes (RFC 6716): these rates, and frames of 2.5, 5, 10, 20, 40 or 60 ms
+        // (in half milliseconds here). Anything else is refused.
         private static readonly int[] OpusSamplingRates = { 8000, 12000, 16000, 24000, 48000 };
         private static readonly int[] OpusFrameHalfMilliseconds = { 5, 10, 20, 40, 80, 120 };
 
-        // Null when the audio is recorded at the server's rate already.
+        // Null when the recording rate is the server's rate.
         private readonly StreamingResampler resampler;
 
-        // Null for PCM.
         private readonly VoiceFrameEncoder encoder;
 
         private readonly Action<short, Codec, byte[]> send;
@@ -55,8 +47,8 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         /// <param name="frameSamples">The samples per frame, at <paramref name="serverRate"/>.</param>
         /// <param name="encoder">Encodes each frame; null sends PCM.</param>
         /// <param name="send">
-        /// Sends a frame: its sample count, its codec and its data. The PCM data is reused for the
-        /// next frame, so <paramref name="send"/> must not keep it.
+        /// Sends a frame: its sample count, codec and data. The PCM data is reused for the next
+        /// frame, so <paramref name="send"/> must not keep it.
         /// </param>
         /// <param name="reportEncodeFailure">Gets the reason the first time the encoder fails.</param>
         internal VoiceFramer(int recordingRate, int serverRate, int frameSamples, VoiceFrameEncoder encoder,
@@ -78,7 +70,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
         internal int FrameSamples => frame.Length;
 
-        /// <summary>The samples, at the server's rate, waiting for a frame to fill. Always fewer than <see cref="FrameSamples"/>.</summary>
+        /// <summary>The samples, at the server's rate, waiting for a frame to fill. Fewer than <see cref="FrameSamples"/>.</summary>
         internal int PendingSamples => frameFill;
 
         /// <summary>The samples in a frame of <paramref name="frameMilliseconds"/> at <paramref name="samplingRate"/>, rounded down.</summary>
@@ -86,9 +78,8 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             => (int)Math.Max(0, Math.Min(int.MaxValue, (long)samplingRate * frameMilliseconds / 1000));
 
         /// <summary>
-        /// The sampling rate to record at: the server's if the microphone takes it, or else the
-        /// nearest one it takes, which needs the least resampling. Unity reports a microphone
-        /// that takes any rate as taking 0 to 0 Hz.
+        /// The sampling rate to record at: the server's if the microphone takes it, else the
+        /// nearest one it takes. Unity reports a microphone that takes any rate as 0 to 0 Hz.
         /// </summary>
         internal static int RecordingRate(int minSupported, int maxSupported, int serverRate)
         {
@@ -140,7 +131,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
                 if (frameFill == frame.Length)
                 {
-                    // Gone before it is sent, so that not even a send that throws brings it back.
+                    // Reset before sending, so a send that throws does not leave the frame to be sent again.
                     frameFill = 0;
                     SendFrame();
                 }
@@ -159,8 +150,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 {
                     encoded = encoder(pcm, frame.Length, out error);
                 }
-                // One that throws, such as a call into a native library that is not there, fails
-                // the frame like one that returns null.
+                // A throwing encoder (e.g. a missing native library) fails the frame like a null return.
                 catch (Exception e)
                 {
                     encoded = null;
@@ -180,15 +170,13 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 }
             }
 
-            // A frame the encoder fails on goes out as PCM rather than not at all. The codec is
-            // per packet: VoiceReceiver decodes only the packets marked Opus and plays the others
-            // as PCM, whether or not its Use Opus Codec is on, and the server passes packets on
-            // unchanged. The frame costs more bandwidth, and nobody hears a gap.
+            // A frame the encoder fails on goes out as PCM instead of being dropped. The codec is
+            // per packet: VoiceReceiver decodes by it, whatever its Use Opus Codec says.
             send((short)frame.Length, Codec.PCM, pcm);
         }
 
-        // Mono 16-bit little-endian, as SamplingUtility.ConvertFloatToShortBytes writes it, but
-        // clamped: past full scale, the cast to short wraps around to a click of the other sign.
+        // As SamplingUtility.ConvertFloatToShortBytes, but clamped: past full scale the cast to
+        // short wraps to the other sign.
         private static void ToPcm16(float[] samples, byte[] bytes)
         {
             for (var i = 0; i < samples.Length; i++)

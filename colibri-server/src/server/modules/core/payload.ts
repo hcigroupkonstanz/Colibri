@@ -1,12 +1,8 @@
-// How deeply a payload may nest. JSON.parse takes any depth, but JSON.stringify and Socket.IO's
-// encoder recurse, and a few thousand levels overflow the stack wherever a payload is written out
-// again: in the TCP worker that ended the thread and dropped every Unity client, on a Socket.IO
-// listener it ended the whole server. Colibri's own values (vectors, colors, a [Sync] JObject)
-// nest a handful of levels.
+// JSON.parse accepts any depth, but JSON.stringify and Socket.IO's encoder recurse and overflow the
+// stack at a few thousand levels, so deeper payloads are refused. Colibri's own values nest a handful.
 export const MAX_PAYLOAD_DEPTH = 100;
 
-// Without recursing itself, so it is safe on exactly the values it is there to catch. Binary data
-// (a Buffer from Socket.IO, say) counts as one value: walking it byte by byte is pointless.
+// Iterative, so it is safe on the values it exists to catch. Binary data is a leaf, not walked.
 export const nestsDeeperThan = function (value: unknown, maxDepth: number = MAX_PAYLOAD_DEPTH): boolean {
     if (typeof value !== 'object' || value === null) return false;
     const pending: Array<{ node: object; depth: number }> = [{ node: value, depth: 1 }];
@@ -21,20 +17,15 @@ export const nestsDeeperThan = function (value: unknown, maxDepth: number = MAX_
     return false;
 };
 
-// Wraps a NetworkMessage's payload in whichever representation the producer already
-// had (raw bytes off the TCP wire, wire string, or parsed value from Socket.IO) and
-// memoizes the others on first request. Same-transport relaying (TCP->TCP, web->web)
-// then costs zero JSON work and - for TCP->TCP - never even transcodes the payload to
-// a JS string; only a genuine cross-transport hop, or a hook that inspects the
-// payload, pays for decoding it.
+// A NetworkMessage's payload in the form the producer had (bytes, string or parsed value); the
+// others are derived on first use and cached. A same-transport relay does no JSON work, and
+// TCP to TCP never decodes to a string.
 export class Payload {
     private bytes: Buffer | undefined;
     private raw: string | undefined;
     private value: unknown;
     private valueResolved: boolean;
-    // Negative cache for asValue(): a payload that isn't JSON (e.g. plain text off the
-    // TCP wire) is relayed over and over, and re-running JSON.parse to re-throw the same
-    // error on every broadcast is exactly the repeated work this class exists to remove.
+    // Caches a failed asValue() so a non-JSON payload is parsed once, not on every relay.
     private parseError: Error | undefined;
 
     private constructor(bytes: Buffer | undefined, raw: string | undefined, value: unknown, valueResolved: boolean) {
@@ -56,8 +47,6 @@ export class Payload {
         return new Payload(undefined, undefined, value, true);
     }
 
-    // Only decodes to utf8 if nothing has requested a byte view yet; a TCP->TCP relay
-    // that never calls asString()/asValue() never pays for this at all.
     public asBytes(): Buffer {
         if (this.bytes === undefined) {
             this.bytes = Buffer.from(this.asString(), 'utf8');
@@ -65,11 +54,8 @@ export class Payload {
         return this.bytes;
     }
 
-    // JSON.stringify(undefined) returns undefined, not a string - so a payload-less
-    // message (Payload.fromValue(undefined), which is what a Socket.IO event with no
-    // `payload` key produces) has to serialize to an empty body. Without the `?? ''` this
-    // returned undefined despite its type, never memoized, and made asBytes() throw
-    // ERR_INVALID_ARG_TYPE on the way out to a TCP client.
+    // JSON.stringify(undefined) is undefined, so a payload-less message (a Socket.IO event without
+    // `payload`) serializes to '' instead.
     public asString(): string {
         if (this.raw === undefined) {
             this.raw = this.bytes !== undefined ? this.bytes.toString('utf8') : (JSON.stringify(this.value) ?? '');
@@ -77,8 +63,7 @@ export class Payload {
         return this.raw;
     }
 
-    // Throws for a payload that isn't valid JSON; callers that relay across transports
-    // (SocketIOServer.resolvePayload) fall back to asString() instead.
+    // Throws if the payload is not JSON; SocketIOServer.resolvePayload falls back to asString().
     public asValue<T = unknown>(): T {
         if (this.parseError !== undefined) throw this.parseError;
 

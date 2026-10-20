@@ -13,37 +13,25 @@ public struct VoicePacket
 
 namespace HCIKonstanz.Colibri.Networking
 {
-    /// <summary>
-    /// Encoder and decoder for voice packets (UDP), all integers little-endian:
-    /// <code>
-    /// [i16 id][i16 sequence][i16 frameSize][u8 version and codec][u32 appId][data]      11-byte header
-    ///   version and codec   HeaderVersion in the high 4 bits, the Codec in the low 4 bits
-    ///   appId               AppId(the app the TCP handshake sends for the App Name)
-    /// </code>
-    /// The server passes a packet on only to the voice clients with the same app id. The
-    /// authority for this format is <c>colibri-server/src/server/modules/web/voice-packet.ts</c>
-    /// and <c>colibri-server/docs/dev/protocol.md</c>.
-    ///
-    /// Free of any <c>UnityEngine</c> dependency, so plain NUnit EditMode tests exercise it.
-    /// </summary>
+    /// <summary>Encodes and decodes the UDP voice packets that the Colibri server relays.</summary>
     public static class VoicePacketCodec
     {
+        // No UnityEngine references, so the NUnit EditMode tests can call it directly.
+        // Little-endian: i16 id, i16 sequence, i16 frameSize, u8 version and codec, u32 appId, data.
+        // Mirrors colibri-server's voice-packet.ts, which relays a packet only to clients with the same appId.
         public const int HeaderSize = 11;
 
-        /// <summary>
-        /// Colibri 1.x had no version: its 7-byte header ends with the codec (0 or 1) where the
-        /// version and codec are now, so its packets read as version 0.
-        /// </summary>
+        /// <summary>The header version this codec writes. Colibri 1.x packets read as version 0 and TryDecode rejects them.</summary>
         public const int HeaderVersion = 2;
 
         private const int VersionAndCodecOffset = 6;
         private const int AppIdOffset = 7;
 
-        // 32-bit FNV-1a, as the server computes it.
+        // Must match voiceAppId in colibri-server (32-bit FNV-1a).
         private const uint FnvOffsetBasis = 0x811C9DC5;
         private const uint FnvPrime = 0x01000193;
 
-        // GetBytes never emits a BOM, so the shared Encoding.UTF8 instance is safe here.
+        // GetBytes writes no BOM, so the hash covers only the name's bytes.
         private static readonly Encoding Utf8 = Encoding.UTF8;
 
         /// <summary>The app id of <paramref name="appName"/>: the 32-bit FNV-1a hash of its UTF-8 bytes.</summary>
@@ -55,7 +43,7 @@ namespace HCIKonstanz.Colibri.Networking
             return hash;
         }
 
-        /// <summary>Encodes a voice packet into a single pre-sized allocation.</summary>
+        /// <summary>Encodes a voice packet into a new byte array, ready to send over UDP.</summary>
         public static byte[] Encode(uint appId, short id, short sequence, short frameSize, Codec codec, ReadOnlySpan<byte> data)
         {
             var packet = new byte[HeaderSize + data.Length];
@@ -69,8 +57,7 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Decodes a received datagram. False for one shorter than the header or with another
-        /// header version, such as a packet from a Colibri 1.x client.
+        /// Decodes a received datagram, or returns false if it is null, shorter than the header, or has another header version.
         /// </summary>
         public static bool TryDecode(byte[] bytes, out uint appId, out VoicePacket packet)
         {

@@ -3,8 +3,7 @@ import { ConnectionPool } from './connection-pool.js';
 import { hrtime } from 'process';
 import { SocketIOServer } from '../networking/index.js';
 
-// 125 s of the 100 ms pings: the admin UI's latency chart shows the last 120 s, and asks for them
-// when it opens.
+// 125 s of 100 ms pings: the admin UI asks for the chart's 120 s, plus the 2 s it slides, when it opens.
 const MAX_LATENCY_SAMPLES = 1250;
 
 export class MeasureLatency extends Service {
@@ -14,10 +13,9 @@ export class MeasureLatency extends Service {
     public constructor(pool: ConnectionPool, frontendConnection: SocketIOServer) {
         super();
 
-        // Send out latency message. TCP clients get their ping merged into the worker's
-        // own 100ms heartbeat frame instead (see TCPServerWorker.handleHeartbeat /
-        // handlePong) - pinging them here too would double idle packet rate for no
-        // reason, so this only targets Socket.IO (web) clients directly.
+        // Send out latency message
+        // TCP clients are pinged by the worker's heartbeat frame (TCPServerWorker.handleHeartbeat,
+        // handlePong); a second ping here would double their idle packets. This only reaches Socket.IO clients.
         setInterval(() => {
             const now = hrtime.bigint();
             frontendConnection.broadcast({
@@ -37,16 +35,11 @@ export class MeasureLatency extends Service {
 
             try {
                 const ping = m.payload?.asValue<number | string>();
-                // Defaulting a missing timestamp to 0 turned every payload-less 'latency'
-                // message into a multi-million-millisecond sample in the ring buffer and
-                // the admin UI's chart. There is nothing to measure here, so skip it.
+                // No timestamp, nothing to measure.
                 if (ping === undefined || ping === null || ping === '') return;
 
-                // hrtime nanoseconds can exceed Number.MAX_SAFE_INTEGER, in which case
-                // JSON.parse hands back a rounded float that BigInt() rejects outright -
-                // truncating keeps the sample instead of discarding it over a few nanos.
-                // Anything but a finite number or a string of up to 20 digits is no timestamp:
-                // BigInt() of a string of millions of digits blocked the main thread for seconds.
+                // Timestamps can exceed MAX_SAFE_INTEGER and then arrive as a rounded number; truncate it, BigInt() throws on a fraction.
+                // Reject anything else; BigInt() of a huge digit string blocks the main thread.
                 if (typeof ping === 'number' ? !Number.isFinite(ping) : typeof ping !== 'string' || !/^\d{1,20}$/.test(ping)) return;
                 const pingNanos = typeof ping === 'number' ? BigInt(Math.trunc(ping)) : BigInt(ping);
                 const now = hrtime.bigint();

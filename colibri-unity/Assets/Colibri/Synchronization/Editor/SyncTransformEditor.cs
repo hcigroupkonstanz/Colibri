@@ -7,8 +7,8 @@ using HCIKonstanz.Colibri.Core;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
-    // Without it, Unity shows no Inspector for several selected objects at all.
     [CustomEditor(typeof(SyncTransform))]
+    // Without this attribute, Unity shows no Inspector when several objects are selected.
     [CanEditMultipleObjects]
     public class SyncTransformEditor : Editor
     {
@@ -32,10 +32,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             {
                 if (GUILayout.Button("Generate ID"))
                 {
-                    // Through SerializedObject, which records an override on a prefab instance, and
-                    // undo. Set on the component and marked dirty, the id of a prefab instance was
-                    // not saved: it was back to the prefab's on Play or when the scene was reloaded,
-                    // so placed copies of one prefab shared an empty id. One id per selected object.
+                    // Through SerializedObject, which records the id as a prefab override and as an undo step.
                     foreach (var selected in targets)
                     {
                         var serialized = new SerializedObject(selected);

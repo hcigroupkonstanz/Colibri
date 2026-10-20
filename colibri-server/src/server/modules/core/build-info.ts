@@ -1,33 +1,28 @@
-// Which source the server was built from: the git commit, for builds with their own changes. `npm run
-// build` records it in dist/server/build-info.json (see write-build-info.ts), and the server reads it
-// at startup.
+// The commit the server was built from. `npm run build` writes it to dist/server/build-info.json
+// (write-build-info.ts), and main.ts reads it at startup.
 import { readFileSync } from 'fs';
 
-// What the build info file holds.
 export interface BuildInfoFile {
-    // The full hash of the commit, or null if the build had no git information.
+    // Null if no commit was found. dirty covers colibri-server only; builtAt is ISO 8601.
     commit: string | null;
-    // Whether colibri-server had changes that were not committed.
     dirty: boolean;
-    // When it was built, as an ISO 8601 time.
     builtAt: string;
 }
 
-// The build info as the server uses it.
 export interface BuildInfo {
     commit: string | null;
     dirty: boolean;
-    // Date.now() of the build; null without a build info file.
+    // Date.now() at build time; null when unknown.
     builtAt: number | null;
 }
 
 export const UNKNOWN_BUILD: BuildInfo = { commit: null, dirty: false, builtAt: null };
 
-// How much of the hash the log and the admin UI show: unique in this repository for a long time,
-// and git takes it wherever it takes a hash.
+// Hash digits shown in the log. Unique in this repository for a long time, and git takes them wherever
+// it takes a hash. The admin UI keeps its own copy (server.component.ts).
 export const SHORT_COMMIT_LENGTH = 10;
 
-// A SHA-1 hash, or a SHA-256 one, in full or cut short, as git prints them.
+// 7 to 64 hex digits: a short hash as git prints it, up to a SHA-256 one.
 const COMMIT_HASH = /^[0-9a-f]{7,64}$/;
 
 const commitOf = function (value: unknown): string | null {
@@ -40,16 +35,16 @@ const isTrue = function (value: string | undefined): boolean {
     return [ 'true', '1', 'yes' ].includes(value?.trim().toLowerCase() ?? '');
 };
 
-// Runs git with these arguments in colibri-server and returns what it prints; throws if git is not
-// installed, the directory is not a git checkout, or git fails.
+// Runs git in colibri-server and returns its output. Throws when git is missing, there is no checkout,
+// or git fails.
 export type Git = (...args: string[]) => string;
 
 /**
- * What `npm run build` records. The commit comes from COLIBRI_COMMIT, and COLIBRI_COMMIT_DIRTY
- * ('true'), if set: a Docker build has no .git to ask, and passes them as build arguments. Else from
- * git, with any change in colibri-server not committed, untracked files included, making it dirty;
- * the other components of the repository are not part of the server. Else there is none. `source`
- * says which, for the build's output.
+ * Records the commit, and whether colibri-server has uncommitted changes, for `npm run build`.
+ * If COLIBRI_COMMIT is set, it is the only source, and COLIBRI_COMMIT_DIRTY gives the dirty flag: a
+ * Docker build has no .git, so it gets both as build arguments. A value that is not a hash gives no
+ * commit. Otherwise git is asked about colibri-server only, untracked files included, and a failed
+ * `git status` counts as clean. `source` names where the commit came from.
  */
 export const collectBuildInfo = function (env: NodeJS.ProcessEnv, git: Git, now = new Date()): { info: BuildInfoFile; source: string } {
     const builtAt = now.toISOString();
@@ -79,8 +74,9 @@ export const collectBuildInfo = function (env: NodeJS.ProcessEnv, git: Git, now 
     return { info: { commit, dirty, builtAt }, source: 'git' };
 };
 
-// The build info file. Without one (a build by tsc alone, or `npm run watch`), or with a field
-// missing or malformed, that part is unknown.
+// A tsc-only build writes no file, so without one everything is unknown. `npm run watch` deletes the
+// old file, which would name an earlier build's commit. A bad commit or builtAt is unknown, and dirty
+// counts only with a commit.
 export const readBuildInfo = function (path: string): BuildInfo {
     let fields: Record<string, unknown>;
     try {
@@ -96,7 +92,6 @@ export const readBuildInfo = function (path: string): BuildInfo {
     return { commit, dirty: commit !== null && fields['dirty'] === true, builtAt: Number.isFinite(builtAt) ? builtAt : null };
 };
 
-// "commit 1a2b3c4d5e", with " (with uncommitted changes)" for a dirty build, or "commit unknown".
 export const describeBuild = function (build: BuildInfo): string {
     if (build.commit === null) return 'commit unknown (built without git information)';
     return `commit ${build.commit.slice(0, SHORT_COMMIT_LENGTH)}${build.dirty ? ' (with uncommitted changes)' : ''}`;

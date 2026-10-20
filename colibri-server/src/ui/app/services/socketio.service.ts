@@ -21,7 +21,8 @@ export class SocketIOService {
 
     private socket: io.Socket<any, any>;
     private listeners: { [name: string]: Subject<any> } = {};
-    // coalesces NgZone re-entry from bursty socket events; only needed while zone.js CD is active
+    // Throttled empty zone.run() that triggers change detection after socket events.
+    // Only needed while zone.js change detection is active.
     private readonly changeTrigger$ = new Subject<void>();
 
     private readonly _state = signal<ConnectionState>('connecting');
@@ -33,16 +34,14 @@ export class SocketIOService {
 
     private readonly reconnectSource = new Subject<Reconnect>();
     /**
-     * Each time the connection is back after it was lost. The server may have restarted, and it
-     * forgets a client's subscriptions when it goes, so whatever was asked for is asked again.
+     * Emits each time the connection is back after a loss. Subscribers re-request their data: the
+     * server forgets a client's subscriptions when its connection drops.
      */
     public readonly reconnected$ = this.reconnectSource.asObservable();
 
     constructor() {
-        // Must match PROTOCOL_VERSION in src/server/modules/networking/protocol.ts. The admin
-        // UI is exempt from the disconnect-on-mismatch check (it ships with the server, so it
-        // can only ever be out of step by mistake), but a stale value here still logs a
-        // warning on every page load.
+        // Keep in step with PROTOCOL_VERSION (src/server/modules/networking/protocol.ts). The
+        // server only warns on a mismatch from the admin UI, but it does so on every connect.
         this.socket = io.connect('', { query: { app: 'colibri', version: '2' } });
 
         this.socket.on('connect', () => {
@@ -58,7 +57,7 @@ export class SocketIOService {
         this.socket.on('disconnect', (reason: string) => {
             this._state.set('reconnecting');
             this._lostAt.set(Date.now());
-            // Socket.IO retries by itself unless the server closed the connection on purpose.
+            // socket.io-client does not retry after a server-initiated disconnect.
             if (reason === 'io server disconnect') {
                 this.socket.connect();
             }

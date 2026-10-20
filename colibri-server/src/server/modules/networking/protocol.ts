@@ -1,4 +1,4 @@
-// v3 TCP wire protocol (breaking change from the v1 flatbuffer framing).
+// TCP framing:
 //
 // [u32 LE totalLength][u8 type][body]
 //   totalLength counts every byte after the length field itself (type + body).
@@ -6,10 +6,6 @@
 //   type 0x01  handshake   body: utf8 "version::app::name"
 //   type 0x02  message     body: [u16 LE channelLen][channel]
 //                               [u16 LE commandLen][command][payload bytes]
-//
-// Fixed offsets mean ingress parsing is readUInt32LE/readUInt8 with no string
-// scanning, and length validation is a real bounds check instead of Number.isFinite
-// on a hand-parsed ASCII string.
 
 export enum FrameType {
     Heartbeat = 0x00,
@@ -25,38 +21,26 @@ const HEARTBEAT_BODY_SIZE = 8;
 // Channel and command are length-prefixed with a u16, so anything longer is unrepresentable.
 export const MAX_FIELD_LENGTH = 0xffff;
 
-// The largest frame either side will accept. Shared by the encoder and the default
-// FrameReader limit so the server can never emit a frame its own parser would reject.
+// Shared by the encoder and the default FrameReader limit, so the server never emits a frame
+// its own parser would reject.
 export const MAX_FRAME_LENGTH = 1024 * 1024 * 5;
 
-// The wire protocol this server speaks, and the version string every client is required
-// to announce in its handshake. Single source of truth for both transports: the TCP
-// handshake body's `version` field and the Socket.IO `version` handshake query.
+// The version every client announces in its handshake: the TCP handshake body's `version` and the
+// Socket.IO `version` query. There is no negotiation; a client announcing another version is
+// refused with protocol::rejected.
 //
-// This is deliberately not a negotiation. There is one supported version at a time, and a
-// client announcing anything else is refused rather than downgraded - the framing changed
-// incompatibly between v1 and the current protocol, and there is no subset both can speak.
-// The point of the check is that the refusal is *legible*: without it a mismatched client
-// reconnects forever against a server that logs nothing unusual.
-//
-// THIS IS NOT THE RELEASE VERSION, and must not be bumped alongside one. It identifies the wire
-// format only: 2.0.0, 2.0.1 and 2.1.0 all speak '2' and interoperate freely, in any combination
-// of client and server. Bump it only when a change would make an existing client misread the
-// bytes on the wire - doing so refuses every deployed client at once, which is the entire cost
-// and the entire point.
+// Not the release version: 2.0.0, 2.0.1 and 2.1.0 all speak '2'. Bump it only when a change makes
+// existing clients misread the wire, since that refuses every deployed client.
 export const PROTOCOL_VERSION = '2';
 
-// The media type of the REST store, for the bodies of its requests and answers. It carries the
-// protocol version, so that a reverse proxy in front of servers of different versions on one host
-// name can route the store's requests by their Accept header, as it routes Socket.IO by the
-// handshake's version query.
+// Media type of the REST store's requests and answers. It carries the protocol version so a
+// reverse proxy in front of servers of different versions can route by Accept header, as it
+// routes Socket.IO by the handshake's version query.
 export const REST_MEDIA_TYPE = `application/vnd.colibri.v${PROTOCOL_VERSION}+json`;
 
-// The channel and command a refusal is delivered on. A plain message frame rather than a
-// server->client handshake frame, so the same notification works over Socket.IO, and so it
-// can carry a reason. Safe against older clients: Unity's Sync command switch has no
-// default case and ignores unknown commands, and the web client surfaces it as an ordinary
-// message.
+// The channel of the server's own messages, and the command of a refusal. A refusal is a plain
+// message frame rather than a handshake frame, so it works over Socket.IO and can carry a reason.
+// Colibri 1.x web clients deliver it like any other message.
 export const COLIBRI_CHANNEL = 'colibri';
 export const PROTOCOL_REJECTED_COMMAND = 'protocol::rejected';
 
@@ -74,22 +58,11 @@ export const protocolRejection = function (clientVersion: string): ProtocolRejec
     };
 };
 
-// Sent to every Socket.IO client whose version was accepted, immediately on connect.
-//
-// This exists so a client can tell an out-of-date *server* apart from a current one, which the
-// version check alone cannot do: the check runs on the server, so a server too old to have it
-// neither refuses anyone nor says what it speaks. Announcing the version unprompted turns that
-// into something a client can wait for, and its absence into a usable signal.
-//
-// It has to be its own message rather than an inference from existing traffic. The obvious
-// candidate - the 100ms `latency` broadcast - was added in colibri-server 1.2.0, so keying on it
-// silently accepts every 1.2.x and 1.3.x server as current. Nothing else a web client can observe
-// distinguishes them: the Socket.IO envelope, the `client::connected` payload and the relay
-// behaviour are all identical.
-//
-// TCP clients get nothing here, and need nothing: the framing itself changed incompatibly in
-// 2.0.0, so a pre-2.0.0 server is already unmistakable to them - for the same reason that a
-// refusal cannot reach a client whose framing differs.
+// Sent to every Socket.IO client that was not refused, right on connect. A server that predates
+// the version check refuses no one and announces nothing, so a client treats the absence of this
+// message as an out-of-date server. It is not inferred from existing traffic: the 100 ms `latency`
+// broadcast dates from colibri-server 1.2.0, so 1.2.x and 1.3.x would pass as current.
+// TCP clients need none: a pre-2.0.0 server already fails on the framing.
 export const PROTOCOL_ACCEPTED_COMMAND = 'protocol::accepted';
 
 export interface ProtocolAcceptance {
@@ -102,15 +75,12 @@ export const protocolAcceptance = function (): ProtocolAcceptance {
 
 export class FrameError extends Error {}
 
-// Thrown instead of a plain FrameError when the bytes that failed to parse are the Colibri 1.x
-// framing, so the caller can say *why* rather than log an anonymous bad length.
+// Thrown instead of a plain FrameError when the bytes that failed to parse are the Colibri 1.x framing.
 //
-// 1.x (colibri-server <= 1.3.x, colibri-unity 1.x) started every packet with three NUL bytes, an
-// ASCII header and another NUL: '\0\0\0h\0' for the handshake (then 'version::app::name\0') and
-// '\0\0\0<decimal body length>\0' for a message. Read as this protocol's u32 LE length, those four
-// bytes come to (header byte << 24) - at least 16 MiB, past MAX_FRAME_LENGTH - so a current frame
-// can never start that way and the check cannot misfire on a well-formed stream. A 1.x client's
-// first packet is its handshake, which surfaces as "Invalid frame length: 1744830464" ('h' << 24).
+// 1.x starts every packet with three NUL bytes, an ASCII header and another NUL: '\0\0\0h\0' for
+// the handshake, '\0\0\0<decimal body length>\0' for a message. Read as a u32 LE length, the first
+// four bytes are (header byte << 24), past MAX_FRAME_LENGTH, so a well-formed frame never starts
+// that way. A 1.x handshake shows up as "Invalid frame length: 1744830464" ('h' << 24).
 export class V1FramingError extends FrameError {}
 
 const V1_HANDSHAKE_HEADER = 0x68; // 'h'
@@ -130,26 +100,21 @@ export const TLS_HANDSHAKE_PREFIX_LENGTH = 2;
 const TLS_HANDSHAKE_RECORD = 0x16;
 const TLS_MAJOR_VERSION = 0x03;
 
-// Whether a connection's first bytes start a TLS handshake: every TLS client starts with a handshake
-// record (0x16) of a TLS version 3.x record layer (0x03). Read as this protocol's u32 LE length field,
-// those two bytes make it 790 (0x0316), or more by a multiple of 64 KiB: no handshake frame a client
-// sends is anywhere near that long, so a client that speaks this protocol unencrypted is not mistaken
-// for TLS. Nor is a Colibri 1.x client, which starts with a NUL byte.
+// A TLS client starts with a handshake record (0x16) of a 3.x record layer (0x03). Read as this
+// protocol's u32 LE length, those two bytes are at least 790 (0x0316), and no handshake frame is
+// near that long, so a plaintext client is not mistaken for TLS. A 1.x client starts with a NUL byte.
 export const looksLikeTlsHandshake = function (firstBytes: Buffer): boolean {
     return firstBytes.length >= TLS_HANDSHAKE_PREFIX_LENGTH
         && firstBytes[0] === TLS_HANDSHAKE_RECORD
         && firstBytes[1] === TLS_MAJOR_VERSION;
 };
 
-// Returns a Buffer whose backing ArrayBuffer holds exactly these bytes and nothing else: the
-// input itself when it already does, otherwise a copy outside Node's Buffer pool.
+// Returns a Buffer whose backing ArrayBuffer holds exactly these bytes, copying outside Node's
+// Buffer pool only if it does not already.
 //
-// Every payload crosses the worker_threads boundary by structured clone, and structured clone
-// copies a typed array's *whole* backing ArrayBuffer, not just the bytes the view covers. A small
-// Buffer from Buffer.from(), Buffer.allocUnsafe() and friends is a view into a shared 64 KiB pool
-// slab (Buffer.poolSize on Node 24), so a 30-byte model::update used to be cloned - and kept alive
-// on the receiving thread - as 64 KiB. That alone capped the TCP transport at about half of what
-// it otherwise handles.
+// Structured clone across the worker_threads boundary copies a typed array's whole backing
+// ArrayBuffer, and a small Buffer from Buffer.from() or allocUnsafe() is a view into the shared
+// 64 KiB pool slab (Buffer.poolSize on Node 24), so it would cross as 64 KiB.
 export const ownBytes = function (bytes: Uint8Array): Buffer {
     if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
         return Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes.buffer, 0, bytes.byteLength);
@@ -188,14 +153,10 @@ export interface EncodableMessage {
     payload: Buffer;
 }
 
-// Single pre-sized allocation: no separate flatbuffers.Builder, no TextEncoder, no
-// merged Uint8Array. Payload bytes are copied verbatim - never round-tripped through
-// a JS string - so a byte-verbatim relay never pays a utf8 transcode.
+// The payload is copied verbatim, never through a JS string.
 //
-// Throws FrameError rather than letting Buffer.writeUInt16LE throw ERR_OUT_OF_RANGE:
-// ingress is fully bounds-checked, and egress needs to be too, since a frame the server
-// can't represent (or that exceeds maxFrameLength) must be dropped as one bad message
-// instead of propagating out of the write path.
+// Throws FrameError, not Buffer.writeUInt16LE's ERR_OUT_OF_RANGE, for a channel or command over
+// MAX_FIELD_LENGTH or a frame over maxFrameLength, so the caller can drop that one message.
 export const encodeMessageFrame = function (msg: EncodableMessage, maxFrameLength = MAX_FRAME_LENGTH): Buffer {
     const channel = Buffer.from(msg.channel, 'utf8');
     const command = Buffer.from(msg.command, 'utf8');
@@ -235,12 +196,9 @@ export const encodeMessageFrame = function (msg: EncodableMessage, maxFrameLengt
     return buffer;
 };
 
-// Growable read buffer with read/write cursors, replacing a Buffer.concat per `data`
-// event. In the common case (no fragmentation) consumed frames are dropped by
-// resetting both cursors to 0 - no copy at all. Only a frame split across TCP
-// segments triggers a compaction, and that copy is bounded by the pending leftover
-// (at most one frame's worth), not by total stream length - this is what avoids the
-// O(n^2) cost of Buffer.concat on a long-lived fragmented connection.
+// Growable read buffer with read/write cursors instead of a Buffer.concat per `data` event.
+// Consumed frames are dropped by resetting both cursors to 0, without a copy. Only a frame split
+// across TCP segments compacts, and that copy is bounded by one frame, not by the stream length.
 export class FrameReader {
     private buffer: Buffer;
     private readPos = 0;
@@ -262,22 +220,17 @@ export class FrameReader {
         this.writePos = 0;
     }
 
-    // Appends newly received bytes and returns every complete frame now available.
-    // Throws FrameError on a malformed or oversized frame - callers should treat that
-    // as fatal for the connection, same as the old maxBufferSize kill-switch. The
-    // V1FramingError subclass means the peer is speaking the Colibri 1.x framing.
+    // Appends received bytes and returns every complete frame now available.
+    // Throws FrameError on a malformed or oversized frame, which is fatal for the connection;
+    // V1FramingError means the peer speaks the Colibri 1.x framing.
     //
-    // Deliberately not a generator: the read cursor only advances as frames are decoded,
-    // so a caller that stopped iterating early (or never started) would have left the
-    // reader with a stale cursor and silently re-delivered or dropped bytes. Draining
-    // eagerly makes the cursor state a function of append() alone.
+    // Not a generator: the read cursor advances as frames are decoded, so a caller that stopped
+    // iterating early would leave it stale.
     public append(data: Buffer): DecodedFrame[] {
         this.ensureCapacity(data.length);
         data.copy(this.buffer, this.writePos);
         this.writePos += data.length;
 
-        // A partial frame is the common case on a fragmented stream, so don't allocate a
-        // result array until there is something to put in it.
         let frames: DecodedFrame[] | undefined;
 
         for (;;) {
@@ -290,7 +243,6 @@ export class FrameReader {
                 throw looksLikeV1Frame(this.buffer, this.readPos) ? new V1FramingError(message) : new FrameError(message);
             }
 
-            // totalLength counts everything after the length field itself (type + body).
             const frameLength = LENGTH_FIELD_SIZE + totalLength;
             if (available < frameLength) break;
 
@@ -319,15 +271,9 @@ export class FrameReader {
 
             case FrameType.Handshake: {
                 const text = this.buffer.toString('utf8', bodyStart, bodyEnd);
-                // Exactly three fields. '::' is the field separator and docs/dev/protocol.md
-                // forbids it inside a field, so a name containing one is a malformed
-                // frame - previously it was silently truncated at the first extra '::'.
-                //
-                // A field may not start or end with ':' either. Next to a separator that makes
-                // ':::', which split() reads as '::' + ':' - so "2::app:::name" (app "app:",
-                // name "name") came out as app "app", name ":name", and the client joined a
-                // different app than the one it announced, without an error anywhere. Such a
-                // body is ambiguous, so it is refused exactly like a field containing '::'.
+                // Exactly three fields: '::' separates them and may not occur inside one. A field may
+                // not start or end with ':' either, since "2::app:::name" splits into app "app" and
+                // name ":name" whatever the sender meant. Ambiguous bodies are refused as malformed.
                 const parts = text.split('::');
                 const [version, app, name] = parts;
                 if (parts.length !== 3 || version === undefined || app === undefined || name === undefined
@@ -353,9 +299,8 @@ export class FrameReader {
                 const command = this.buffer.toString('utf8', offset, offset + commandLength);
                 offset += commandLength;
 
-                // Copied out (not a subarray) since the backing buffer is reused/compacted
-                // on subsequent append() calls - and into an allocation of its own, never the
-                // Buffer pool, because this is what gets posted to the main thread (see ownBytes).
+                // Copied, not a subarray: append() reuses and compacts the backing buffer. Allocated
+                // outside the Buffer pool because the payload is posted to the main thread.
                 const payload = Buffer.allocUnsafeSlow(bodyEnd - offset);
                 this.buffer.copy(payload, 0, offset, bodyEnd);
                 return { type: FrameType.Message, channel, command, payload };

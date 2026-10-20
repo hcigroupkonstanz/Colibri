@@ -8,10 +8,10 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { ClientService, LOG_LEVELS, LogService } from '../../services';
 import { LEVEL_TAGS } from '../log-message/log-format';
 
-/** How long typing pauses before the search runs, in ms. */
+/** Typing pause before a search runs, in ms. */
 export const SEARCH_DELAY = 150;
 
-/** A phone, upright or sideways, where the filters fold away behind a button. */
+/** A phone in either orientation: under 700px wide or 500px tall. The filters fold behind a button. */
 export const PHONE = '(max-width: 699.98px), (max-height: 499.98px)';
 
 interface AppOption {
@@ -27,11 +27,11 @@ interface ActiveFilter {
 
 /** Where the log is among its errors and warnings. */
 export interface LogNav {
-    /** How many errors and warnings the lines shown have. */
+    /** How many errors and warnings the matching lines have, not counting reconnect rows. */
     problems: number;
-    /** The one Previous and Next went to last, counted from 1, or null. */
+    /** 1-based place, among the problems, of the last one stepped to; null if it is not among them. */
     position: number | null;
-    /** How many errors there are since the page was opened. */
+    /** Errors among the matching lines created since the page was opened, not counting reconnect rows. */
     newErrors: number;
     openedAt: number;
 }
@@ -81,25 +81,26 @@ export class LogToolbarComponent implements OnDestroy {
     levelOptions = LOG_LEVELS;
     tags = LEVEL_TAGS;
 
-    /** Whether the filters are shown on a phone, where they are folded away. */
+    /** Whether the filters panel is open. Only a phone folds it away. */
     open = signal(false);
     /** Whether the search field has text in it. */
     typed = signal(false);
 
     private searchInput = viewChild.required<ElementRef<HTMLInputElement>>('searchInput');
     private searchTimer: ReturnType<typeof setTimeout> | undefined;
-    // The search this field set last. The field is written only for a search set elsewhere (Clear
-    // filters, a removed filter chip): writing back its own, trimmed, ate the space just typed.
+    // Last search sent from this field. The effect writes the field only for a search set elsewhere:
+    // writing back the trimmed text would eat a space still being typed.
     private searchSent: string | null = null;
 
     allLevels = computed(() => this.log.levels().size === LOG_LEVELS.length);
 
-    // Every app seen in the log since the page loaded and every app with a client connected, so
-    // that the list does not shrink to the one app being shown.
+    // Apps seen in the log since the page loaded, and apps with a client connected, so the list
+    // does not shrink to the app being filtered on.
     appOptions = computed<AppOption[]>(() => {
         const counts = new Map<string, number>();
         for (const app of this.log.apps()) counts.set(app, 0);
         for (const client of this.clients.clients()) {
+            // 'colibri' is this admin page's own connection, not an app.
             if (client.app !== 'colibri') counts.set(client.app, (counts.get(client.app) ?? 0) + 1);
         }
         const filter = this.log.filter();
@@ -162,7 +163,7 @@ export class LogToolbarComponent implements OnDestroy {
         }, SEARCH_DELAY);
     }
 
-    /** Escape leaves the field; the clear button stays in it, to type the next search. */
+    /** Escape clears and blurs the field; the clear button keeps the focus there, to type the next search. */
     clearSearch(input: HTMLInputElement, stay = false): void {
         clearTimeout(this.searchTimer);
         input.value = '';
@@ -174,15 +175,15 @@ export class LogToolbarComponent implements OnDestroy {
     }
 
     /**
-     * Previous, Next or New errors. On a phone they are in the folded filters, which close, so
-     * that the log has the room to show the line; the buttons by "Jump to latest" go on from there.
+     * Previous, Next or New errors. On a phone they are in the folded filters, which close after a
+     * step so the line has room. Previous and Next then come from the page's "Jump to latest" buttons.
      */
     step(step: NavStep): void {
         this.navigate.emit(step);
         if (window.matchMedia?.(PHONE).matches) this.open.set(false);
     }
 
-    /** To the search field, for the log page's '/' key; on a phone, the filters open for it. */
+    /** Focuses the search field, for the log page's '/' key. On a phone the filters panel opens first. */
     focusSearch(): void {
         this.open.set(true);
         this.searchInput().nativeElement.focus();

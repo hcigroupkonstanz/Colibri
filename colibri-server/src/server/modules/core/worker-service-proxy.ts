@@ -10,11 +10,10 @@ export abstract class WorkerServiceProxy extends Service {
     private threadWorker!: threads.Worker;
     private clusterWorker!: Worker;
 
-    // Retained so restartWorker() can rebuild the thread after an unexpected exit.
+    // For restartWorker().
     private workerPath: string | undefined;
     private workerData: unknown;
-    // Distinguishes "we asked it to go away" from "it died", so a deliberate shutdown
-    // doesn't look like a crash worth restarting.
+    // Set by terminateWorker() so a deliberate exit is not treated as a crash.
     private terminating = false;
 
 
@@ -62,9 +61,6 @@ export abstract class WorkerServiceProxy extends Service {
             this.logError(err.message + '\n' + err.stack, false);
         });
 
-        // Without this, a worker that died took its whole transport down silently: the
-        // 'error' log above was the only trace, the process stayed up, and every
-        // postMessage from then on went nowhere.
         this.threadWorker.on('exit', code => {
             if (this.terminating) return;
 
@@ -89,16 +85,13 @@ export abstract class WorkerServiceProxy extends Service {
         });
     }
 
-    // Called when the worker thread exits without having been asked to. Subclasses that can
-    // rebuild their state override this (see TCPServerProxy) and decide whether to
-    // restartWorker(); the default is to do nothing beyond the error logged above.
+    // Called when the worker exits without terminateWorker(). Override to call restartWorker().
     protected onWorkerExited(): void {
         return;
     }
 
-    // Replaces a dead worker thread with a fresh one on the same path. Any state the worker
-    // held is gone - the caller is responsible for re-issuing whatever start message the
-    // worker needs and for reconciling whatever the old thread was tracking.
+    // Respawns the worker with the original path and data. The new thread starts without the
+    // old one's state, so the caller re-sends its start message. False if initWorker() never ran.
     protected restartWorker(): boolean {
         if (this.workerPath === undefined) return false;
 
@@ -106,9 +99,7 @@ export abstract class WorkerServiceProxy extends Service {
         return true;
     }
 
-    // Docker's `stop` sends SIGTERM and, after a grace period, SIGKILL - if the worker
-    // thread is never explicitly terminated, the process can outlive its own shutdown
-    // handler (a worker_threads.Worker keeps the event loop alive on its own).
+    // A live worker thread keeps the event loop running, so shutdown has to terminate it.
     protected async terminateWorker(): Promise<void> {
         this.terminating = true;
         if (this.threadWorker) {

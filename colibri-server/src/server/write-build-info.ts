@@ -1,6 +1,5 @@
-// Run by `npm run build` after tsc: records the commit the server is built from in
-// dist/server/build-info.json, next to main.js, which reads it at startup. Without COLIBRI_COMMIT and
-// without git, the commit is unknown and the build goes on.
+// Runs after tsc in `npm run build`. Writes the build info to dist/server/build-info.json, which
+// main.ts reads at startup. Without COLIBRI_COMMIT and git the commit is unknown and the build goes on.
 import { execFileSync } from 'child_process';
 import { writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';

@@ -4,7 +4,7 @@ import { ClientService, ClientsSnapshot } from '../../services';
 import { TIME_RANGE_MILLIS, clientColor, timeDomain } from '../latency-chart/latency-chart.component';
 
 const margin = { top: 12, right: 12, bottom: 28, left: 44 };
-// A second more than the chart shows, so the oldest area reaches its left edge.
+// Two seconds more than the chart shows, so the oldest area reaches its left edge.
 const keepFor = TIME_RANGE_MILLIS + 2000;
 // Snapshots come every second; a longer pause (a reconnect, a hidden tab) breaks the areas.
 const maxGap = 2500;
@@ -30,10 +30,7 @@ export const addSample = function (samples: ReadonlyArray<Sample>, sample: Sampl
     return [ ...samples.filter(s => s.at >= sample.at - keepFor && s.at < sample.at), sample ];
 };
 
-/**
- * What a snapshot's rate history stands for: the samples of the snapshots a page would have had in
- * each second before it, which arrived at `at`. Each client keeps its colour now.
- */
+/** A snapshot's rate history as samples: one per second before `at`, each client in its current colour. */
 export const historySamples = function (snapshot: ClientsSnapshot, at: number, color: (id: string) => string): Sample[] {
     const seconds = snapshot.clients.reduce((most, client) => Math.max(most, client.history?.length ?? 0), 0);
     const samples: Sample[] = [];
@@ -67,10 +64,10 @@ export interface Series {
 }
 
 /**
- * The rows d3.stack takes, one per snapshot, and the clients in them, the first seen at the bottom,
- * each in its newest colour: the table's colours change when the page reconnects.
- * A rate the server did not have (a client's first second, a TCP worker slow to answer) keeps the
- * client's last one: as 0 it drew a dip in the total just when the server is busiest.
+ * The rows d3.stack takes, one per snapshot, with the clients in them: the first seen at the
+ * bottom, each in its newest colour. A rate the server did not have (a client's first second, a
+ * TCP worker late to answer) keeps the client's last one: as 0 it would dip the total just when
+ * the server is busiest.
  */
 export const stackInput = function (samples: ReadonlyArray<Sample>, direction: Direction, app: string): { rows: StackRow[]; series: Series[] } {
     const series = new Map<string, Series>();
@@ -104,9 +101,9 @@ export const latestTotal = function (rows: ReadonlyArray<StackRow>): number | nu
 };
 
 /**
- * Which points of a layer's top edge to draw: where it has some height, and next to those, so it
- * rises and falls with a client that joins or leaves. Along a client not there, or sending
- * nothing, its edge lay on the layers below, and being drawn later, it took their colour.
+ * Which points of a layer's top edge to draw: those where it has height, and their neighbours, so
+ * the edge rises and falls with a client that joins or leaves. Where it has none, the edge lies on
+ * the layer below, and as later layers are drawn on top, its stroke would recolour that edge.
  */
 export const edgeShown = function (layer: ReadonlyArray<d3.SeriesPoint<StackRow>>): boolean[] {
     const tall = layer.map(point => !point.data.gap && point[1] > point[0]);
@@ -183,9 +180,9 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
     private x: d3.ScaleTime<number, number, never> = d3.scaleTime();
 
     constructor() {
-        // Each snapshot once, with each client's colour as it was then: a client that left keeps it.
-        // The first of a subscription, after the page opens or reconnects, brings the rates of the
-        // seconds before it.
+        // Each snapshot once, with each client's colour as it was then, so a client that left keeps it.
+        // The first snapshot of a subscription, after the page opens or reconnects, brings the rates
+        // of the seconds before it.
         effect(() => {
             const snapshot = this.snapshot();
             if (!snapshot) return;
@@ -245,8 +242,6 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
     private initChart(): void {
         this.svg = d3.select(this.chart().nativeElement).append('svg');
 
-        // The areas reach a second or two left of the axis: the samples start before the time
-        // axis does, so that they fill it to its left edge.
         const clipId = `throughput-clip-${++clipIds}`;
         this.clipRect = this.svg.append('clipPath').attr('id', clipId).append('rect').attr('y', -2);
 
@@ -254,7 +249,7 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
             .append('g')
             .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
             .attr('clip-path', `url(#${clipId})`)
-            // extra container for smooth animations
+            // The transitions move this inner group, so the clip-path on the parent stays put.
             .append('g');
 
         this.axisBottom = this.svg.append('g').attr('class', 'axis');

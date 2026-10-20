@@ -36,9 +36,7 @@ namespace HCIKonstanz.Colibri.Communication
         private int microphoneSamplingRate;
         private bool broadcast = false;
 
-        // The microphone recorded from, null for the default one. Chosen once, in InitBroadcast:
-        // MicrophoneID is an index into this device's list, so one chosen in the Editor can be out
-        // of range on a headset. It threw there, and voice was off for good.
+        // Null for the default microphone. Chosen once, in InitBroadcast.
         private string microphoneDevice;
 
         // Networking
@@ -47,13 +45,11 @@ namespace HCIKonstanz.Colibri.Communication
         private int frameSize = 960;
         private short localUserId;
 
-        // Opus codec, null when voice goes out as PCM
+        // Opus codec
         private OpusEncoder opusEncoder;
 
 #if UNITY_ANDROID
-        // Android: waiting for the microphone permission, and when it was last checked. The
-        // permission callbacks may run on another thread, so they only set the flags below, and
-        // Update acts on them.
+        // Permission callbacks may not run on the main thread: they only set the volatile flags, and Update acts on them.
         private bool waitingForPermission;
         private float permissionCheckedAt;
         private bool permissionAskedAgain;
@@ -81,15 +77,14 @@ namespace HCIKonstanz.Colibri.Communication
             microphonePermissionCallbacks.PermissionGranted += _ => permissionGranted = true;
             microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
 #if UNITY_2023_1_OR_NEWER
-            // This event only exists from Unity 2023.1 on. Unguarded, it was a compile error
-            // in every Android build on 2022.3, the oldest version the package supports.
+            // PermissionRequestDismissed exists from Unity 2023.1.
             microphonePermissionCallbacks.PermissionRequestDismissed += _ => permissionDismissed = true;
 #endif
             Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
         }
 
-        // Android cancels a request while another one is shown, and the user can close the dialog:
-        // either used to leave voice off for the session. Asked once more, and after that, see Update.
+        // Dismissed: the user closed the dialog, or Android cancelled the request for another one.
+        // Asked once more; after that, Update's poll picks up a later grant.
         private void OnMicrophonePermissionDismissed()
         {
             if (!permissionAskedAgain)
@@ -112,8 +107,8 @@ namespace HCIKonstanz.Colibri.Communication
                 OnMicrophonePermissionDismissed();
             }
 
-            // Granted by the request, later in the device's settings or by another request, voice
-            // starts then. Checked once a second: the check goes through Java.
+            // A grant by the request sets the flag; one made outside it (device settings, another request) is polled for.
+            // Once a second, since the check goes through Java.
             if (permissionGranted)
             {
                 permissionGranted = false;
@@ -144,11 +139,8 @@ namespace HCIKonstanz.Colibri.Communication
                 + "once it is granted, e.g. in the device's settings for this app.");
         }
 
-        /// <summary>
-        /// The microphone to record from, null for the default one. Meta Quest and other Android
-        /// devices use the default one, as they always did, decided at runtime: the build target
-        /// used to decide, so the Editor with the Android target ignored MicrophoneID too.
-        /// </summary>
+        // Android (Meta Quest included) always records from the default microphone.
+        // MicrophoneID is an index into this device's list, so it can be out of range.
         private string ChooseMicrophone(string[] devices)
         {
             if (Application.platform == RuntimePlatform.Android)
@@ -164,14 +156,13 @@ namespace HCIKonstanz.Colibri.Communication
         private void InitBroadcast()
         {
 #if UNITY_ANDROID
-            // From the permission callback or the check in Update, whichever comes first.
             waitingForPermission = false;
 #endif
+            // Reached from the grant flag and from the poll in Update, whichever comes first.
             if (isInitialized)
                 return;
 
-            // As VoiceServerConnection has it: frames are counted at this rate, and at 0 they would
-            // hold no samples.
+            // Same fallback as VoiceServerConnection; at 0 frames would hold no samples.
             int configuredSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
             serverSamplingRate = configuredSamplingRate > 0 ? configuredSamplingRate : 48000;
             // Get all available recording devices and select recording device
@@ -197,18 +188,15 @@ namespace HCIKonstanz.Colibri.Communication
             Microphone.GetDeviceCaps(microphoneDevice, out minSupportedSamplingRate, out maxSupportedSamplingRate);
             if (Debugging) Debug.Log(DEBUG_HEADER + "Sampling rates supported: " + minSupportedSamplingRate + " - " + maxSupportedSamplingRate);
 
-            // Decide on sampling rate. A microphone that takes any rate reports 0 to 0, and its
-            // maximum, which this used to record at then, is no rate at all.
+            // Decide on sampling rate
             microphoneSamplingRate = VoiceFramer.RecordingRate(minSupportedSamplingRate, maxSupportedSamplingRate, serverSamplingRate);
             if (Debugging) Debug.Log(DEBUG_HEADER + "Use sampling rate: " + microphoneSamplingRate);
 
-            // Frames are cut at the server's sampling rate, which a packet's frame size counts in,
-            // after the audio is resampled to it: 20 ms is 960 samples at 48 kHz, whatever rate
-            // the microphone records at.
+            // Calculate package size based on requested frame size (milliseconds)
+            // Frames are cut after resampling, so they count samples at the server's rate, not the microphone's.
             frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, FrameSizeMilliseconds);
             if (frameSize < 1 || frameSize > VoiceFramer.MaxFrameSamples)
             {
-                // A frame of no samples was sent over and over, and the send loop never ended.
                 Debug.LogError(DEBUG_HEADER + "Frame Size Milliseconds " + FrameSizeMilliseconds + " makes frames of " + frameSize + " samples at " + serverSamplingRate + " Hz, which a voice packet cannot carry. Using 20 ms.");
                 frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, 20);
             }
@@ -241,8 +229,7 @@ namespace HCIKonstanz.Colibri.Communication
                 if (Debugging) Debug.Log(DEBUG_HEADER + "Channel count: " + recordingAudioClip.channels);
                 lastRecordingSamplePosition = Microphone.GetPosition(microphoneDevice);
 
-                // A new one for every broadcast, so that none of the last broadcast's audio goes
-                // out with this one.
+                // New per broadcast, so no samples left over from the last one go out.
                 framer = new VoiceFramer(microphoneSamplingRate, serverSamplingRate, frameSize,
                     opusEncoder != null ? EncodeOpus : (VoiceFrameEncoder)null, SendFrame, ReportEncodeFailure);
                 broadcast = true;
@@ -263,10 +250,8 @@ namespace HCIKonstanz.Colibri.Communication
             }
         }
 
-        /// <summary>
-        /// The Opus encoder, or null, having said why, when Opus cannot encode this configuration or
-        /// does not run here. Voice then goes out as PCM.
-        /// </summary>
+        // Null, after logging why, when Opus cannot encode this configuration or does not run here.
+        // Voice then goes out as PCM.
         private OpusEncoder CreateOpusEncoder()
         {
             if (!VoiceFramer.IsOpusFrame(serverSamplingRate, frameSize))
@@ -308,7 +293,7 @@ namespace HCIKonstanz.Colibri.Communication
             recordingAudioClip.GetData(data, lastRecordingSamplePosition);
             lastRecordingSamplePosition = currentSamplePosition;
 
-            // Sends every frame they fill; the rest waits for the next samples
+            // Sends each frame the samples fill; the remainder waits for the next call.
             framer.Add(data);
         }
 

@@ -9,25 +9,13 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Setup
 {
-    /// <summary>
-    /// Two Player settings that let a build compile, install and start normally, and then fail
-    /// where there is no console to say why: Internet Access on Android (every Meta Quest build),
-    /// and Allow downloads over HTTP on every player platform.
-    /// </summary>
-    /// <remarks>
-    /// Checked after every domain reload - which switching the build target causes too - and at
-    /// the start of every player build, and reported as a console warning. The Colibri Setup
-    /// window (Window -> Colibri Configuration) shows the same issues, each with a button that
-    /// fixes it.
-    /// </remarks>
+    // Both settings fail in the built player, where there is no console to say why. The editor and
+    // the build warn instead.
     internal static class AndroidSettingsCheck
     {
         internal enum Setting
         {
-            /// <summary>Player > Other Settings > Internet Access.</summary>
             InternetAccess,
-
-            /// <summary>Player > Other Settings > Allow downloads over HTTP.</summary>
             AllowDownloadsOverHttp
         }
 
@@ -47,7 +35,7 @@ namespace HCIKonstanz.Colibri.Setup
             }
         }
 
-        /// <summary>The issues of this project, for the given (possibly not yet saved) configuration.</summary>
+        // Also used by the Setup window, with its unsaved edits.
         internal static List<Issue> FindIssues(ColibriConfig config)
         {
             return FindIssues(
@@ -76,8 +64,7 @@ namespace HCIKonstanz.Colibri.Setup
                     () => PlayerSettings.Android.forceInternetPermission = true));
             }
 
-            // Every player platform, not only Android: a Windows IL2CPP player refused Store's plain
-            // HTTP to a LAN server just the same.
+            // Not only Android: the setting applies to every player platform.
             if (!isSsl && !string.IsNullOrWhiteSpace(serverAddress) && !IsLoopback(serverAddress)
                 && !AllowsHttp(httpOption, developmentBuild))
             {
@@ -108,10 +95,7 @@ namespace HCIKonstanz.Colibri.Setup
             }
         }
 
-        /// <summary>
-        /// Unity lets plain HTTP through to localhost whatever the setting says. On a headset that
-        /// is the headset itself, but that is a different mistake from this one.
-        /// </summary>
+        // Unity lets plain HTTP through to localhost whatever the setting says.
         private static bool IsLoopback(string serverAddress)
         {
             var host = serverAddress.Trim();
@@ -138,11 +122,9 @@ namespace HCIKonstanz.Colibri.Setup
         [InitializeOnLoadMethod]
         private static void CheckAfterReload()
         {
-            // Deferred: the configuration is loaded through Resources, which is not reliably
-            // available while the domain is still being set up. To the first editor update rather
-            // than delayCall: Unity holds delayCall while the editor is in the background, so a
-            // build target switched just before looking elsewhere said nothing until the editor
-            // had focus again.
+            // Deferred: ColibriConfig loads through Resources, which is not reliably available during
+            // domain setup. Not EditorApplication.delayCall, since Unity holds that while the editor
+            // is in the background.
             EditorApplication.update += CheckOnFirstUpdate;
         }
 
@@ -169,10 +151,7 @@ namespace HCIKonstanz.Colibri.Setup
         }
     }
 
-    /// <summary>
-    /// The same check when the settings take effect: at the start of a player build. The
-    /// warnings go into the build log, and the build goes ahead regardless.
-    /// </summary>
+    // Warns only: the build goes ahead regardless.
     internal sealed class AndroidSettingsBuildCheck : IPreprocessBuildWithReport
     {
         public int callbackOrder => 0;
@@ -186,7 +165,7 @@ namespace HCIKonstanz.Colibri.Setup
                 PlayerSettings.insecureHttpOption, PlayerSettings.Android.forceInternetPermission);
         }
 
-        /// <summary>The build's check with every input passed in. Exists for the test suite.</summary>
+        // Every input is a parameter so the tests can call it without a build.
         internal static void Check(BuildTarget target, bool development, ColibriConfig config,
             InsecureHttpOption httpOption, bool forceInternetPermission)
         {

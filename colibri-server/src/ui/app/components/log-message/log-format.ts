@@ -2,7 +2,7 @@ import { LogMessage } from '../../services';
 
 export const LEVEL_TAGS: ReadonlyArray<string> = [ 'ERR', 'WRN', 'INF', 'DBG' ];
 
-// Nord frost and aurora, lightened for 4.5:1 on their own tint over every row and card background.
+// Nord frost and aurora, lightened so an app's name keeps 4.5:1 on its 10% tint over the log rows.
 // No red or yellow: those mean errors and warnings.
 const APP_COLORS = [ '#96cad8', '#b6cda3', '#d4b9cf', '#ebb7a2', '#abc3dc' ];
 
@@ -20,8 +20,8 @@ const text = function (value: unknown): string | undefined {
 };
 
 /**
- * Whether a client's name is an IP address, as a web client's is. Every web client on one host,
- * or behind one Docker port, has the same.
+ * Whether a client's name is an IP address, as a web client's is. Web clients on one machine, or
+ * behind one Docker port with no trusted proxy, all share the address.
  */
 export const isAddress = function (name: string): boolean {
     return /^\d{1,3}(\.\d{1,3}){3}$/.test(name) || (name.includes(':') && /^[\da-f:.]+$/i.test(name));
@@ -53,9 +53,10 @@ export const messageText = function (log: LogMessage): string {
     return log.message;
 };
 
-/** The same colour for an app wherever it appears. */
+/** Hashed from the name, so every view gives an app the same colour. */
 export const appColor = function (app: string): string {
-    // FNV-1a: names that differ in one character still get different colours
+    // FNV-1a: names that differ in one character get different hashes.
+    // Five colours means some apps still share one.
     let hash = 0x811c9dc5;
     for (let i = 0; i < app.length; i++) {
         hash = Math.imul(hash ^ app.charCodeAt(i), 0x01000193);
@@ -63,7 +64,7 @@ export const appColor = function (app: string): string {
     return APP_COLORS[(hash >>> 0) % APP_COLORS.length];
 };
 
-/** Whether a line contains the search text, lower case, in its message, source or client id. */
+/** Whether the line contains `search` in its message, source or client id. `search` must be lower case. */
 export const matchesSearch = function (log: LogMessage, search: string): boolean {
     if (log.reconnect) return false;
     if (log.message.toLowerCase().includes(search)) return true;
@@ -76,10 +77,10 @@ export interface TextPart {
     match: boolean;
 }
 
-/** Splits a text around each occurrence of the search text, ignoring case. */
+/** Splits `value` around each match of `search`, which must be lower case. */
 export const highlight = function (value: string, search: string): TextPart[] {
     const lower = value.toLowerCase();
-    // a few characters change length in lower case, which would shift every index after them
+    // toLowerCase changes the length of a few characters, which would shift every later index.
     if (!search || lower.length !== value.length) return [ { text: value, match: false } ];
 
     const parts: TextPart[] = [];

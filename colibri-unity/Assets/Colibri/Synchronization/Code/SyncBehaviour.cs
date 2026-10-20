@@ -12,29 +12,23 @@ using HCIKonstanz.Colibri.Core;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>
+    /// Base class for a component whose [Sync] fields and properties are synchronized between
+    /// clients. <typeparamref name="T"/> is the deriving class.
+    /// </summary>
     public abstract class SyncBehaviour<T> : MonoBehaviour, SyncTicker.ITickable, ISyncedObject
         where T : SyncBehaviour<T>
     {
         private const string SupportedTypes = "bool, int, float, string, Vector2, Vector3, Quaternion, Color, JObject and arrays of those";
 
-        /*
-         *  Synced attribute metadata. Built once per model type, never per instance, and typed
-         *  all the way down: the change comparison never sees `object`, so an idle synced object
-         *  allocates nothing at all.
-         */
+        // Attribute metadata, built once per type. Typed throughout, so the change comparison never boxes.
 
         private interface IChangeTracker
         {
-            /// <summary>
-            /// Latches the attribute's current value and reports whether it differs from the
-            /// previously latched one.
-            /// </summary>
+            /// <summary>Latches the current value; true if it differs from the one latched before.</summary>
             bool CaptureChange(T target);
 
-            /// <summary>
-            /// Latches the attribute's current value without reporting it - for a value that came
-            /// from the server, which must not be sent straight back as if it were a local change.
-            /// </summary>
+            /// <summary>Latches the current value without reporting it as a change.</summary>
             void Latch(T target);
         }
 
@@ -48,7 +42,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             public int Index;
             public Type PropertyType;
 
-            /// <summary>Boxes, so it is only called once a change has actually been detected.</summary>
+            /// <summary>Boxes, so only call it for a value that is about to be sent.</summary>
             public abstract object GetBoxed(T target);
             public abstract void SetBoxed(T target, object value);
             public abstract IChangeTracker CreateTracker(T target);
@@ -82,9 +76,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             {
                 var current = _getter(target);
 
-                // See SyncValues: compared as they go on the wire. For Vector3, Quaternion and the
-                // other value types that is EqualityComparer<TValue>.Default, the IEquatable<>
-                // implementation, so comparing costs nothing and boxes nothing.
+                // Compared as on the wire (see SyncValues). Value types use EqualityComparer<TValue>.Default,
+                // which does not box.
                 if (AreEqual(current, _lastValue))
                     return false;
 
@@ -99,14 +92,12 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
+        /// <summary>Raised when an instance registers its model: in Awake, and when it follows an Id change.</summary>
         public static event Action<SyncBehaviour<T>> ModelCreated;
+        /// <summary>Raised when an instance leaves its model: in OnDestroy, and when it follows an Id change.</summary>
         public static event Action<SyncBehaviour<T>> ModelDestroyed;
 
-        /// <summary>
-        /// The id of the model a <see cref="SyncBehaviourManager{T}"/> is building an object for,
-        /// from an update another client sent, while it does so; null otherwise. Read in Awake,
-        /// which runs during the build.
-        /// </summary>
+        // The id of the model a SyncBehaviourManager is building from a remote update, while it does; read in Awake.
         internal static string RemoteModelBeingBuilt;
 
 
@@ -132,15 +123,9 @@ namespace HCIKonstanz.Colibri.Synchronization
                     RegisterAttribute(field.Name, field.FieldType, field);
         }
 
-        /// <summary>
-        /// How a C# name - a model type or a [Sync] member - becomes its name on the wire.
-        /// </summary>
-        /// <remarks>
-        /// Invariant on purpose. Culture-sensitive <c>ToLower()</c> turns 'I' into a dotless i
-        /// (U+0131) on Turkish and Azerbaijani systems, so on such a machine "PhysicsId" went out
-        /// with a character in it that neither colibri-web's <c>toLowerCase()</c> nor any other
-        /// client produces, and the member silently stopped syncing.
-        /// </remarks>
+        /// <summary>The wire name of a C# name, for a model type or a [Sync] member.</summary>
+        // Invariant, not ToLower(): that turns 'I' into a dotless i on Turkish and Azerbaijani systems,
+        // and the name would no longer match the one other clients use.
         internal static string ToWireName(string name) => name.ToLowerInvariant();
 
         /// <summary>The wire names of this model type's [Sync] members. Exists for the test suite.</summary>
@@ -157,9 +142,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             var name = ToWireName(memberName);
 
-            // "id" is the model's id on the wire. A member of that name, `[Sync] public int ID` say,
-            // went out as the id of every update this object sent, and every client took the
-            // model it named for another object.
+            // "id" is the model's id on the wire; a member of that name would be sent as the id of every update.
             if (name == "id")
             {
                 Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{memberName}': 'id' is the name of the model's own Id. Rename the member.");
@@ -181,11 +164,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             _syncedAttributes.Add(name, attribute);
         }
 
-        // Explicit per-type dispatch rather than MakeGenericMethod: every BuildAttribute<TValue>,
-        // and with it SyncedAttribute<TValue>, ChangeTracker<TValue> and the Func/Action delegate
-        // types, is a closed instantiation IL2CPP can see and compile ahead of time. It is also the
-        // one place that can report up front that a [Sync] member has a type Colibri cannot put on
-        // the wire.
+        // Dispatch by type instead of MakeGenericMethod, so IL2CPP sees every closed instantiation and
+        // compiles it ahead of time.
         private static SyncedAttribute BuildAttribute(string name, Type valueType, MemberInfo member)
         {
             if (valueType == typeof(bool)) return BuildAttribute<bool>(name, member);
@@ -240,8 +220,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
             catch (Exception e)
             {
-                // Once per member and type, at startup - but an exception here would escape from
-                // the first Awake and leave that object half set up, so it is reported instead.
+                // Reported instead of thrown: it would escape the first Awake and leave the object half set up.
                 Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{member.Name}' - {e.GetType().Name}: {e.Message}");
                 return null;
             }
@@ -256,30 +235,12 @@ namespace HCIKonstanz.Colibri.Synchronization
             };
         }
 
-        /// <summary>
-        /// Accessors for IL2CPP, which has no JIT: no expression trees, nothing compiled at runtime.
-        /// </summary>
-        /// <remarks>
-        /// <para>
-        /// Under IL2CPP, <c>LambdaExpression.Compile()</c> does not fail - it quietly falls back to
-        /// the System.Linq.Expressions interpreter, which builds its delegate through
-        /// <c>MakeGenericMethod</c> at runtime. That is slow on every call, and for value types it
-        /// depends on generic code IL2CPP may not have generated. So under ENABLE_IL2CPP:
-        /// </para>
-        /// <para>
-        /// A property gets open-instance delegates bound straight to its get and set methods - the
-        /// same typed call a compiled lambda makes, so the per-frame poll stays free of allocation.
-        /// </para>
-        /// <para>
-        /// A field goes through <c>FieldInfo.GetValue</c>/<c>SetValue</c>, as it did in 1.x. That
-        /// boxes a value-type field on every poll; there is no allocation-free way to read a field
-        /// through reflection without a JIT. A hot value-type member is cheaper as a property.
-        /// </para>
-        /// <para>
-        /// Compiled on every backend so the test suite can run it in the Editor, which is always
-        /// Mono. The member must already have been validated by <see cref="BuildAttribute{TValue}"/>.
-        /// </para>
-        /// </remarks>
+        /// <summary>Accessors for IL2CPP, which has no JIT.</summary>
+        // Compile() does not fail there but falls back to the expression interpreter, which is slow and, for
+        // value types, depends on generic code IL2CPP may not have generated.
+        // FieldInfo boxes a value-type field on every poll; a hot value-type member is cheaper as a property.
+        // Not behind #if so the Editor tests can run it (the Editor is always Mono). The member must have
+        // passed BuildAttribute<TValue>.
         internal static void CreateReflectionAccessors<TValue>(MemberInfo member, out Func<T, TValue> getter, out Action<T, TValue> setter)
         {
             if (member is PropertyInfo property)
@@ -295,10 +256,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 #if !ENABLE_IL2CPP
-        /// <summary>
-        /// Accessors for Mono, compiled from expression trees: typed for properties and fields
-        /// alike, so nothing boxes.
-        /// </summary>
+        /// <summary>Accessors for Mono, compiled from expression trees, so nothing boxes.</summary>
         private static void CreateCompiledAccessors<TValue>(MemberInfo member, out Func<T, TValue> getter, out Action<T, TValue> setter)
         {
             var exTarget = Expression.Parameter(typeof(T), "target");
@@ -326,8 +284,13 @@ namespace HCIKonstanz.Colibri.Synchronization
 #endif
 
 
+        /// <summary>The model's id, unique per channel. Generated in Awake when empty.</summary>
         public string Id;
 
+        /// <summary>
+        /// Tells models of one type apart: the channel is the type name plus ModelId. A manager handles
+        /// the objects whose ModelId matches its Template's.
+        /// </summary>
         public string ModelId = "";
         private readonly string ChannelPrefix = ToWireName(typeof(T).Name);
         internal string Channel { get => ChannelOf(ModelId); }
@@ -335,65 +298,55 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         // Parallel to _attributeList.
         private IChangeTracker[] _trackers;
-
-        // Parallel to _attributeList: whether IsSynced said yes at the last poll.
-        private bool[] _wasSynced;
+        private bool[] _wasSynced; // IsSynced at the last poll
 
         private JObject _nextUpdate;
 
-        // The send-rate limit (SyncSettings.MaxSendRate): when this object may send next, on
-        // SyncTicker's clock, and when it last did. Changes before then wait in _nextUpdate.
+        // Rate limit (SyncSettings.MaxSendRate), on SyncTicker's clock: when the object may send next, and
+        // when it last did. Changes before then wait in _nextUpdate.
         private double _nextSendTime = double.NegativeInfinity;
         private double _lastSendTime = double.NegativeInfinity;
 
-        // The object's own active flag as the last poll saw it, and whether that poll saw it
-        // switched - which goes out at once, past the limit.
-        private bool _wasActive;
-        private bool _sendAtOnce;
+        private bool _wasActive;  // activeSelf at the last poll
+        private bool _sendAtOnce; // activeSelf changed: goes out past the rate limit
 
-        // Parallel to _attributeList, each made when its member is first sent or first takes a value
-        // from elsewhere: the values the member sent around the time the connection last worked,
-        // and the one it held before them. Null for an object that has done neither.
+        // Parallel to _attributeList, made lazily: when a member first sends or takes the server's value.
         private SentValues[] _sentValues;
 
-        // The round of answers to the requests made again after the last reconnect, while they are
-        // still coming in (see Sync.ReconnectRound), or the one this object opened at its first
-        // answer to keep changes made before it (see "Changes made before the first answer");
-        // null otherwise.
+        // The Sync.ReconnectRound the object is in: after a reconnect, or opened at its first answer to
+        // keep changes made before it. Null otherwise.
         private Sync.ReconnectRound _round;
 
-        // Parallel to _attributeList: the members whose last change the round showed to have been
-        // lost with the connection, or to be read by the server after what arrived. Each keeps its
-        // value, which goes out again, and takes nothing more from the round.
+        // Parallel to _attributeList: members that keep their local value for the rest of the round, and
+        // send it again.
         private bool[] _keptInRound;
 
-        // Parallel to _attributeList: the members that sent after the requests of the round went
-        // out. The server reads what they sent after everything that arrives in the round.
+        // Parallel to _attributeList: members that sent after the round's requests went out; the server
+        // reads what they sent after everything in the round.
         private bool[] _sentInRound;
 
         private bool _isQuitting;
         private bool _hasReceivedDestroyCommand;
         private bool _hasReceivedFirstUpdate;
 
-        // Built by a manager from another client's update, which is its first update: nothing of
-        // this client's is kept over it.
+        // Built by a manager from a remote update, which is its first: nothing local is kept over it.
         private bool _isBuiltFromUpdate;
 
-        // Given its id in Awake, a fresh one: the server holds nothing for the object.
+        // Id generated in Awake: the server holds nothing for the object.
         private bool _hasMadeItsId;
 
-        // A part of a copy that a manager built from another client's update.
+        // A part of a copy that a manager built from a remote update.
         private bool _isCopy;
 
-        // The Id and ModelId the object registered with in Awake, see KeepRegisteredId.
+        // The Id and ModelId the object is registered under (see FollowIdChange, KeepRegisteredId).
         private string _registeredId;
         private string _registeredModelId;
 
-        // A new one when the object moves to another Id (see FollowIdChange).
+        // Completes at the first update for the object; a new one after an Id change.
         private TaskCompletionSource<bool> _isReady = new TaskCompletionSource<bool>();
 
-        // Moved to another Id after being created here: it sends its full state once the server
-        // answers that it holds nothing for the new one.
+        // Moved to another Id after being created here: sends its full state if the server holds nothing
+        // for the new Id.
         private bool _announceAtFirstAnswer;
 
         string ISyncedObject.Id => Id;
@@ -427,7 +380,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
         }
 
-        /// <summary>Takes the member's current value as no change of this object's.</summary>
+        /// <summary>Latches the member's current value, so the next poll does not report it as a change.</summary>
         private protected void Latch(string memberName)
         {
             if (_trackers == null)
@@ -447,20 +400,11 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Follows an Id or ModelId changed after Awake, at the next poll: right after Instantiate,
-        /// which runs Awake, to the id of the player the object stands for, say. The object leaves
-        /// its old model and channel, asks the server for the new one, and takes the server's
-        /// state, or sends its own if the server has none and the object was created here. A
-        /// model this client created under the old Id is deleted for everyone: nobody else has
-        /// it, and other clients' copies of it would stay for good. The parts below the object
-        /// keep their Ids.
+        /// Follows an Id or ModelId changed after Awake (right after Instantiate, say), at the next poll:
+        /// leaves the old model and channel, requests the new one, and sends its own state if the server
+        /// has none and the object was created here. The parts below the object keep their Ids.
         /// </summary>
-        /// <remarks>
-        /// The object used to go on listening under the old Id and sending under the new one: it
-        /// never took the server's answer, never synced, and its manager built a second object
-        /// from that answer. A copy that a manager built of another client's object keeps the Id
-        /// it was built with (see <see cref="KeepRegisteredId"/>).
-        /// </remarks>
+        // A copy that a manager built of another client's object keeps its Id (see KeepRegisteredId).
         private void FollowIdChange()
         {
             if (_registeredId == null || (Id == _registeredId && ModelId == _registeredModelId))
@@ -479,14 +423,15 @@ namespace HCIKonstanz.Colibri.Synchronization
             Sync.RemoveModelDeleteListener(oldChannel, OnModelDelete);
             SyncedIds.Deregister(oldId);
             ModelDestroyed?.Invoke(this);
+            // Made here: nobody else would delete it, and other clients' copies would stay for good.
             if (madeHere)
             {
                 LocallyDeletedModels.Remember(oldChannel, oldId);
                 Sync.SendModelDelete(oldChannel, oldId);
             }
 
-            // A start under the new Id: what this object sent or was told under the old one says
-            // nothing about the new model, and what it holds now is compared with the answer.
+            // Starts afresh under the new Id: nothing sent or received under the old one applies, and the
+            // values latched below are what the first answer is compared with.
             _nextUpdate = null;
             _hasMadeItsId = false;
             _hasReceivedFirstUpdate = false;
@@ -513,9 +458,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Sets an Id or ModelId changed since Awake back, with an error: for a copy a manager
-        /// built of another client's object. A model script that set Id there gave the copy
-        /// another object's Id, often this client's own.
+        /// Restores the Id and ModelId a copy of another client's object registered with, and logs an
+        /// error: a model script that sets Id on a copy would give it another object's Id.
         /// </summary>
         private void KeepRegisteredId()
         {
@@ -533,14 +477,14 @@ namespace HCIKonstanz.Colibri.Synchronization
         int SyncTicker.ITickable.TickIndex { get => _tickIndex; set => _tickIndex = value; }
 
         /// <summary>
-        /// Whether Awake has run, which is where the object registers: false for one that has been
-        /// switched off since its scene loaded. The change trackers are made there.
+        /// Whether Awake has run, which makes the change trackers: false for an object that has not been
+        /// active yet.
         /// </summary>
         internal bool HasAwoken => _trackers != null;
 
         /// <summary>
-        /// Whether this client knows what the server holds for the object: its first answer has
-        /// arrived, or the object made its id in Awake, so the server holds nothing for it yet.
+        /// Whether the server's state for the object is known: its first answer has arrived, or the
+        /// object made its id in Awake and the server holds nothing for it.
         /// </summary>
         private protected bool KnowsServerState => _hasReceivedFirstUpdate || _hasMadeItsId;
 
@@ -549,19 +493,14 @@ namespace HCIKonstanz.Colibri.Synchronization
 
 
         /// <summary>
-        /// Whether the [Sync] member named <paramref name="memberName"/> (its C# name) is switched
-        /// on. One that is off is never sent: not as a change, not in the full state that
-        /// <see cref="TriggerSync"/> sends.
+        /// Whether the [Sync] member named <paramref name="memberName"/> (its C# name) is switched on.
+        /// One that is off is never sent, neither as a change nor in the full state of
+        /// <see cref="TriggerSync"/>.
         /// </summary>
-        /// <remarks>
-        /// A switched-off member still has a getter, and the value it reads is no value of the
-        /// object's - SyncTransform's Position reads Vector3.zero while SyncPosition is off. Sent,
-        /// that placeholder is applied by every client that has the member switched on: the
-        /// object jumps to the origin there.
-        ///
-        /// Asked for every member in every poll, so it must be cheap and must not allocate.
-        /// Switched on again, the member is sent whatever it reads.
-        /// </remarks>
+        // A switched-off member's getter reads a placeholder (SyncTransform's Position is Vector3.zero
+        // while SyncPosition is off) that would move the object to the origin on every client that has
+        // it on.
+        // Asked for every member in every poll: keep it cheap and allocation-free.
         private protected virtual bool IsSynced(string memberName) => true;
 
 
@@ -569,9 +508,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             Initialize();
 
-            // Awake only ever runs on an object in a scene - a placed or an instantiated one,
-            // never a prefab asset - so there is no prefab case to exclude here. Another synced
-            // component of the object may have given this one its id already: see SyncedIds.
+            // Another synced component of the object may have given this one its id already (see SyncedIds).
             if (String.IsNullOrEmpty(Id))
                 SyncedIds.Assign(this, this);
             SyncedIds.Register(Id);
@@ -588,13 +525,9 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             SyncTicker.Register(this);
 
-            // A model::request { id } is a fresh request: it tells the server that this client has
-            // the object in its scene now, or is creating it, and the server lifts the tombstone of
-            // a model of that id deleted a moment ago. Right for an object placed in a scene or
-            // created here. Not for one a manager builds from another client's update, which
-            // carries the model's state already: the model may have been deleted since the server
-            // relayed that update. Asked for, it lost its tombstone, and an update another client
-            // had sent before the delete then created it afresh on the server and on every client.
+            // AddModelUpdateListener sends a model::request, which lifts the server's tombstone for this id. Not
+            // for an object a manager builds from a remote update: the model may have been deleted since, and
+            // an update sent before the delete would recreate it on the server and every client.
             if (RemoteModelBeingBuilt != null && RemoteModelBeingBuilt == Id)
             {
                 _isBuiltFromUpdate = true;
@@ -602,8 +535,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
             else
             {
-                // In this client's scene again, so updates for it are no longer ones that were on
-                // their way when this client deleted it.
+                // In this client's scene again: forget a local delete of this id.
                 LocallyDeletedModels.Forget(Channel, Id);
                 Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, OnRequestedAgain);
             }
@@ -634,17 +566,16 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         protected virtual void OnDestroy()
         {
-            // Under the Id and ModelId it registered with: changed since, but not yet followed (see
-            // FollowIdChange), the listeners, the delete and the bookkeeping went to the new ones.
+            // Tear down under the Id and ModelId it registered with: if they changed and FollowIdChange has
+            // not run yet, the listeners and bookkeeping are still under those.
             if (_registeredId != null)
             {
                 Id = _registeredId;
                 ModelId = _registeredModelId;
             }
 
-            // An update the send-rate limit still holds is dropped with the object, and the
-            // delete below goes out at once: sent after the delete, the update would bring the
-            // object back to life on the server.
+            // A held update is dropped with the object: sent after the delete below, it would recreate the
+            // model on the server.
             SyncTicker.Deregister(this);
             if (HasAwoken)
                 SyncedIds.Deregister(Id);
@@ -654,54 +585,38 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             ModelDestroyed?.Invoke(this);
 
-            // Shutting down is not deleting: the object is meant to outlive this client on the
-            // server. _isQuitting alone cannot tell, because Unity sends OnApplicationQuit only
-            // to active GameObjects - and a synced object is inactive whenever this client or
-            // another one has hidden it. Such an object deleted itself, and with it every other
-            // client's copy, on the way out of Play mode or the app. Application.quitting
-            // (SingletonLifetime.IsQuitting) is raised before teardown whatever the object's state.
+            // Quitting is not deleting: the model outlives this client. OnApplicationQuit reaches only active
+            // GameObjects and a hidden synced object is inactive, so _isQuitting is not enough;
+            // SingletonLifetime.IsQuitting (Application.quitting) is raised whatever the object's state.
             if (_isQuitting || SingletonLifetime.IsQuitting || _hasReceivedDestroyCommand)
                 return;
 
-            // A copy of another client's object goes with its scene, and a manager builds it again
-            // when the scene loads again. Deleted, it was gone for everyone, its owner included: a
-            // client reloading the scene to start over took every other client's avatar with it.
-            // Destroying the copy on purpose still deletes it.
+            // A copy goes with its scene without a delete: the manager builds it again when the scene loads
+            // again, and a delete would remove it for its owner and every other client.
             if (_isCopy && !gameObject.scene.isLoaded)
             {
                 _isReady.TrySetCanceled();
                 return;
             }
 
-            // So that an update another client sent before the server had this delete does not
-            // make a manager build the object again - see LocallyDeletedModels.
+            // A remote update sent before the server saw this delete must not make a manager build the object
+            // again (see LocallyDeletedModels).
             LocallyDeletedModels.Remember(Channel, Id);
             Sync.SendModelDelete(Channel, Id);
             _isReady.TrySetCanceled();
         }
 
 
-        /*
-         *  Driven by SyncTicker - one Update and one LateUpdate for the whole application.
-         */
+        // Driven by SyncTicker: one Update and one LateUpdate for the whole application.
 
         void SyncTicker.ITickable.PollChanges()
         {
-            // Gated on the component alone. An inactive GameObject is still polled, because its
-            // being inactive is itself synced state: SyncTransform's Active reads activeSelf, and
-            // gated on isActiveAndEnabled the poll stopped the moment the object was switched
-            // off - so `false` was never seen, and other clients' copies never disappeared.
-            //
-            // Teardown sends nothing through here. Destroy, unloading a scene and leaving Play
-            // mode do not touch activeSelf, and the object leaves the ticker in OnDestroy, before
-            // any further poll could run. No OnDisable hook is involved either, so none of those
-            // can be mistaken for a deactivation.
-            //
-            // A component that is switched off on its own (enabled = false) neither latches nor
-            // sends, so whatever changed meanwhile is picked up as a normal change once it is
-            // back on.
             FollowIdChange();
 
+            // Gated on the component alone: an inactive GameObject is still polled, since being inactive is synced
+            // state (SyncTransform's Active reads activeSelf) and `false` must be seen. Teardown leaves activeSelf alone.
+            // A component with enabled = false neither latches nor sends; what changed meanwhile is picked up once
+            // it is back on.
             if (!enabled)
                 return;
 
@@ -713,16 +628,13 @@ namespace HCIKonstanz.Colibri.Synchronization
                 var switchedOn = isSynced && !_wasSynced[i];
                 _wasSynced[i] = isSynced;
 
-                // A member that is switched off reads a placeholder, which is no value to send -
-                // and no value to compare with either, so it is not latched.
+                // A switched-off member reads a placeholder: not sent, and not latched either.
                 if (!isSynced)
                     continue;
 
-                // Switched on again, the member goes out whatever it reads: the other clients
-                // still have the value from before it was switched off, and what it reads now
-                // may differ from that while being equal to anything latched here meanwhile -
-                // SyncTransform's scale set back to one while SyncScale was off is just what its
-                // placeholder reads. Compared, that change was never sent.
+                // Switched on again, the member is sent without a comparison: other clients still hold the value
+                // from before, and a comparison can miss the change (SyncTransform's scale set back to one while
+                // SyncScale was off is what its placeholder reads).
                 if (switchedOn)
                 {
                     _trackers[i].Latch(self);
@@ -731,9 +643,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     continue;
                 }
 
-                // Until the server's first answer for this object, nothing is compared or latched:
-                // the answer compares each member with the value it had when the object
-                // registered (see "Changes made before the first answer" below).
+                // Nothing is compared or latched until the first answer, which compares each member with its value
+                // from registration (see "Changes made before the first answer").
                 if (!_hasReceivedFirstUpdate)
                     continue;
 
@@ -741,9 +652,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                     AddUpdate(attribute, attribute.GetBoxed(self));
             }
 
-            // Switching the object off or on is not held back by the send-rate limit: it is a
-            // one-off event rather than motion, and hiding an object is often the last thing that
-            // happens to it. Whatever is waiting goes out with it, in this frame.
+            // Switching the object off or on bypasses the rate limit: it is a one-off, often the last thing
+            // that happens to an object. Whatever is waiting goes out with it, in this frame.
             var active = gameObject.activeSelf;
             if (active != _wasActive)
             {
@@ -760,16 +670,12 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// The update to send in this frame, if one is due, applying the send-rate limit. The
-        /// deciding half of FlushUpdate; internal so the tests can run it on a clock of their own.
+        /// The update to send in this frame under the rate limit, or null. The deciding half of
+        /// FlushUpdate; internal so the tests can run it on a clock of their own.
         /// </summary>
-        /// <remarks>
-        /// Leading edge first: a change after a quiet spell goes out at once, so a one-off change
-        /// is exactly as quick as without a limit. Changes in the interval after that are held,
-        /// merged into one update, and sent as soon as the interval is up - by the ticker, which
-        /// flushes every object in every frame, so the last values of a burst go out whether or
-        /// not anything changes after them.
-        /// </remarks>
+        // Leading edge first: a change after a quiet spell goes out at once. Later changes are merged and
+        // held until the interval is up; the ticker flushes every object in every frame, so the last
+        // values of a burst go out without another change.
         internal JObject TakeDueUpdate(double now, double interval, double heardAt)
         {
             var sendAtOnce = _sendAtOnce;
@@ -778,20 +684,16 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (_nextUpdate == null)
                 return null;
 
-            // The slot was set with the interval of the last send. A limit raised since then -
-            // SyncSettings.MaxSendRate set from code - shortens the wait for what is held now:
-            // otherwise a change held under 1 per second still waited out the full second after
-            // the limit had become 30. A lowered limit takes effect from the next slot on.
+            // _nextSendTime was set with the previous interval. A raised MaxSendRate (set from code) shortens
+            // the wait for what is held now; a lowered one applies from the next slot.
             var due = Math.Min(_nextSendTime, _lastSendTime + interval);
 
             if (interval > 0 && now < due && !sendAtOnce)
                 return null;
 
-            // The next slot is one interval after the previous slot, not after now. Frames rarely
-            // land on the interval: at 72 fps a 30 Hz limit is passed 8 ms late, and counting from
-            // now would round every interval up to three frames - 24 Hz. Carried over, the lateness
-            // is made up in the next interval. Only while the object keeps sending, though: after a
-            // pause, or a send forced early, it starts afresh, so no backlog of sends builds up.
+            // The next slot is one interval after the previous slot, not after now: counting from now rounds every
+            // interval up to whole frames (30 Hz at 72 fps becomes 24 Hz). The lateness is carried over only while
+            // the object keeps sending; after a pause or an early send it starts afresh, so no backlog builds up.
             var late = now - due;
             _nextSendTime = late >= 0 && late < interval ? due + interval : now + interval;
             _lastSendTime = now;
@@ -803,14 +705,14 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Keeps the values of an update that is going out, for the answers to the request made
-        /// again after a reconnect. See <see cref="KeepsLocalValue"/>.
+        /// Keeps the values of an outgoing update, for judging the server's answers after a reconnect
+        /// (see <see cref="KeepsLocalValue"/>).
         /// </summary>
         private void RememberSent(JObject update, double now, double heardAt)
         {
             var answersPending = _round != null && !_round.IsOver;
 
-            // Walked by hand: Properties() would allocate an enumerator for every update sent.
+            // By hand: Properties() would allocate an enumerator per update.
             for (var token = update.First; token != null; token = token.Next)
             {
                 var property = (JProperty)token;
@@ -831,18 +733,17 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// A value as SentValues keeps it. Every other value is made afresh for each update, but a
-        /// JObject member's is the application's own object, which it may change in place later.
+        /// A value as SentValues keeps it. A JObject member's value is the application's own object,
+        /// which it may change in place later, so it is cloned.
         /// </summary>
         private static JToken ToKeep(SyncedAttribute attribute, JToken value)
             => attribute.PropertyType == typeof(JObject) ? value.DeepClone() : value;
 
 
+        /// <summary>Applies a remote update for this object; one for another Id is ignored.</summary>
         public void OnModelUpdate(JObject data)
         {
-            // The member table is per type and was only ever built in Awake, so an update reaching
-            // an object of a type no instance of which had woken yet found no members, and every
-            // value in it was dropped with an "Unable to sync attribute" warning.
+            // The member table is per type and built in Awake, which may not have run for any instance yet.
             Initialize();
 
             var id = data["id"].Value<string>();
@@ -851,12 +752,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 var isFirstUpdate = !_hasReceivedFirstUpdate;
                 _hasReceivedFirstUpdate = true;
 
-                // While the answers to the requests made again after the last reconnect are
-                // coming in, everything received is judged against what this object sent before
-                // the outage: see "The answers to the requests made again after a reconnect" below.
-                // So is everything received after a first answer over which this object kept
-                // changes of its own, until the answers still on their way then are in: see
-                // "Changes made before the first answer".
+                // While a round is open (after a reconnect, or after a first answer that kept local changes), what
+                // arrives is judged by KeepsLocalValue.
                 var round = _round;
                 if (round != null && round.IsOver)
                     round = _round = null;
@@ -879,25 +776,15 @@ namespace HCIKonstanz.Colibri.Synchronization
 
                 _isReady.TrySetResult(true);
 
-                // A bare { id } is the server's answer to a model::request for a model it holds
-                // nothing of; a SyncBehaviour never sends one as an update. The first such answer
-                // is the usual start of a new object, and what follows it is unchanged: a
-                // manager's TriggerSync sends the full state. A later one answers the request made
-                // again after a reconnect, and is taken to mean the server has lost this object -
-                // it clears an app's models when its last client leaves, which is what a lone
-                // client's Wi-Fi blip looks like from the server, and all of them when it restarts.
-                // Nothing used to put the state back, so every client that joined afterwards was
-                // missing the object. The full state carries members, so a client receiving it
-                // applies it and sends nothing in return.
+                // A bare { id } answers a model::request for a model the server holds nothing of; a SyncBehaviour
+                // never sends one as an update. A first one is a new object, whose state a manager's TriggerSync
+                // sends. A later one, after a reconnect, means the server lost the model (it clears an app's models
+                // when the last client leaves, as a lone client's Wi-Fi blip looks to it, and all of them on restart),
+                // so the full state goes out again. A client receiving it applies it and sends nothing back.
                 //
-                // That reading relies on the server telling a lost model from a deleted one. Another
-                // client may have deleted this object while this client was offline, and the delete
-                // it relayed never arrived here. The server remembers such a delete for
-                // MODEL_TOMBSTONE_SECONDS and answers the request with model::delete, which
-                // OnModelDelete handles: this copy goes too, and nothing is sent. Answered with a
-                // bare { id } instead - by a server that does not remember deletes, or after that
-                // time is up - this sends the deleted object's state, and every client builds it
-                // again.
+                // That assumes the server tells a lost model from a deleted one: for MODEL_TOMBSTONE_SECONDS it answers
+                // a request made again for a deleted model with model::delete (see OnModelDelete). After that the
+                // answer is a bare { id }, and sending the state recreates the deleted object on every client.
                 if (!isFirstUpdate && data.Count == 1 && !_hasReceivedDestroyCommand)
                     AddFullState();
                 else if (isFirstUpdate && _announceAtFirstAnswer && data.Count == 1 && !_hasReceivedDestroyCommand)
@@ -907,6 +794,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
+        /// <summary>Sends the object's full state, once the server's first answer for it is in.</summary>
         public async void TriggerSync()
         {
             try
@@ -915,7 +803,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
             catch (OperationCanceledException)
             {
-                // destroyed before the server ever sent its state - nothing left to sync
+                // Cancelled: destroyed, or moved to another Id, before the server answered.
                 return;
             }
 
@@ -937,46 +825,30 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
-        /*
-         *  Changes made before the first answer.
-         *
-         *  An object asks the server for its state when it registers, in Awake, and the answer
-         *  arrives a round trip later, or once the connection is up. A member changed in between,
-         *  in a script's Start or OnConnected handler or by a user right after Play, used to be
-         *  latched by the poll without being sent, and the answer then put the server's value over
-         *  it: the change was undone on this client and never reached any other.
-         *
-         *  So the poll compares nothing until the first answer, and the answer compares each member
-         *  with the value it had when the object registered. A member that differs keeps its value,
-         *  which goes out as an ordinary update; the server reads it after the answer, and every
-         *  other client takes it from there. Every other member takes the answer's value, so a
-         *  value from the scene or the prefab, or one set in Awake before base.Awake(), never goes
-         *  out over the server's. That needs a getter to read the object's value in base.Awake()
-         *  already: one that reads a field set up after it, a cached component say, reads its
-         *  fallback there and the real value at the answer, which counts as a change.
-         *
-         *  The answer is not the last message that can hold the server's older values. A manager
-         *  asks for every model on its channel, usually in the same frame as the object asks for
-         *  its own, and the answer to that holds this object too; an update another client sent
-         *  before the server read the change is relayed here as well. Applied, either undid the
-         *  change on this client alone. So a member kept takes nothing more until the answer to
-         *  one more request, sent now, ahead of the change: the server has answered every request
-         *  made before by then (see Sync.AskForEndOfAnswers). It is kept as a member is in the
-         *  round after a reconnect, and an object whose first answer arrives in that round, one
-         *  registered during the outage, keeps it in that round instead.
-         *
-         *  An object a manager builds from another client's update takes that update as it is:
-         *  what its own Awake set is no change of this client's.
-         */
+        // Changes made before the first answer.
+        //
+        // An object requests its state in Awake and the answer arrives a round trip later, or once connected. A
+        // member changed meanwhile (in Start, an OnConnected handler, by a user right after Play) must not lose
+        // to the server's older value. So the poll compares nothing until the answer, which compares each member
+        // with its value from registration: a changed member keeps its value and is sent as an ordinary update,
+        // the others take the answer's value. That needs getters that read the real value in base.Awake(); one
+        // that reads something set up later (a cached component) reads a fallback there, and the real value
+        // counts as a change at the answer.
+        //
+        // The answer is not the last message holding the server's older values: a manager's request for its whole
+        // channel and remote updates sent before the server read the change follow. So a kept member takes
+        // nothing more until the answer to one more request, sent now ahead of the change (see
+        // Sync.AskForEndOfAnswers), or until the end of the reconnect round the object is in.
+        // An object a manager builds from a remote update takes it as is.
 
         /// <summary>
-        /// At the server's first answer for this object: keeps every member changed since the
-        /// object registered, and sends it. <paramref name="round"/> is the round the object is
-        /// in, or null, and is opened when a member is kept outside one.
+        /// At the server's first answer: keeps every member changed since the object registered, and
+        /// sends it. <paramref name="round"/> is the round the object is in, or null, and is opened when
+        /// a member is kept outside one.
         /// </summary>
         private void KeepChangesMadeBeforeTheAnswer(JObject answer, ref Sync.ReconnectRound round)
         {
-            // A component that is switched off sends nothing, and takes what arrives.
+            // A disabled component sends nothing and takes what arrives.
             if (_trackers == null || _isBuiltFromUpdate || _hasReceivedDestroyCommand || !enabled)
                 return;
 
@@ -985,18 +857,16 @@ namespace HCIKonstanz.Colibri.Synchronization
             {
                 var attribute = _attributeList[i];
 
-                // A member that is switched off reads a placeholder, and one switched on since the
-                // last poll was compared with one: neither is a change. The next poll sends the
-                // latter, as it sends every member switched on.
+                // A switched-off member reads a placeholder, and the latched value of one switched on since the
+                // last poll may be a placeholder: neither is a change. The next poll sends the latter.
                 if (!IsSynced(attribute.MemberName) || !_wasSynced[i] || !_trackers[i].CaptureChange(self))
                     continue;
 
                 if (round == null)
                     round = _round = Sync.AskForEndOfAnswers();
 
-                // The value the server holds, which the one sent now goes out after. Should that be
-                // lost in a link that drops before the server has read it, the round after the
-                // reconnect tells it by this value.
+                // The value the server holds, which the one sent now goes out after; if that send is lost, the
+                // round after the next reconnect recognises it by this value.
                 if (answer.TryGetValue(attribute.Name, out var shown))
                     SentValuesOf(attribute).ServerShowed(ToKeep(attribute, shown));
 
@@ -1005,54 +875,26 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
-        /*
-         *  The answers to the requests made again after a reconnect.
-         *
-         *  A change made the moment the connection dropped was written into a dead link and lost,
-         *  and the server answers with what it held before that change. Applied like any other
-         *  update, the answer put the object back on the very client that had changed it, and
-         *  every other client kept the old value too. So each member of what arrives in the round
-         *  (see Sync.ReconnectRound) is compared with the values that member sent recently, and
-         *  with the one it held before them (SentValues):
-         *
-         *  - the value sent last: it arrived, and there is nothing to do;
-         *  - a value sent before that, or the one held before them: what followed it was lost. The
-         *    local value stays and goes out again, as an ordinary update under the send-rate
-         *    limit, and the member takes nothing more from the round: whatever else the round
-         *    brings for it, the server had before it read the value sent again, which then
-         *    replaces it there and on every other client. The answer's value is kept as the one
-         *    held before the value sent again, so if that is lost as well, at a drop soon after,
-         *    the next round still tells;
-         *  - any other value: another client set it while this one was away, and it is applied,
-         *    as it always was. So is a member that was not sent recently at all.
-         *
-         *  The value held before them is what an object that sat still before the drop has to go
-         *  by: switched off at the drop after a minute switched on, it sent nothing but the lost
-         *  `false` in the window. Another client that sets a member back during the outage, to one
-         *  of those values, is undone in turn: that looks the same, and is accepted.
-         *
-         *  A member missing from what arrives is left alone. An update from another client
-         *  carries only what that client changed, so a missing member says nothing about what
-         *  the server holds for it. Read as "the server has no value", it would send this
-         *  client's value over one that another client set during the outage. So a member whose
-         *  very first value was the one lost stays unsent, as it did before.
-         *
-         *  An object that has never sent anything - one a manager built from another client's
-         *  update, say - applies its answers exactly as before, and so does every object once the
-         *  round is over: an update from another client is applied as it arrives.
-         *
-         *  Until then, each member keeps the values it had sent when the requests went out
-         *  (SentValues.KeepUntilAnswered): what it sends after them cannot be in an answer, and an
-         *  object moved on right after the reconnect would push out the values sent into the dead
-         *  link, so that the answer holding one was applied.
-         *
-         *  What a member sends after the requests reaches the server after everything that arrives
-         *  in the round, and replaces it there and on every other client. So such a member keeps
-         *  its value whatever arrives, even a value it never held: applied here, that stayed on
-         *  this client alone, and a one-off change such as a switch never mended it. It is treated
-         *  as a lost change, and sent again, so that what arrived is kept as the value held before
-         *  it: if the link drops again before the server has read it, the next round tells.
-         */
+        // The answers to the requests made again after a reconnect.
+        //
+        // A change made as the link dropped is lost and the server answers with the value from before it.
+        // Applied, that undoes the change here while every other client keeps the old value. So each member of
+        // what arrives in the round (see Sync.ReconnectRound) is judged against the values it sent recently and
+        // the one it held before them (SentValues):
+        //
+        // 1. The value sent last: it arrived, nothing to do.
+        // 2. A value sent before that, or the one held before them (all an object that sat still has: switched
+        //    off at the drop after a minute on, it sent only the lost `false`): what followed was lost. The local
+        //    value goes out again as an ordinary update under the rate limit, and the member takes nothing more
+        //    from the round. The answer's value becomes the value held before the resend, so a second loss is
+        //    recognised too. A remote reset to one of these values during the outage looks the same and is undone.
+        // 3. Any other value, or a member that did not send recently: another client set it, and it is applied.
+        //
+        // A member missing from what arrives is left alone: a remote update carries only what changed.
+        // Until the answers are in, a member keeps the values it had sent when the requests went out
+        // (SentValues.KeepUntilAnswered). What it sends after the requests reaches the server after everything
+        // in the round, so it keeps its value whatever arrives and is sent again, with what arrived as the
+        // value held before it.
 
         /// <summary>Told by Sync that the model has just been asked for again after a reconnect.</summary>
         private void OnRequestedAgain(Sync.ReconnectRound round)
@@ -1072,20 +914,19 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Judges one member of what arrived in the round. True when the server's value is not to
-        /// be applied: the value this object sent last arrived, or what it sent after the server's
-        /// value was lost or went out after the requests, and goes out again now.
+        /// Judges one member of what arrived in the round. True when the server's value is not applied:
+        /// the value sent last arrived, or the local value is kept and goes out again.
         /// </summary>
         private bool KeepsLocalValue(string name, JToken serverValue, Sync.ReconnectRound round)
         {
             if (!_syncedAttributes.TryGetValue(name, out var attribute))
                 return false;
 
-            // A member that is switched off reads a placeholder, which is no value to keep or send.
+            // A switched-off member reads a placeholder: nothing to keep or send.
             if (!IsSynced(attribute.MemberName))
                 return false;
 
-            // Kept before it has sent anything, too: a member changed before the first answer.
+            // Includes a member kept at the first answer, which may not have sent yet.
             if (_keptInRound != null && _keptInRound[attribute.Index])
                 return true;
 
@@ -1108,8 +949,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     break;
             }
 
-            // The server holds this value, and the one sent again goes out after it. Should that be
-            // lost too, in a link that drops again soon after, the next round tells it by this value.
+            // The server holds this value; if the resend is lost too, the next round recognises it by this value.
             sent.ServerShowed(ToKeep(attribute, serverValue));
             KeepAndSendAgain(attribute);
             return true;
@@ -1124,7 +964,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (_hasReceivedDestroyCommand)
                 return;
 
-            // Latched, as the poll would have: what goes out now is not a change to report again.
+            // Latched as the poll would: what goes out now is not a new change.
             var self = this as T;
             _trackers?[attribute.Index].Latch(self);
             AddUpdate(attribute, attribute.GetBoxed(self));
@@ -1138,12 +978,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             {
                 _hasReceivedDestroyCommand = true;
 
-                // Destroyed a moment from now rather than at once, and until OnDestroy the ticker
-                // went on driving the object: an update it sent in that moment - one the send-rate
-                // limit was holding, or a change polled meanwhile - reached the server after the
-                // delete and created the model there afresh. Every other client's manager then
-                // built a ghost of it, and nobody was left to delete it again. Nothing about this
-                // object goes out any more.
+                // Destroy is delayed and the ticker drives the object until OnDestroy: an update sent meanwhile (a
+                // held one, or a change polled) would reach the server after the delete and recreate the model.
                 _nextUpdate = null;
                 SyncTicker.Deregister(this);
 
@@ -1161,9 +997,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             else
                 _nextUpdate.Add(attribute.Name, value.ToJson());
 
-            // The message itself goes out in FlushUpdate(), so all of this frame's changes
-            // travel together in one message - together with the next frames' too, while the
-            // send-rate limit holds it back.
+            // Sent by FlushUpdate, so a frame's changes travel in one message, together with later frames'
+            // while the rate limit holds it back.
         }
 
         private static readonly object UnsupportedValue = new object();
@@ -1186,7 +1021,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return value.ToQuaternionStrict();
             if (type == typeof(Color))
                 return value.ToColorStrict();
-            // A JSON null or a single value is no array: it used to become an empty one.
+            // ArrayStrict throws on a JSON null or a single value instead of making an empty array.
             if (type == typeof(bool[]))
                 return value.ArrayStrict().Select(x => (bool)x).ToArray();
             if (type == typeof(int[]))
@@ -1205,8 +1040,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return value.ArrayStrict().Select(x => x.ToColorStrict()).ToArray();
             if (type == typeof(JObject))
             {
-                // A JObject member that is null on the sender arrives as a JSON null, which is a
-                // JValue: cast to JObject, it threw on every client that received it.
+                // A null JObject member arrives as a JSON null, which is a JValue and not a JObject.
                 if (value.Type == JTokenType.Null)
                     return null;
                 return value as JObject ?? throw new InvalidCastException($"{value.Type} is not a JSON object");
@@ -1214,8 +1048,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return UnsupportedValue;
         }
 
-        // The members whose unreadable value has been reported, so that a sender that keeps
-        // sending one is reported once.
+        // Members whose unreadable value was reported; each is reported once.
         private HashSet<string> _warnedUnreadable;
 
         private void WarnUnreadable(SyncedAttribute attribute, JToken value, Exception exception)
@@ -1240,10 +1073,9 @@ namespace HCIKonstanz.Colibri.Synchronization
             var self = this as T;
             var attribute = _syncedAttributes[name];
 
-            // Read first, set after, so that only a value that cannot be read is caught here: an
-            // exception from a [Sync] setter in application code goes on to Sync's dispatch, which
-            // reports it. A value of the wrong type, or a JSON null, used to throw out of the
-            // update, and every member after it in the update was lost.
+            // Read first and set after, so only an unreadable value is caught here: an exception from a [Sync]
+            // setter in application code goes on to Sync's dispatch, which reports it. A bad value must not
+            // lose the rest of the update.
             object read;
             try
             {
@@ -1263,52 +1095,33 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
             attribute.SetBoxed(self, read);
 
-            // What the server sent is now the known state, not a change for the poll to report.
-            // This used to be a per-attribute "received, swallow the next change" flag instead,
-            // which went stale whenever the poll saw no change afterwards - two updates between
-            // polls that ended where they started, or any update while the component was off -
-            // and then silently swallowed the next genuine local change.
-            //
-            // Null only before Awake, when OnModelUpdate reaches an object that was instantiated
-            // inactive; Awake then latches every current value anyway.
+            // What the server sent is the known state, not a change for the poll to report.
+            // _trackers is null before Awake, e.g. for an object instantiated inactive; Awake latches the
+            // then-current values.
             if (_trackers != null)
                 _trackers[attribute.Index].Latch(self);
 
-            // The member holds another client's value now, and what it sent before that says
-            // nothing about the server any more: an answer after the next reconnect holding one of
-            // those values again was set back to it by someone else. The value it holds now does:
-            // the server holds it too, so an answer holding it after this member's next change
-            // says that change was lost. A JObject is the application's own object from here on,
-            // and is copied.
+            // The member holds the server's value now, so what it sent before says nothing about the server.
+            // If an answer after a reconnect holds this value following the member's next change, that change
+            // was lost.
             SentValuesOf(attribute).ServerShowed(ToKeep(attribute, value));
 
-            // A local change of the same member that is still waiting to be sent - polled earlier
-            // this frame, or held by the send-rate limit - has just been overwritten here by the
-            // server's value. Sent anyway, it would overwrite that value on the server and every
-            // other client too, while this client goes on showing the server's: the copies would
-            // disagree for good. Dropped, they all agree on the value this client now shows.
+            // A pending local change of this member (polled this frame, or held by the rate limit) was just
+            // overwritten by the server's value. Sent anyway, it would replace that value on the server and
+            // every other client while this client shows the server's, and the copies would disagree for good.
             if (_nextUpdate != null && _nextUpdate.Remove(attribute.Name) && _nextUpdate.Count == 1)
                 _nextUpdate = null;
         }
     }
 
     /// <summary>
-    /// How a [Sync] member's values are compared for a change, and kept to compare the next one
-    /// with: as they go on the wire.
+    /// Compares and copies a [Sync] member's values as they go on the wire, to detect changes.
     /// </summary>
-    /// <remarks>
-    /// Arrays and JObjects used to be compared by reference. A getter that builds the value, such
-    /// as <c>[Sync] public Vector3[] Points => _points.ToArray();</c>, then made a change in every
-    /// poll: the member went out at the send-rate limit for good, and every client that applied it
-    /// read a new array again and sent it back. Changed in place, the same array was no change.
-    /// Each is now compared element by element, or with JToken.DeepEquals, against a copy.
-    ///
-    /// A Color goes on the wire as #RRGGBBAA, 8 bits a channel. Compared exactly, a color set in
-    /// every frame, such as Color.gray, differed from the rounded one every other client applied,
-    /// so each of them sent it back, and on again. Colors are compared as Color32.
-    ///
-    /// The comparers are made for each supported type by name, so IL2CPP compiles each of them.
-    /// </remarks>
+    // Arrays are compared element by element and JObjects with JToken.DeepEquals, against a copy: a
+    // getter that builds its value (Points => _points.ToArray()) would differ in every poll.
+    // Colors are compared as Color32, since the wire carries #RRGGBBAA at 8 bits a channel: an exact
+    // comparison differs from the rounded color every other client applies, and echoes it back.
+    // Comparers are chosen per supported type by name, so IL2CPP compiles each of them.
     internal static class SyncValues
     {
         internal static Func<TValue, TValue, bool> EqualityFor<TValue>()

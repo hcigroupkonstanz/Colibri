@@ -1,9 +1,8 @@
 import { Service } from '../core/index.js';
 import { ConnectionPool, NetworkMessage } from './connection-pool.js';
 
-// A client's log line is cut to this many characters. RemoteLogger sends whatever the app logs, a
-// whole JSON dump or a megabyte string included, and every line is printed and kept in the admin
-// UI's history (see WebLog): a few such lines a second filled the server's heap within minutes.
+// Per-line cap: RemoteLogger sends whatever the app logs, and every line is printed and kept in
+// the admin UI history (WebLog).
 export const MAX_CLIENT_LOG_CHARS = 8 * 1024;
 
 const truncate = function (text: string): string {
@@ -16,23 +15,15 @@ export class ClientLogger extends Service {
     public get groupName(): string { return 'hook'; }
 
     /**
-     * A log line is human-readable text, so it has to reach the admin UI as text rather than as
-     * the JSON encoding of a string.
-     *
-     * colibri-unity sends this one channel as raw utf8 for exactly that reason (see
-     * `WebServerConnection.EncodePayload`), and `asString()` hands that straight back. A
-     * Socket.IO client cannot do the same - it sends a JS value, so the payload arrives as
-     * `Payload.fromValue('text')`, whose `asString()` is `JSON.stringify` and yields `"text"`
-     * with the quotes in it and every newline in a stack trace flattened to a literal `\n`.
-     * Unwrapping a string value here fixes that for both transports, and for every colibri-web
-     * version already published.
+     * The text of a log message. Unity sends the log channel as raw utf8; a Socket.IO client sends a
+     * JS value, whose asString() is JSON with quotes and escaped newlines, so a string value is unwrapped.
      */
     public static readLogText(msg: NetworkMessage): string {
         try {
             const value = msg.payload?.asValue();
             if (typeof value === 'string') return value;
         } catch {
-            // Not JSON at all - raw text off the TCP wire, which asString() returns verbatim.
+            // Not JSON: raw text from a TCP client, which asString() returns as is.
         }
         return msg.payload?.asString() ?? '';
     }

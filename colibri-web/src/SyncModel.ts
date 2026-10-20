@@ -1,15 +1,13 @@
 import { Subject, bufferTime, filter, map, share } from 'rxjs';
 
 export abstract class SyncModel<T> {
-    // Populated per-instance by registerSyncedProperty() via Object.defineProperty
-    // as a non-enumerable field, so it stays out of Object.keys()/JSON serialization;
-    // `declare` documents the type without emitting a competing field initializer.
+    // Non-enumerable (stays out of Object.keys() and JSON), defined per instance by registerSyncedProperty().
+    // `declare` emits no field initializer.
     declare private __syncedProperties?: Record<string, string | symbol>;
 
     public readonly id: string;
 
-    // Set synchronously while a remote update is being applied, so decorated
-    // setters can suppress re-emitting the change they were just given.
+    // True while update() applies a remote update, so the setters do not echo it.
     public applyingRemoteUpdate = false;
 
     public readonly modelChanges = new Subject<string>();
@@ -20,10 +18,9 @@ export abstract class SyncModel<T> {
         share()
     );
 
-    // Emits once, when delete() is called: the RegisterModelSync that lists the model deletes it
-    // for every client. Public only for RegisterModelSync, as modelChanges is for @Synced().
+    // Emits once on delete(), which RegisterModelSync sends on as model::delete. Public only for RegisterModelSync.
     public readonly deletions = new Subject<void>();
-    // An ES private field: a subclass may well have a `deleted` of its own.
+    // ES private: a subclass may have a `deleted` of its own.
     #deleted = false;
 
     public constructor(id: string) {
@@ -39,8 +36,8 @@ export abstract class SyncModel<T> {
     }
 
     /**
-     * Deletes the model for every client of the app: on the server, on every other client (Unity
-     * destroys its GameObject), and from this client's list. The model stops syncing.
+     * Deletes the model for every client of the app (Unity destroys its GameObject) and removes it
+     * from this client's list. The model stops syncing.
      */
     public delete(): void {
         if (this.#deleted) return;
@@ -51,26 +48,23 @@ export abstract class SyncModel<T> {
                     'take it from the list RegisterModelSync gives, to delete it for every client.'
             );
         }
-        // Detached first: ending modelChanges sends a change still buffered, which must not go out
-        // after the delete. With MODEL_TOMBSTONE_SECONDS=0 it created the object again everywhere.
-        // SyncModel's own detach(), whatever a model class has under that name.
+        // Detach first: completing modelChanges flushes a buffered change, which must be sent before the delete.
+        // SyncModel's own detach(), as a model class may define one too.
         SyncModel.prototype.detach.call(this);
         this.deletions.next();
         this.deletions.complete();
     }
 
     /**
-     * Stops syncing the model on this client only: it sends nothing more, and every other client
-     * keeps it. For RegisterModelSync, on a delete from another client and when registerModel
-     * replaces a listed copy.
+     * Stops syncing the model on this client only; every other client keeps it. RegisterModelSync
+     * calls it on a remote delete and when registerModel replaces a listed copy.
      */
     public detach(): void {
         this.modelChanges.complete();
     }
 
     public registerSyncedProperty(name: string, prop: string | symbol): void {
-        // Called per-instance (via the accessor decorator's addInitializer), once
-        // for every @Synced member declared anywhere in the prototype chain.
+        // Called per instance: by @Synced's initializer for every member in the prototype chain, and by synced().
         let syncedProperties = this.__syncedProperties;
         if (syncedProperties === undefined) {
             syncedProperties = {};
@@ -98,9 +92,7 @@ export abstract class SyncModel<T> {
                 if (key !== 'id') {
                     const localKey = syncedProps[key];
                     if (localKey) {
-                        // Reflection-based assignment: `localKey` names whichever
-                        // decorated field this network key maps to, so its runtime
-                        // type can't be tied to `updates[key]`'s at compile time.
+                        // localKey is only known at runtime, so its type can't be tied to updates[key].
                         (this as unknown as Record<string | symbol, unknown>)[localKey] = updates[key as keyof T];
                     } else {
                         console.warn(`Unknown property ${key} in ${this.constructor.name}`);
@@ -119,8 +111,7 @@ export abstract class SyncModel<T> {
         for (const key of Object.keys(syncedProps)) {
             const localKey = syncedProps[key] as keyof SyncModel<T>;
             if (attributes.length === 0 || attributes.includes(localKey)) {
-                // localKey is always a decorated data field in practice, never a
-                // method, but keyof SyncModel<T> can't express that narrowing
+                // Always a synced data field, never a method, but keyof SyncModel<T> can't express that.
                 // eslint-disable-next-line @typescript-eslint/unbound-method
                 json[key] = this[localKey];
             }

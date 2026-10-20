@@ -29,9 +29,7 @@ namespace HCIKonstanz.Colibri.Samples
         public Quaternion[] SyncedQuaternionArray;
         public Color[] SyncedColorArray;
 
-        // Naming the type - Sync.Receive<float> - is what makes this unambiguous. Without it the
-        // compiler has to pick between one Receive overload per supported type, and some of these
-        // handlers would need an explicit (Action<float>)-style cast.
+        // The type argument picks the Receive overload, so the handlers need no casts.
         private void OnEnable()
         {
             Sync.Receive<bool>(Channel, OnBoolMessage);
@@ -55,9 +53,8 @@ namespace HCIKonstanz.Colibri.Samples
             Sync.Receive<JToken>(Channel, OnJsonMessage);
         }
 
-        // Destroying this object would drop these listeners on its own - Colibri knows they belong
-        // to it. Disabling it does not, because the object is still very much alive, so the pairing
-        // with OnEnable is what stops a disabled component from going on receiving.
+        // Colibri drops the listeners of a destroyed object by itself. A disabled one keeps them,
+        // so they are unregistered here.
         private void OnDisable()
         {
             Sync.Unregister<bool>(Channel, OnBoolMessage);
@@ -107,9 +104,7 @@ namespace HCIKonstanz.Colibri.Samples
                 Sync.Send(Channel, SyncedQuaternionArray);
                 Sync.Send(Channel, SyncedColorArray);
 
-                // Same channel as everything else above: the JToken listener registered in
-                // OnEnable listens on Channel, so sending this anywhere else would make the
-                // sample's own JSON round trip unobservable from the sample.
+                // On Channel, where OnJsonMessage (registered in OnEnable) listens.
                 Sync.Send(Channel, new JObject
                 {
                     { "attribute1", "example" },

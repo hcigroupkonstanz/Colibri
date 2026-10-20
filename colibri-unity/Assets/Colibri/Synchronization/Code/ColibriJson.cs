@@ -8,42 +8,28 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Synchronization
 {
     /// <summary>
-    /// Newtonsoft JSON that can convert Unity's Vector2, Vector3, Vector4, Quaternion and Color
-    /// inside your own classes. The Store uses it; use it yourself to put such a class into a
-    /// [Sync] JObject member or Sync.Send(channel, JToken):
-    /// <c>JObject.FromObject(value, ColibriJson.Serializer)</c>, and back with
-    /// <c>token.ToObject&lt;YourClass&gt;(ColibriJson.Serializer)</c>.
+    /// Newtonsoft JSON that converts Unity's Vector2, Vector3, Vector4, Quaternion and Color inside
+    /// your own classes. The Store uses it. To put such a class into a [Sync] JObject member or
+    /// Sync.Send(channel, JToken), use <c>JObject.FromObject(value, ColibriJson.Serializer)</c>,
+    /// and back <c>token.ToObject&lt;YourClass&gt;(ColibriJson.Serializer)</c>.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Newtonsoft on its own cannot write any of these types. It writes every public property, and
-    /// <c>Vector3.normalized</c> is a Vector3 again - as are <c>Quaternion.normalized</c> and
-    /// <c>Color.linear</c> - so it stops with "Self referencing loop detected", and a class holding
-    /// one cannot be converted at all.
-    /// </para>
-    /// <para>
-    /// Written in the shapes Colibri puts on the wire, which are also the ones colibri-web's types
-    /// describe: Vector2 <c>[x, y]</c>, Vector3 <c>[x, y, z]</c>, Vector4 and Quaternion
-    /// <c>[x, y, z, w]</c>, Color <c>[r, g, b, a]</c>. A colour goes as numbers rather than the
-    /// <c>"#RRGGBBAA"</c> a [Sync] Color travels as: that string keeps 8 bits per channel and
-    /// nothing above 1, and a saved value should load as it was saved. Colibri reads both colour
-    /// shapes everywhere, and so does colibri-web.
-    /// </para>
-    /// <para>
-    /// Read: those arrays; objects with the components named, as in <c>{"x": 1, "y": 2, "z": 3}</c>,
-    /// which is how Unity's JsonUtility - and with it Colibri 1.x's Store - wrote them; and for a
-    /// colour also <c>"#RRGGBBAA"</c>. Anything else is a JsonSerializationException.
-    /// </para>
+    /// Plain Newtonsoft fails on these types with "Self referencing loop detected", because e.g.
+    /// <c>Vector3.normalized</c> is a Vector3 again.
+    /// Written as the arrays Colibri puts on the wire (matching colibri-web): Vector2 <c>[x, y]</c>,
+    /// Vector3 <c>[x, y, z]</c>, Vector4 and Quaternion <c>[x, y, z, w]</c>, Color <c>[r, g, b, a]</c>.
+    /// Color is not written as the <c>"#RRGGBBAA"</c> of a [Sync] Color, which keeps only 8 bits per
+    /// channel and clamps to 1.
+    /// Read: those arrays, objects with the component names (<c>{"x": 1, "y": 2, "z": 3}</c>, the
+    /// shape JsonUtility and the 1.x Store wrote), and for Color also <c>"#RRGGBBAA"</c>.
+    /// Anything else throws a JsonSerializationException.
     /// </remarks>
     public static class ColibriJson
     {
         /// <summary>New settings with Colibri's converters, for JsonConvert.</summary>
         /// <remarks>
-        /// A string that looks like a date stays the string it is when it is read into a JToken,
-        /// an object or a string - as JSON.parse in colibri-web leaves it. Newtonsoft's default turns
-        /// "2026-10-08T12:00:00Z" into a DateTime there, which comes back as "10/08/2026 12:00:00",
-        /// or moved into this device's time zone. Read into a DateTime or DateTimeOffset, it is
-        /// still a date.
+        /// Date-like strings stay strings when read into a JToken, an object or a string, as with
+        /// JSON.parse in colibri-web. Read into a DateTime or DateTimeOffset, they are still dates.
         /// </remarks>
         public static JsonSerializerSettings CreateSettings()
         {
@@ -53,9 +39,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// A serializer with Colibri's converters, for <c>JToken.FromObject</c> and
-        /// <c>ToObject</c>. Shared, so leave its settings alone; take
-        /// <see cref="CreateSettings"/> for settings of your own.
+        /// A serializer with Colibri's converters, for <c>JToken.FromObject</c> and <c>ToObject</c>.
+        /// Shared, so do not change its settings; use <see cref="CreateSettings"/> for your own.
         /// </summary>
         public static JsonSerializer Serializer { get; } = JsonSerializer.Create(CreateSettings());
 
@@ -69,19 +54,14 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 
-        /// <summary>
-        /// One Unity value type, written as an array of its float components. Non-generic
-        /// JsonConverter rather than JsonConverter&lt;T&gt;, so that it takes the nullable form of
-        /// the type too.
-        /// </summary>
+        // Non-generic JsonConverter so that it also takes TValue?.
         private abstract class ComponentsConverter<TValue> : JsonConverter
             where TValue : struct
         {
+            // Component names in write order; the first _required of them must be present.
             private readonly string[] _names;
             private readonly int _required;
 
-            /// <param name="required">How many leading components a value has to have.</param>
-            /// <param name="names">The components, in the order they are written.</param>
             protected ComponentsConverter(int required, params string[] names)
             {
                 _required = required;
@@ -90,17 +70,17 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             protected abstract float Get(TValue value, int index);
 
-            /// <summary>The value from its components; <paramref name="count"/> of them were given, the rest are 0.</summary>
+            // Only the first count components were given; the rest are 0.
             protected abstract TValue Create(float[] components, int count);
 
-            /// <summary>A shape other than the array and the object, such as a colour's hex string.</summary>
+            // Shapes besides array and object, e.g. a colour's hex string.
             protected virtual bool TryReadOther(JToken token, out TValue value)
             {
                 value = default;
                 return false;
             }
 
-            /// <summary>The shapes this converter reads, for the message about one it cannot.</summary>
+            // For the error message.
             protected virtual string Expected => $"[{string.Join(", ", _names)}] or an object with those names";
 
             public override bool CanConvert(Type objectType)
@@ -123,8 +103,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
             {
-                // Taken before the token is loaded: a loaded token is a root of its own, and its
-                // path no longer says where in the document it was.
+                // Before loading: the loaded token is its own root, so its Path no longer locates it.
                 var path = reader.Path;
                 var token = JToken.Load(reader);
 
@@ -229,7 +208,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             protected override Quaternion Create(float[] c, int count) => new Quaternion(c[0], c[1], c[2], c[3]);
         }
 
-        /// <summary>Alpha is optional, as in colibri-web's [r, g, b] and Unity's "#RRGGBB": opaque.</summary>
+        // Alpha is optional (opaque if missing), as in colibri-web's [r, g, b] and "#RRGGBB".
         private sealed class ColorConverter : ComponentsConverter<Color>
         {
             public ColorConverter() : base(3, "r", "g", "b", "a") { }

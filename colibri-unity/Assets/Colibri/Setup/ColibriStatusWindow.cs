@@ -8,46 +8,32 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Setup
 {
     /// <summary>
-    /// "Am I actually connected, and is anything arriving?" answered without reading the console.
-    ///
-    /// Everything here is read-only observation of the running app: the window never creates or
-    /// touches scene objects, and in particular never goes through WebServerConnection.Instance,
-    /// because SingletonBehaviour.Instance *creates* a GameObject when none exists - which outside
-    /// Play mode would mean an editor window quietly adding an object to the open scene.
+    /// Shows whether the running app is connected and what is arriving, without reading the console.
     /// </summary>
+    // Read-only. Never goes through WebServerConnection.Instance: SingletonBehaviour.Instance creates
+    // a GameObject when none exists, and this window must not add objects to the scene.
     public class ColibriStatusWindow : EditorWindow
     {
         private const double RepaintIntervalSeconds = 0.1;
 
-        /// <summary>
-        /// How long a gap has to be before it is worth showing a number for. The server
-        /// heartbeats every 100 ms, so anything under this is just the normal sawtooth.
-        /// </summary>
+        // The server heartbeats every 100 ms, so a gap under this is just the normal sawtooth.
         private const long HeartbeatConcernMillis = 500;
 
-        /// <summary>
-        /// Below this, the frame rate is the reason messages feel late. Received messages are
-        /// handed to user code from <c>Update</c>, so 20 fps already puts up to 50 ms between a
-        /// message arriving on the socket and anything acting on it - and an Editor left in the
-        /// background falls a long way below that.
-        /// </summary>
+        // Below this, the frame rate is what makes messages feel late: they reach user code from
+        // Update, so at 20 fps up to 50 ms pass before anything acts on one.
         private const float DeliveryRateConcernFps = 20f;
 
-        /// <summary>Between the widest label and the value next to it.</summary>
         private const float LabelColumnGap = 8f;
 
         private Vector2 _scroll;
         private double _nextRepaint;
 
-        // Peak-hold over one second. Showing MillisSinceLastHeartbeat() raw meant sampling a
-        // 0-100 ms sawtooth at the same 10 Hz this window repaints at, which beats against it
-        // and reads like a number counting down - alarming, and impossible to read anything
-        // out of. The worst gap in the last second is both steady and the figure that
-        // actually matters.
+        // Peak-hold over one second. The raw gap is a 0-100 ms sawtooth that beats against the
+        // 10 Hz repaint and reads like a countdown; the worst gap of the last second holds still.
         private long _worstRecentGap;
         private double _gapWindowEnds;
 
-        // The width the certificate's fingerprint had in the last repaint; see DrawCertificate.
+        // Fingerprint label width at the last repaint; DrawCertificate sizes from it.
         private float _fingerprintWidth;
 
         [MenuItem("Window/Colibri Status")]
@@ -64,8 +50,8 @@ namespace HCIKonstanz.Colibri.Setup
 
         private void OnEditorUpdate()
         {
-            // Only while playing, and only ten times a second: nothing here changes in edit mode,
-            // and repainting on every editor tick would show up in the editor's own profile.
+            // Only in Play mode, and ten times a second: nothing changes in edit mode, and repainting
+            // on every editor tick would show up in the editor's own profile.
             if (!EditorApplication.isPlaying || EditorApplication.timeSinceStartup < _nextRepaint)
                 return;
 
@@ -112,7 +98,7 @@ namespace HCIKonstanz.Colibri.Setup
                 return;
             }
 
-            // Never WebServerConnection.Instance - see the class comment.
+            // Not Instance: it would create the object when the scene has none.
             var connection = FindAnyObjectByType<WebServerConnection>();
             if (connection == null)
             {
@@ -134,8 +120,8 @@ namespace HCIKonstanz.Colibri.Setup
 
             if (status == ConnectionStatus.ProtocolMismatch)
             {
-                // Terminal, and the one connection state the usual "is the server running?"
-                // advice is actively wrong for - the server is running, and it said no.
+                // Terminal. The usual "is the server running?" advice is wrong here: it is running,
+                // and it said no.
                 EditorGUILayout.HelpBox(
                     $"The server refused this client: {connection.ProtocolMismatchReason}\n\n" +
                     "This is not retried. Update colibri-unity and colibri-server to matching versions.",
@@ -145,8 +131,8 @@ namespace HCIKonstanz.Colibri.Setup
 
             if (status == ConnectionStatus.Connected)
             {
-                // Not a latency: the heartbeat carries the server's clock, so no round trip can be
-                // derived from it. It does say whether the server is still talking to us.
+                // Not latency: the heartbeat carries the server's clock, so no round trip can be
+                // derived from it. It does show whether the server is still talking to us.
                 var gap = TrackHeartbeatGap(connection.MillisSinceLastHeartbeat());
                 Row("Heartbeat",
                     gap < HeartbeatConcernMillis
@@ -158,8 +144,8 @@ namespace HCIKonstanz.Colibri.Setup
             }
             else if (!string.IsNullOrEmpty(connection.SuspectedProtocolMismatch))
             {
-                // "Check that colibri-server is running" is the wrong advice here: something is
-                // answering on that port, it just is not speaking this protocol.
+                // Something answers on that port but does not speak this protocol, so "check that
+                // colibri-server is running" is the wrong advice.
                 EditorGUILayout.HelpBox(
                     $"{connection.SuspectedProtocolMismatch}\n\n" +
                     "Still retrying, because this cannot tell an out-of-date server apart from an address that points at something other than colibri-server.",
@@ -167,8 +153,8 @@ namespace HCIKonstanz.Colibri.Setup
             }
             else
             {
-                // A timeout and a refusal want different fixes - the address or the network, against
-                // the server or its port - so the last one is shown rather than left to the console.
+                // A timeout and a refusal need different fixes, so the last failure is shown here
+                // rather than left to the console.
                 var failure = connection.LastConnectFailure;
                 EditorGUILayout.HelpBox(
                     "Not connected. Check that colibri-server is running and that the server address above is reachable."
@@ -177,14 +163,6 @@ namespace HCIKonstanz.Colibri.Setup
             }
         }
 
-        /// <summary>
-        /// How the server's certificate was accepted, and its fingerprint, selectable so that it
-        /// can be copied into "Server certificate SHA-256" to accept only this certificate.
-        /// </summary>
-        /// <remarks>
-        /// Both wrap: on one line, they ran past the edge of the window at its default width and
-        /// were cut off.
-        /// </remarks>
         private void DrawCertificate(WebServerConnection connection)
         {
             if (!connection.UsesTls || connection.CertificateAcceptance == null)
@@ -192,11 +170,9 @@ namespace HCIKonstanz.Colibri.Setup
 
             Row("Certificate", connection.CertificateAcceptance);
 
-            // A selectable label takes the height it is given, and the layout needs that height
-            // before it hands out widths. So it is worked out for the width the fingerprint had in
-            // the last repaint, and only estimated before the first one: an estimate below the
-            // real width reserved a second, empty line in a wide window. The fingerprint has no
-            // spaces: it breaks between characters.
+            // The layout needs a selectable label's height before it hands out widths, so the height
+            // comes from the width at the last repaint, and is estimated only before the first one.
+            // The fingerprint has no spaces, so it breaks between characters.
             var fingerprint = connection.ServerCertificateSha256 ?? "";
             var width = _fingerprintWidth > 0f
                 ? _fingerprintWidth
@@ -206,10 +182,11 @@ namespace HCIKonstanz.Colibri.Setup
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.PrefixLabel("SHA-256");
+            // Selectable, so the fingerprint can be copied into "Server certificate SHA-256".
             EditorGUILayout.SelectableLabel(fingerprint, EditorStyles.wordWrappedLabel, GUILayout.Height(height));
 
-            // Only a repaint has the real width. Laid out again at once when it changed, so a new
-            // window or a resize shows the wrong height for a single frame at most.
+            // Only a repaint knows the real width. Repaint again when it changes, so a resize is off
+            // for one frame at most.
             if (Event.current.type == EventType.Repaint)
             {
                 var laidOut = GUILayoutUtility.GetLastRect().width;
@@ -223,12 +200,8 @@ namespace HCIKonstanz.Colibri.Setup
             EditorGUILayout.EndHorizontal();
         }
 
-        /// <summary>
-        /// The socket runs off the main thread, so what is left between a message arriving and
-        /// user code seeing it is one frame of this client's own. That is worth stating outright:
-        /// a background Editor delivering at 4 fps looks exactly like a slow server otherwise,
-        /// and the fix is on this side of the wire.
-        /// </summary>
+        // The socket runs off the main thread, so the delay left is this client's own frame time.
+        // A background Editor at 4 fps looks exactly like a slow server, and the fix is local.
         private void DrawDeliveryRate(WebServerConnection connection)
         {
             var fps = connection.DeliveryFramesPerSecond;
@@ -252,8 +225,7 @@ namespace HCIKonstanz.Colibri.Setup
             }
         }
 
-        /// <returns>The worst gap seen in the last second, so the reading holds still long
-        /// enough to be read.</returns>
+        // Returns the worst gap of the last second, so the reading holds still enough to be read.
         private long TrackHeartbeatGap(long currentGap)
         {
             if (currentGap > _worstRecentGap)
@@ -293,9 +265,8 @@ namespace HCIKonstanz.Colibri.Setup
         {
             EditorGUILayout.LabelField("Recent messages", EditorStyles.boldLabel);
 
-            // Entries outlive Play mode when domain reload is disabled. Showing the last
-            // session's messages here, with ages still counting up against a clock that never
-            // stops, reads as if something were still being sent.
+            // With domain reload disabled, entries outlive Play mode. Their ages would keep counting
+            // against a clock that never stops, which reads as live traffic.
             if (!EditorApplication.isPlaying)
             {
                 EditorGUILayout.LabelField("(nothing sent or received yet)");
@@ -317,19 +288,11 @@ namespace HCIKonstanz.Colibri.Setup
             EditorGUIUtility.labelWidth = labelWidth;
         }
 
-        /// <summary>
-        /// A label and its value, the value wrapped to the window's width. On one line, a value
-        /// longer than the space next to the label column was cut off at the window's edge.
-        /// </summary>
         private static void Row(string label, string value)
             => EditorGUILayout.LabelField(label, value, EditorStyles.wordWrappedLabel);
 
-        /// <summary>
-        /// Widens the label column to fit the widest of <paramref name="labels"/>, up to half the
-        /// window, for the rows drawn until it is put back. At the default width a long channel
-        /// name ran into the value next to it.
-        /// </summary>
-        /// <returns>The width to put back.</returns>
+        // Widens the label column to fit the widest label, up to half the window, for the rows
+        // drawn after it. The caller puts back the returned width.
         private static float WidenLabelColumn(string[] labels)
         {
             var previous = EditorGUIUtility.labelWidth;

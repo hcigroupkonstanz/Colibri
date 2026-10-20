@@ -5,7 +5,7 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Synchronization
 {
     /// <summary>
-    /// How the synchronization layer behaves, changeable from code while the app runs.
+    /// Settings of the synchronization layer that code can change while the app runs.
     /// </summary>
     public static class SyncSettings
     {
@@ -13,31 +13,28 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static bool _hasWarnedAboutConfiguredRate;
 
         /// <summary>
-        /// The most updates per second one synced object - a <c>SyncTransform</c> or any other
-        /// <see cref="SyncBehaviour{T}"/> - sends. 0 means no limit: an update in every frame in
-        /// which something changed.
+        /// The most updates per second that one synced object sends, a <c>SyncTransform</c> or any
+        /// other <see cref="SyncBehaviour{T}"/>. 0 means no limit: an update in every frame in which
+        /// something changed.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// The limit loses nothing. The first change after a quiet spell goes out in the frame it is
-        /// made, as it always did. Changes within one interval (1 / MaxSendRate seconds) after that
-        /// are collected, and their latest values go out together as soon as the interval is up -
-        /// whether or not anything changes after them. Only the values in between never travel.
-        /// Switching an object off or on is never held back, and neither is what is waiting when
-        /// the app pauses or loses focus - the way out on Android and Quest. When the app quits,
-        /// what is waiting is sent too, but the connection closes in the same teardown, so that
-        /// last send is best effort.
+        /// The limit keeps the latest state. A change after a quiet spell is sent in the frame it is
+        /// made. Later changes within one interval (1 / MaxSendRate seconds) are merged, and their
+        /// latest values go out when the interval is up, even if the object does not change again.
+        /// Intermediate values are not sent.
         /// </para>
         /// <para>
-        /// Why there is a limit: a headset renders 72 to 120 frames per second, and without one every
-        /// moving object sends that many messages. Dozens of headsets, each moving a few objects,
-        /// produce more traffic than one server and one Wi-Fi network can keep up with.
+        /// Switching an object on or off is not delayed. Waiting changes are sent at once when the app
+        /// pauses or loses focus. On Android and Quest that can be the last chance, as quit may never
+        /// be called there. On quit they are sent too, but that send is best effort: the connection
+        /// closes in the same teardown.
         /// </para>
         /// <para>
         /// Starts out as <see cref="ColibriConfig.MaxSendRate"/> (Window -> Colibri Configuration).
         /// Setting it here applies to this run of the app only and leaves the configuration alone.
-        /// A negative value in the configuration is a mistake rather than a rate: it is reported
-        /// once and the default, <see cref="ColibriConfig.DEFAULT_MAX_SEND_RATE"/>, is used.
+        /// A negative configured value is reported once, and <see cref="ColibriConfig.DEFAULT_MAX_SEND_RATE"/>
+        /// is used instead.
         /// </para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">On a negative value.</exception>
@@ -55,9 +52,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// The configuration's rate. A negative one used to be clamped to 0 - no limit at all, every
-        /// moving object sending in every frame - without a word. The setup window refuses to save
-        /// one, but the configuration asset's own Inspector and a hand edit let it through.
+        /// The configuration's rate, or the default when the configured one is negative. The setup
+        /// window rejects a negative rate, but a hand edit of the asset does not.
         /// </summary>
         private static int ConfiguredRate()
         {
@@ -65,7 +61,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (configured >= 0)
                 return configured;
 
-            // Read every frame, so said once per run rather than every time.
+            // Called every frame through SendInterval, so warn once per run.
             if (!_hasWarnedAboutConfiguredRate)
             {
                 _hasWarnedAboutConfiguredRate = true;
@@ -88,9 +84,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// Back to the configuration's value. Statics survive Play mode when domain reload is
-        /// disabled, and a rate set from code in one session must not carry into the next - nor
-        /// must having reported a negative configured rate keep the next session quiet about it.
+        /// Clears the rate set from code and the one-time warning flag at the start of each run.
+        /// Statics survive Play mode when domain reload is disabled, so both would carry into the
+        /// next run.
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetMaxSendRate()

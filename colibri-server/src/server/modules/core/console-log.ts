@@ -2,23 +2,19 @@ import { Console } from 'console';
 import { Observable, Subscription } from 'rxjs';
 import { LogLevel, LogMessage, Metadata } from './log-message.js';
 
-/**
- * Set on a log message whose text has already been written to stdout/stderr by whoever logged
- * it, so {@link ConsoleLog} does not print it a second time. The admin UI still shows it.
- */
+/** Metadata flag for a message its logger already wrote to stdout/stderr; {@link ConsoleLog} skips it. */
 export const PRINTED_TO_CONSOLE = 'printedToConsole';
 
-/** Most of a message {@link ConsoleLog} prints; the rest is cut and counted. */
+/** Longest message {@link ConsoleLog} prints in full; the rest is cut and counted. */
 export const MAX_CONSOLE_MESSAGE_LENGTH = 8192;
 
 export interface ConsoleLogOptions {
-    /** The most verbose level printed: Info prints Error, Warn and Info, and drops Debug. */
+    /** Most verbose level printed: Info prints Error, Warn and Info. */
     minLevel: LogLevel;
 
     /**
-     * Whether broadcast/sync traffic (`metadata.broadcastTraffic`) is printed. Decided by this
-     * alone and never by {@link minLevel}, the same way the admin UI's "show broadcast traffic"
-     * toggle works: it is logged at Debug, many times a second per client.
+     * Whether broadcast traffic (`metadata.broadcastTraffic`) is printed. It is logged at Debug,
+     * many times a second per client, so only this decides, never {@link minLevel} (as in the admin UI).
      */
     broadcastTraffic: boolean;
 }
@@ -43,8 +39,8 @@ const LABELS: { [level: number]: string } = {
     [LogLevel.Debug]: 'DEBUG',
 };
 
-// Everything but tab and newline: a carriage return, a backspace or an ANSI escape in a client's
-// log line would otherwise rewrite what an operator sees in a terminal.
+// All control characters but tab and newline; a CR, backspace or ANSI escape in a client's log
+// line would rewrite the terminal.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
 
@@ -52,9 +48,8 @@ const escapeControl = function (char: string): string {
     return `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`;
 };
 
-// A private Console rather than the global one: it ignores a broken stdout/stderr pipe instead
-// of throwing, and it keeps writing to the real streams even if something (RedirectConsole)
-// has replaced console.log/console.error with a function that logs back onto the bus.
+// Not the global console: RedirectConsole replaces console.* with functions that log back onto
+// Service.output$.
 let defaultWriter: ConsoleLogWriter | undefined;
 const getDefaultWriter = function (): ConsoleLogWriter {
     if (!defaultWriter) {
@@ -68,16 +63,11 @@ const getDefaultWriter = function (): ConsoleLogWriter {
 };
 
 /**
- * Prints the services' log messages to stdout and stderr, so they reach `docker logs`.
- *
- * Every `Service` log call publishes on `Service.output$`, and until this existed the admin UI's
- * in-memory `WebLog` was the only thing listening - a refused client, a failed store.json write
- * or a crashed TCP worker never reached the container's output, and was gone with the process.
+ * Prints the log messages of `Service.output$` to stdout and stderr, so they reach `docker logs`.
  *
  * One line per message: `<ISO timestamp> <LEVEL> [<group>/<service>] <message>`. Errors and
- * warnings go to stderr, the rest to stdout. A message that spans several lines (a stack trace)
- * continues on lines indented by four spaces, so nothing a client sends can start a line that
- * looks like one of these.
+ * warnings go to stderr, the rest to stdout. Further lines of a message (a stack trace) are
+ * indented by four spaces, so nothing a client sends can look like a log line.
  */
 export class ConsoleLog {
     public constructor(
@@ -87,8 +77,8 @@ export class ConsoleLog {
 
     /**
      * Reads `CONSOLE_LOG_LEVEL` (error, warn, info or debug; default info) and
-     * `CONSOLE_LOG_BROADCAST_TRAFFIC` (true or false; default false). Throws on a level it does
-     * not know, naming the variable, rather than guessing what was meant.
+     * `CONSOLE_LOG_BROADCAST_TRAFFIC` (true or false; default false). Throws on an unknown level,
+     * naming the variable.
      */
     public static optionsFromEnv(env: NodeJS.ProcessEnv): ConsoleLogOptions {
         return {
@@ -131,8 +121,7 @@ export class ConsoleLog {
     }
 
     public write(msg: LogMessage): void {
-        // A subscriber that throws is rethrown by RxJS as an uncaught exception, which shuts
-        // the server down - printing a log line is never worth that.
+        // A throwing subscriber becomes an uncaught exception and stops the server.
         try {
             if (!ConsoleLog.shouldPrint(msg, this.options)) return;
             const line = ConsoleLog.format(msg);

@@ -7,11 +7,11 @@ export const enum LogLevel {
 
 export type Metadata = { [key: string]: string | number | boolean };
 
-// The metadata key of a routine connect or disconnect line, which the admin UI's Connections switch
-// hides (see WebLog). A warning or an error about a connection is not tagged, and stays visible.
+// Tags routine connection lines. WebLog hides them while the admin UI's Connections switch is off.
+// Warnings and errors about a connection are not tagged, so they stay visible.
 export const CONNECTION_METADATA_KEY = 'connection';
 
-// The metadata of such a line about no client in particular.
+// One object for all connection lines. outputMsg does not copy metadata, so nothing may write to it.
 export const CONNECTION_LINE: Metadata = Object.freeze({ [CONNECTION_METADATA_KEY]: true });
 
 export interface LogMessage {

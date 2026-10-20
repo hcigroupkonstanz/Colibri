@@ -1,7 +1,9 @@
 using UnityEngine;
 
+/// <summary>Converts audio samples between 16-bit PCM, float and byte arrays, and applies volume.</summary>
 public class SamplingUtility
 {
+    /// <summary>Duplicates each mono sample into a left and a right sample, giving an interleaved stereo array of twice the length.</summary>
     public static float[] ConvertToStereo(float[] samples)
     {
         float[] stereoSamples = new float[samples.Length * 2];
@@ -15,6 +17,7 @@ public class SamplingUtility
         return stereoSamples;
     }
 
+    /// <summary>Reads every 4 bytes as one float in the platform's byte order, so the length must be a multiple of 4.</summary>
     public static float[] ConvertToFloat(byte[] byteArray)
     {
         int len = byteArray.Length / 4;
@@ -26,6 +29,7 @@ public class SamplingUtility
         return floatArray;
     }
 
+    /// <summary>Converts 16-bit little-endian PCM to floats from -1 to 1, reusing floatBuffer when it has one element per sample.</summary>
     public static float[] ConvertShortBytesToFloat(byte[] shortBytes, float[] floatBuffer = null)
     {
         int sampleCount = shortBytes.Length / 2;
@@ -43,6 +47,7 @@ public class SamplingUtility
         return floatBuffer;
     }
 
+    /// <summary>Writes each float as 4 bytes in the platform's byte order, the inverse of ConvertToFloat.</summary>
     public static byte[] ConvertToBytes(float[] floatArray)
     {
         int len = floatArray.Length * 4;
@@ -57,6 +62,7 @@ public class SamplingUtility
         return byteArray;
     }
 
+    /// <summary>Converts floats to 16-bit little-endian PCM; values outside -1 to 1 are not clamped, and byteBuffer is reused when it has two bytes per sample.</summary>
     public static byte[] ConvertFloatToShortBytes(float[] floatData, byte[] byteBuffer = null)
     {
         int sampleCount = floatData.Length;
@@ -76,6 +82,7 @@ public class SamplingUtility
         return byteBuffer;
     }
 
+    /// <summary>Converts 16-bit little-endian PCM straight to 32-bit float bytes, reusing floatByteBuffer when it has four bytes per sample.</summary>
     public static byte[] ConvertShortBytesToFloatBytes(byte[] shortBytes, byte[] floatByteBuffer = null)
     {
         int sampleCount = shortBytes.Length / 2;
@@ -99,6 +106,7 @@ public class SamplingUtility
         return floatByteBuffer;
     }
 
+    /// <summary>Multiplies samples in place by gain, clamped to -1 to 1, and returns the same array.</summary>
     public static float[] ChangeVolume(float[] samples, float gain)
     {
         for (int i = 0; i < samples.Length; i++)

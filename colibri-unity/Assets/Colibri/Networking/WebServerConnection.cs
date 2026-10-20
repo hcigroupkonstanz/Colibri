@@ -22,262 +22,170 @@ namespace HCIKonstanz.Colibri.Networking
 {
     /// <summary>
     /// <see cref="ConnectionStatus.ProtocolMismatch"/> is terminal: unlike
-    /// <see cref="ConnectionStatus.Disconnected"/> it is never followed by another attempt,
-    /// because a version mismatch cannot resolve itself.
+    /// <see cref="ConnectionStatus.Disconnected"/> it is not followed by another attempt, since retrying
+    /// cannot fix a version mismatch.
     /// </summary>
     public enum ConnectionStatus { Connected, Disconnected, Connecting, Reconnecting, ProtocolMismatch };
 
     /// <summary>
     /// TCP connection to a colibri-server, speaking the v3 binary protocol
     /// (see <see cref="Protocol.FrameCodec"/> and <c>colibri-server/docs/dev/protocol.md</c>).
-    ///
-    /// Requires colibri-server >= 2.0.0. There is no version negotiation: the server accepts
-    /// exactly one protocol version and refuses anything else, so both sides have to be
-    /// upgraded together.
-    ///
-    /// With <see cref="ColibriConfig.IsSSL"/> the connection is TLS: the same frames, inside an
-    /// encrypted stream. Which server certificates it accepts is up to
-    /// <see cref="ServerCertificatePolicy"/>.
+    /// Requires colibri-server >= 2.0.0; the server accepts exactly one protocol version, so there
+    /// is no negotiation and both sides are upgraded together.
+    /// With <see cref="ColibriConfig.IsSSL"/> the same frames run inside TLS, and
+    /// <see cref="ServerCertificatePolicy"/> decides which server certificates are accepted.
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class WebServerConnection : SingletonBehaviour<WebServerConnection>
     {
-        /// <summary>
-        /// Protocol version announced in the handshake. Has to equal <c>PROTOCOL_VERSION</c> in
-        /// the server's <c>src/server/modules/networking/protocol.ts</c> and in colibri-web's
-        /// <c>src/Colibri.ts</c>; colibri-server's <c>npm run test:vectors</c> checks that all of
-        /// them agree. A server speaking anything else refuses the connection with a
-        /// <see cref="PROTOCOL_REJECTED_COMMAND"/> message.
-        /// </summary>
+        // Must equal PROTOCOL_VERSION in colibri-server (src/server/modules/networking/protocol.ts) and in
+        // colibri-web (src/Colibri.ts); the server's `npm run test:vectors` checks all three.
         private const string CLIENT_VERSION = "2";
 
-        /// <summary>
-        /// Channel and command the server refuses a mismatched client on. Handled here rather
-        /// than in <c>Sync</c>: it is Colibri's own plumbing, not an application message.
-        /// </summary>
+        // The server refuses a client with another protocol version on this channel and command.
+        // ReceiveLoop handles it itself instead of delivering it as an application message.
         private const string COLIBRI_CHANNEL = "colibri";
         private const string PROTOCOL_REJECTED_COMMAND = "protocol::rejected";
 
-        /// <summary>
-        /// A server on a genuinely different framing cannot be told anything - it cannot decode
-        /// our frames and we cannot decode its. What that looks like from here is a session that
-        /// faults before a single frame is read, over and over. After this many in a row, say so:
-        /// the alternative is an infinite reconnect loop whose log gives no hint of the cause.
-        /// The same number of unanswered sessions in a row (see CountSessionWithoutAFrame) gets a
-        /// hint of its own.
-        /// </summary>
+        // A server on another framing cannot decode our frames and cannot send the explicit refusal, so the
+        // only symptom is sessions failing before a frame is read. This many in a row log a hint instead of
+        // reconnecting silently; unanswered sessions count the same (see CountSessionWithoutAFrame).
         private const int EARLY_FRAME_FAILURES_BEFORE_HINT = 3;
 
-        /// <summary>
-        /// The server heartbeats every 100 ms, so silence for this long means the connection
-        /// is gone even if the socket has not noticed yet.
-        /// </summary>
+        // The server heartbeats every 100 ms, so this much silence means the connection is gone even if
+        // the socket has not noticed.
         private const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
 
         private const int RECEIVE_BUFFER_SIZE = 64 * 1024;
         private const int RECONNECT_DELAY_MIN_MS = 500;
         private const int RECONNECT_DELAY_MAX_MS = 10 * 1000;
 
-        /// <summary>
-        /// How long one attempt to open the TCP connection may take before it is given up and
-        /// retried after the usual backoff. The socket has no timeout of its own: an address that
-        /// nothing answers on - a server switched off on another subnet, a mistyped IP - used to
-        /// hold the attempt in Connecting for the OS's own SYN timeout, about two minutes on
-        /// Android, without a retry or a word in the log. On a local network a connection opens in
-        /// milliseconds; 5 s still leaves room for two lost SYNs on bad Wi-Fi. With TLS the
-        /// handshake has to finish within the same time: a server without TLS may never answer it.
-        /// So do looking up the server's name and trying each of its addresses (see
-        /// <see cref="ConnectAnyAsync"/>). A placed body waits as long for a server before it is
-        /// simulated without the server's state (see Sync.StopsWaitingForServer).
-        /// </summary>
+        // One connection attempt: name lookup, every address tried and, with TLS, the handshake (a server
+        // without TLS may never answer it). The socket has no timeout of its own (about two minutes on
+        // Android); 5 s leaves room for two lost SYNs. Sync.StopsWaitingForServer waits as long before it
+        // simulates a placed body without the server's state.
         internal const int CONNECT_TIMEOUT_MS = 5000;
 
-        /// <summary>
-        /// The least time an attempt on one of several addresses gets. A server name can resolve to
-        /// several addresses, typically an IPv4 and an IPv6 one, and they are tried one after the
-        /// other, each with an equal share of the time left, so that one nothing answers on (behind
-        /// a firewall that drops the connection, say) holds up the attempt only for its share. A
-        /// path that works answers a connection well within a second, so a name with many addresses
-        /// gets this much per address rather than shares too short to answer in.
-        /// </summary>
+        // Least time one address gets when several are tried in turn (see AttemptTimeoutMs), so a name with
+        // many addresses does not get shares too short to answer in. A working path answers within a second.
         private const int MIN_ADDRESS_ATTEMPT_MS = 1000;
 
-        /// <summary>
-        /// The most time an attempt on a loopback address gets while other addresses are still to
-        /// be tried. Loopback accepts or refuses a connection at once, except that Windows takes a
-        /// second or more to report a refusal. "localhost" resolves to 127.0.0.1 and ::1, which is
-        /// tried second (see <see cref="AddressesToTry"/>), so without this a connection to localhost
-        /// would wait out that refusal every time against a server on ::1 only (TCP_HOST ::1).
-        /// </summary>
+        // Most time a loopback address gets while others are left to try. Windows reports a refused loopback
+        // connect only after a second or more, which would delay "localhost" (127.0.0.1, then ::1) every time
+        // against a server on ::1 only (TCP_HOST ::1).
         private const int LOOPBACK_ATTEMPT_MS = 250;
 
-        /// <summary>
-        /// How often a connect in progress looks whether its socket has been closed, which on Mono
-        /// it does not notice by itself. See <see cref="WaitForConnectAsync"/>.
-        /// </summary>
+        // How often WaitForConnectAsync checks whether the socket was closed, which Mono does not report by itself.
         private const int CLOSED_SOCKET_CHECK_MS = 100;
 
-        /// <summary>
-        /// How many broadcasts and other messages that are not model state may wait for the
-        /// connection while it is down. This is a last-write-wins sync client: growing the queue
-        /// without limit during a long outage would only buffer updates that are already
-        /// superseded, so past this the oldest are dropped. Model messages are not dropped here; see
-        /// "The outbox" below for why, and for what bounds them instead.
-        /// </summary>
+        // Cap on broadcasts and other messages that are not model state waiting for the connection. The oldest
+        // are dropped: this is a last-write-wins sync client, so a long queue only buffers superseded updates.
+        // Model messages are not counted here, see "The outbox" below.
         private const int MAX_QUEUED_MESSAGES = 256;
 
-        /// <summary>
-        /// How many messages the outbox may hold in all, model state included - the backstop behind
-        /// <see cref="MAX_QUEUED_MESSAGES"/>, which only counts what may be dropped. A model::request,
-        /// a model::delete and a model::update that cannot be folded (one someone awaits, or one with
-        /// something else about its object queued in between) are not counted there, so an outage in
-        /// which objects keep being created and destroyed used to queue them without limit; so did a
-        /// connection whose writes fall behind what is sent. Past this many the oldest messages that
-        /// may be dropped go first, and only then the oldest model messages: a loss nothing repairs,
-        /// but a bounded one.
-        /// </summary>
+        // Cap on the whole outbox, model state included: the backstop for MAX_QUEUED_MESSAGES, which applies
+        // only while disconnected and does not count requests, deletes and unfoldable updates. Past it the
+        // oldest droppable messages go first, then the oldest model messages.
         private const int MAX_OUTBOX_MESSAGES = 10000;
 
-        /// <summary>
-        /// How many received messages may wait for <see cref="Update"/> before the queue starts
-        /// folding model updates. The receive thread keeps reading while Update does not run - a
-        /// Quest paused with the headset off, an Editor in the background without Run In
-        /// Background - so that the server does not time the client out, and every message it read
-        /// used to be queued without limit and delivered all at once when Update ran again. Past
-        /// this many, a model::update is folded into the one queued for the same object, newer
-        /// fields winning, as the outbox does during an outage: the object ends up in the same
-        /// state, and model state is bounded by the number of objects rather than by how long
-        /// Update did not run. A frame normally hands over far fewer, so ordinary delivery is not
-        /// affected; a listener that records every update sees only the newest state of each object
-        /// for the stretch that Update did not run.
-        /// </summary>
+        // Received messages waiting for Update past which model updates are folded per object, newer fields
+        // winning. The receive thread keeps reading while Update does not run (Quest paused, Editor in the
+        // background), so model state is bounded by the number of objects, not by how long Update stalled.
+        // A listener that records every update sees only the newest state of each object for that stretch.
         private const int RECEIVED_FOLDING_THRESHOLD = 1000;
 
-        /// <summary>
-        /// How many received messages may wait for <see cref="Update"/> in all - the backstop behind
-        /// <see cref="RECEIVED_FOLDING_THRESHOLD"/>, as <see cref="MAX_OUTBOX_MESSAGES"/> is for the
-        /// outbox. Past it the oldest broadcasts and other messages that are not model state are
-        /// dropped first, and only when none are left the oldest model messages.
-        /// </summary>
+        // Cap on all received messages waiting for Update, the backstop for RECEIVED_FOLDING_THRESHOLD as
+        // MAX_OUTBOX_MESSAGES is for the outbox. The oldest broadcasts and other non-model messages are
+        // dropped first, then the oldest model messages.
         private const int MAX_RECEIVED_MESSAGES = 10000;
 
-        /// <summary>
-        /// How long the end of Play mode, or quitting the app, waits for what is still in the outbox
-        /// to be written to the socket before it is closed. The app is closing, so the wait is
-        /// short: on a working connection, writing what is queued then - the updates the send-rate
-        /// limit was holding, flushed by SyncTicker - only hands a few frames to the operating
-        /// system.
-        /// </summary>
+        // How long OnDisable waits for the outbox when quitting or ending Play mode. Short, since the app is
+        // closing: what SyncTicker flushes from the send rate limit then is only a few frames.
         private const int QUIT_DRAIN_TIMEOUT_MS = 100;
 
-        /// <summary>
-        /// ClientLogger (<c>client-logger.ts</c>) reads this channel's payload with
-        /// <c>asString()</c>, so it is the one channel that ships raw text instead of JSON -
-        /// quoting it would put stray quotes in the admin UI's log page.
-        /// </summary>
+        // The server's ClientLogger (client-logger.ts) reads this payload with asString(), so it goes out as
+        // raw text instead of JSON. Quoted, the admin UI's log page would show stray quotes.
         private const string LOG_CHANNEL = "log";
 
         private static readonly Encoding Utf8 = new UTF8Encoding(false, false);
 
         public delegate void MessageAction(string channel, string command, JToken payload);
+
+        /// <summary>Raised on the main thread for every received message.</summary>
         public event MessageAction OnMessageReceived;
 
         /// <summary>
-        /// Raised on the main thread once the server has started talking to this client - its
-        /// first frame, not merely an accepted TCP connection. Something that accepts and then
-        /// says nothing, or speaks a framing this client cannot read, never raises it.
+        /// Raised on the main thread once the server has sent its first frame, not on an accepted TCP
+        /// connection alone. A server that accepts and then says nothing, or speaks a framing this client
+        /// cannot read, never raises it.
         /// </summary>
         /// <remarks>
-        /// Both events are raised from <c>Update</c>, once per connection and in the order things
-        /// happened, so the last one raised always tells the truth: a connection that drops and
-        /// comes back between two frames - a long frame during a Wi-Fi blip - raises
+        /// Both events are raised from <c>Update</c> in the order the transitions happened, so the last one
+        /// raised is the current state: a drop and reconnect between two frames raises
         /// <see cref="OnDisconnected"/> and then <see cref="OnConnected"/> in the next frame.
-        /// Disabling or destroying this component raises what is still due there and then, from
-        /// <c>OnDisable</c>, so a connection open at that moment ends with its
-        /// <see cref="OnDisconnected"/> too - or, when a handler of one of these events is what
-        /// disabled it, right after that event has reached every handler. The one exception is
-        /// the end of Play mode or of the app, which raises neither: the objects the handlers
-        /// belong to may already be gone.
+        /// Disabling or destroying this component raises what is still due from <c>OnDisable</c>, so an open
+        /// connection ends with <see cref="OnDisconnected"/> (right after the event reached every handler, if
+        /// a handler disabled it). Ending Play mode or the app raises neither: the handlers' objects may be gone.
         /// </remarks>
         public event Action OnConnected;
 
         /// <summary>
-        /// Raised on the main thread once for every <see cref="OnConnected"/>, after it, when that
-        /// connection ends - dropped, timed out, refused by the server, or closed by disabling or
-        /// destroying this component (see <see cref="OnConnected"/> for the one exception). An
-        /// attempt that never got as far as Connected raises neither event. That includes a server
-        /// that refuses this client in its very first frame: it is reported by
-        /// <see cref="Status"/> becoming <see cref="ConnectionStatus.ProtocolMismatch"/> and by
-        /// <see cref="Connected"/> being cancelled.
+        /// Raised on the main thread once for every <see cref="OnConnected"/>, after it, when that connection
+        /// ends: dropped, timed out, refused or closed by disabling this component (see
+        /// <see cref="OnConnected"/> for the exception). An attempt that never reached Connected raises neither
+        /// event; a refusal in the first frame shows as <see cref="Status"/> becoming
+        /// <see cref="ConnectionStatus.ProtocolMismatch"/> and <see cref="Connected"/> being cancelled.
         /// </summary>
         public event Action OnDisconnected;
 
-        // Instance, not static: static state survives Enter Play Mode with domain reload
-        // disabled and would leave a second play session talking to a dead socket.
-        //
         // Main thread only: the loop the last OnEnable started, until OnDisable ends it.
+        // Instance state, not static: static state would survive Enter Play Mode without domain reload.
         private ConnectionLoop _loop;
 
-        /// <summary>
-        /// One run of the connection loop, from the OnEnable that starts it to the OnDisable that
-        /// ends it, and what belongs to that run alone.
-        /// </summary>
-        /// <remarks>
-        /// A disable and enable in one frame starts the next run while the last one is still
-        /// unwinding on a worker thread. Its cleanup used to work on the component's fields, which
-        /// by then were the next run's: it closed the new socket in the middle of its connect,
-        /// disarmed its watchdog, and could close the outbox and set Disconnected under a session
-        /// that was already Connected. A run keeps its socket and watchdog here instead. What the
-        /// component shares - <see cref="Status"/>, the outbox and what is reported about the
-        /// connection - a run changes only while its token is not cancelled, checked under the lock
-        /// that guards it. OnDisable cancels the token before it sets all of that itself, so a run
-        /// it has ended changes none of it, however late it unwinds.
-        /// </remarks>
+        // One run of the connection loop, from the OnEnable that starts it to the OnDisable that ends it.
+        // A disable and enable in one frame start the next run while the last still unwinds on a worker
+        // thread, so a run keeps its own socket and watchdog here. The state the component shares (Status,
+        // the outbox, what is reported about the connection) a run changes only while its token is not
+        // cancelled, checked under the lock that guards it; OnDisable cancels the token before it sets all
+        // of that itself.
         private sealed class ConnectionLoop
         {
             public readonly CancellationTokenSource Lifetime = new CancellationTokenSource();
 
-            // Taken once: the source's Token throws after OnDisable has disposed it, and the run
-            // may still be unwinding then.
+            // Taken once: Lifetime.Token throws after OnDisable has disposed the source, and the run may still unwind.
             public readonly CancellationToken Token;
 
-            // The socket of the attempt or session in progress, or null between two. Closing it is
-            // what ends a session, TLS or not. Set and cleared by the run; read by Update()'s
-            // heartbeat watchdog and by OnDisable. The send path uses _outboxSession instead.
+            // Socket of the attempt or session in progress, null between two. Closing it ends a session, TLS or
+            // not. Set and cleared by the run, read by the watchdog in Update and by OnDisable; the send path
+            // uses _outboxSession.
             public volatile Socket Socket;
 
-            // Set as soon as the TCP connection is accepted, cleared when the session ends or the
-            // watchdog in Update() fires. Covers the stretch before the first frame too: something
-            // that accepts the connection and then never says a word would otherwise hold a session
-            // in Connecting forever, now that Connected waits for the server to speak.
+            // Set when the TCP connection is accepted, cleared when the session ends or the watchdog fires.
+            // Covers the stretch before the first frame, so a server that accepts and then says nothing cannot
+            // hold a session in Connecting.
             public volatile bool IsWatchdogArmed;
 
-            // Session-scoped: set once the TCP connection is up and this client has sent its
-            // handshake. Without it, a session that never got that far - "connection refused"
-            // because the server simply is not running - would count towards the framing hint and
-            // have this client blaming a version mismatch for a server that is switched off.
+            // Session-scoped: the TCP connection is up and the handshake sent. Without it, a refused connection
+            // (server not running) would count towards the framing hint.
             public volatile bool ReachedHandshake;
 
-            // Session-scoped: set once the session has decoded anything at all. Only a session that
-            // ends *before* this is set counts towards the framing hint.
+            // Session-scoped: the session has decoded a frame. Only sessions that end before this count towards
+            // the framing hint.
             public volatile bool DecodedAnyFrame;
 
-            // Session-scoped: set by the watchdog in Update() when it drops a session the server has
-            // not sent a frame on. Such a session counts towards a hint of its own, not the framing
-            // hint: neither a 1.x server nor one with TLS on stays silent.
+            // Session-scoped: the watchdog dropped the session before the server sent a frame. Counts towards the
+            // unanswered-session hint, not the framing hint (see CountSessionWithoutAFrame).
             public volatile bool EndedSilent;
 
-            // Session-scoped: set by the watchdog in Update() when it drops the session, connected
-            // or not, before it closes the socket. The watchdog has said why, so the read or write
-            // that fails on the closed socket is not logged as a failed connection as well.
+            // Session-scoped: the watchdog closed the socket, connected or not, and has said why, so the read or
+            // write that fails on it is not logged as well.
             public volatile bool DroppedByWatchdog;
 
-            // Session-scoped: set when the session ended on a frame this client could not decode,
-            // the way every session with a 1.x server ends. With TLS, the only kind of session
-            // without a frame that counts towards the framing hint; see CountSessionWithoutAFrame.
+            // Session-scoped: ended on a frame that could not be decoded, as sessions with a 1.x server do. With
+            // TLS, the only frameless session that counts towards the framing hint.
             public volatile bool EndedOnBadFrame;
 
-            // The run itself: completes once it has ended and cleaned up after its last session.
+            // Completes once the run has ended and cleaned up after its last session.
             public Task Run;
 
             public ConnectionLoop()
@@ -286,40 +194,28 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <remarks>Internal for the tests, which shrink its send buffer to stand in for a slow link.</remarks>
+        // The tests shrink its send buffer to stand in for a slow link.
         internal Socket CurrentSocket => _loop?.Socket;
 
-        /// <summary>
-        /// The connection loop the last OnEnable started, until OnDisable ends it. Completes once the
-        /// loop has cleaned up after its last session.
-        /// </summary>
-        /// <remarks>Internal for the tests, which wait for an ended loop to finish its cleanup.</remarks>
+        // The tests wait on it for an ended loop to finish its cleanup.
         internal Task CurrentLoop => _loop?.Run;
 
-        /// <summary>
-        /// Awaited by a connection loop when a session has ended, before it cleans up after it. Null
-        /// outside the tests.
-        /// </summary>
-        /// <remarks>
-        /// Internal for the tests, which hold a loop that OnDisable has ended there until the next
-        /// loop's session is Connected. On its own it unwinds within milliseconds, long before that,
-        /// so a cleanup that changed the next session's status or outbox would go unnoticed.
-        /// </remarks>
+        // Tests only: awaited when a session has ended, before the loop cleans up after it. Holds a loop that
+        // OnDisable ended until the next loop is Connected, so a cleanup touching its status or outbox shows.
         internal volatile Func<Task> BeforeSessionCleanup;
 
         private string _hostname = "";
 
-        // Serializes every write to the socket - the outbox's messages and the receive loop's
-        // heartbeat echoes. Concurrent writes used to interleave their bytes and corrupt the
-        // framing for everything that followed, and an SslStream takes only one write at a time.
-        // The receive loop never waits for it: see EchoHeartbeat.
+        // Serializes every socket write, outbox messages and heartbeat echoes alike: concurrent writes would
+        // interleave bytes and corrupt the framing, and an SslStream takes one write at a time. The receive
+        // loop never waits for it (see EchoHeartbeat).
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
 
-        /// <remarks>Internal for the tests, which hold it to stand in for a slow write.</remarks>
+        // The tests hold it to stand in for a slow write.
         internal SemaphoreSlim SendLock => _sendLock;
 
-        // The newest heartbeat echo not written yet, with the session it answers, or null. Set by
-        // the receive loop, taken by whoever holds _sendLock. See EchoHeartbeat.
+        // The newest heartbeat echo not written yet, with the session it answers, or null. Set by the receive
+        // loop, taken by whoever holds _sendLock (see EchoHeartbeat).
         private PendingEcho _pendingEcho;
 
         private sealed class PendingEcho
@@ -329,10 +225,9 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// One connection to the server: its socket, and the stream every frame is read from and
-        /// written to - the socket's own <see cref="NetworkStream"/>, or with TLS an
-        /// <see cref="SslStream"/> over it. Closing the socket is what ends a session: it fails
-        /// whatever is reading or writing at that moment, encrypted or not.
+        /// One connection to the server: its socket, and the stream frames are read from and written to (the
+        /// socket's <see cref="NetworkStream"/>, or an <see cref="SslStream"/> over it). Closing the socket
+        /// ends the session and fails whatever is reading or writing.
         /// </summary>
         internal sealed class Session
         {
@@ -355,38 +250,37 @@ namespace HCIKonstanz.Colibri.Networking
             public void Close() => CloseSocket(Socket);
         }
 
-        // Every outgoing message, in the order it was sent, until it has been written to a socket.
-        // See "The outbox" below. Everything from here to _hasWarnedAboutRefusal is under _outboxLock:
-        // senders on any thread, the drainer on the thread pool and the connection loop all touch it.
+        // Every outgoing message in send order, until written to a socket (see "The outbox" below).
+        // Everything up to _hasWarnedAboutRefusal is guarded by _outboxLock: senders on any thread, the
+        // drainer on the thread pool and the connection loop all touch it.
         private readonly LinkedList<Outgoing> _outbox = new LinkedList<Outgoing>();
         private readonly object _outboxLock = new object();
 
-        // The session the outbox currently drains into, and its token. Null while not connected,
-        // which is what makes a send wait in the outbox.
+        // The session the outbox drains into, and its token. Null while not connected, which makes a send
+        // wait in the outbox.
         private Session _outboxSession;
         private CancellationToken _outboxToken;
 
-        // True while a DrainOutbox() is running. There is never more than one, which is what keeps
-        // the messages in order.
+        // True while a DrainOutbox is running. Only one runs at a time, which keeps the messages in order.
         private bool _isDraining;
 
-        // Reset on every connection, so a drop is reported once per outage.
+        // Reset when the outbox opens, so each is logged once per connection.
         private bool _hasWarnedAboutDrops;
         private bool _hasWarnedAboutOutboxLimit;
 
-        // Set when the server refuses this client's protocol version. Nothing will ever be sent
-        // again, so a send completes at once, as dropped, instead of waiting in the outbox.
+        // Set when the server refuses this client's protocol version. Nothing is sent after that, so a send
+        // completes at once as dropped.
         private bool _isRefused;
         private bool _hasWarnedAboutRefusal;
 
-        // Receive loop in, main thread out. Everything from here to _hasWarnedAboutReceivedBacklog
-        // is under _queuedCommandsLock. See EnqueueReceived for how the queue is bounded.
+        // Receive loop in, main thread out. Everything up to _hasWarnedAboutReceivedBacklog is guarded by
+        // _queuedCommandsLock. See EnqueueReceived for how the queue is bounded.
         private readonly LinkedList<InPacket> _queuedCommands = new LinkedList<InPacket>();
         private readonly object _queuedCommandsLock = new object();
 
-        // While a backlog lasts - from RECEIVED_FOLDING_THRESHOLD messages until Update has taken
-        // them - the model::update queued for each object that later ones can still be folded into:
-        // one that nothing else about the object has been queued behind.
+        // During a backlog (from RECEIVED_FOLDING_THRESHOLD messages until Update takes them): the model::update
+        // queued for each object that later ones can still be folded into, i.e. with nothing else about the
+        // object queued behind it.
         private readonly Dictionary<(string Channel, string Id), LinkedListNode<InPacket>> _queuedReceivedUpdates
             = new Dictionary<(string Channel, string Id), LinkedListNode<InPacket>>();
         private bool _isReceivedBacklog;
@@ -394,28 +288,25 @@ namespace HCIKonstanz.Colibri.Networking
         private int _foldedReceivedCount;
         private int _droppedReceivedCount;
 
-        // Reset on every connection, so a backlog is reported once per connection.
+        // Reset on every connection, so a backlog is logged once per connection.
         private bool _hasWarnedAboutReceivedBacklog;
 
-        // Main thread only: what one DeliverReceivedMessages hands out, reused from frame to frame.
+        // Main thread only: reused by DeliverReceivedMessages from frame to frame.
         private readonly List<InPacket> _delivering = new List<InPacket>();
 
         private long _lastHeartbeatTime;
         private long _livenessStamps;
 
-        // Main thread only: the OnMessageReceived delegate last delivered to, and its handlers.
+        // Main thread only: the OnMessageReceived value last delivered to, and its invocation list.
         private MessageAction _deliveringTo;
         private Delegate[] _deliveringToList;
 
-        // Both touched from the connection loop and from Update() via the Status setter, so
-        // every access to them is under _statusLock.
+        // Both touched by the connection loop and, via the Status setter, by Update: every access is under
+        // _statusLock.
         private int _connectAttempts;
         private int _connectedSessions;
 
-        /// <summary>
-        /// How many times this connection has become <see cref="ConnectionStatus.Connected"/> -
-        /// so 2 or more in an <see cref="OnConnected"/> handler means it is a reconnect.
-        /// </summary>
+        // How many times the connection has become Connected; 2 or more in an OnConnected handler means a reconnect.
         internal int ConnectedSessions
         {
             get
@@ -429,17 +320,16 @@ namespace HCIKonstanz.Colibri.Networking
         private bool _hasReportedMissingConfig;
         private string _reportedSanitizedApp;
 
-        // Connection loop only: the TLS failure last logged as an error, so that a server that
-        // keeps failing the same way says so once rather than at every attempt. Cleared by a
-        // connection, and by enabling the component.
+        // Connection loop only: the TLS failure last logged as an error, so a server that keeps failing the
+        // same way says so once. Cleared by a connection and by OnEnable.
         private string _reportedTlsFailure;
 
-        // Cleared by enabling the component: a certificate accepted only because self-signed ones
-        // are allowed is said once per session, not at every reconnect.
+        // Cleared by OnEnable: the warning about a certificate accepted only because self-signed ones are
+        // allowed is logged once, not at every reconnect.
         private volatile bool _hasWarnedAboutUntrustedCertificate;
 
-        // ColibriConfig.Load() goes through Resources.Load, which is main-thread only, so the
-        // connection loop reads this snapshot instead of the ScriptableObject.
+        // ColibriConfig.Load() goes through Resources.Load, which is main-thread only, so the connection loop
+        // reads this snapshot (refreshed in OnEnable and Update).
         private volatile string _serverAddress;
         private volatile string _appName;
         private volatile int _tcpPort;
@@ -447,69 +337,56 @@ namespace HCIKonstanz.Colibri.Networking
         private volatile bool _allowSelfSignedCertificate;
         private volatile string _serverCertificateSha256;
 
-        // Set by each TLS handshake, for the Status window: the certificate the server presented,
-        // and how it was accepted. Null until a TLS connection has been made.
+        // Set by each TLS handshake, for the Status window: the certificate the server presented and how it
+        // was accepted. Null until a TLS connection has been made.
         private volatile string _presentedCertificateSha256;
         private volatile string _certificateAcceptance;
 
-        // Gate that `await Connected` waits on, replacing the UniRx IObservable<bool> awaiter.
-        // Only user code awaits it now - the send path queues in the outbox instead of waiting
-        // here. Deliberately a TaskCompletionSource and not a UniTaskCompletionSource: any number
-        // of callers may await it at once, and a UniTaskCompletionSource throws "can not await
-        // twice" on the second pending awaiter.
-        //
-        // volatile because the gate is re-armed on the connection loop's thread while code on
-        // any other thread may be reading it to await.
+        // Gate behind `await Connected`, awaited by user code only (sends queue in the outbox instead).
+        // A TaskCompletionSource because several callers may await it at once, which UniTaskCompletionSource
+        // rejects. volatile: re-armed on the connection loop's thread, read on any.
         private volatile TaskCompletionSource<bool> _connectedGate = NewGate();
         private volatile bool _isGateOpen;
 
         /// <summary>
-        /// Completes when <see cref="Status"/> becomes <see cref="ConnectionStatus.Connected"/>,
-        /// i.e. once the server has sent its first frame. While disconnected it is a fresh, pending
-        /// task again. Cancelled when this component is disabled, and when the server refuses this
-        /// client's protocol version: that is final, so awaiting it would otherwise never return.
+        /// Completes when <see cref="Status"/> becomes <see cref="ConnectionStatus.Connected"/>, i.e. once the
+        /// server has sent its first frame; while disconnected it is a fresh, pending task. Cancelled when this
+        /// component is disabled and when the server refuses the protocol version, which is final.
         /// </summary>
         public Task Connected => _connectedGate.Task;
 
         private static TaskCompletionSource<bool> NewGate()
             => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // OnConnected (true) and OnDisconnected (false) still to be raised on the main thread, in
-        // the order the transitions happened: they are queued under _statusLock, by the Status
-        // setter. They used to be two flags, raised connected-first, so a connection that dropped
-        // and came back before the next Update raised OnConnected and then OnDisconnected, and
-        // left user code believing it was disconnected while it was connected.
+        // OnConnected (true) and OnDisconnected (false) still to be raised on the main thread, in the order
+        // the transitions happened. Queued by the Status setter under _statusLock.
         private readonly ConcurrentQueue<bool> _connectionEvents = new ConcurrentQueue<bool>();
 
-        // Set while RaiseConnectionEvents is running, on the main thread only. A handler that
-        // disables or destroys this component runs OnDisable inside that loop; see there.
+        // Main thread only. A handler that disables or destroys this component re-enters from OnDisable, see
+        // RaiseConnectionEvents.
         private bool _isRaisingConnectionEvents;
 
         /// <summary>
-        /// Smoothed rate at which <see cref="Update"/> runs, which is the rate at which received
-        /// messages are handed to user code. Zero until the first few frames have been measured.
+        /// Smoothed rate at which <see cref="Update"/> runs, which is the rate at which received messages
+        /// reach user code. Zero until the first few frames have been measured.
         /// </summary>
         /// <remarks>
-        /// Not a diagnostic of the network. Once the socket is off the main thread the remaining
-        /// delivery delay is entirely the local frame time, and an Editor in the background is
-        /// throttled hard enough for that to be the dominant term - which looks exactly like a
-        /// slow connection unless something says otherwise.
+        /// Not a network diagnostic: with the socket off the main thread, the remaining delivery delay is the
+        /// local frame time, which an Editor in the background throttles hard enough to look like a slow connection.
         /// </remarks>
         public float DeliveryFramesPerSecond => _smoothedDeltaTime > 0f ? 1f / _smoothedDeltaTime : 0f;
 
         private float _smoothedDeltaTime;
 
-        /// <summary>
-        /// Thread the receive loop last ran on, or 0 before the first receive. Exists so the test
-        /// suite can assert the loop is not on the main thread; nothing in the library reads it.
-        /// </summary>
+        // Tests only: the thread the receive loop last ran on, to assert it is not the main thread. Zero before
+        // the first receive.
         internal int ReceiveThreadId => _receiveThreadId;
         private volatile int _receiveThreadId;
 
         private volatile ConnectionStatus _status = ConnectionStatus.Disconnected;
 
-        // Written by the receive loop off the main thread, read by the Editor status window and
-        // by user code on the main thread.
+        // Written by the receive loop off the main thread, read by the Editor status window and by user code
+        // on the main thread.
         private volatile string _serverVersion;
         private volatile string _protocolMismatchReason;
 
@@ -518,17 +395,17 @@ namespace HCIKonstanz.Colibri.Networking
         private int _consecutiveUnansweredSessions;
         private volatile string _suspectedProtocolMismatch;
 
-        // Whether the current session uses TLS, read from the configuration when it started.
-        // Written by the connection loop under _statusLock, read by UsesTls on any thread.
+        // Whether the current session uses TLS, read from the configuration when it started. Written by the
+        // connection loop under _statusLock, read by UsesTls on any thread.
         private volatile bool _sessionUsesTls;
 
-        // The setter is a read-modify-write over several fields, and the connection loop and
-        // Update()'s heartbeat watchdog can both reach it at the same time. Interleaved, the two
-        // can lose a transition - the watchdog's Disconnected landing between the loop's compare
-        // and its assignment leaves the gate open on a socket that is already closed. A loop sets
-        // it through TrySetStatus, which checks under this lock that the loop has not been ended.
+        // Status's setter is a read-modify-write over several fields, and both the connection loop and the
+        // watchdog in Update reach it. Unguarded, a transition can be lost: a watchdog Disconnected landing
+        // between the loop's compare and assignment leaves the gate open on a closed socket. A loop sets it
+        // through TrySetStatus, which also checks under this lock that the loop has not been ended.
         private readonly object _statusLock = new object();
 
+        /// <summary>Current connection state.</summary>
         public ConnectionStatus Status
         {
             get { return _status; }
@@ -549,25 +426,21 @@ namespace HCIKonstanz.Colibri.Networking
                         _connectionEvents.Enqueue(true);
                         _isGateOpen = true;
 
-                        // The gate is created with RunContinuationsAsynchronously, so no awaiting
-                        // caller resumes inline here and none of them runs while holding the lock.
+                        // Continuations run asynchronously (see NewGate), so no awaiter resumes inline under the lock.
                         _connectedGate.TrySetResult(true);
                     }
                     else if (_isGateOpen)
                     {
-                        // Re-arm the gate so that `await Connected` while disconnected waits for
-                        // the next successful connection.
+                        // Re-arm, so `await Connected` while disconnected waits for the next connection.
                         _isGateOpen = false;
                         _connectedGate = NewGate();
                     }
 
-                    // Final: there will be no next connection to wait for.
+                    // Final: there is no next connection to wait for.
                     if (_status == ConnectionStatus.ProtocolMismatch)
                         _connectedGate.TrySetCanceled();
 
-                    // One OnDisconnected per OnConnected, whatever ended the connection - a
-                    // refusal included. It used to be raised for every failed attempt, connected
-                    // or not, and never for a refusal at all.
+                    // One OnDisconnected per OnConnected, whatever ended the connection, a refusal included.
                     if (wasConnected)
                         _connectionEvents.Enqueue(false);
                 }
@@ -575,13 +448,12 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Sets <see cref="Status"/> for the connection loop that <paramref name="token"/> belongs
-        /// to, unless OnDisable has ended that loop: the status is then OnDisable's, and the next
-        /// loop's. Checked under the lock the setter takes, so that OnDisable, which cancels the
-        /// token before it sets Disconnected, always has the last word.
+        /// Sets <see cref="Status"/> for the connection loop that <paramref name="token"/> belongs to, unless
+        /// OnDisable has ended that loop: the status is then OnDisable's and the next loop's. Checked under the
+        /// lock the setter takes, so OnDisable, which cancels the token before it sets Disconnected, has the
+        /// last word.
         /// </summary>
         /// <returns>False if the loop has been ended.</returns>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal bool TrySetStatus(ConnectionStatus value, CancellationToken token)
         {
             lock (_statusLock)
@@ -600,8 +472,7 @@ namespace HCIKonstanz.Colibri.Networking
             public string Command;
             public JToken Payload;
 
-            // Whether the bound on the receive queue drops it before any model message: false for
-            // the model commands, as in the outbox.
+            // Dropped before any model message when the queue is over its bound; false for model commands, as in the outbox.
             public bool CanDrop;
         }
 
@@ -633,8 +504,8 @@ namespace HCIKonstanz.Colibri.Networking
 
         private void RefreshConfig()
         {
-            // Never null - an unconfigured project gets the defaults, and the empty app name is
-            // what RunConnectionLoop reports and waits on.
+            // Never null: an unconfigured project gets the defaults, and its empty app name is what
+            // RunConnectionLoop reports and waits on.
             var config = ColibriConfig.Load();
 
             _serverAddress = config.Host;
@@ -647,15 +518,14 @@ namespace HCIKonstanz.Colibri.Networking
 
         private void OnDisable()
         {
-            // Play mode ending, or the app quitting: SyncTicker has just handed over what the
-            // send-rate limit was holding, and on Mono and IL2CPP a socket write completes a moment
-            // later on a worker thread. Closing the socket straight away could lose it. An ordinary
-            // disable does not wait: whatever is queued stays queued for the next enable.
+            // Quitting or ending Play mode: SyncTicker has just handed over what the send rate limit held, and on
+            // Mono and IL2CPP a socket write completes a moment later on a worker thread, so closing the socket
+            // now could lose it. An ordinary disable does not wait: the queue stays for the next enable.
             if (SingletonLifetime.IsQuitting)
                 WaitForOutboxToDrain(QUIT_DRAIN_TIMEOUT_MS);
 
-            // Cancelled before anything below: from here on the loop leaves the status and the
-            // outbox alone, however late it unwinds (see ConnectionLoop).
+            // Cancelled before anything below: from here on the loop leaves the status and the outbox alone,
+            // however late it unwinds (see ConnectionLoop).
             var loop = _loop;
             _loop = null;
             if (loop != null)
@@ -668,18 +538,15 @@ namespace HCIKonstanz.Colibri.Networking
             // Whatever is still queued stays queued: re-enabling the component sends it.
             CloseOutbox();
 
-            // In this order: leaving Connected re-arms the gate with a fresh task, and that is
-            // the one an `await Connected` from now on would otherwise wait on forever - OnEnable
-            // replaces it rather than completing it.
+            // In this order: leaving Connected re-arms the gate, and an `await Connected` from now on would wait
+            // on that fresh task forever, since OnEnable replaces the gate rather than completing it.
             Status = ConnectionStatus.Disconnected;
             _connectedGate.TrySetCanceled();
 
-            // A disabled or destroyed component gets no Update to raise them from, so the
-            // OnDisconnected of a connection open until now was never raised - or, after a
-            // re-enable, raised late. Not at the end of Play mode or of the app: teardown has no
-            // order, and a handler would as likely run on an object destroyed a moment ago. When
-            // one of these handlers is what disabled it, this returns at once, and the loop that
-            // called the handler raises OnDisconnected after it.
+            // A disabled or destroyed component gets no Update to raise these from, so the OnDisconnected of a
+            // connection open until now is raised here. Not when quitting: teardown has no order, and a handler
+            // may run on an object destroyed a moment ago. If a handler of these events disabled the component,
+            // this returns at once and the loop that called the handler raises OnDisconnected after it.
             if (!SingletonLifetime.IsQuitting)
                 RaiseConnectionEvents();
         }
@@ -730,13 +597,11 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>Raises OnConnected and OnDisconnected for every transition still due, in order.</summary>
         private void RaiseConnectionEvents()
         {
-            // A handler that disables or destroys this component calls back in here from
-            // OnDisable. Raising OnDisconnected there and then would reach the handlers after it
-            // before the OnConnected being raised does, and they would be left believing they are
-            // connected. The loop below raises it instead, once every handler has had OnConnected.
+            // A handler that disables or destroys this component re-enters here from OnDisable. Raising
+            // OnDisconnected there would reach the handlers after it before the OnConnected being raised does;
+            // the loop below raises it instead, once every handler has had OnConnected.
             if (_isRaisingConnectionEvents)
                 return;
 
@@ -758,9 +623,8 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Calls each handler on its own. One that throws would otherwise skip the handlers after
-        /// it - Sync's re-request of the models after a reconnect among them - and the rest of
-        /// this frame's Update: the received messages and the heartbeat watchdog.
+        /// Calls each handler on its own, so one that throws does not skip the handlers after it (Sync's
+        /// re-request of the models after a reconnect among them) or the rest of this frame's Update.
         /// </summary>
         private static void Raise(Action handlers, string eventName)
         {
@@ -781,18 +645,16 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Hands a received message to the main thread, where <see cref="Update"/> delivers it.
-        /// Bounded the way the outbox is, for the stretches Update does not run: past
-        /// <see cref="RECEIVED_FOLDING_THRESHOLD"/> waiting messages a model::update is folded into
-        /// the one queued for the same object, and past <see cref="MAX_RECEIVED_MESSAGES"/> the
-        /// oldest messages are dropped, broadcasts first.
-        ///
-        /// Not once OnDisable has ended the connection loop that <paramref name="token"/> belongs
+        /// Hands a received message to the main thread, where <see cref="Update"/> delivers it. Bounded like
+        /// the outbox for the stretches Update does not run: past <see cref="RECEIVED_FOLDING_THRESHOLD"/>
+        /// waiting messages a model::update is folded into the one queued for the same object, and past
+        /// <see cref="MAX_RECEIVED_MESSAGES"/> the oldest messages are dropped, broadcasts first.
+        /// Does nothing once OnDisable has ended the connection loop that <paramref name="token"/> belongs
         /// to: the next loop's messages may be queued by then, and this one would land behind them.
         /// </summary>
         /// <remarks>
-        /// Called from the receive loop; internal so the EditMode tests can queue one too. The
-        /// queue owns <paramref name="payload"/> from here on: a fold writes newer fields into it.
+        /// Called from the receive loop. The queue owns <paramref name="payload"/> from here on: a fold writes
+        /// newer fields into it.
         /// </remarks>
         internal void EnqueueReceived(string channel, string command, JToken payload, CancellationToken token = default)
         {
@@ -800,8 +662,8 @@ namespace HCIKonstanz.Colibri.Networking
 
             lock (_queuedCommandsLock)
             {
-                // Checked under the lock: the next loop starts only after OnDisable has cancelled the
-                // token, so whatever it queues is queued after this check could still pass.
+                // Checked and queued under one lock: the next loop starts only after OnDisable has cancelled the
+                // token, so its messages queue behind this one.
                 if (token.IsCancellationRequested)
                     return;
 
@@ -813,8 +675,8 @@ namespace HCIKonstanz.Colibri.Networking
                     var key = (channel, id);
                     if (_queuedReceivedUpdates.TryGetValue(key, out var queued))
                     {
-                        // The queued update is the one parsed off the socket, which nothing else
-                        // holds yet. To the back of the queue: it now carries the newest change.
+                        // The queued payload was parsed off the socket and nothing else holds it yet. To the back of the
+                        // queue: it now carries the newest change.
                         var merged = (JObject)queued.Value.Payload;
                         foreach (var property in update.Properties())
                             merged[property.Name] = property.Value;
@@ -830,9 +692,8 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 else
                 {
-                    // Something else about an object - a delete, or a bare { id } that answers a
-                    // request - ends the fold for it: an older update folded past it would arrive
-                    // after it. See StopFolding, the outbox's counterpart.
+                    // A delete, or a bare { id } that answers a request, ends the fold for its object: an older update
+                    // folded past it would arrive after it. StopFolding is the outbox's counterpart.
                     if (_isReceivedBacklog && !canDrop)
                         StopFoldingReceived(channel, payload);
 
@@ -846,7 +707,6 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>A model::update with something in it besides its id, which may be folded.</summary>
         private static bool IsFoldableUpdate(string command, JToken payload, out JObject update, out string id)
         {
             if (command != MODEL_UPDATE_COMMAND || !TryGetModelId(payload, out update, out id))
@@ -911,12 +771,9 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Delivers everything received since the last frame. Handlers run on the main thread to
-        /// keep threading issues out of user code, and one at a time: a handler that throws used to
-        /// take the remaining handlers of that message down with it, and push every message queued
-        /// behind it to the next frame.
+        /// Delivers everything received since the last frame. Handlers run on the main thread, one at a time,
+        /// and one that throws does not stop the others or the messages queued behind it.
         /// </summary>
-        /// <remarks>Internal so the EditMode tests can drive it without a player loop.</remarks>
         internal void DeliverReceivedMessages()
         {
             int folded;
@@ -979,8 +836,8 @@ namespace HCIKonstanz.Colibri.Networking
             if (handlers == null)
                 return;
 
-            // A multicast delegate is immutable, so its invocation list only needs fetching
-            // again when someone has subscribed or unsubscribed since.
+            // A multicast delegate is immutable, so its invocation list is only fetched again after a subscribe
+            // or unsubscribe.
             if (!ReferenceEquals(handlers, _deliveringTo))
             {
                 _deliveringTo = handlers;
@@ -1001,18 +858,12 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>
-        /// Measured here rather than anywhere else because this is the very method that drains
-        /// <c>_queuedCommands</c>: it reports the rate messages are actually delivered at, not
-        /// something adjacent to it.
-        /// </summary>
         private void TrackDeliveryRate()
         {
             // unscaledDeltaTime, so a paused or slowed timeScale is not read as a stalled client.
             var delta = Time.unscaledDeltaTime;
 
-            // Exponential moving average: a single long frame should show up, but not make the
-            // readout jump around so much that it cannot be read.
+            // Exponential moving average: one long frame shows up, without making the readout jump around.
             _smoothedDeltaTime = _smoothedDeltaTime <= 0f
                 ? delta
                 : Mathf.Lerp(_smoothedDeltaTime, delta, 0.1f);
@@ -1026,23 +877,13 @@ namespace HCIKonstanz.Colibri.Networking
         /*
          *  ConfigureAwait(false) on every await from here down, without exception.
          *
-         *  This loop is started from OnEnable, i.e. on the main thread, so without it the first
-         *  await captures Unity's SynchronizationContext and every continuation in the chain -
-         *  connect, receive, heartbeat echo, send - is posted back to the main thread and pumped
-         *  once per frame. Inbound bytes then sit in the kernel buffer until the next frame, the
-         *  heartbeat echo costs two more frame-pumps *inside* the receive loop, and StampLiveness
-         *  only runs when the main thread runs.
-         *
-         *  An unfocused Editor throttles its player loop, so that one cause produced both halves
-         *  of the reported symptom: sync that visibly lagged between two editors side by side,
-         *  and missed heartbeats on whichever one was in the background.
-         *
-         *  The main-thread handoff that user code needs is elsewhere and stays where it is:
-         *  received messages go through _queuedCommands and are delivered from Update().
+         *  The loop starts on the main thread (OnEnable), so an await without it captures Unity's
+         *  SynchronizationContext and every continuation (connect, receive, heartbeat echo, send) waits
+         *  for the player loop, which an unfocused Editor throttles. Messages reach user code through
+         *  _queuedCommands and Update.
          */
 
-        // One long-lived task per component lifetime, instead of Update() re-entering
-        // Connect() every frame while disconnected.
+        // One long-lived task per run, rather than Update retrying every frame while disconnected.
         private async Task RunConnectionLoop(ConnectionLoop loop)
         {
             var token = loop.Token;
@@ -1051,13 +892,11 @@ namespace HCIKonstanz.Colibri.Networking
                 var address = _serverAddress;
                 var app = _appName;
 
-                // Whitespace counts as nothing, as in ColibriConfig.IsConfigured: an App Name of
-                // spaces used to connect, into an app of its own that no other client is in,
-                // while the setup and status windows said the project was not configured.
+                // Whitespace counts as nothing, as in ColibriConfig.IsConfigured.
                 if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(app))
                 {
-                    // Nothing configured (yet) - poll rather than give up, so setting the app
-                    // name at runtime still connects. Said once, not twice a second.
+                    // Poll rather than give up, so setting the App Name at runtime still connects. Logged once, not at
+                    // every poll.
                     if (!_hasReportedMissingConfig)
                     {
                         _hasReportedMissingConfig = true;
@@ -1074,8 +913,7 @@ namespace HCIKonstanz.Colibri.Networking
                 var handshakeApp = HandshakeAppName(app);
                 if (handshakeApp != app && handshakeApp != _reportedSanitizedApp)
                 {
-                    // Said rather than done quietly: only clients announcing the same app name
-                    // see each other, and a web client configured with the original name will not.
+                    // Logged, since a client configured with the original name will not see this one.
                     _reportedSanitizedApp = handshakeApp;
                     Debug.LogWarning(
                         $"Colibri: the App Name '{app}' cannot be sent as it is - it may not contain '::' or start or end with ':'. " +
@@ -1099,9 +937,8 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 catch (Exception) when (token.IsCancellationRequested)
                 {
-                    // Ended by OnDisable, which closed the socket under whatever was reading or
-                    // writing it. Nothing failed, and nothing is retried: saying "retrying" here
-                    // used to read as a failure of the session the next enable had just started.
+                    // Ended by OnDisable, which closed the socket under the read or write. Not a failure, so nothing is
+                    // logged or retried.
                     break;
                 }
                 catch (ProtocolMismatchException e)
@@ -1114,14 +951,13 @@ namespace HCIKonstanz.Colibri.Networking
                 catch (FrameException e)
                 {
                     loop.EndedOnBadFrame = true;
-                    // A desynchronized stream cannot be recovered from - there is no delimiter
-                    // to resynchronize on - so the connection is dropped and rebuilt.
+                    // No delimiter to resynchronize on, so a desynchronized stream is dropped and the connection rebuilt.
                     Debug.LogError($"Colibri: invalid frame from server, dropping connection: {e.Message}");
                 }
                 catch (TimeoutException e)
                 {
-                    // Nothing refused the connection - nothing answered at all, which is usually
-                    // the wrong address, or a device on another network than the server.
+                    // Nothing refused the connection and nothing answered: usually a wrong address, or a device on
+                    // another network than the server.
                     Debug.Log($"Colibri: {e.Message}. Check the server address, and that this device is on the same network as the server. Retrying...");
                 }
                 catch (TlsHandshakeException e)
@@ -1130,8 +966,8 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 catch (Exception e) when (loop.DroppedByWatchdog && (e is SocketException || e is IOException))
                 {
-                    // The watchdog closed the socket under the session and has already said why. The
-                    // read that fails on it, with OperationAborted, would only say it again.
+                    // The watchdog closed the socket and has said why; the read that fails on it (OperationAborted) would
+                    // only repeat it.
                 }
                 catch (SocketException e)
                 {
@@ -1143,9 +979,7 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 catch (Exception e) when (e is IOException || e is AuthenticationException)
                 {
-                    // How a stream reports the socket failing under it: NetworkStream and SslStream
-                    // wrap what the socket threw, which is told apart here as it was before the
-                    // connection went through a stream.
+                    // NetworkStream and SslStream wrap what the socket threw; unwrap it to tell the cases apart.
                     if (FindCause<ObjectDisposedException>(e) == null)
                     {
                         var socketError = FindCause<SocketException>(e);
@@ -1169,27 +1003,24 @@ namespace HCIKonstanz.Colibri.Networking
                     CloseSocket(loop.Socket);
                     loop.Socket = null;
 
-                    // However the session ended - a clean hang-up, an undecodable frame, a reset,
-                    // the watchdog - except for this component being disabled, which says nothing
-                    // about the server.
+                    // Whatever ended the session, except this component being disabled, which says nothing about the server.
                     if (!token.IsCancellationRequested)
                         CountSessionWithoutAFrame(loop);
 
-                    // Shared with the next loop, so only while this one has not been ended: OnDisable
-                    // has then closed the outbox and set the status itself, and they may already
-                    // belong to a session the next enable started.
+                    // Shared with the next loop, so only while this one has not been ended: by then OnDisable has closed
+                    // the outbox and set the status itself, and they may belong to a session the next enable started.
                     CloseOutbox(token);
 
-                    // Before the status changes, so nothing that reacts to ProtocolMismatch can
-                    // still queue a message that would wait for a connection that never comes.
+                    // Before the status changes, so a reaction to ProtocolMismatch cannot queue a message that waits for
+                    // a connection that never comes.
                     if (mismatched)
                         RefuseSends(token);
 
                     TrySetStatus(mismatched ? ConnectionStatus.ProtocolMismatch : ConnectionStatus.Disconnected, token);
                 }
 
-                // Terminal. Retrying cannot make the two sides agree, and a reconnect loop would
-                // only bury the one log line that explains what is wrong.
+                // Terminal: retrying cannot make the versions agree, and would bury the one log line that says what
+                // is wrong.
                 if (mismatched)
                     break;
 
@@ -1202,43 +1033,31 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// A server whose framing this client cannot decode also cannot decode ours, so it has
-        /// no way to send the explicit refusal. Repeated failures before a single frame is read
-        /// are the only symptom that case has, so name the likely cause instead of logging the
-        /// same decode error forever.
-        ///
-        /// This is a suspicion, not a finding: it cannot tell an out-of-date server apart from a
-        /// TCP port that is not Colibri at all. So it stays a warning, the connection keeps being
-        /// retried, and <see cref="Status"/> is left alone - only a refusal this client actually
-        /// decoded is terminal.
-        ///
-        /// Called once for every session that ends, whatever ended it. The count is reset by the
-        /// first frame a session decodes (<see cref="OnFrameDecoded"/>), not here, so "consecutive"
-        /// means what it says: it used to be updated only on a clean hang-up or an undecodable
-        /// frame, and a session ended by a reset or the watchdog neither counted nor cleared it.
-        ///
-        /// A session on which nothing came back is counted apart, with a hint of its own: one the
-        /// watchdog ended, with no frame in the time it waited, and with TLS one that was closed or
-        /// reset without a frame. Neither cause of the framing hint looks like that. A 1.x server
-        /// heartbeats from the moment it accepts, through a TLS-terminating proxy too, and its
-        /// heartbeat fails to decode at once; a 2.x server with TLS on sends a frame once the TLS
-        /// handshake is done. What is left is something that accepts connections and then closes
-        /// them or forwards nothing, such as a proxy whose backend is down, or a server that does
-        /// not answer. Without TLS, a close cannot be told apart from a server with TLS on hanging
-        /// up on this client, so it counts towards the framing hint, which names such a proxy as
-        /// well. Each kind of session breaks the other's row.
+        /// Called once for every session that ends, whatever ended it. A session that got past the handshake
+        /// and ended without a decoded frame counts towards one of two hints, logged after
+        /// <see cref="EARLY_FRAME_FAILURES_BEFORE_HINT"/> in a row. Each kind resets the other's count, and the
+        /// first decoded frame resets both (<see cref="OnFrameDecoded"/>).
         /// </summary>
+        /// <remarks>
+        /// Framing hint: a server on another framing cannot decode our frames, so it cannot send the explicit
+        /// refusal either. A suspicion only (it looks the same as a port that is not Colibri), so
+        /// <see cref="Status"/> is left alone; only a refusal this client decoded is terminal.
+        /// Unanswered hint: the watchdog ended the session, or with TLS it was closed or reset without a
+        /// frame. A 1.x server heartbeats at once, behind a TLS-terminating proxy too, and that fails to
+        /// decode; a 2.x server with TLS sends a frame after the handshake. What is left is a proxy whose
+        /// backend is down, or a server that does not answer. Without TLS a close cannot be told apart from a
+        /// TLS server hanging up on this client, so it counts as framing, whose hint names such a proxy too.
+        /// </remarks>
         private void CountSessionWithoutAFrame(ConnectionLoop loop)
         {
-            // Never got as far as a connected socket: that is a server that is down, a wrong
-            // address or a closed port, and has nothing to say about protocol versions.
+            // Server down, wrong address or closed port: says nothing about protocol versions.
             if (!loop.ReachedHandshake)
                 return;
 
             if (loop.DecodedAnyFrame)
                 return;
 
-            // Nothing came back: see above.
+            // Unanswered session, see above.
             if (loop.EndedSilent || (_sessionUsesTls && !loop.EndedOnBadFrame))
             {
                 _consecutiveEarlyFrameFailures = 0;
@@ -1274,17 +1093,15 @@ namespace HCIKonstanz.Colibri.Networking
                     "If a proxy or port forwarding is in front of the server, check that the server behind it is running.";
             }
 
-            // Logged before it is published. This runs on the session loop's thread, so whatever
-            // polls SuspectedProtocolMismatch on the main thread - the Status window, a test
-            // waiting for it - could otherwise act on the value before the line exists.
+            // Logged before it is published: this runs on the session loop's thread, and the main thread polls
+            // SuspectedProtocolMismatch (Status window, tests) and could act on the value before the line exists.
             Debug.LogError($"Colibri: {suspicion}");
             _suspectedProtocolMismatch = suspicion;
         }
 
         /// <summary>
-        /// The first frame of a session, of any kind - a refusal included - settles that this
-        /// server speaks our framing, so it clears the count and the suspicion at once rather than
-        /// whenever the session happens to end.
+        /// The first frame of a session, a refusal included, shows that the server speaks our framing, so the
+        /// counts and the suspicion are cleared at once rather than when the session ends.
         /// </summary>
         private void OnFrameDecoded(ConnectionLoop loop)
         {
@@ -1294,11 +1111,7 @@ namespace HCIKonstanz.Colibri.Networking
             _suspectedProtocolMismatch = null;
         }
 
-        /// <summary>
-        /// How many sessions in a row got past the handshake and then ended without a frame, other
-        /// than by the watchdog or, with TLS, by a close or reset. Exists for the test suite;
-        /// nothing in the library reads it.
-        /// </summary>
+        // Tests only: sessions in a row counted towards the framing hint.
         internal int ConsecutiveEarlyFrameFailures => Volatile.Read(ref _consecutiveEarlyFrameFailures);
 
         private async Task RunSession(ConnectionLoop loop, string host, int port, string app, bool useTls)
@@ -1323,8 +1136,8 @@ namespace HCIKonstanz.Colibri.Networking
             Session session;
             try
             {
-                // Every address tried gets a socket of its own. The loop holds the one being tried,
-                // so that OnDisable, and the cleanup after this session, close it.
+                // Every address tried gets a socket of its own. The loop holds the one being tried, so OnDisable and
+                // the cleanup after this session close it.
                 session = await OpenSessionAsync(host, port, certificateCheck, CONNECT_TIMEOUT_MS, socket => loop.Socket = socket, token)
                     .ConfigureAwait(false);
             }
@@ -1344,9 +1157,8 @@ namespace HCIKonstanz.Colibri.Networking
                 throw;
             }
 
-            // Closing the socket is what unblocks an in-flight read or write, plain or TLS; there
-            // is no cancellation token overload for either on this API surface. Registered on a
-            // token that is cancelled already, it closes the socket at once.
+            // Closing the socket unblocks an in-flight read or write, TLS or not; neither has a token overload on
+            // this API surface. Closes at once if the token is cancelled already.
             using (token.Register(session.Close))
             {
                 try
@@ -1378,29 +1190,24 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Opens the TCP connection to <paramref name="host"/> and, with <paramref name="tls"/>, a
-        /// TLS session over it, all within <paramref name="timeoutMs"/>: the name lookup, every
-        /// address tried and the handshake. The session's stream is the one the v3 frames are read
-        /// from and written to, encrypted or not; without TLS it is the socket's own stream.
+        /// Opens the TCP connection to <paramref name="host"/> and, with <paramref name="tls"/>, a TLS session
+        /// over it, all within <paramref name="timeoutMs"/>: name lookup, every address tried and the
+        /// handshake. The session's stream carries the v3 frames, encrypted or not.
         /// </summary>
         /// <param name="host">
-        /// The configured server address: a name, an IPv4 address, or an IPv6 address with or
-        /// without brackets. TLS uses it as it is, for SNI and the certificate check.
+        /// A name, an IPv4 address, or an IPv6 address with or without brackets. TLS uses it as it is, for SNI
+        /// and the certificate check.
         /// </param>
         /// <param name="tls">The certificate check of the handshake, or null for no TLS.</param>
         /// <param name="attempting">
-        /// Called with the socket for each address, before it is tried. The sockets stay this
-        /// method's: it closes every one but the one it returns, and that one too if it throws.
+        /// Called with the socket for each address, before it is tried. The sockets stay this method's: it
+        /// closes every one but the one it returns, and that one too if it throws.
         /// </param>
         /// <exception cref="TimeoutException">The name did not resolve, or nothing answered the connection, in time, and nothing refused it.</exception>
         /// <exception cref="TlsHandshakeException">The TLS handshake failed or did not finish in time.</exception>
         /// <exception cref="OperationCanceledException"><paramref name="token"/> was cancelled first.</exception>
         /// <exception cref="ObjectDisposedException">A socket was closed while connecting.</exception>
-        /// <exception cref="SocketException">
-        /// The name does not resolve, or every address failed, one of them refused or all of them
-        /// before their time was up, unreachable, say. See <see cref="ConnectAnyAsync"/> for which error.
-        /// </exception>
-        /// <remarks>Internal for the EditMode tests.</remarks>
+        /// <exception cref="SocketException">The name does not resolve, or every address failed. See <see cref="ConnectAnyAsync"/> for which error.</exception>
         internal static async Task<Session> OpenSessionAsync(string host, int port, ServerCertificateCheck tls, int timeoutMs,
             Action<Socket> attempting, CancellationToken token)
         {
@@ -1413,8 +1220,7 @@ namespace HCIKonstanz.Colibri.Networking
 
             try
             {
-                // Not owning the socket: closing the socket stays the one way to end a session, and
-                // it is closed by whoever ends it.
+                // Does not own the socket: closing it is the one way to end a session, and whoever ends the session does that.
                 var plain = new NetworkStream(socket, false);
                 if (tls == null)
                     return new Session(socket, plain, address);
@@ -1431,10 +1237,10 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// The TLS handshake, as a client: SNI and the certificate's name are the configured
-        /// server address, and <paramref name="check"/> decides about the certificate. The TLS
-        /// versions are the runtime's own default: TLS 1.2 on Unity's TLS backend, 1.2 or 1.3
-        /// elsewhere. colibri-server accepts nothing older than 1.2.
+        /// The TLS handshake as a client: SNI and the certificate's name are the configured server address,
+        /// and <paramref name="check"/> decides about the certificate. The TLS versions are the runtime's
+        /// default: TLS 1.2 on Unity's TLS backend, 1.2 or 1.3 elsewhere. colibri-server accepts nothing
+        /// older than 1.2.
         /// </summary>
         private static async Task<Stream> AuthenticateAsync(Socket socket, NetworkStream plain, string host, int port,
             ServerCertificateCheck check, int timeoutMs, int totalTimeoutMs, CancellationToken token)
@@ -1470,9 +1276,9 @@ namespace HCIKonstanz.Colibri.Networking
                 }
             }
 
-            // As with a connect: closing the socket is what abandons the handshake. The stream is
-            // let go of once the handshake has failed with it, and its exception observed then -
-            // on the thread pool, not inline in the stream's own completion of the handshake.
+            // Closing the socket abandons the handshake, as with a connect. The stream is disposed and its
+            // exception observed once the handshake has failed, on the thread pool rather than inline in the
+            // stream's own completion of the handshake.
             CloseSocket(socket);
             _ = handshake.ContinueWith(attempt =>
             {
@@ -1487,11 +1293,9 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Lets go of a session's stream once it has ended. An SslStream holds the TLS state, which
-        /// closing the socket does not free, so it is disposed, but only once nothing is writing to
-        /// it: a write of this session may still be on its way out of the outbox or the heartbeat
-        /// echo, and those take the send lock. Not waited for, so that the end of a session never
-        /// waits for a write.
+        /// Disposes a session's stream once it has ended: an SslStream holds TLS state that closing the socket
+        /// does not free. Waits for the send lock first, since a write of this session may still be on its way
+        /// out of the outbox or the heartbeat echo. Not awaited, so the end of a session never waits for a write.
         /// </summary>
         private void ReleaseStream(Stream stream)
         {
@@ -1517,9 +1321,9 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Keeps what the handshake decided about the server's certificate for the Status window,
-        /// and says once per session that one was accepted only because self-signed certificates
-        /// are allowed: the connection is encrypted, but nothing has checked whose server it is.
+        /// Keeps the handshake's verdict on the server's certificate for the Status window, and warns once
+        /// when it was accepted only because self-signed certificates are allowed: the connection is
+        /// encrypted, but nothing checks whose server it is.
         /// </summary>
         private void NoteCertificate(ServerCertificateCheck check, string host, int port)
         {
@@ -1548,10 +1352,9 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Logs a failed TLS handshake: as an error the first time it fails that way, since it
-        /// will not go away until a setting changes, and after that only as a note, as a refused
-        /// connection is. The connection keeps being retried, so a server that is switched to TLS,
-        /// or given another certificate, is picked up without a restart.
+        /// Logs a failed TLS handshake as an error the first time it fails that way, since it will not go away
+        /// until a setting changes, and after that as a note, like a refused connection. The connection keeps
+        /// being retried, so a server switched to TLS or given another certificate is picked up without a restart.
         /// </summary>
         private void ReportTlsFailure(TlsHandshakeException e)
         {
@@ -1574,7 +1377,6 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>The first exception of type <typeparamref name="T"/> in <paramref name="e"/>'s chain of inner exceptions, itself included.</summary>
         private static T FindCause<T>(Exception e) where T : Exception
         {
             for (var cause = e; cause != null; cause = cause.InnerException)
@@ -1589,16 +1391,14 @@ namespace HCIKonstanz.Colibri.Networking
         /*
          *  Finding the server
          *
-         *  The socket used to be IPv4 and to connect by name, so a server name with only IPv6
-         *  addresses (AAAA records), or an IPv6 address, could not be reached at all. Now the name
-         *  is looked up here, and each of its addresses is tried with a socket of its own family.
+         *  The name is looked up here and each of its addresses is tried with a socket of its own family,
+         *  so a name with only IPv6 addresses, or an IPv6 address, can be reached.
          */
 
         /// <summary>
-        /// The addresses to try for <paramref name="host"/>, in the order to try them. An IP address
-        /// is taken as it is. A name is looked up, and its IPv4 addresses come first, then its IPv6
-        /// addresses, each family in the order the platform's resolver gives it (RFC 6724). See
-        /// <see cref="AddressesToTry"/> for why.
+        /// The addresses to try for <paramref name="host"/>, in order. An IP address is taken as it is. A name
+        /// is looked up, and its IPv4 addresses come first, then its IPv6 addresses, each family in the order
+        /// the platform's resolver gives it (RFC 6724). See <see cref="AddressesToTry"/> for why.
         /// </summary>
         /// <exception cref="SocketException">The name does not resolve, or resolves to no address.</exception>
         /// <exception cref="TimeoutException">The lookup did not finish within <paramref name="timeoutMs"/>.</exception>
@@ -1608,17 +1408,17 @@ namespace HCIKonstanz.Colibri.Networking
             if (TryParseAddress(host, out var address))
                 return Task.FromResult(AddressesToTry(new[] { address }));
 
-            // The blocking lookup on the thread pool rather than GetHostAddressesAsync: neither can
-            // be cancelled on Unity's .NET profile, and this one works the same on Mono and IL2CPP.
-            // A lookup that is given up holds its pool thread until the resolver gives up as well.
+            // The blocking lookup on the thread pool rather than GetHostAddressesAsync: neither can be cancelled
+            // on Unity's .NET profile, and this one works the same on Mono and IL2CPP. An abandoned lookup holds
+            // its pool thread until the resolver gives up as well.
             return WaitForLookupAsync(Task.Run(() => Dns.GetHostAddresses(host)), host, timeoutMs, token);
         }
 
         /// <summary>
-        /// The rest of <see cref="ResolveAsync"/> for a name: waits for <paramref name="lookup"/>
-        /// until it completes, the time is up or <paramref name="token"/> is cancelled.
+        /// The rest of <see cref="ResolveAsync"/> for a name: waits for <paramref name="lookup"/> until it
+        /// completes, the time is up or <paramref name="token"/> is cancelled.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests, which stand in for a slow resolver with a lookup that never completes.</remarks>
+        /// <remarks>Separate so the EditMode tests can stand in for a slow resolver with a lookup that never completes.</remarks>
         internal static async Task<IReadOnlyList<IPAddress>> WaitForLookupAsync(Task<IPAddress[]> lookup, string host, int timeoutMs, CancellationToken token)
         {
             using (var timer = CancellationTokenSource.CreateLinkedTokenSource(token))
@@ -1647,10 +1447,9 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Whether <paramref name="host"/> is an IP address rather than a name: an IPv4 address, or
-        /// an IPv6 address with or without the brackets a URL puts around one ("[2001:db8::1]").
+        /// Whether <paramref name="host"/> is an IP address rather than a name: an IPv4 address, or an IPv6
+        /// address with or without the brackets a URL puts around one ("[2001:db8::1]").
         /// </summary>
-        /// <remarks>Internal for VoiceServerConnection and the EditMode tests.</remarks>
         internal static bool TryParseAddress(string host, out IPAddress address)
         {
             address = null;
@@ -1674,10 +1473,10 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Whether the device has a route to <paramref name="address"/>. Connecting a UDP socket
-        /// sends nothing: it only looks the route up, and fails at once without one.
+        /// Whether the device has a route to <paramref name="address"/>. Connecting a UDP socket sends
+        /// nothing: it only looks the route up, and fails at once without one.
         /// </summary>
-        /// <remarks>Internal for VoiceServerConnection and the EditMode tests.</remarks>
+        /// <remarks>Also used by VoiceServerConnection.</remarks>
         internal static bool HasRoute(IPAddress address, int port)
         {
             try
@@ -1697,20 +1496,16 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// What a lookup found, ready to be tried in order: each address once, the IPv4 addresses
-        /// first and then the IPv6 addresses, each family in the order found, and an IPv4-mapped
-        /// IPv6 address as the IPv4 address it stands for, which an IPv4 socket reaches on every
-        /// platform.
+        /// What a lookup found, ready to be tried in order: each address once, the IPv4 addresses first and
+        /// then the IPv6 addresses, each family in the order found, and an IPv4-mapped IPv6 address as the IPv4
+        /// address it stands for, which an IPv4 socket reaches on every platform.
         /// </summary>
         /// <remarks>
         /// IPv4 first because voice goes to an IPv4 address whenever the name has one
-        /// (VoiceServerConnection.SelectServerAddress), and colibri-server relays voice only from
-        /// the source address of a TCP connection of the same app (voice-server.ts, admit). In the
-        /// resolver's order, usually IPv6 first, a name with both an A and an AAAA record had TCP
-        /// arrive over IPv6 and voice over IPv4, from another address, and every voice packet was
-        /// dropped: "localhost" on Windows against a server on TCP_HOST ::, or a Docker host whose
-        /// docker-proxy forwards IPv6 TCP from the bridge gateway's address. A name with only IPv6
-        /// addresses still connects over IPv6, and voice follows. Internal for the EditMode tests.
+        /// (VoiceServerConnection.SelectServerAddress), and colibri-server relays voice only from the source
+        /// address of a TCP connection of the same app (voice-server.ts, admit). With TCP on IPv6 and voice on
+        /// IPv4 the addresses differ and every voice packet is dropped, e.g. "localhost" on Windows against a
+        /// server on TCP_HOST ::. A name with only IPv6 addresses still connects over IPv6, and voice follows.
         /// </remarks>
         internal static IReadOnlyList<IPAddress> AddressesToTry(IPAddress[] found)
         {
@@ -1733,13 +1528,11 @@ namespace HCIKonstanz.Colibri.Networking
 
         /// <summary>
         /// How long the attempt on one of several addresses may take: an equal share of
-        /// <paramref name="remainingMs"/> among <paramref name="attemptsLeft"/> addresses, this one
-        /// and those after it that the device has a route to, but at least
-        /// <see cref="MIN_ADDRESS_ATTEMPT_MS"/>, and for a loopback address at most
-        /// <see cref="LOOPBACK_ATTEMPT_MS"/>. The last address gets all the time left, and no
-        /// attempt more than that.
+        /// <paramref name="remainingMs"/> among <paramref name="attemptsLeft"/> addresses, this one and those
+        /// after it that the device has a route to, but at least <see cref="MIN_ADDRESS_ATTEMPT_MS"/>, and for
+        /// a loopback address at most <see cref="LOOPBACK_ATTEMPT_MS"/>. The last address gets all the time
+        /// left, and no attempt more than that.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal static int AttemptTimeoutMs(int remainingMs, int attemptsLeft, bool isLoopback)
         {
             if (attemptsLeft <= 1)
@@ -1753,11 +1546,10 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Connects to the first of <paramref name="addresses"/> that answers. They are tried in
-        /// order, each with a socket of its own family and the time <see cref="AttemptTimeoutMs"/>
-        /// gives it, and the next is tried at once when one is refused or unreachable. When every
-        /// address fails, the error that says the most about the server is reported (see
-        /// <see cref="FailureRank"/>), the first of equals.
+        /// Connects to the first of <paramref name="addresses"/> that answers. They are tried in order, each
+        /// with a socket of its own family and the time <see cref="AttemptTimeoutMs"/> gives it, and the next
+        /// is tried at once when one is refused or unreachable. When every address fails, the error that says
+        /// the most about the server is reported (see <see cref="FailureRank"/>), the first of equals.
         /// </summary>
         /// <param name="host">The server address as configured, for the messages.</param>
         /// <param name="timeoutMs">The time all attempts together may take.</param>
@@ -1768,16 +1560,15 @@ namespace HCIKonstanz.Colibri.Networking
         /// <exception cref="SocketException">Every address failed, and one refused or none went unanswered: the first refusal, or else the first address's error.</exception>
         /// <exception cref="OperationCanceledException"><paramref name="token"/> was cancelled first.</exception>
         /// <exception cref="ObjectDisposedException">A socket was closed while connecting.</exception>
-        /// <remarks>Asks <see cref="HasRoute"/> which addresses the device has a route to. Internal for the EditMode tests.</remarks>
+        /// <remarks>Asks <see cref="HasRoute"/> which addresses the device has a route to.</remarks>
         internal static Task<(Socket Socket, IPAddress Address)> ConnectAnyAsync(IReadOnlyList<IPAddress> addresses, string host,
             int port, int timeoutMs, int totalTimeoutMs, Action<Socket> attempting, CancellationToken token)
             => ConnectAnyAsync(addresses, host, port, timeoutMs, totalTimeoutMs, address => HasRoute(address, port), attempting, token);
 
         /// <summary>
-        /// <see cref="ConnectAnyAsync(IReadOnlyList{IPAddress}, string, int, int, int, Action{Socket}, CancellationToken)"/>,
-        /// asking <paramref name="hasRoute"/> whether the device has a route to an address.
+        /// The overload that asks <paramref name="hasRoute"/> instead of <see cref="HasRoute"/> whether the
+        /// device has a route to an address, so the EditMode tests can decide.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests, which decide which addresses have a route.</remarks>
         internal static async Task<(Socket Socket, IPAddress Address)> ConnectAnyAsync(IReadOnlyList<IPAddress> addresses, string host,
             int port, int timeoutMs, int totalTimeoutMs, Func<IPAddress, bool> hasRoute, Action<Socket> attempting, CancellationToken token)
         {
@@ -1793,10 +1584,9 @@ namespace HCIKonstanz.Colibri.Networking
                 if (remaining <= 0)
                     break;
 
-                // Shared only with the addresses after this one that the device has a route to. One
-                // without fails at once, as an IPv6 address does on Wi-Fi without IPv6, and counted,
-                // it left the IPv4 address before it half of the 5 s, too short for a connection
-                // that needs a third SYN.
+                // Shared only with the addresses after this one that the device has a route to. One without fails at
+                // once, as an IPv6 address does on Wi-Fi without IPv6, and counting it would leave the IPv4 address
+                // before it half of the 5 s, too short for a connection that needs a third SYN.
                 var address = addresses[i];
                 var attemptMs = AttemptTimeoutMs((int)remaining, 1 + routedAfter[i], IPAddress.IsLoopback(address));
 
@@ -1804,11 +1594,10 @@ namespace HCIKonstanz.Colibri.Networking
                 var connected = false;
                 try
                 {
-                    // The address's own family: an IPv4 socket cannot reach an IPv6 address.
                     socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
                     attempting?.Invoke(socket);
 
-                    // Registered on a token that is cancelled already, it closes the socket at once.
+                    // Closes the socket at once if the token is cancelled already.
                     using (token.Register(() => CloseSocket(socket)))
                         await ConnectAsync(socket, address, port, attemptMs, token).ConfigureAwait(false);
 
@@ -1817,20 +1606,18 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 catch (Exception e) when (!(e is ObjectDisposedException) && !token.IsCancellationRequested)
                 {
-                    // Refused, unreachable, an address family this device has no sockets for, no
-                    // answer within this address's share, or anything else a runtime throws for one
-                    // address family and not the other: the next address may still answer.
-                    // Reported if none does: the error that says the most about the server, the
-                    // first of equals.
+                    // Refused, unreachable, an address family this device has no sockets for, no answer within this
+                    // address's share, or anything else a runtime throws for one address family and not the other: the
+                    // next address may still answer.
                     if (failure == null || FailureRank(e) > FailureRank(failure))
                         failure = e;
 
                     if (i + 1 < addresses.Count && clock.ElapsedMilliseconds < timeoutMs)
                     {
                         var next = Endpoint(addresses[i + 1], port);
-                        // Two decimals: a loopback address's 250 ms read as 0.3 s with one. "No connection",
-                        // not "no answer": Windows retries a refused connect for about a second, so a
-                        // loopback address that refused is given up on before the refusal arrives.
+                        // Two decimals, so a loopback address's 250 ms does not read as 0.3 s. "No connection", not "no
+                        // answer": Windows reports a refused loopback connect only after about a second, so an address given
+                        // up on after 250 ms may have refused.
                         Debug.Log(e is TimeoutException
                             ? $"Colibri: no connection to {Endpoint(address, port)} within "
                                 + $"{(attemptMs / 1000f).ToString("0.##", CultureInfo.InvariantCulture)} s, trying {next}"
@@ -1851,8 +1638,7 @@ namespace HCIKonstanz.Colibri.Networking
             if (failure != null && !(failure is TimeoutException))
                 ExceptionDispatchInfo.Capture(failure).Throw();
 
-            // Invariant: this ends up in the log and on screen, and "0,5 s" in one locale and
-            // "0.5 s" in another is one more thing to puzzle over.
+            // Invariant culture: this ends up in the log and on screen, and should read the same in every locale.
             throw new TimeoutException(
                 $"{host}:{port} did not answer within {(totalTimeoutMs / 1000f).ToString("0.#", CultureInfo.InvariantCulture)} s", failure);
         }
@@ -1873,17 +1659,16 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// How much a failed attempt says about the server, to choose the error reported when every
-        /// address failed. A refusal says the most (the machine is there, nothing listens on the
-        /// port), then no answer, then anything else, which is about the path to the server.
+        /// How much a failed attempt says about the server, to choose the error reported when every address
+        /// failed. A refusal says the most (the machine is there, nothing listens on the port), then no
+        /// answer, then anything else, which is about the path to the server.
         /// </summary>
         /// <remarks>
-        /// An IPv6 address tried after IPv4 on a network without IPv6 fails as unreachable, which hid
-        /// a refused IPv4 address: a server that was down read as a network without a route. A
-        /// refusal beats no answer because Windows reports a refused loopback connection only after
-        /// a second or more: with no server running, "localhost" gave up on 127.0.0.1 after its
-        /// 0.25 s, ::1 then refused, and the timeout pointed to the address and the network rather
-        /// than to starting the server.
+        /// An IPv6 address tried after IPv4 on a network without IPv6 fails as unreachable, which would hide a
+        /// refused IPv4 address and make a stopped server read as no route. A refusal beats no answer because
+        /// Windows reports a refused loopback connect only after a second or more: with no server running,
+        /// "localhost" gives up on 127.0.0.1 after 0.25 s, ::1 then refuses, and the timeout would point to
+        /// the address and the network rather than to starting the server.
         /// </remarks>
         private static int FailureRank(Exception failure)
         {
@@ -1900,15 +1685,14 @@ namespace HCIKonstanz.Colibri.Networking
         private static string Endpoint(IPAddress address, int port) => $"{HostOf(address)}:{port}";
 
         /// <summary>
-        /// Opens the TCP connection to one address, or gives up after <paramref name="timeoutMs"/>.
-        /// Closing the socket is the only way to abandon a pending connect on this API surface, so
-        /// that is what giving up does; the socket cannot be used again afterwards.
+        /// Opens the TCP connection to one address, or gives up after <paramref name="timeoutMs"/>. Giving up
+        /// closes the socket, the only way to abandon a pending connect on this API surface, so the socket
+        /// cannot be used again.
         /// </summary>
         /// <exception cref="TimeoutException">Nothing answered in time.</exception>
         /// <exception cref="OperationCanceledException"><paramref name="token"/> was cancelled first.</exception>
         /// <exception cref="ObjectDisposedException">The socket was closed first.</exception>
         /// <exception cref="SocketException">The attempt failed before the time was up, refused, say.</exception>
-        /// <remarks>Internal for the EditMode tests, which time it against a port that never answers.</remarks>
         internal static async Task ConnectAsync(Socket socket, IPAddress address, int port, int timeoutMs, CancellationToken token)
         {
             var connecting = socket.ConnectAsync(address, port);
@@ -1916,16 +1700,15 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// The rest of <see cref="ConnectAsync"/>: waits for <paramref name="connecting"/>, the
-        /// connect in progress on <paramref name="socket"/>, until it completes, the time is up,
+        /// The rest of <see cref="ConnectAsync"/>: waits for <paramref name="connecting"/>, the connect in
+        /// progress on <paramref name="socket"/>, until it completes, the time is up,
         /// <paramref name="token"/> is cancelled or the socket is closed.
         /// </summary>
         /// <remarks>
-        /// The socket is looked at every <see cref="CLOSED_SOCKET_CHECK_MS"/> rather than left to
-        /// the connect to notice: on Mono a connect whose socket is closed neither completes nor
-        /// fails, so an attempt whose socket was closed under it waited out the whole timeout and
-        /// then reported a server that may well have answered as not answering. Internal for the
-        /// EditMode tests, which stand in for that with a connect that never completes.
+        /// Looks at the socket every <see cref="CLOSED_SOCKET_CHECK_MS"/> because on Mono a connect whose
+        /// socket is closed neither completes nor fails, so it would wait out the whole timeout and report a
+        /// server that may well have answered as not answering. The EditMode tests stand in for that with a
+        /// connect that never completes.
         /// </remarks>
         internal static async Task WaitForConnectAsync(Socket socket, Task connecting, string host, int port, int timeoutMs, CancellationToken token)
         {
@@ -1965,9 +1748,8 @@ namespace HCIKonstanz.Colibri.Networking
 
             CloseSocket(socket);
 
-            // Nothing waits for the abandoned connect any more. On .NET it now fails with the closed
-            // socket, and its exception is observed here rather than surfacing as unobserved later;
-            // on Mono it may never complete at all.
+            // Nothing waits for the abandoned connect any more. On .NET it now fails with the closed socket, and
+            // its exception is observed here rather than surfacing as unobserved later; on Mono it may never complete.
             _ = connecting.ContinueWith(attempt => { _ = attempt.Exception; }, CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
@@ -1975,21 +1757,17 @@ namespace HCIKonstanz.Colibri.Networking
             if (closed)
                 throw new ObjectDisposedException(typeof(Socket).FullName, $"The socket was closed while connecting to {host}:{port}.");
 
-            // Invariant: this ends up in the log and on screen, and "0,5 s" in one locale and
-            // "0.5 s" in another is one more thing to puzzle over.
+            // Invariant culture: this ends up in the log and on screen, and should read the same in every locale.
             throw new TimeoutException(
                 $"{host}:{port} did not answer within {(timeoutMs / 1000f).ToString("0.#", CultureInfo.InvariantCulture)} s");
         }
 
         /// <summary>
-        /// The session is <see cref="ConnectionStatus.Connected"/> from the first frame the server
-        /// sends, not from the moment the TCP connection opened. Anything can accept a connection:
-        /// a 1.x server does, and then speaks a framing this client cannot read; so does a port
-        /// that is not Colibri at all. Counting those as connections reset the reconnect backoff on
-        /// every attempt - it never grew past 500 ms - and fired OnConnected, and flushed the queued
-        /// messages, into a session that was about to fail. A server that says nothing at all is
-        /// dropped by the watchdog in <see cref="Update"/>; the server heartbeats every 100 ms, so
-        /// a real one is never kept waiting.
+        /// The session is <see cref="ConnectionStatus.Connected"/> from the first frame the server sends, not
+        /// from the TCP connection: anything can accept one, a 1.x server (which then speaks a framing this
+        /// client cannot read) or a port that is not Colibri. Counting those would reset the backoff on every
+        /// attempt, fire OnConnected and flush the queue into a session about to fail. A server that says
+        /// nothing is dropped by the watchdog in <see cref="Update"/>; a real one heartbeats every 100 ms.
         /// </summary>
         private void BecomeConnected(Session session, string host, int port, string app, CancellationToken token)
         {
@@ -2034,7 +1812,7 @@ namespace HCIKonstanz.Colibri.Networking
                     .ConfigureAwait(false);
                 if (received <= 0)
                 {
-                    // Unless it was this end: OnDisable closes the socket of a loop it ends.
+                    // Not logged if this end closed it: OnDisable closes the socket of a loop it ends.
                     if (!token.IsCancellationRequested)
                         Debug.Log("Colibri: server closed the connection");
                     return;
@@ -2042,10 +1820,9 @@ namespace HCIKonstanz.Colibri.Networking
 
                 _receiveThreadId = Thread.CurrentThread.ManagedThreadId;
 
-                // Once the server has proven itself, any received byte is proof of life: it
-                // heartbeats every 100 ms whether or not there is traffic, and a large message can
-                // take longer than that to arrive. Before then only a decoded frame counts, or
-                // something trickling bytes that never form one would hold the session open.
+                // Once the server has proven itself, any received byte is proof of life: it heartbeats every 100 ms,
+                // and a large message can take longer than that to arrive. Before then only a decoded frame counts,
+                // or something trickling bytes that never form one would hold the session open.
                 if (isConnected)
                     StampLiveness();
 
@@ -2055,18 +1832,14 @@ namespace HCIKonstanz.Colibri.Networking
 
                 for (var i = 0; i < frames.Count; i++)
                 {
-                    // Ended by OnDisable after this batch was read: the rest of it goes the way of
-                    // the bytes still unread on the closed socket, and changes nothing the next loop
-                    // shares.
+                    // If OnDisable ended the loop after this batch was read, the rest of it is discarded like the bytes
+                    // still unread on the closed socket, and changes nothing the next loop shares.
                     token.ThrowIfCancellationRequested();
 
                     var frame = frames[i];
 
-                    // Checked before the session counts as connected: colibri-server says nothing
-                    // to a client before it has accepted the handshake, so a refusal is the very
-                    // first frame, and that must not first be reported as a connection. (A server
-                    // that heartbeats first, as colibri-server once did, is refused all the same:
-                    // the refusal then ends a session that counted as connected.)
+                    // Before the session counts as connected: colibri-server says nothing before it has accepted the
+                    // handshake, so a refusal is the very first frame and must not first be reported as a connection.
                     if (frame.Type == FrameType.Message && frame.Channel == COLIBRI_CHANNEL && frame.Command == PROTOCOL_REJECTED_COMMAND)
                         throw BuildProtocolMismatch(frame.Payload);
 
@@ -2079,20 +1852,13 @@ namespace HCIKonstanz.Colibri.Networking
                     switch (frame.Type)
                     {
                         case FrameType.Heartbeat:
-                            // Echoed back verbatim - the u64 is the server's own monotonic clock
-                            // reading and is never interpreted here. Since 2.0.0 this echo is the
-                            // sole source of the server's TCP latency measurements; the old
-                            // `colibri`/`latency` message echo is Socket.IO-only and nothing
-                            // sends it to a TCP client any more. Not awaited: see EchoHeartbeat.
+                            // Echoed back verbatim: the u64 is the server's own monotonic clock reading and is never interpreted
+                            // here. Since 2.0.0 this echo is the sole source of the server's TCP latency measurements. Not
+                            // awaited, see EchoHeartbeat.
                             EchoHeartbeat(session, frame.PingTimestamp);
                             break;
 
                         case FrameType.Message:
-                            // A refusal never gets here - it is intercepted above, before the
-                            // queue: it is Colibri's own plumbing, and delivering it as an ordinary
-                            // message would leave every application to recognize it for itself.
-                            // It throws, so the session unwinds through the one place that decides
-                            // whether to retry.
                             EnqueueReceived(frame.Channel, frame.Command, ParsePayload(frame.Payload), token);
                             break;
 
@@ -2108,10 +1874,8 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Reads the server's refusal payload. Deliberately forgiving about its shape: the whole
-        /// point of this path is to explain a mismatch, so a payload that is missing or is not
-        /// the JSON we expect must still produce a usable message rather than a parse error that
-        /// buries the real problem.
+        /// Reads the server's refusal payload. Forgiving about its shape: a payload that is missing or is not
+        /// the JSON we expect must still produce a usable message, not a parse error that buries the real problem.
         /// </summary>
         private ProtocolMismatchException BuildProtocolMismatch(byte[] payload)
         {
@@ -2155,7 +1919,7 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <returns><c>false</c> if the wait was cancelled - i.e. the caller should stop looping.</returns>
+        /// <returns>False if the wait was cancelled, so the caller should stop looping.</returns>
         private static async Task<bool> Delay(int delayMs, CancellationToken token)
         {
             try
@@ -2169,7 +1933,6 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>Whether <paramref name="socket"/> has been closed, by whoever closed it.</summary>
         private static bool IsClosed(Socket socket)
         {
             try
@@ -2201,8 +1964,8 @@ namespace HCIKonstanz.Colibri.Networking
             }
             catch (ObjectDisposedException)
             {
-                // Already closed - closing is idempotent by design here, since both OnDisable
-                // and the heartbeat watchdog can race the session's own teardown.
+                // Already closed: closing is idempotent here, since OnDisable, the heartbeat watchdog and the
+                // session's own teardown can race.
             }
             catch (Exception e)
             {
@@ -2210,10 +1973,7 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <remarks>
-        /// Internal for the EditMode tests, which stand in for hearing from the server with it, and
-        /// for having heard from it <paramref name="millisAgo"/> ago on the system clock.
-        /// </remarks>
+        // millisAgo is for the tests, which stand in for having heard from the server that long ago.
         internal void StampLiveness(long millisAgo = 0)
         {
             Interlocked.Exchange(ref _lastHeartbeatTime, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - millisAgo);
@@ -2222,16 +1982,16 @@ namespace HCIKonstanz.Colibri.Networking
 
         /// <summary>
         /// How many times the server has been heard from: it changes whenever
-        /// <see cref="MillisSinceLastHeartbeat"/> starts again from zero. Sync notes on Unity's clock
-        /// when it last changed (see Sync.LastHeardAt), which the system clock that times the
-        /// heartbeats need not keep pace with.
+        /// <see cref="MillisSinceLastHeartbeat"/> starts again from zero. Sync uses it to note on Unity's
+        /// clock when the server was last heard from (Sync.LastHeardAt), which the system clock behind the
+        /// heartbeat times need not keep pace with.
         /// </summary>
         internal long LivenessStamps => Interlocked.Read(ref _livenessStamps);
 
         /// <summary>
-        /// How long ago the server was last heard from. Not a round-trip latency: the server's
-        /// heartbeat carries the server's own clock, so the client cannot derive an RTT from it.
-        /// Real latency figures live on the server's admin UI.
+        /// How long ago the server was last heard from. Not a round-trip latency: the heartbeat carries the
+        /// server's own clock, so the client cannot derive an RTT from it. Real latency figures are in the
+        /// server's admin UI.
         /// </summary>
         public long MillisSinceLastHeartbeat() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - Interlocked.Read(ref _lastHeartbeatTime);
 
@@ -2248,44 +2008,33 @@ namespace HCIKonstanz.Colibri.Networking
         public static string ClientVersion => CLIENT_VERSION;
 
         /// <summary>
-        /// Protocol version the server reported when it refused this client, or null while no
-        /// refusal has been received. Only ever set alongside
-        /// <see cref="ConnectionStatus.ProtocolMismatch"/>: a server that accepts the connection
-        /// never sends its version, because there is nothing to report.
+        /// Protocol version the server reported when it refused this client, or null while no refusal has
+        /// been received. Only set alongside <see cref="ConnectionStatus.ProtocolMismatch"/>: a server that
+        /// accepts the connection never sends its version.
         /// </summary>
         public string ServerVersion => _serverVersion;
 
         /// <summary>
         /// Why the server refused this client, or null if it has not. Companion to
-        /// <see cref="ConnectionStatus.ProtocolMismatch"/> for anything that wants to show the
-        /// reason rather than just the state.
+        /// <see cref="ConnectionStatus.ProtocolMismatch"/> for showing the reason.
         /// </summary>
         public string ProtocolMismatchReason => _protocolMismatchReason;
 
         /// <summary>
-        /// Why a protocol mismatch is *suspected*, or null if it is not. Set when several
-        /// connections in a row were accepted but ended before a frame could be read - the only
-        /// symptom available when the server's framing differs so much that it cannot send, and
-        /// this client cannot decode, the explicit refusal. A connection on which no frame arrived
-        /// before the heartbeat watchdog dropped it does not count: silence is logged as a warning
-        /// of its own, since neither an out-of-date server nor one with TLS on stays silent. With
-        /// TLS, neither does one that was closed or reset without a frame: an out-of-date server
-        /// behind a TLS-terminating proxy sends frames this client cannot decode, and only those
-        /// count there.
-        ///
-        /// Unlike <see cref="ProtocolMismatchReason"/> this is a guess, not something the server
-        /// said: it reads the same whether the server is out of date or the address points at
-        /// something that is not Colibri at all. The connection keeps being retried, and
-        /// <see cref="Status"/> is unaffected. Cleared as soon as any frame decodes.
+        /// Why a protocol mismatch is suspected, or null if it is not. Set when several connections in a row
+        /// were accepted but ended before a frame could be read, the only symptom when the server's framing
+        /// is too different to send, or this client to decode, the explicit refusal. A connection the heartbeat
+        /// watchdog dropped without a frame does not count (that logs a warning of its own).
+        /// Unlike <see cref="ProtocolMismatchReason"/> this is a guess: it reads the same whether the server
+        /// is out of date or the address points at something that is not Colibri at all. The connection keeps
+        /// being retried and <see cref="Status"/> is unaffected. Cleared as soon as any frame decodes.
         /// </summary>
         public string SuspectedProtocolMismatch => _suspectedProtocolMismatch;
 
         /// <summary>
-        /// Why the last attempt to open the TCP connection failed - "192.168.0.10:9212 did not
-        /// answer within 5 s", say, a refusal, or with TLS a failed handshake or a rejected
-        /// certificate - or null once one has opened. For showing why the client is still not
-        /// connected; each failure is logged as well. Unaffected by anything that happens after the
-        /// connection opened.
+        /// Why the last attempt to open the TCP connection failed ("192.168.0.10:9212 did not answer within
+        /// 5 s", a refusal, or with TLS a failed handshake or a rejected certificate), or null once one has
+        /// opened. For showing why the client is not connected; each failure is logged as well.
         /// </summary>
         public string LastConnectFailure => _lastConnectFailure;
         private volatile string _lastConnectFailure;
@@ -2310,17 +2059,15 @@ namespace HCIKonstanz.Colibri.Networking
          *  Sending
          */
 
-        // All socket writes go under _sendLock so that a frame is never interleaved with another
-        // frame's bytes. Messages come through here; heartbeat echoes through EchoHeartbeat, which
-        // never waits for the lock, and are written between two frames.
+        // All writes hold _sendLock, so a frame is never interleaved with another frame's bytes. Heartbeat
+        // echoes come through EchoHeartbeat, which never waits for the lock, and are written between two frames.
         private async Task SendFrame(Session session, byte[] frame, CancellationToken token)
         {
             await _sendLock.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                // An echo that came in while someone else had the socket goes first, and one that
-                // came in while this frame was being written - a large one on a slow link takes
-                // seconds - goes straight after it.
+                // An echo that came in while someone else had the socket goes first; one that came in while this
+                // frame was being written (seconds, for a large frame on a slow link) goes straight after it.
                 await WritePendingEcho(session).ConfigureAwait(false);
                 await WriteAll(session, frame).ConfigureAwait(false);
                 await WritePendingEcho(session).ConfigureAwait(false);
@@ -2332,24 +2079,23 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         // Under _sendLock. A stream write completes only once the whole frame has been handed to
-        // the socket - encrypted first, with TLS - so a frame is never cut short.
+        // the socket (encrypted first, with TLS), so a frame is never cut short.
         private static Task WriteAll(Session session, byte[] frame)
             => session.Stream.WriteAsync(frame, 0, frame.Length);
 
         /// <summary>
-        /// Answers a server heartbeat without waiting for the socket. The receive loop calls this,
-        /// and it must never wait for a write: a large message on a slow link holds the socket for
-        /// as long as it takes to write, and a receive loop waiting behind it stopped reading - the
-        /// server's heartbeats included - so the watchdog in <see cref="Update"/> dropped a healthy
-        /// connection after 2 s. The next session sent the same message first, and was dropped the
-        /// same way, again and again, with nothing else getting through.
-        ///
-        /// So the echo is left in a slot, and written by whoever has the socket: at once if nobody
-        /// does, otherwise by the write in progress as soon as its frame is complete - a frame cannot
-        /// be split by another frame's bytes. Only the newest echo is kept. While a long write holds
-        /// the socket the server is still receiving its bytes, and that is what its idle timeout
-        /// looks at; a skipped echo only costs it one latency sample.
+        /// Answers a server heartbeat without waiting for the socket. The receive loop calls this and must
+        /// never wait for a write: a large message on a slow link holds the socket, and a receive loop stuck
+        /// behind it stops reading the server's heartbeats, so the watchdog in <see cref="Update"/> would
+        /// drop a healthy connection after 2 s.
         /// </summary>
+        /// <remarks>
+        /// The echo is left in a slot and written by whoever has the socket: at once if nobody does, otherwise
+        /// by the write in progress as soon as its frame is complete, so a frame is never split by another
+        /// frame's bytes. Only the newest echo is kept. While a long write holds the socket the server is
+        /// still receiving its bytes, which is what its idle timeout looks at; a skipped echo only costs it one
+        /// latency sample.
+        /// </remarks>
         private void EchoHeartbeat(Session session, ulong pingTimestamp)
         {
             Volatile.Write(ref _pendingEcho, new PendingEcho { Session = session, Frame = FrameCodec.EncodeHeartbeat(pingTimestamp) });
@@ -2372,9 +2118,9 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Under _sendLock: writes the pending echo, if there is one. With
-        /// <paramref name="session"/>, only an echo that belongs to that session - an echo left
-        /// over from an earlier session answers nothing any more, and is dropped.
+        /// Under _sendLock: writes the pending echo, if there is one. With <paramref name="session"/>, only an
+        /// echo that belongs to that session; one left over from an earlier session answers nothing any more,
+        /// and is dropped.
         /// </summary>
         /// <remarks>Never throws: a write that fails closes the socket, which ends the session.</remarks>
         private async Task WritePendingEcho(Session session)
@@ -2397,7 +2143,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         /// <summary>
         /// Lets go of the socket. An echo that arrived after the holder last looked would otherwise
-        /// wait for the next write or the next heartbeat, so it is written now - unless another
+        /// wait for the next write or the next heartbeat, so it is written now, unless another
         /// write has taken the socket in the meantime, which then writes it.
         /// </summary>
         private void ReleaseSendLock()
@@ -2411,39 +2157,30 @@ namespace HCIKonstanz.Colibri.Networking
         /*
          *  The outbox.
          *
-         *  Every message goes into one FIFO and is written to the socket by one drainer, so they
-         *  leave in exactly the order they were sent - across an outage too. Sends used to wait
-         *  on the Connected gate instead: each one issued while disconnected parked a task (no
-         *  bound), and on reconnect the parked continuations resumed together on the thread pool
-         *  and raced for the socket, so outage messages went out in any order and interleaved with
-         *  new ones. On a last-write-wins server that let a stale position overwrite a newer one.
+         *  Every message goes into one FIFO and is written to the socket by one drainer, so messages leave
+         *  in the order they were sent, across an outage too. While connected the outbox is just the way to
+         *  the socket and normally empty or close to it. While not, it is the retry queue, sent ahead of
+         *  anything newer once the next session is connected. A message whose write failed stays at the head
+         *  and goes first next time.
          *
-         *  While connected the outbox is just the way to the socket and is normally empty or
-         *  close to it. While not, it is the retry queue, sent ahead of anything newer as soon as
-         *  the next session is connected. A message whose write failed stays at the head and goes
-         *  first next time.
-         *
-         *  The queue is bounded during an outage, but not by dropping just anything. Broadcasts -
-         *  and anything else that is not model state - are capped at MAX_QUEUED_MESSAGES, oldest
-         *  dropped first. The model commands are not dropped by it, because nothing would repair
-         *  the loss: a dropped model::request leaves its SyncBehaviour waiting for its first state
-         *  and never sending a change, a dropped model::delete leaves the object alive on every
-         *  other client, and a dropped model::update - an object that changed once early in the
-         *  outage while others kept moving - is lost, and the re-request after reconnecting then
-         *  even reverts it locally to the server's older copy. Instead, every model::update queued
-         *  for the same object during an outage is folded into one, newer fields winning, which
-         *  is exactly what a last-write-wins server would have ended up with. That keeps model
+         *  The queue is bounded during an outage, but not by dropping just anything. Broadcasts, and
+         *  anything else that is not model state, are capped at MAX_QUEUED_MESSAGES, oldest dropped first.
+         *  The model commands are not dropped by it, because nothing would repair the loss: a dropped
+         *  model::request leaves its SyncBehaviour waiting for its first state and never sending a change, a
+         *  dropped model::delete leaves the object alive on every other client, and a dropped model::update
+         *  is lost, and the re-request after reconnecting then reverts it locally to the server's older copy.
+         *  Instead, every model::update queued for the same object during an outage is folded into one, newer
+         *  fields winning, which is what a last-write-wins server would have ended up with. That keeps model
          *  state bounded by the number of objects rather than by how long the outage lasts.
          *
-         *  Requests, deletes and awaited updates are not folded, though; each is queued as it is.
-         *  So behind both of these sits a hard cap on the whole outbox, MAX_OUTBOX_MESSAGES, which
-         *  applies while connected too: the last resort, which does drop model state rather than
-         *  grow without end.
+         *  Requests, deletes and awaited updates are not folded; each is queued as it is. So behind both of
+         *  these sits a hard cap on the whole outbox, MAX_OUTBOX_MESSAGES, which applies while connected too:
+         *  the last resort, which does drop model state rather than grow without end.
          *
-         *  The folded update moves to the back of the queue, so a fold must never carry an update
-         *  past something else about the same object: a newer update, a delete, or a request the
-         *  server would answer without it. Such a message ends the fold for that object, and the
-         *  next update starts a new one behind it; reconnecting ends every fold.
+         *  The folded update moves to the back of the queue, so a fold must never carry an update past
+         *  something else about the same object: a newer update, a delete, or a request the server would
+         *  answer without it. Such a message ends the fold for that object, the next update starts a new one
+         *  behind it, and reconnecting ends every fold.
          */
 
         private const string MODEL_REQUEST_COMMAND = "model::request";
@@ -2470,16 +2207,15 @@ namespace HCIKonstanz.Colibri.Networking
 
         // Under _outboxLock: how many droppable messages the outbox holds, and the model::update
         // queued for each object during the current outage that later ones can still be folded
-        // into - one that nothing else about the object has been queued behind.
+        // into, i.e. with nothing else about the object queued behind it.
         private int _droppableCount;
         private readonly Dictionary<(string Channel, string Id), LinkedListNode<Outgoing>> _queuedModelUpdates
             = new Dictionary<(string Channel, string Id), LinkedListNode<Outgoing>>();
 
         /// <summary>
-        /// Lets the outbox drain into this session. Called once it is Connected, with the token of
-        /// the loop the session belongs to: once OnDisable has ended that loop this does nothing.
+        /// Lets the outbox drain into this session. Called once it is Connected, with the token of the loop the
+        /// session belongs to: once OnDisable has ended that loop this does nothing.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests, which open and close it around sessions they fake.</remarks>
         internal void OpenOutbox(Session session, CancellationToken token)
         {
             bool startDraining;
@@ -2494,11 +2230,9 @@ namespace HCIKonstanz.Colibri.Networking
                 _hasWarnedAboutDrops = false;
                 _hasWarnedAboutOutboxLimit = false;
 
-                // Updates are only folded within one outage. From here on, those folded during the
-                // outage that just ended are ordinary queued messages: what is sent while connected
-                // lines up behind them without being looked at. If one is still queued when the
-                // connection drops again - a slow link - folding the next outage's update for that
-                // object into it would move it past those, a newer update to the object among them.
+                // Folds last one outage. What was folded in the outage that just ended is ordinary queued messages
+                // now; if one is still queued when the connection drops again (slow link), folding the next outage's
+                // update for that object into it would move it past the newer updates queued behind it.
                 _queuedModelUpdates.Clear();
 
                 startDraining = !_isDraining && _outbox.Count > 0;
@@ -2511,7 +2245,6 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>Makes every send from now on wait in the outbox for the next connection.</summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal void CloseOutbox()
         {
             lock (_outboxLock)
@@ -2525,11 +2258,10 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// <see cref="CloseOutbox()"/> for the connection loop that <paramref name="token"/> belongs
-        /// to, when its session ends: unless OnDisable has ended that loop, which has then closed
-        /// the outbox itself, and the outbox may already drain into the next loop's session.
+        /// <see cref="CloseOutbox()"/> for the connection loop that <paramref name="token"/> belongs to, when
+        /// its session ends, unless OnDisable has ended that loop: it has closed the outbox itself, and the
+        /// outbox may already drain into the next loop's session.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal void CloseOutbox(CancellationToken token)
         {
             lock (_outboxLock)
@@ -2541,7 +2273,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         /// <summary>
         /// Blocks until everything in the outbox has been written to the current session's socket,
-        /// the session has ended, or <paramref name="timeoutMs"/> has passed - whichever comes
+        /// the session has ended or <paramref name="timeoutMs"/> has passed, whichever comes
         /// first. Returns at once while not connected.
         /// </summary>
         /// <returns>True if the outbox is empty.</returns>
@@ -2569,13 +2301,11 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// The server refused this client: everything still queued is dropped, and every send from
-        /// now on is dropped as it is made. Waiting would be waiting forever - nothing will ever
-        /// connect again - and that is a task leaked per send, plus RemoteLogging's queue growing
-        /// for good behind a send that never returns.
-        ///
-        /// Not once OnDisable has ended the loop that <paramref name="token"/> belongs to: enabling
-        /// the component again is a deliberate retry, and the next loop's sends are not refused.
+        /// The server refused this client: everything still queued is dropped, and so is every later send as it
+        /// is made. Nothing will connect again, so waiting would leave every <see cref="SendCommandAsync"/>
+        /// pending for good.
+        /// Does nothing once OnDisable has ended the loop that <paramref name="token"/> belongs to: enabling the
+        /// component again is a deliberate retry, and the next loop's sends are not refused.
         /// </summary>
         private void RefuseSends(CancellationToken token)
         {
@@ -2785,11 +2515,11 @@ namespace HCIKonstanz.Colibri.Networking
                 _droppableCount++;
         }
 
-        // Under _outboxLock, for a model command that is not folded: an update someone awaits, a
-        // request or a delete. A folded update goes to the back of the queue, so the update queued
-        // for an object may only absorb later ones while nothing else about that object is queued
-        // behind it. Otherwise its older values would overtake a newer update, arrive after a
-        // delete and bring the object back, or miss a request the server then answers without them.
+        // Under _outboxLock, for a model command that is not folded (an awaited update, a request, a
+        // delete). A folded update goes to the back, so the update queued for an object may absorb later
+        // ones only while nothing else about it is queued behind: otherwise its older values would
+        // overtake a newer update, arrive after a delete and revive the object, or miss a request the
+        // server then answers without them.
         private void StopFolding(string channel, JToken payload)
         {
             if (TryGetModelId(payload, out _, out var id))
@@ -2967,10 +2697,9 @@ namespace HCIKonstanz.Colibri.Networking
             if (payload == null || payload.Type == JTokenType.Null)
                 return Array.Empty<byte>();
 
-            // Everything except the log channel goes out as JSON. Writing a string payload
-            // unquoted (as v1 did) is not valid JSON, so the server's Payload.asValue() threw
-            // and fell back to asString() - meaning a Unity string and a web client's string
-            // did not round-trip identically.
+            // Everything except the log channel goes out as JSON. A string payload written unquoted (as 1.x did)
+            // is not valid JSON, so the server's Payload.asValue() would throw and fall back to asString(), and a
+            // Unity string and a web client's string would not round-trip identically.
             if (channel == LOG_CHANNEL)
                 return Utf8.GetBytes(payload.Type == JTokenType.String ? payload.Value<string>() : payload.ToString(Formatting.None));
 
@@ -2981,12 +2710,10 @@ namespace HCIKonstanz.Colibri.Networking
         /// Reads a received payload as JSON, keeping every string exactly as it was sent.
         /// </summary>
         /// <remarks>
-        /// JToken.Parse reads a string that looks like a date - "2026-10-08T12:00:00Z", what
-        /// JavaScript's toISOString() and C#'s ToString("o") write - as a DateTime. A string
-        /// listener or a [Sync] string member then got "10/08/2026 12:00:00" instead, and a
-        /// timestamp with an offset was moved into this device's time zone, while colibri-web,
-        /// reading the same message with JSON.parse, kept the string. Internal for the EditMode
-        /// tests.
+        /// JToken.Parse reads a string that looks like a date ("2026-10-08T12:00:00Z", what JavaScript's
+        /// toISOString() and C#'s ToString("o") write) as a DateTime. A string listener or a [Sync] string
+        /// member would get "10/08/2026 12:00:00" instead, and a timestamp with an offset would be moved into
+        /// this device's time zone, while colibri-web, reading the message with JSON.parse, keeps the string.
         /// </remarks>
         internal static JToken ParsePayload(byte[] payload)
         {
@@ -3018,21 +2745,20 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// The app the handshake sends for the App Name <paramref name="appName"/>, which is the
-        /// app the server puts this client in. Voice packets carry its hash as their app id, as
-        /// the server relays voice only from the address of a Unity client of the packet's app.
+        /// The app the handshake sends for the App Name <paramref name="appName"/>, which is the app the server
+        /// puts this client in. Voice packets carry its hash as their app id, as the server relays voice only
+        /// from the address of a Unity client of the packet's app.
         /// </summary>
-        /// <remarks>Internal for VoiceServerConnection and the EditMode tests.</remarks>
+        /// <remarks>Also used by VoiceServerConnection.</remarks>
         internal static string HandshakeAppName(string appName) => SanitizeHandshakeField(appName);
 
         /// <summary>
-        /// Makes a device or app name safe to put in the handshake. '::' is the field separator,
-        /// so a name containing one produces a frame the server rejects outright. A single ':' at
-        /// either end is worse, because nothing rejects it: it merges with the separator next to
-        /// it into ':::', which the server splits as '::' + ':', so app "app:" arrives as app
-        /// "app" with the colon moved onto the client name - another app, silently.
+        /// Makes a device or app name safe to put in the handshake. '::' is the field separator, so a name
+        /// containing one produces a frame the server rejects outright. A single ':' at either end is worse,
+        /// because nothing rejects it: it merges with the separator next to it into ':::', which the server
+        /// splits as '::' + ':', so app "app:" arrives as app "app" with the colon moved onto the client name,
+        /// another app, silently.
         /// </summary>
-        /// <remarks>Internal for the EditMode tests.</remarks>
         internal static string SanitizeHandshakeField(string value)
         {
             if (string.IsNullOrEmpty(value))

@@ -8,21 +8,13 @@ namespace HCIKonstanz.Colibri.Synchronization
     /// and id, so that a <see cref="SyncBehaviourManager{T}"/> does not build them again.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// While this client deletes an object, another one may still be moving it. An update that
-    /// client sent before the server had the delete is relayed here as well, and arrives after
-    /// the object is gone. The manager no longer knew the id, so it built the object again from
-    /// its template, with the template's values for every member the update did not carry. Every
-    /// other client receives that update before the delete, on the same connection, so it reaches
-    /// their copy while the copy still exists.
-    /// </para>
-    /// <para>
-    /// Remembered for a while rather than for good: once the updates from before the delete have
-    /// arrived, an update for that id means the id is in use again, say a scene with placed objects
-    /// of fixed ids loaded on another client. One created on this client again is forgotten at once,
-    /// in its Awake. Only deletes this client sent are remembered: one it receives arrives after
-    /// every update relayed before it.
-    /// </para>
+    /// A remote update sent before the server had this client's delete arrives after the object is
+    /// gone, and the manager would build it again from its template. A delete received from the
+    /// server comes after every update relayed before it, so only deletes this client sent are
+    /// remembered.
+    /// Remembered only for the window: after it, an update for the id means the id is in use again,
+    /// e.g. a scene with placed objects of fixed ids loaded on another client. An object created
+    /// here with the id again forgets it in its Awake.
     /// </remarks>
     internal static class LocallyDeletedModels
     {
@@ -34,15 +26,11 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static readonly Dictionary<(string Channel, string Id), double> _deletedAt
             = new Dictionary<(string Channel, string Id), double>();
 
-        // The same deletes in the order they were made, which is the order they expire in, so
-        // expiring them costs nothing per delete however many objects a scene unload deletes.
+        // The same deletes oldest first, so Expire stops at the first one still in the window.
         private static readonly Queue<((string Channel, string Id) Key, double At)> _byAge
             = new Queue<((string Channel, string Id) Key, double At)>();
 
-        /// <summary>
-        /// A Play session starts with nothing remembered. With domain reload disabled these
-        /// survive from one session to the next, and the clock starts again from zero.
-        /// </summary>
+        /// <summary>Resets all state at the start of a Play session; statics survive with domain reload disabled.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void Reset()
         {
@@ -73,7 +61,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (!_deletedAt.TryGetValue((channel, id), out var at))
                 return false;
 
-            // A clock behind the delete has been reset since, which no remembered delete outlives.
+            // now < at: the clock restarted since the delete, so it no longer counts.
             if (now - at < WindowSeconds && now >= at)
                 return true;
 
@@ -81,26 +69,24 @@ namespace HCIKonstanz.Colibri.Synchronization
             return false;
         }
 
-        /// <summary>The deletes remembered now, expired ones included until the next Remember.</summary>
+        /// <summary>The remembered deletes; expired ones are counted until the next Remember.</summary>
         internal static int Count => _deletedAt.Count;
 
         /// <summary>
-        /// The deletes made at or after <paramref name="since"/> and remembered still at
-        /// <paramref name="now"/>, oldest first; null if there are none. See Sync's OnDisconnected,
-        /// which sends them again.
+        /// The deletes made at or after <paramref name="since"/> and still remembered at
+        /// <paramref name="now"/>, oldest first; null if there are none. Sync.OnDisconnected
+        /// sends them again.
         /// </summary>
         internal static List<(string Channel, string Id)> Since(double since, double now)
         {
             List<(string Channel, string Id)> deletes = null;
             foreach (var (key, at) in _byAge)
             {
-                // As in Contains: one older than the window, or one a clock behind it has been reset
-                // since, is not remembered any more, though it stays queued until the next Remember.
+                // Expired as in Contains, but still queued until the next Remember.
                 if (at < since || now - at >= WindowSeconds || now < at)
                     continue;
 
-                // A delete remembered again later has an entry of its own, and a forgotten one has
-                // none left.
+                // Skip entries superseded by a later Remember or removed by Forget.
                 if (_deletedAt.TryGetValue(key, out var latest) && latest == at)
                     (deletes ??= new List<(string Channel, string Id)>()).Add(key);
             }
@@ -117,8 +103,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
                 _byAge.Dequeue();
 
-                // Only if nothing has remembered or forgotten the id since: a delete of the same
-                // id remembered again later has its own, younger entry in the queue.
+                // Keep it if the id was remembered again since; its younger queue entry expires it.
                 if (_deletedAt.TryGetValue(oldest.Key, out var at) && at == oldest.At)
                     _deletedAt.Remove(oldest.Key);
             }

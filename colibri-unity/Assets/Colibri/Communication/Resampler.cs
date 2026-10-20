@@ -6,9 +6,8 @@ public class Resampler
     public int sourceRate { get; private set; }
     public int targetRate { get; private set; }
 
-    // Null for a rate of zero or less, which resamples to nothing. AudioSettings.outputSampleRate,
-    // VoiceReceiver's target rate, can be that without an audio device, and the old implementation
-    // did not throw for it either.
+    // Null if either rate is zero or less; ResampleStream then returns an empty array. VoiceReceiver
+    // passes AudioSettings.outputSampleRate as the target, which can be zero without an audio device.
     private readonly StreamingResampler resampler;
     private float[] output = Array.Empty<float>();
 
@@ -21,9 +20,8 @@ public class Resampler
     }
 
     /// <summary>
-    /// Resamples the next chunk of a stream. The chunks may have any length: the stream carries
-    /// on from one chunk to the next, and how many samples come out of a chunk varies by one so
-    /// that the output keeps exact pace with the input.
+    /// Resamples the next chunk of a stream, whose chunks may have any length; the output carries
+    /// on across them and keeps pace with the input to within one sample.
     /// </summary>
     public float[] ResampleStream(float[] inputChunk)
     {

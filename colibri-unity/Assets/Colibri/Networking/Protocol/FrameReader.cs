@@ -6,14 +6,8 @@ using System.Text;
 namespace HCIKonstanz.Colibri.Networking.Protocol
 {
     /// <summary>
-    /// Growable read buffer with read/write cursors, fed from the socket receive loop. Mirrors the
-    /// semantics of the server's <c>FrameReader</c>: in the common case (no fragmentation) consumed
-    /// frames are dropped by resetting both cursors - no copy at all. Only a frame split across TCP
-    /// segments triggers a compaction, and that copy is bounded by the pending leftover (at most one
-    /// frame's worth), not by total stream length.
-    ///
-    /// This replaces the v1 <c>HasPacketHeader</c>/<c>GetPacketHeader</c> null-byte scanning
-    /// entirely: every length is a real bounds-checked field.
+    /// Reassembles length-prefixed frames from the bytes of the socket receive loop. Mirrors the
+    /// buffering of the server's <c>FrameReader</c> (<c>protocol.ts</c>).
     /// </summary>
     public sealed class FrameReader
     {
@@ -36,7 +30,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             _buffer = new byte[initialCapacity];
         }
 
-        /// <summary>Bytes buffered but not yet consumed - i.e. the trailing partial frame.</summary>
+        /// <summary>Bytes of the trailing partial frame, buffered but not yet decoded.</summary>
         public int PendingBytes => _writePos - _readPos;
 
         public void Reset()
@@ -46,26 +40,20 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         }
 
         /// <summary>
-        /// Appends newly received bytes and returns every complete frame now available.
+        /// Appends received bytes and returns every complete frame now available.
         /// </summary>
         /// <exception cref="FrameException">
-        /// On a malformed or oversized frame. Callers must treat that as fatal for the connection:
-        /// the stream is desynchronized and there is nothing to resynchronize on.
+        /// On a malformed or oversized frame. The stream cannot resynchronize, so the caller must
+        /// drop the connection.
         /// </exception>
-        /// <remarks>
-        /// Deliberately not an iterator: the read cursor only advances as frames are decoded, so a
-        /// caller that stopped enumerating early would leave the reader with a stale cursor and
-        /// silently re-deliver or drop bytes. Draining eagerly makes the cursor state a function of
-        /// <see cref="Append"/> alone.
-        /// </remarks>
+        // Not an iterator: the read cursor advances as frames decode, so stopping early would leave it stale.
         public IReadOnlyList<DecodedFrame> Append(ReadOnlySpan<byte> data)
         {
             EnsureCapacity(data.Length);
             data.CopyTo(_buffer.AsSpan(_writePos));
             _writePos += data.Length;
 
-            // A partial frame is the common case on a fragmented stream, so don't allocate a
-            // result list until there is something to put in it.
+            // Allocated lazily: most calls on a fragmented stream complete no frame.
             List<DecodedFrame> frames = null;
 
             while (true)
@@ -77,12 +65,11 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 var totalLength = BinaryPrimitives.ReadUInt32LittleEndian(_buffer.AsSpan(_readPos));
                 if (totalLength == 0 || totalLength > (uint)_maxFrameLength)
                 {
-                    // Leave the cursors where they are; the caller is expected to drop the
-                    // connection, and Reset() is what clears the buffer.
+                    // Cursors stay put; the caller drops the connection, and Reset() clears the buffer.
                     throw new FrameException($"Invalid frame length: {totalLength}");
                 }
 
-                // totalLength counts everything after the length field itself (type + body).
+                // totalLength counts type + body, not the length field.
                 var frameLength = FrameCodec.LengthFieldSize + (int)totalLength;
                 if (available < frameLength)
                     break;
@@ -115,8 +102,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 case FrameType.Handshake:
                 {
                     var text = Utf8.GetString(_buffer, bodyStart, bodyEnd - bodyStart);
-                    // Exactly three fields. '::' is the field separator and docs/dev/protocol.md
-                    // forbids it inside a field, so a name containing one is a malformed frame.
+                    // '::' separates the three fields and is not allowed inside one.
                     var parts = text.Split(new[] { FrameCodec.FieldSeparator }, StringSplitOptions.None);
                     if (parts.Length != 3)
                         throw new FrameException($"Malformed handshake frame: \"{text}\"");
@@ -145,8 +131,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                     var command = Utf8.GetString(_buffer, offset, commandLength);
                     offset += commandLength;
 
-                    // Copied out (not a slice) since the backing buffer is reused and compacted
-                    // on subsequent Append() calls.
+                    // Copied: the buffer is reused and compacted by later Append calls.
                     var payload = new byte[bodyEnd - offset];
                     Buffer.BlockCopy(_buffer, offset, payload, 0, payload.Length);
                     return DecodedFrame.Message(channel, command, payload);

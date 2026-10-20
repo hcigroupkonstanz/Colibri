@@ -17,31 +17,27 @@ const toBuffer = function (value: Buffer | Uint8Array): Buffer {
     return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
 };
 
-// Bounded so a worker that dies immediately on start (a port already in use, say) reports
-// the problem instead of respawning forever. Reset once a client actually connects, which
-// is proof the restarted transport works.
+// Bounded so a worker that dies right on start (port in use, say) is not respawned forever.
+// Reset when a client connects, which shows the restarted worker works.
 const MAX_RESTART_ATTEMPTS = 5;
 const RESTART_DELAY_MILLIS = 1000;
 
-// How long clientActivity() waits for the worker's answer. The answer queues behind the TCP
-// messages the main thread has yet to handle, so under load it can take a while; past this the
-// admin UI gets no activity for the TCP clients this once rather than waiting.
+// The worker's answer to clientActivity() queues behind the TCP messages the main thread has yet to
+// handle, so under load it can be late; the admin UI then shows no activity for the TCP clients that time.
 export const CLIENT_ACTIVITY_TIMEOUT_MILLIS = 1000;
 
-// A TCP client as the main thread knows it.
 export interface TcpNetworkClient extends NetworkClient {
-    // Its address, behind a proxy the one its PROXY protocol header named.
+    // Behind a proxy, the address its PROXY protocol header named.
     address: string;
     tls: boolean;
-    // Whether it reached a trusted proxy over TLS, as TCP_TLS_AT_PROXY says; see TcpClientConnected.
+    // Came through a trusted proxy and TCP_TLS_AT_PROXY says that proxy ends TLS.
     tlsAtProxy: boolean;
-    // Date.now() of the connection.
+    // Date.now() at connect.
     connectedAt: number;
 }
 
 const NO_ACTIVITY: ReadonlyMap<string, ClientActivity> = new Map();
 
-// A clientActivity() request waiting for the worker's answer.
 interface ActivityRequest {
     id: number;
     resolve: (activity: ReadonlyMap<string, ClientActivity>) => void;
@@ -55,9 +51,7 @@ export class TCPServerProxy
     public groupName = 'unity';
 
     private readonly clients = new Map<string, TcpNetworkClient>();
-    // Mirrors the worker's own clientsByApp index on this side of the postMessage
-    // boundary, purely so broadcastToApp can answer "is there any TCP client in this app?"
-    // without paying asBytes() and a structured clone to find out the answer is no.
+    // Mirrors the worker's clientsByApp, so broadcastToApp can tell there is no recipient without posting.
     private readonly clientIdsByApp = new Map<string, Set<string>>();
     private clientStream = new Subject<ReadonlyArray<NetworkClient>>();
     private clientAddedStream = new Subject<TcpNetworkClient>();
@@ -65,23 +59,17 @@ export class TCPServerProxy
 
     private messageStream = new Subject<NetworkMessage>();
 
-    // How many clientMessage$ the worker has posted that have not been dispatched here yet: the
-    // worker adds one per post, this side takes one off per message handled. Shared memory rather
-    // than a message, because it has to be readable while the very queue it measures is full. The
-    // worker holds back model updates and drops broadcasts while it is over the limit; see
-    // InboundBacklog.
+    // clientMessage$ posted by the worker and not dispatched here yet. Shared memory, so the worker
+    // can read it while the queue it measures is full (see InboundBacklog).
     private readonly inboundBacklog = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
-    // What the worker needs to know beyond the port: everything in TcpServerOptions except the
-    // backlog counter, which is this proxy's own. The TLS certificate in it is always the latest, so
-    // that a restarted worker starts with that one.
+    // Kept for restarts. options.tls is always the latest certificate.
     private startOptions: { port: number; host: string; options: Omit<TcpServerOptions, 'inboundBacklog'> } | undefined;
     private restartAttempts = 0;
     private restartTimer: NodeJS.Timeout | undefined;
     private tlsChanges: Subscription | undefined;
 
-    // The clientActivity() requests waiting for the worker's answer, by whether they ask for the
-    // rate history.
+    // Pending clientActivity() requests, by whether they ask for the rate history.
     private readonly activityRequests = new Map<boolean, ActivityRequest>();
     private lastActivityRequest = 0;
 
@@ -91,7 +79,7 @@ export class TCPServerProxy
     public get currentClients(): ReadonlyArray<TcpNetworkClient> {
         return Array.from(this.clients.values());
     }
-    // TcpNetworkClient rather than NetworkClient: the voice server needs each client's address.
+    // TcpNetworkClient rather than NetworkClient: the voice server admits UDP senders by a client's address.
     public get clientConnected$(): Observable<TcpNetworkClient> {
         return this.clientAddedStream.asObservable();
     }
@@ -142,8 +130,7 @@ export class TCPServerProxy
                             origin: wireMessage.origin ? this.clients.get(wireMessage.origin.id) : undefined,
                         });
                     } finally {
-                        // Even if a subscriber threw: a message counted and never taken off again
-                        // would leave the worker that much closer to its limit, for good.
+                        // Also when a subscriber throws, or the count would stay up for good.
                         Atomics.sub(this.inboundBacklog, 0, 1);
                     }
                     break;
@@ -152,7 +139,7 @@ export class TCPServerProxy
         });
     }
 
-    // `tls`: accept only TLS connections, with this certificate and each renewed one.
+    // `tls`: the port accepts only TLS connections, served with these credentials and each renewal.
     public start(
         port: number,
         host: string,
@@ -181,8 +168,6 @@ export class TCPServerProxy
     }
 
     public async stop(): Promise<void> {
-        // Cleared first so a worker exit triggered by the terminate below isn't mistaken
-        // for a crash and restarted underneath the shutdown.
         this.startOptions = undefined;
         this.tlsChanges?.unsubscribe();
         this.tlsChanges = undefined;
@@ -196,12 +181,8 @@ export class TCPServerProxy
         await this.terminateWorker();
     }
 
-    // What the admin UI's client view shows of each TCP client's traffic, by client id, from the
-    // worker, which counts it. Asked for, and answered, only while an admin UI page shows it: one
-    // round trip a second. With `history`, each client's rate history too, for a page's first
-    // snapshot. Requests made while one of the same kind is waiting share its answer. Resolves with
-    // nothing for a client the worker did not report, and with nothing at all if the worker has not
-    // answered within CLIENT_ACTIVITY_TIMEOUT_MILLIS.
+    // Traffic per TCP client id as the worker counts it (admin UI); `history` adds each client's rate
+    // history. Requests of one kind share the pending answer. Resolves empty after timeoutMillis.
     public clientActivity(timeoutMillis = CLIENT_ACTIVITY_TIMEOUT_MILLIS, history = false): Promise<ReadonlyMap<string, ClientActivity>> {
         if (this.clients.size === 0) return Promise.resolve(NO_ACTIVITY);
         const waiting = this.activityRequests.get(history);
@@ -230,8 +211,7 @@ export class TCPServerProxy
         this.finishActivityRequest(report.request, activity);
     }
 
-    // An answer that comes after its request timed out is dropped: a later request is waiting for
-    // its own.
+    // An answer to a request that already timed out matches nothing and is dropped.
     private finishActivityRequest(id: number, activity: ReadonlyMap<string, ClientActivity>): void {
         for (const [ history, request ] of this.activityRequests) {
             if (request.id !== id) continue;
@@ -241,13 +221,10 @@ export class TCPServerProxy
         }
     }
 
-    // The TCP transport is the whole reason this process exists for Unity clients, so a
-    // worker that dies must not leave a half-alive server: HTTP and Socket.IO would keep
-    // answering normally while every TCP client is gone and every postMessage to the dead
-    // thread is silently discarded.
+    // Restarted rather than left dead: HTTP and Socket.IO would keep running with every TCP client
+    // gone and posts to the dead thread discarded.
     protected override onWorkerExited(): void {
-        // The thread took every connection with it. Report the disconnects so nothing
-        // downstream (ModelSynchronization, the admin UI client list) keeps a stale client.
+        // The thread took every connection with it; report them gone so downstream state is dropped.
         for (const client of Array.from(this.clients.values())) {
             this.clients.delete(client.id);
             this.removeFromAppIndex(client);
@@ -255,12 +232,11 @@ export class TCPServerProxy
         }
         this.clientStream.next(this.currentClients);
 
-        // Node delivers every message a worker posted before it reports the worker's exit, so
-        // the backlog is back to 0 by now. Reset all the same: a count left behind by a thread
-        // that no longer exists would have the next one limiting messages from the start.
+        // Node delivers a worker's posted messages before its exit, so this is 0 already; reset
+        // anyway, or the next worker would start with a stale count.
         Atomics.store(this.inboundBacklog, 0, 0);
 
-        // No startOptions means we were never started, or are being shut down on purpose.
+        // start() has not been called, or stop() has.
         if (!this.startOptions) return;
 
         if (this.restartAttempts >= MAX_RESTART_ATTEMPTS) {
@@ -293,14 +269,10 @@ export class TCPServerProxy
         });
     }
 
-    // Fast path for "broadcast to every client of one app": rather than shipping a
-    // per-client id array across the worker boundary (structured-clone cost scales with
-    // client count), the worker resolves recipients from its own per-app index.
+    // Broadcast to one app's TCP clients. The worker resolves them from its per-app index, so no id
+    // array is cloned into it.
     public broadcastToApp(msg: NetworkMessage, app: string, exceptClientId?: string): void {
-        // A web-only deployment (or any app whose clients are all web clients, which
-        // always includes 'colibri') would otherwise pay a full JSON.stringify plus a
-        // structured clone into the worker on every broadcast, only for the worker to
-        // resolve an empty recipient set and return.
+        // No TCP recipient (a web-only app, say): skip the encoding and the structured clone.
         if (!this.hasRecipients(app, exceptClientId)) return;
 
         this.postMessage('m:broadcastToApp', {
@@ -317,10 +289,8 @@ export class TCPServerProxy
         return true;
     }
 
-    // ownBytes, because this payload is about to be structured-cloned into the worker, which
-    // copies the whole ArrayBuffer behind it. A TCP-origin payload already owns its bytes and
-    // passes through untouched; anything asBytes() had to encode from a string (every web-origin
-    // or server-built message) is a view into the 64 KiB Buffer pool and is copied out first.
+    // ownBytes: the structured clone into the worker copies the payload's whole ArrayBuffer, and
+    // asBytes() of a string payload is a view into Node's 64 KiB Buffer pool.
     private toWireMessage(msg: NetworkMessage): { channel: string; command: string; payload: Buffer } {
         return {
             channel: msg.channel,
@@ -330,17 +300,10 @@ export class TCPServerProxy
     }
 
     private onClientConnected(client: TcpNetworkClient): void {
-        // A client completing a handshake proves the (possibly restarted) worker is
-        // healthy, so the restart budget starts over from here.
         this.restartAttempts = 0;
 
-        // A TCP client can handshake again on the same connection; the worker then reports it
-        // connected again under the same id, in its new app. Downstream that has to look like
-        // leaving the old app and joining the new one - ConnectionPool's app index,
-        // ModelSynchronization clearing the store of an app whose last client left, and
-        // ClientBroadcast's client::disconnected - or the old app keeps the id, and its store,
-        // forever. The new entry is in `clients` before the old one is reported gone, so a
-        // re-handshake into the *same* app is not mistaken for that app's last client leaving.
+        // A re-handshake arrives as a second connect under the same id, maybe in another app. The old
+        // entry is reported disconnected so its app drops the id, after the new one is set so the same app is not seen empty.
         const previous = this.clients.get(client.id);
         this.clients.set(client.id, client);
         if (previous) {

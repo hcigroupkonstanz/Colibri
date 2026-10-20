@@ -1,36 +1,31 @@
 import { CustomError } from 'ts-custom-error';
 
+/** Base class of colibri-web's errors, such as an invalid address or port. */
 export class ColibriError extends CustomError {}
 
 /**
- * Raised when this client and the server do not agree on the wire protocol. The fix is always
- * to align the `colibri-web` and `colibri-server` versions.
+ * Reported when this client and the server do not speak the same wire protocol. The fix is to run
+ * matching `colibri-web` and `colibri-server` versions.
  *
- * Check {@link ProtocolMismatchError.fatal `fatal`} before reacting - the two cases this covers
- * differ in whether there is still a working connection:
+ * Check `fatal` first. Both kinds are reported on `Colibri.protocolMismatch`:
  *
- * - `fatal: true` - the server **refused** this client and hung up. Terminal, not transient:
- *   there is no negotiation and no subset both sides can speak, so reconnecting cannot succeed.
- *   `Colibri` stops Socket.IO from retrying when it receives one.
- * - `fatal: false` - the server is **suspected** to predate the version check, inferred from the
- *   absence of a signal only a 2.0.0+ server sends. The connection is live and usable, since the
- *   Socket.IO envelope did not change between v1 and v2, so this is a warning to act on at
- *   leisure and not a reason to tear anything down.
+ * - `fatal: true`: the server refused this client and disconnected it. Terminal. There is no
+ *   negotiation, so reconnecting cannot succeed, and `Colibri` stops Socket.IO from retrying.
+ * - `fatal: false`: the server is suspected to predate colibri-server 2.0.0, because it never
+ *   announced its protocol version. The connection stays up. Upgrade the server when you can.
  */
 export class ProtocolMismatchError extends ColibriError {
     public constructor(
         message: string,
         /**
-         * Protocol version the server speaks - always a wire version like `'1'` or `'2'`, never a
-         * release version, so it is comparable with {@link clientVersion} on both paths. Reported
-         * by the server when `fatal`, and `'unknown'` if it refused this client without saying
-         * what it speaks. When not `fatal` it is **inferred**: a server that never announced
-         * itself predates 2.0.0, and every release before that speaks `'1'`.
+         * Wire protocol version the server speaks, like `'2'`, not a release version. The server
+         * reports it on refusal, and it is `'unknown'` if the refusal did not say. When not `fatal`
+         * it is inferred: a server that never announced itself is taken to speak `'1'`.
          */
         public readonly serverVersion: string,
-        /** Protocol version this client announced in its handshake. */
+        /** Wire protocol version this client announced in its handshake. */
         public readonly clientVersion: string,
-        /** Whether the connection is gone. See the class doc - a suspicion is not fatal. */
+        /** Whether the connection is gone. False when the server is only suspected to be old. */
         public readonly fatal: boolean = true
     ) {
         super(message);

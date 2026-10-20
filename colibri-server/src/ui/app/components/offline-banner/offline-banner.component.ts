@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { DatePipe } from '@angular/common';
 import { SocketIOService } from '../../services';
 
-/** Says, at the top of a page, that what it shows is from before the connection was lost. */
 @Component({
     selector: 'app-offline-banner',
     template: `
@@ -36,6 +35,6 @@ import { SocketIOService } from '../../services';
 export class OfflineBannerComponent {
     private socketio = inject(SocketIOService);
 
-    /** When the connection was lost, while it is. */
+    /** Epoch ms when the connection was lost; null unless it is reconnecting. */
     lostAt = computed(() => this.socketio.state() === 'reconnecting' ? this.socketio.lostAt() : null);
 }

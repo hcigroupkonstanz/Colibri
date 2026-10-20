@@ -8,128 +8,95 @@ namespace HCIKonstanz.Colibri.Synchronization
 {
     /// <summary>
     /// The values one [Sync] member of one object sent around the time the connection last worked,
-    /// and the one it held before them, kept for a single decision: what to do with that member in
-    /// the server's answers to the requests made again after a reconnect (see <see cref="Judge"/>
-    /// and Sync.ReconnectRound).
+    /// and the one it held before them. <see cref="Judge"/> uses them after a reconnect to tell a
+    /// change lost in the dead link from a remote update made during the outage.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// A change made the moment a headset's Wi-Fi drops is written into a connection that is
-    /// already dead, and is lost: the client only notices about two seconds later, when the
-    /// server's heartbeats stop. After the reconnect the server answers the request with the value
-    /// from before that change, and applying it, as every update used to be applied, put the
-    /// object back on the very client that had changed it, while every other client kept the old
-    /// value as well - until the member changed again, which a released grab or a switched-off
-    /// object never does.
-    /// </para>
-    /// <para>
-    /// The answer alone cannot tell such a lost change from one another client made during the
-    /// outage. What the member held can: a value it held before the one it sent last says that
-    /// one never arrived, while a value it did not hold was set by someone else.
-    /// </para>
-    /// <para>
-    /// What it held is what it sent in the window (<see cref="WindowSeconds"/>), and the value it
-    /// held when the window began. The latter is all there is for an object that sat still: one
-    /// switched on a minute ago and switched off at the drop sent only <c>false</c> in the window,
-    /// and the answer's <c>true</c> is the change lost, not another client's. It is the newest
-    /// value sent before the window if one is kept, and otherwise the value held before the oldest
-    /// one kept: the last one dropped, or the one the server last showed. That is a value the
-    /// member took from elsewhere, such as the server's state when the object first came up, or
-    /// the one an answer held when it showed the member's last change lost.
-    /// </para>
-    /// <para>
-    /// Which values are kept follows from when this client last heard from the server, which
-    /// heartbeats every 100 ms: the link died at most about that long after, and the value the
-    /// server has was sent around then. Everything sent from then until the outage is noticed went
-    /// into the dead link, about 60 values for an object moved at 30 updates a second. So kept are
-    /// the latest <see cref="Capacity"/> values sent up to that time, the first
-    /// <see cref="Capacity"/> sent after it, and the newest, however long the outage. While the
-    /// connection works, this client hears from the server all the time, and a value dropped from
-    /// in between was replaced by a later one that reached the server as well.
-    /// </para>
-    /// <para>
-    /// While the answers to the requests made again after a reconnect are coming in, the values
-    /// kept when the requests went out stay as they are (see <see cref="KeepUntilAnswered"/>), and
-    /// of those sent since, only the newest is kept besides: the answers hold what the server had
-    /// before it read anything sent after the requests. Hearing from the server on the new
-    /// connection says nothing about the values sent into the dead one, and an object moved on
-    /// right after the reconnect used to push them out.
-    /// </para>
+    /// A change made as the link drops goes into a dead connection and is lost; the client only
+    /// notices when the server's heartbeats stop, about two seconds later. After the reconnect the
+    /// server answers with the value from before that change, and applying it reverts the object
+    /// on the client that changed it while every other client keeps the old value. A value the
+    /// member held before the one it sent last says that send never arrived; a value it never held
+    /// was set by someone else.
     /// </remarks>
+    // Held values are the ones sent within WindowSeconds, and the value held when the window began.
+    // The latter is all an object that sat still has: switched on a minute ago and off at the drop,
+    // it sent only `false`, and the answer's `true` is the lost change.
+    //
+    // The sent values are kept around when the server was last heard from (it heartbeats every
+    // 100 ms): the link died about then, and everything sent until the outage is noticed went into
+    // it (about 60 values for an object moved at 30 updates a second). While the connection works,
+    // a value dropped from in between was replaced by a later one that reached the server too.
     internal sealed class SentValues
     {
         internal enum Verdict
         {
-            /// <summary>Nothing sent recently: the answer is applied, as any update is.</summary>
+            /// <summary>Nothing sent in the window: the answer is applied.</summary>
             NotSentRecently,
 
-            /// <summary>The server holds the value sent last: it arrived, and there is nothing to do.</summary>
+            /// <summary>The server holds the value sent last: it arrived.</summary>
             Arrived,
 
             /// <summary>
-            /// The server holds a value the member held before the one it sent last: what was sent
-            /// after it never arrived. The local value stays, and goes out again.
+            /// The server holds a value the member held before the one it sent last, so what was
+            /// sent after it never arrived. The local value stays and goes out again.
             /// </summary>
             Lost,
 
             /// <summary>
-            /// The server holds a value this member did not hold recently: another client set it
-            /// while this one was away, and the answer is applied.
+            /// The server holds a value the member did not hold recently: another client set it
+            /// during the outage, and the answer is applied.
             /// </summary>
             ChangedElsewhere,
         }
 
         /// <summary>
-        /// How many values are kept on either side of when this client last heard from the server:
-        /// the latest sent up to then, and the first sent after. The newest is kept as well.
+        /// How many values are kept on either side of when the server was last heard from: the
+        /// latest sent up to then, and the first sent after. The newest is kept as well.
         /// </summary>
         internal const int Capacity = 8;
 
         private const double DefaultWindowSeconds = 10;
 
         /// <summary>
-        /// How long before the connection was lost a value may have been sent and still count. A
-        /// member that sent nothing in that time has nothing to judge. A value sent long before
-        /// cannot tell a lost change from another client's: a member that went from A to B a minute
-        /// ago and that another client has set back to A during the outage would look as if B had
-        /// been lost, and the other client's change would be undone.
+        /// How long before the outage was noticed a sent value still counts. A member that sent
+        /// nothing in that time is not judged.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// For a member that did send in the window, that is what happens, and is accepted: another
-        /// client that sets it back during the outage, to a value it held in the window or when the
-        /// window began, is undone.
+        /// A longer window would undo remote changes: a member that went from A to B a minute ago
+        /// and was set back to A by another client would look as if B had been lost. Within the
+        /// window that case is accepted: a remote reset to a value the member held in the window,
+        /// or when it began, is undone.
         /// </para>
         /// <para>
-        /// Counted back from the moment this client noticed the outage, not from the answer, so a
-        /// change lost at the drop is still recognised after an outage of any length; after a link
-        /// that drops again before the answers arrive, from the first outage (see
-        /// Sync.RequestModelsAgain). Settable only so the test suite can shorten it.
+        /// Counted from when this client noticed the outage, not from the answer, so a change lost
+        /// at the drop is recognised after an outage of any length; after a link that drops again
+        /// before the answers arrive, from the first outage (see Sync.RequestModelsAgain).
+        /// Not readonly so tests can shorten it.
         /// </para>
         /// </remarks>
         internal static double WindowSeconds = DefaultWindowSeconds;
 
-        /// <summary>A setting changed by a test does not carry into the next Play session.</summary>
+        // Statics survive between Play sessions when domain reload is disabled.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetWindow() => WindowSeconds = DefaultWindowSeconds;
 
-        // Oldest first: the first _heard were sent by the time this client last heard from the
-        // server, as the latest send knew it, the rest after. Made at the first send, since every
-        // member that takes a value from elsewhere has a SentValues too, and on an object only ever
-        // moved by other clients none of them sends. Capacity on either side, the newest, and room
-        // for the value coming in.
+        // Oldest first: the first _heard were sent by the time the server was last heard from (as of
+        // the latest send), the rest after. Allocated at the first send, since a member that takes
+        // remote values has a SentValues too and may never send. Room for Capacity on either side,
+        // the newest, and the incoming value.
         private JToken[] _values;
         private double[] _times;
         private int _count;
         private int _heard;
 
-        // The value the member held before the oldest one kept: the last one dropped from those sent
-        // by the time the server was last heard from, or the one the server last showed. Null when
-        // there is neither.
+        // The value held before the oldest one kept: the last one dropped from the oldest end, or the
+        // one the server last showed. Null when there is neither.
         private JToken _heldBefore;
 
-        // While the answers to the requests made again after a reconnect are coming in, how many of
-        // the values, oldest first, were kept when the requests went out; zero otherwise.
+        // While the answers to a reconnect's requests come in: how many of the oldest values were kept
+        // when the requests went out. Zero otherwise.
         private int _keptForAnswers;
 
         /// <param name="value">
@@ -137,9 +104,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// one that may.
         /// </param>
         /// <param name="time">When it was sent, on <see cref="SyncTicker"/>'s clock.</param>
-        /// <param name="heardAt">When this client last heard from the server, on the same clock.</param>
+        /// <param name="heardAt">When the server was last heard from, on the same clock.</param>
         /// <param name="answersPending">
-        /// Whether the answers to the requests made again after a reconnect are still coming in.
+        /// Whether the answers to a reconnect's requests are still coming in.
         /// </param>
         internal void Remember(JToken value, double time, double heardAt, bool answersPending = false)
         {
@@ -152,7 +119,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (!answersPending)
                 _keptForAnswers = 0;
 
-            // Sent after the requests, so no answer holds it: kept as the newest only, after the
+            // Sent after the requests, so no answer holds it: only the newest is kept, after the
             // values kept for the answers.
             if (_keptForAnswers > 0)
             {
@@ -162,8 +129,8 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             }
 
-            // Once the answers are in, the newest value sent while they came in may still have the
-            // slot that is otherwise free for the value coming in.
+            // The newest value sent while the answers came in may still occupy the slot for the
+            // incoming value.
             if (_count == _values.Length)
                 DropOldest(1);
 
@@ -175,13 +142,12 @@ namespace HCIKonstanz.Colibri.Synchronization
             while (_heard < _count && _times[_heard] <= heardAt)
                 _heard++;
 
-            // Of those, the latest are kept, and the one before them is what the member held before
-            // the oldest one kept.
+            // Of those, the latest Capacity are kept; the newest one dropped is _heldBefore.
             if (_heard > Capacity)
                 DropOldest(_heard - Capacity);
 
-            // Of those sent after, the first are kept, and the newest: the value before the newest
-            // goes unless it is one of the first.
+            // Of those sent after, the first Capacity and the newest are kept: the one before the
+            // newest goes.
             while (_count - _heard > Capacity + 1)
             {
                 _count--;
@@ -192,19 +158,21 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// For when the requests made again after a reconnect go out: until their answers are in
-        /// (see <see cref="Remember"/>), the values kept now stay as they are. A round that follows
-        /// one whose answers never came keeps that one's values, and the newest sent since: should
-        /// that fill every slot, the oldest goes.
+        /// For when the requests made again after a reconnect go out: the values kept now stay as
+        /// they are until their answers are in (see <see cref="Remember"/>).
         /// </summary>
         internal void KeepUntilAnswered()
         {
             if (_count == 0)
                 return;
 
+            // A round after one whose answers never came keeps that one's values and the newest
+            // since; if that fills every slot, the oldest goes.
             if (_count == _values.Length)
                 DropOldest(1);
 
+            // Hearing from the server on the new connection says nothing about the values sent into
+            // the dead one, which later sends would otherwise push out.
             _keptForAnswers = _count;
         }
 
@@ -219,11 +187,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// For when the server shows that it holds <paramref name="value"/>: in an update the member
-        /// takes from elsewhere, or in an answer that shows the member's last change lost. What
-        /// this object sent before says nothing about the server any more, and is forgotten. The
-        /// value shown is kept as the one before the next send: should that be lost as well, an
-        /// answer still holding this value tells it.
+        /// For when the server shows that it holds <paramref name="value"/>, in a remote update or in
+        /// an answer that shows the member's last change lost. Earlier sends say nothing about the
+        /// server any more and are forgotten.
         /// </summary>
         /// <param name="value">
         /// The value as it arrived. It must not change afterwards; the caller copies one that may.
@@ -235,16 +201,17 @@ namespace HCIKonstanz.Colibri.Synchronization
             _count = 0;
             _heard = 0;
             _keptForAnswers = 0;
+
+            // The value before the next send: if that is lost too, an answer still holding this
+            // value recognises it.
             _heldBefore = value;
         }
 
-        /// <summary>Whether a value was sent at or after <paramref name="since"/>.</summary>
         internal bool HasSentSince(double since) => _count > 0 && _times[_count - 1] >= since;
 
         /// <summary>
         /// Compares the server's value with the values sent at or after <paramref name="since"/>,
-        /// newest first, and then with the one the member held when that time began, as they read
-        /// on the wire.
+        /// newest first, and then with the one the member held when that time began.
         /// </summary>
         internal Verdict Judge(JToken serverValue, double since)
         {
@@ -256,8 +223,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             {
                 var held = WireEquals(ToWireForm(_values[i]), server);
 
-                // Sent before the window: the value held when it began. Sent in order, so
-                // everything past this one is older still and does not count.
+                // Sent before the window, so this is the value held when it began. Everything older
+                // does not count.
                 if (_times[i] < since)
                     return held ? Verdict.Lost : Verdict.ChangedElsewhere;
 
@@ -265,19 +232,16 @@ namespace HCIKonstanz.Colibri.Synchronization
                     return i == _count - 1 ? Verdict.Arrived : Verdict.Lost;
             }
 
-            // Everything kept was sent in the window, so the value from before the oldest of
-            // them was held in the window too, or when it began.
+            // Everything kept was sent in the window, so the value before the oldest was held in the
+            // window or when it began.
             return _heldBefore != null && WireEquals(ToWireForm(_heldBefore), server)
                 ? Verdict.Lost
                 : Verdict.ChangedElsewhere;
         }
 
-        /// <summary>
-        /// The value as a client reads it off the wire: written as the connection writes it, and
-        /// read back as it reads every payload, with dates left as strings (see
-        /// <c>WebServerConnection.ParsePayload</c>). A value sent from here is held as the float it
-        /// was made from, 0.1f, which is not the double 0.1 that the server's answer reads as.
-        /// </summary>
+        // The value as a client reads it off the wire: written as the connection writes it, read back
+        // as it reads payloads, dates left as strings (see WebServerConnection.ParsePayload). A float
+        // member's 0.1f is held as a float, which is not the double 0.1 the server's answer reads as.
         private static JToken ToWireForm(JToken value)
         {
             if (value == null)
@@ -288,9 +252,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>
-        /// JSON equality, with one difference from <see cref="JToken.DeepEquals(JToken, JToken)"/>:
-        /// an integer and a float of the same value are equal. A float member holding a whole number
-        /// goes out as <c>2.0</c>, and the server, which is JavaScript, sends it back as <c>2</c>.
+        /// JSON equality, except that an integer and a float of the same value are equal: a float
+        /// member holding a whole number goes out as <c>2.0</c>, and the server sends back <c>2</c>.
         /// </summary>
         internal static bool WireEquals(JToken a, JToken b)
         {

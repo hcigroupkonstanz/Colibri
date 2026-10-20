@@ -6,9 +6,7 @@ import { randomUUID } from 'crypto';
 
 const LOGGING_APP = 'colibri';
 const MAX_LOG_SIZE = 20000;
-// The history is bounded by size as well as by count: at 20,000 lines of a few MiB each (a
-// client's RemoteLogger sends whatever it logs), the count alone let it fill the server's heap.
-// Typical lines take a fraction of this; only long ones make older lines go early.
+// Caps the history by size as well as count: a client's RemoteLogger sends whatever it logs.
 export const MAX_LOG_CHARS = 8 * 1024 * 1024;
 
 interface WebMessage {
@@ -35,23 +33,16 @@ interface LogPreferences {
     request: number | null;
 }
 
-// What makes two log lines "the same" for merging; WebMessage copies all of it verbatim from
-// the LogMessage, so an entry's key can be recomputed from either. The app and the client are
-// part of it: the clients of two apps on one host share a name (their IP address), and a line
-// about a client need not name it ("Colibri client 10.0.0.5 disconnected"), so the same line
-// about two clients used to become one entry, counted together and shown under the first only.
+// Merge key, computable from a LogMessage or a WebMessage. App and client are part of it: clients
+// of two apps on one host share a name (their IP address) and a line need not name its client.
 const messageKey = function (msg: { level: number; group: string; message: string; metadata: Metadata }): string {
     return JSON.stringify([ msg.level, msg.group, msg.message, msg.metadata.clientApp ?? null, msg.metadata.clientId ?? null ]);
 };
 
 const KNOWN_LEVELS: ReadonlySet<number> = new Set([ LogLevel.Error, LogLevel.Warn, LogLevel.Info, LogLevel.Debug ]);
 
-// requestLog is accepted from any Socket.IO client of any app, so its payload is whatever
-// that client chose to send. Each field is taken only if it has the expected type and is
-// otherwise left at its default (no filter, all levels, no broadcast traffic, connection lines
-// shown, as before the switch existed): `levels: 1`
-// used to reach `new Set(1)` and throw, `levels: 'x'` became Set {'x'} and silently hid
-// every level, and a non-string `filter` silently hid every message.
+// requestLog comes from any client of any app, so each field is used only if it has the expected
+// type, else its default (no filter, all levels, no broadcast traffic, connection lines shown).
 const parseLogPreferences = function (body: unknown): LogPreferences {
     const fields = (body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
     return {
@@ -71,17 +62,11 @@ export class WebLog extends Service {
 
     private readonly logMessages = new RingBuffer<WebMessage>(MAX_LOG_SIZE);
 
-    // Exact-match index for merging repeats of the same (level, group, message), independent of
-    // how much unrelated log traffic interleaves between occurrences - a positional lookback over
-    // logMessages (the old approach) missed most repeats under any real amount of other traffic,
-    // since the previous occurrence would already have scrolled past the lookback window.
-    //
-    // Holds exactly the entries still in logMessages (see pushMessage), so it is bounded by
-    // MAX_LOG_SIZE too. It used to keep every key ever logged, each pinning its evicted
-    // message: 100k distinct lines left 100k entries behind a 20k-entry history.
+    // Merge index by messageKey. Holds only the entries still in logMessages (see forget), so it is
+    // bounded like the history.
     private readonly recentByKey = new Map<string, WebMessage>();
 
-    // The total length of the messages in logMessages, against MAX_LOG_CHARS.
+    // Sum of the message lengths in logMessages, capped by MAX_LOG_CHARS.
     private logChars = 0;
 
     public constructor(private socketio: SocketIOServer) {
@@ -94,9 +79,7 @@ export class WebLog extends Service {
         this.socketio.messages$
             .pipe(filter(msg => msg.channel === 'colibri::log' && msg.command === 'requestLog'))
             .subscribe(networkMsg => {
-                // RxJS rethrows an exception from a subscriber asynchronously, where it is an
-                // uncaught exception and main.ts shuts the server down - so nothing a client
-                // sends may escape from here.
+                // An exception escaping a subscriber is uncaught and main.ts shuts the server down.
                 try {
                     this.handleRequestLog(networkMsg);
                 } catch (err) {
@@ -123,9 +106,7 @@ export class WebLog extends Service {
         // client can't handle too many messages at once
         const clientLimit = 10000;
 
-        // Sorted by `created`, the time a line last occurred, which is also where the admin UI
-        // puts a merged entry when it repeats live. In buffer order (first occurrences) a merged
-        // entry's time jumped backwards, and a reload reordered the page.
+        // Sorted by `created` (last occurrence), where the admin UI puts a merged entry that repeats live.
         const messages = this.logMessages
             .toArray()
             .filter(msg => !filter || msg.metadata.clientApp === filter)
@@ -134,10 +115,8 @@ export class WebLog extends Service {
             .slice(-clientLimit)
             .map(msg => ({ ...msg }));
 
-        // One message, and sent even when empty: the admin UI ignores live lines from asking until
-        // this arrives, since those were filtered by its previous preferences. It used to be one
-        // event per line, 10,000 of them for a full history. `at` is this server's clock, which
-        // stamps the lines, for a page whose own clock is off.
+        // Sent even when empty: the admin UI drops live lines between its request and this reply.
+        // `at` is the server clock that stamps the lines, for a page whose own clock is off.
         this.socketio.broadcast({
             channel: 'colibri::log',
             command: 'history',
@@ -146,8 +125,7 @@ export class WebLog extends Service {
     }
 
     private redirectLogMessage(log: LogMessage): void {
-        // group identical messages together, as long as the earlier occurrence is still in
-        // logMessages (an evicted one has already been dropped from recentByKey)
+        // Merge into the earlier occurrence if it is still in logMessages (eviction drops it from recentByKey).
         const key = messageKey(log);
         let webMsg = this.recentByKey.get(key);
 
@@ -169,9 +147,8 @@ export class WebLog extends Service {
             this.pushMessage(key, webMsg);
         }
 
-        // History above is kept regardless (a client may request it later), but a single
-        // pass over currentClients decides the recipients, and building the broadcast
-        // payload is skipped entirely when no admin UI is connected to receive it.
+        // The history above is kept regardless (a client may request it later); no payload is built
+        // unless some admin UI receives the line.
         const clients: SocketIoClient[] = [];
         for (const client of this.socketio.currentClients) {
             if (client.app !== LOGGING_APP) continue;
@@ -187,10 +164,7 @@ export class WebLog extends Service {
 
         if (clients.length === 0) return;
 
-        // Snapshot, not a reference: webMsg is a merge target that gets mutated in place on its
-        // next repeat, and Payload.fromValue() stores whatever it's given verbatim - passing the
-        // live object would let a later merge silently rewrite what an earlier broadcast for this
-        // same entry sends.
+        // Snapshot: webMsg is mutated in place on its next repeat and Payload.fromValue() keeps the object as given.
         this.socketio.broadcast({
             channel: 'colibri::log',
             command: 'message',
@@ -222,11 +196,9 @@ export class WebLog extends Service {
         this.logChars -= evicted.message.length;
     }
 
-    // Broadcast/sync traffic is governed exclusively by showBroadcastTraffic, never by levels,
-    // even though it's always logged at Debug: lets an admin watch Debug output without sync
-    // spam, or watch sync spam without unrelated Debug noise. Connection lines are hidden by
-    // their own switch, and otherwise shown at their level like any other line. Without
-    // preferences (no requestLog yet): every line but sync traffic.
+    // Broadcast traffic is logged at Debug but governed only by showBroadcastTraffic, never by levels,
+    // so Debug can be watched without it and vice versa. Connection lines have their own switch.
+    // Without preferences (no requestLog yet): every line but broadcast traffic.
     private isVisibleToClient(level: number, metadata: Metadata, preferences: LogPreferences | undefined): boolean {
         if (metadata['broadcastTraffic'] === true) {
             return preferences?.showBroadcastTraffic === true;
