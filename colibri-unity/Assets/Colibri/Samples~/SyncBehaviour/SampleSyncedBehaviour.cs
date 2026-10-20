@@ -47,14 +47,14 @@ namespace HCIKonstanz.Colibri.Samples
 
         public Color LocalColor;
 
-        // The color last applied, so that Update applies LocalColor only once it is edited.
+        // Last value set through Color. A LocalColor that differs from it was edited in the Inspector.
         private Color _appliedColor;
 
         private Renderer _renderer;
         protected override void Awake()
         {
-            // Before base.Awake(), which reads every [Sync] member once: the server's first answer
-            // replaces each member that still reads that value, and keeps each one that does not.
+            // Set before base.Awake(), which latches every [Sync] member: the Color getter reads _renderer,
+            // and a member changed after that latch is kept over the server's first answer.
             _renderer = GetComponent<Renderer>();
             Color = LocalColor;
             base.Awake();
@@ -62,7 +62,7 @@ namespace HCIKonstanz.Colibri.Samples
 
         private void Update()
         {
-            // apply updates from unity editor (for demo purposes)
+            // Applies edits to LocalColor made in the Inspector.
             if (LocalColor != _appliedColor)
                 Color = LocalColor;
         }

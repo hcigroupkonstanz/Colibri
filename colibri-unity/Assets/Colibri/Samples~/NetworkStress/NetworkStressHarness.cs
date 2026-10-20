@@ -9,43 +9,26 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Samples
 {
     /// <summary>
-    /// Puts Colibri under load and says what happened.
-    ///
-    /// Run it in two editors side by side - that is the configuration it exists for. One drives a
-    /// few hundred synchronized objects, the other watches what arrives, and both show the same
-    /// panel. Turn the object count up until the numbers stop being acceptable; the point at which
-    /// that happens is the answer you came for.
+    /// Puts Colibri under load and shows throughput, latency and loss in an on-screen panel.
+    /// Run it in two editors side by side: one drives the synchronized objects, the other shows what arrives.
     /// </summary>
     /// <remarks>
-    /// There are two separate instruments here, and keeping them apart is what makes the readings
-    /// mean anything:
-    ///
-    /// - <b>Load</b> is <see cref="StressModel"/> objects being moved. Realistic, because it is
-    ///   how a real scene generates traffic - but state sync coalesces per frame, so a missing
-    ///   value is not a missing message and this cannot measure loss.
-    /// - <b>Latency and loss</b> ride on a separate low-rate probe channel where every message is
-    ///   meant to arrive exactly once. It is a round trip, so no clock is shared between the two
-    ///   ends and the figure stays honest across machines. Kept at a low rate deliberately: it is
-    ///   measuring the delay under the load, not adding to it.
+    /// The load is <see cref="StressModel"/> objects being moved. State sync merges the changes made
+    /// between two sends, so a missing value is not a missing message and the load cannot measure
+    /// loss. Latency and loss use a separate low-rate probe channel: each probe is echoed back, so
+    /// the round trip needs no clock shared between the two machines.
     /// </remarks>
     public class NetworkStressHarness : MonoBehaviour
     {
-        /// <summary>
-        /// Its own channel, not one of the sample channels. Anything else on "myChannel" would be
-        /// counted as a lost probe the moment it did not echo.
-        /// </summary>
+        // Dedicated channel, so only probes reach OnProbe.
         private const string ProbeChannel = "colibri-stress-probe";
 
-        /// <summary>A probe unanswered for this long is counted as lost rather than slow.</summary>
+        // A probe unanswered for this long counts as lost, not slow.
         private const float ProbeTimeoutSeconds = 2f;
 
         private const int RttSampleCapacity = 2000;
 
-        /// <summary>
-        /// Objects created per frame while catching up to the requested count. Creating several
-        /// hundred in one frame locks the editor for long enough to look like a crash, and each
-        /// one asks the server for its initial state as it wakes.
-        /// </summary>
+        // Objects created per frame while catching up to ObjectCount; several hundred in one frame freeze the editor.
         private const int SpawnBudgetPerFrame = 25;
 
         [Header("Load")]
@@ -75,8 +58,7 @@ namespace HCIKonstanz.Colibri.Samples
         private StressModelManager _manager;
         private WebServerConnection _connection;
 
-        // Identifies this client's probes so an echo can be told from someone else's ping, and so
-        // two harnesses measuring at once do not read each other's round trips as their own.
+        // Tells this client's probes from other clients', so harnesses measuring at once do not read each other's echoes.
         private string _originId;
 
         private string _padding = "";
@@ -98,7 +80,7 @@ namespace HCIKonstanz.Colibri.Samples
         private long _probesOutOfOrder;
         private int _highestEchoSeen;
 
-        // Changes the driver made, not messages: see DriveObjects.
+        // Counts changes, not messages: the send rate limit merges changes.
         private long _changesMade;
         private long _changesMadeAtSample;
         private int _movingObjects;
@@ -118,7 +100,7 @@ namespace HCIKonstanz.Colibri.Samples
         private float _disconnectedAt;
         private float _lastReconnectSeconds;
 
-        // Percentiles are only worth recomputing as fast as they are read.
+        // Throttled, as OnGUI runs several times per frame.
         private float _nextPercentileRefresh;
         private float _nextSummaryLog;
         private float _p50, _p95, _p99;
@@ -131,13 +113,10 @@ namespace HCIKonstanz.Colibri.Samples
 
         private void Awake()
         {
-            // Without this an unfocused editor suspends its player loop, and the client that is
-            // supposed to be receiving the flood quietly stops running at all.
+            // An unfocused editor would pause the player loop, and the receiving client with it.
             Application.runInBackground = true;
 
             _originId = Guid.NewGuid().ToString("N").Substring(0, 8);
-            // "Any" rather than "First": there should be exactly one of each of these in the
-            // scene, so instance-ID ordering buys nothing and the ordered variant is deprecated.
             _manager = FindAnyObjectByType<StressModelManager>();
 
             if (_manager == null)
@@ -148,8 +127,7 @@ namespace HCIKonstanz.Colibri.Samples
 
         private void OnEnable() => Sync.Receive<JToken>(ProbeChannel, OnProbe);
 
-        // Destroying this object would drop the listener on its own; disabling it would not, and a
-        // disabled harness still answering probes would make the other client's latency look fine.
+        // Sync drops the listener of a destroyed owner but not of a disabled one, which would keep echoing probes.
         private void OnDisable() => Sync.Unregister<JToken>(ProbeChannel, OnProbe);
 
         private void OnDestroy() => ClearObjects();
@@ -207,7 +185,7 @@ namespace HCIKonstanz.Colibri.Samples
 
         private void AdjustObjectCount()
         {
-            // Destroying is cheap; creating is not, and a few hundred at once locks up the editor.
+            // Only creating is budgeted; destroying is cheap.
             while (_objects.Count > ObjectCount)
             {
                 var last = _objects.Count - 1;
@@ -225,9 +203,7 @@ namespace HCIKonstanz.Colibri.Samples
         {
             var template = _manager != null ? _manager.Template : null;
 
-            // Instantiating the manager's template keeps the two clients rendering the same thing.
-            // Falling back to a bare primitive means the scene still works if the template is
-            // unassigned - with a warning, since that is a wiring mistake rather than a mode.
+            // The manager builds remote objects from its template, so instantiating it renders both clients alike.
             GameObject go;
             if (template != null)
             {
@@ -268,12 +244,7 @@ namespace HCIKonstanz.Colibri.Samples
                 if (model == null)
                     continue;
 
-                // Always a different value from last frame, so every driven object really does
-                // change in every frame. That is what is counted here: changes, not messages. The
-                // send-rate limit (SyncSettings.MaxSendRate) holds each object to that many
-                // messages a second and folds the changes in between into them, so at 72 fps and
-                // the default 30 a second, fewer than half of these changes are a message of their
-                // own. What arrives is the other client's "In".
+                // One change per object and frame; the send rate limit turns them into fewer messages.
                 var basePosition = GridPosition(i);
                 basePosition.z = Mathf.Sin(t * 2f + i * 0.3f);
 
@@ -283,11 +254,7 @@ namespace HCIKonstanz.Colibri.Samples
             }
         }
 
-        /// <summary>
-        /// The most messages a second the changes counted above can have become: one per change,
-        /// or the send-rate limit's worth per moving object, whichever is less. A bound, not a
-        /// count - Colibri does not report what it sent.
-        /// </summary>
+        // Colibri does not count sent messages, so this is an upper bound: one per change, at most MaxSendRate per moving object.
         private float SentAtMostPerSecond()
         {
             var limit = SyncSettings.MaxSendRate;
@@ -296,7 +263,7 @@ namespace HCIKonstanz.Colibri.Samples
 
 
         /*
-         *  Probes - the only thing here that can honestly report a dropped message
+         *  Probes
          */
 
         private void SendProbes()
@@ -304,8 +271,7 @@ namespace HCIKonstanz.Colibri.Samples
             if (ProbeRateHz <= 0)
                 return;
 
-            // Credit rather than a timer, so a client running at 10 fps still sends 20 probes a
-            // second rather than silently measuring at its frame rate.
+            // Credit instead of a timer, so a low frame rate still sends ProbeRateHz probes a second.
             _probeCredit += ProbeRateHz * Time.unscaledDeltaTime;
 
             while (_probeCredit >= 1f)
@@ -339,8 +305,7 @@ namespace HCIKonstanz.Colibri.Samples
 
             if (!isEcho)
             {
-                // Answering is unconditional: an instance is useful as the far end of someone
-                // else's measurement without having to be put into a mode first.
+                // Always echo, so any instance can be the far end of another client's measurement.
                 Sync.Send(ProbeChannel, new JObject
                 {
                     { "o", origin },
@@ -354,7 +319,7 @@ namespace HCIKonstanz.Colibri.Samples
                 return;
 
             if (!_outstandingProbes.TryGetValue(seq, out var sentAt))
-                return; // Already timed out and counted as lost, or not ours to begin with.
+                return; // Already expired as lost, or cleared by ResetStats.
 
             _outstandingProbes.Remove(seq);
             _probesEchoed++;
@@ -451,8 +416,7 @@ namespace HCIKonstanz.Colibri.Samples
             if (now < _nextRateSample)
                 return;
 
-            // First call after a reset establishes the baseline rather than reporting a rate over
-            // an unknown interval.
+            // The first sample after a reset only sets the baseline.
             if (_nextRateSample > 0f)
             {
                 _changedPerSecond = _changesMade - _changesMadeAtSample;
@@ -532,11 +496,8 @@ namespace HCIKonstanz.Colibri.Samples
             _objects.Clear();
         }
 
-        /// <summary>
-        /// Drops the socket without touching the library: the connection's own OnDisable cancels
-        /// its lifetime and closes the socket, and OnEnable starts a fresh loop. Stopping the
-        /// server instead exercises the same path with a real outage and the reconnect backoff.
-        /// </summary>
+        // Disabling the connection closes its socket and re-enabling reconnects.
+        // Stopping the server tests the same path with a real outage and the reconnect backoff.
         private IEnumerator DropConnection()
         {
             if (_connection == null)
@@ -599,16 +560,13 @@ namespace HCIKonstanz.Colibri.Samples
 
             var spawning = _objects.Count != ObjectCount;
             Row("Objects", spawning ? $"{_objects.Count} of {ObjectCount}..." : _objects.Count.ToString());
-            // Changes, and what they can have become on the wire - not a count of messages sent,
-            // which the send-rate limit keeps below the changes. "In" on the other client is.
+            // "Changed" counts changes and "Sent" is an upper bound; only "In" on the other client counts messages.
             var limit = SyncSettings.MaxSendRate;
             Row("Changed", $"{_changedPerSecond:0} /s");
             Row("Sent", $"up to {SentAtMostPerSecond():0} msg/s   "
                 + (limit > 0 ? $"(at most {limit}/s per object)" : "(no send-rate limit)"));
             Row("In", $"{_inPerSecond:0} msg/s");
 
-            // Named for what it is. A missing value here is last-write-wins doing its job, not a
-            // message the network dropped - the probe channel below is what measures that.
             Row("Coalesced", $"{StressModel.Coalesced}   (superseded before sending, not lost)");
 
             if (_objects.Count == 0 && ObjectCount == 0)
@@ -628,9 +586,8 @@ namespace HCIKonstanz.Colibri.Samples
 
             if (_probesEchoed == 0)
             {
-                // A second client can be running with nothing coming back: over the server's rate
-                // limit, which the scene's defaults are, every probe or echo is dropped once the
-                // client's burst allowance is spent.
+                // A running second client can still produce no echoes: over the server's rate limit,
+                // probes and echoes are dropped once the client's burst allowance is spent.
                 if (_probesSent == 0)
                     GUILayout.Label("No probes sent yet.");
                 else if (_probesLost == 0)
@@ -646,8 +603,8 @@ namespace HCIKonstanz.Colibri.Samples
             Row("Worst", $"{_rttWorst:0.0} ms");
             Row("Echoed", $"{_probesEchoed} of {_probesSent}   ({_echoPerSecond:0}/s)");
 
-            // The rate limit is the likeliest of these: the scene's defaults, 100 moving objects at
-            // 30 updates a second each, are three times the server's default of 1000 a second.
+            // The rate limit is the likeliest cause: the scene's 100 moving objects at the default 30 updates
+            // a second are 3000 messages a second, three times the server's default of 1000.
             if (_probesLost > 0)
             {
                 var percent = 100f * _probesLost / Mathf.Max(1L, _probesSent);

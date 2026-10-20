@@ -5,7 +5,6 @@ public class RestApiExample : MonoBehaviour
 {
     async void Start()
     {
-        // Create example object
         ExampleClass exampleObject = new ExampleClass();
         exampleObject.Id = 1234;
         exampleObject.Name = "Charly Sharp";
@@ -28,7 +27,7 @@ public class RestApiExample : MonoBehaviour
         }
 
         // Delete saved example object with REST API
-        // bool deleteSuccess = await restApi.Delete(APP_NAME, "exampleObject");
+        // bool deleteSuccess = await Store.Delete("exampleObject");
         // Debug.Log("Delete Example Object Success: " + deleteSuccess);
 
     }

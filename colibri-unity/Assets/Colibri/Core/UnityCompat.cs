@@ -5,17 +5,11 @@ using Object = UnityEngine.Object;
 namespace HCIKonstanz.Colibri.Core
 {
     /// <summary>
-    /// Scene queries whose only warning-free form depends on the editor version.
-    ///
-    /// Unity 6000.4 deprecated every FindObjectsByType overload that takes a FindObjectsSortMode
-    /// and added overloads without one, which 2022.3 does not have. Either form called directly
-    /// warns at one end of the supported range and does not compile at the other, so the switch
-    /// lives here once rather than at every call site.
-    ///
-    /// None of Colibri's callers depends on the order of the result: they filter it, count it, or
-    /// ask whether anything matches. The sort-free overloads make no promise about order, which is
-    /// what FindObjectsSortMode.None already meant.
+    /// Scene queries that work on both 2022.3 and Unity 6000.4+. Unity 6000.4 deprecated the
+    /// FindObjectsByType overloads that take a FindObjectsSortMode and added ones without it;
+    /// 2022.3 has only the former, so the version check lives here.
     /// </summary>
+    // No caller picks a result by position, so the unsorted order of the sort-free overloads does not matter.
     internal static class UnityCompat
     {
         public static T[] FindAll<T>(FindObjectsInactive inactive = FindObjectsInactive.Exclude) where T : Object

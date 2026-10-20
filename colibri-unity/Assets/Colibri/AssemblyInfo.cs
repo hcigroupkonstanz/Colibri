@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
 
-// The sync loop's hot path is deliberately internal - SyncTicker's registration list and the
-// ITickable seam are implementation detail, not API. Testing them through reflection works but
-// breaks silently on a rename, and the one bug that most needs a regression test (a ticker
-// surviving Play mode and then double-ticking every registered object) lives entirely in there.
+// The sync loop's hot path (SyncTicker's registration list, ITickable seam) is internal: not API.
+// Tests see it through InternalsVisibleTo, since reflection works but breaks silently on a rename.
 [assembly: InternalsVisibleTo("HCIKonstanz.Colibri.Tests")]
 [assembly: InternalsVisibleTo("HCIKonstanz.Colibri.E2E")]

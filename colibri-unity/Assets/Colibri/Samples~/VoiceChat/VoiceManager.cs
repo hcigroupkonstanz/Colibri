@@ -18,28 +18,24 @@ public class VoiceManager : MonoBehaviour
 
     void OnEnable()
     {
-        // Create random id
         Id = (short)UnityEngine.Random.Range(1, 32000);
 
-        // Receive IDs of other clients
         Sync.Receive<int>(CHANNEL, OnIdArrived);
 
-        // Start broadcasting voice
         VoiceBroadcast.StartBroadcast(Id);
     }
 
     void OnDisable()
     {
-        // Remove receive ID listener
         Sync.Unregister<int>(CHANNEL, OnIdArrived);
 
-        // Stop broadcasting voice
         VoiceBroadcast.StopBroadcast();
     }
 
     void Update()
     {
-        // Send the own ID every second to other clients
+        // The id doubles as a heartbeat: receivers drop a client that sends none for
+        // DisconnectUserAfterSeconds.
         timeSinceLastSended += Time.deltaTime;
         if (timeSinceLastSended > 1f)
         {
@@ -47,7 +43,6 @@ public class VoiceManager : MonoBehaviour
             timeSinceLastSended = 0f;
         }
 
-        // Check if clients are not available anymore
         if (clientsLastHeartbeat != null)
         {
             List<int> removeIds = new List<int>();
@@ -58,7 +53,6 @@ public class VoiceManager : MonoBehaviour
                     removeIds.Add(id);
                 }
             }
-            // Remove all not available clients
             foreach (int id in removeIds)
             {
                 Destroy(clients[id]);
@@ -76,18 +70,16 @@ public class VoiceManager : MonoBehaviour
             clientsLastHeartbeat = new Dictionary<int, float>();
         }
 
-        // If a ID arrives that has no VoiceReceiver at the moment instantiate one
         if (!clients.ContainsKey(id))
         {
             GameObject voiceReceiverPrefab = Instantiate(VoiceReceiverPrefab);
             clients.Add(id, voiceReceiverPrefab);
             clientsLastHeartbeat.Add(id, Time.time);
-            // Start plaback the voice of the user with the id
+            // Play back the voice of the client with this id.
             voiceReceiverPrefab.GetComponent<VoiceReceiver>().StartPlayback((short)id);
         }
         else
         {
-            // Update last heartbeat time
             clientsLastHeartbeat[id] = Time.time;
         }
 

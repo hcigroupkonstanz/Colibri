@@ -3,9 +3,8 @@ using HCIKonstanz.Colibri.Synchronization;
 namespace HCIKonstanz.Colibri.Samples
 {
     /// <summary>
-    /// Instantiates a <see cref="StressModel"/> locally for every one another client creates.
-    /// Without it in the scene, a client would send its own objects perfectly well and show
-    /// nothing at all for the other side's - which under load reads as total message loss.
+    /// Builds a local <see cref="StressModel"/> from <c>Template</c> for each one another client
+    /// creates. Without this component in the scene, remote objects do not appear.
     /// </summary>
     public class StressModelManager : SyncBehaviourManager<StressModel>
     {
