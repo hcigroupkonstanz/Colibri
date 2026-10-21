@@ -4,8 +4,9 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const github = 'https://github.com/hcigroupkonstanz/Colibri';
 
-// The public test server's monitoring page. Decided later; it does not run there yet.
-const monitoring = 'http://colibri.hci.uni-konstanz.de:9211';
+// The monitoring pages of the public test server, one per Colibri version.
+const monitoring = 'https://colibri.hci.uni-konstanz.de/v2/';
+const monitoringV1 = 'https://colibri.hci.uni-konstanz.de/v1/';
 
 const config: Config = {
   title: 'Colibri',
@@ -84,7 +85,15 @@ const config: Config = {
         },
         {type: 'docSidebar', sidebarId: 'serverSidebar', label: 'Server', position: 'left'},
         {type: 'docsVersionDropdown', position: 'right'},
-        {href: monitoring, label: 'Public Server', position: 'right'},
+        {
+          type: 'dropdown',
+          label: 'Public Server',
+          position: 'right',
+          items: [
+            {href: monitoring, label: 'Colibri 2'},
+            {href: monitoringV1, label: 'Colibri 1'},
+          ],
+        },
         {href: github, label: 'GitHub', position: 'right'},
       ],
     },
@@ -102,7 +111,8 @@ const config: Config = {
           title: 'Server',
           items: [
             {label: 'Installation', to: '/server/installation'},
-            {label: 'Monitoring of the public server', href: monitoring},
+            {label: 'Public server (Colibri 2)', href: monitoring},
+            {label: 'Public server (Colibri 1)', href: monitoringV1},
           ],
         },
         {

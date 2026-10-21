@@ -11,7 +11,7 @@ void (async () => {
     new RemoteLogger(true);
 
     // visit the web interface at http://<YOUR_COLIBRI_SERVER>:9211 to see the logs
-    // in this case: http://colibri.hci.uni-konstanz.de:9211
+    // for the public test server: https://colibri.hci.uni-konstanz.de/v2/
     console.log('Hello world!');
     console.info('This is an information');
     console.debug('This is a debug message', { foo: 'bar' });
