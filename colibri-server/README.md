@@ -3,7 +3,7 @@
 Server for Colibri. It passes messages and synchronized objects between the Unity and web clients of each app,
 provides the data store and voice chat, and shows a monitoring page in the browser.
 
-[Full documentation](https://colibri.hci.uni-konstanz.de/server/installation)
+Documentation: [colibri.hci.uni-konstanz.de](https://colibri.hci.uni-konstanz.de/server/installation)
 
 Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 

@@ -3,7 +3,7 @@
 TypeScript client for Colibri supporting messages between clients, synchronized objects, data store and monitoring.
 Voice chat is currently not supported on the web.
 
-[Full documentation](https://colibri.hci.uni-konstanz.de/web/installation)
+Documentation: [colibri.hci.uni-konstanz.de](https://colibri.hci.uni-konstanz.de/web/installation)
 
 Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 

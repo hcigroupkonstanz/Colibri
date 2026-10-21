@@ -4,6 +4,8 @@
 
 Colibri synchronizes objects and data between apps for fast cross-reality prototyping in research.
 
+Documentation: [colibri.hci.uni-konstanz.de](https://colibri.hci.uni-konstanz.de/)
+
 ## Supported platforms
 
 | Platform | Client |

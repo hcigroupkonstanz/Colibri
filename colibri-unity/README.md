@@ -2,7 +2,7 @@
 
 Unity client for Colibri supporting messages between clients, synchronized objects, data store, monitoring, and voice chat.
 
-[Full documentation](https://colibri.hci.uni-konstanz.de/unity/installation)
+Documentation: [colibri.hci.uni-konstanz.de](https://colibri.hci.uni-konstanz.de/unity/installation)
 
 Upgrading from Colibri 1.x: [Migration Guide](../MIGRATION.md).
 
