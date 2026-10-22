@@ -1,5 +1,4 @@
-﻿#if UNITY_EDITOR
-using UnityEditor;
+﻿using UnityEditor;
 using UnityEngine;
 using System.Linq;
 using System;
@@ -44,4 +43,3 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
     }
 }
-#endif

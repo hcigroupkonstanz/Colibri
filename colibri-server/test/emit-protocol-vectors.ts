@@ -50,7 +50,7 @@ interface VersionLiteral {
 const versionLiterals: VersionLiteral[] = [
     { file: 'colibri-web/src/Colibri.ts', pattern: /export const PROTOCOL_VERSION\s*=\s*'([^']*)'/g },
     {
-        file: 'colibri-unity/Assets/Colibri/Networking/WebServerConnection.cs',
+        file: 'colibri-unity/Assets/Colibri/Runtime/Networking/WebServerConnection.cs',
         pattern: /const string CLIENT_VERSION\s*=\s*"([^"]*)"/g,
     },
     {

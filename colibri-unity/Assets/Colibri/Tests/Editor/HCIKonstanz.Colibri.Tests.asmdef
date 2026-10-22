@@ -3,6 +3,7 @@
     "rootNamespace": "HCIKonstanz.Colibri.Tests",
     "references": [
         "HCIKonstanz.Colibri",
+        "HCIKonstanz.Colibri.Editor",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System.Linq;
 using HCIKonstanz.Colibri.Networking;
 using HCIKonstanz.Colibri.Synchronization;
@@ -326,4 +325,3 @@ namespace HCIKonstanz.Colibri.Setup
         }
     }
 }
-#endif
