@@ -246,7 +246,7 @@ namespace HCIKonstanz.Colibri.Tests
             => new JObject { { "id", model.Id }, { "label", label }, { "count", count } };
 
         /// <summary>
-        /// The answer to the request sent after all the others (see Sync.ReconnectRound): the
+        /// The answer to the request sent after all the others (see ReconnectRound): the
         /// answers to the requests made again are all in.
         /// </summary>
         private static void EndOfAnswers()

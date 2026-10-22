@@ -53,9 +53,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         // Parallel to SyncMembers<T>.AttributeList, made lazily: when a member first sends or takes the server's value.
         private SentValues[] _sentValues;
 
-        // The Sync.ReconnectRound the object is in: after a reconnect, or opened at its first answer to
+        // The ReconnectRound the object is in: after a reconnect, or opened at its first answer to
         // keep changes made before it. Null otherwise.
-        private Sync.ReconnectRound _round;
+        private ReconnectRound _round;
 
         // Parallel to SyncMembers<T>.AttributeList: members that keep their local value for the rest of the round, and
         // send it again.
@@ -586,7 +586,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// sends it. <paramref name="round"/> is the round the object is in, or null, and is opened when
         /// a member is kept outside one.
         /// </summary>
-        private void KeepChangesMadeBeforeTheAnswer(JObject answer, ref Sync.ReconnectRound round)
+        private void KeepChangesMadeBeforeTheAnswer(JObject answer, ref ReconnectRound round)
         {
             // A disabled component sends nothing and takes what arrives.
             if (_trackers == null || _isBuiltFromUpdate || _hasReceivedDestroyCommand || !enabled)
@@ -619,7 +619,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         //
         // A change made as the link dropped is lost and the server answers with the value from before it.
         // Applied, that undoes the change here while every other client keeps the old value. So each member of
-        // what arrives in the round (see Sync.ReconnectRound) is judged against the values it sent recently and
+        // what arrives in the round (see ReconnectRound) is judged against the values it sent recently and
         // the one it held before them (SentValues):
         //
         // 1. The value sent last: it arrived, nothing to do.
@@ -637,7 +637,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         // value held before it.
 
         /// <summary>Told by Sync that the model has just been asked for again after a reconnect.</summary>
-        private void OnRequestedAgain(Sync.ReconnectRound round)
+        private void OnRequestedAgain(ReconnectRound round)
         {
             _round = round;
 
@@ -657,7 +657,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// Judges one member of what arrived in the round. True when the server's value is not applied:
         /// the value sent last arrived, or the local value is kept and goes out again.
         /// </summary>
-        private bool KeepsLocalValue(string name, JToken serverValue, Sync.ReconnectRound round)
+        private bool KeepsLocalValue(string name, JToken serverValue, ReconnectRound round)
         {
             if (!SyncMembers<T>.SyncedAttributes.TryGetValue(name, out var attribute))
                 return false;

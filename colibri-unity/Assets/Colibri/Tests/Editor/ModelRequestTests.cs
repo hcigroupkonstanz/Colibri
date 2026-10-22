@@ -105,14 +105,14 @@ namespace HCIKonstanz.Colibri.Tests
         /// <summary>
         /// After the requests made again for a SyncBehaviour's object, on every channel, one more
         /// goes out, for an id no model has: the server answers a client's requests in the order
-        /// they came, so its answer marks the end of theirs. See Sync.ReconnectRound.
+        /// they came, so its answer marks the end of theirs. See ReconnectRound.
         /// </summary>
         [Test]
         public void TheRequestsMadeAgainForObjectsAreFollowedByOneWhoseAnswerEndsThem()
         {
             var doors = NewChannel();
             var windows = NewChannel();
-            Sync.ReconnectRound told = null;
+            ReconnectRound told = null;
             Action<JObject> door = _ => { };
             Action<JObject> window = _ => { };
             Sync.AddModelUpdateListener(doors, door, "door", round => told = round);
@@ -374,7 +374,7 @@ namespace HCIKonstanz.Colibri.Tests
         }
 
         /// <summary>
-        /// The answer to the request sent after all the others (see Sync.ReconnectRound): the
+        /// The answer to the request sent after all the others (see ReconnectRound): the
         /// answers to the requests made again are all in.
         /// </summary>
         private static void EndOfAnswers()
