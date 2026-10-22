@@ -7,6 +7,10 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 end_of_line = lf
 
+# Unity writes trailing spaces in its YAML files
+[*.{meta,asset,prefab,unity,mat}]
+trim_trailing_whitespace = false
+
 [*.{json,asmdef,asmref}]
 indent_style = space
 indent_size = 4
