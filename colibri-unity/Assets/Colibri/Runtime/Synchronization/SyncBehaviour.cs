@@ -44,8 +44,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         // Rate limit (SyncSettings.MaxSendRate), on SyncTicker's clock: when the object may send next, and
         // when it last did. Changes before then wait in _nextUpdate.
-        private double _nextSendTime = double.NegativeInfinity;
-        private double _lastSendTime = double.NegativeInfinity;
+        private readonly SendRateLimiter _sendRate = new SendRateLimiter();
 
         private bool _wasActive;  // activeSelf at the last poll
         private bool _sendAtOnce; // activeSelf changed: goes out past the rate limit
@@ -424,19 +423,8 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (_nextUpdate == null)
                 return null;
 
-            // _nextSendTime was set with the previous interval. A raised MaxSendRate (set from code) shortens
-            // the wait for what is held now; a lowered one applies from the next slot.
-            var due = Math.Min(_nextSendTime, _lastSendTime + interval);
-
-            if (interval > 0 && now < due && !sendAtOnce)
+            if (!_sendRate.TryTake(now, interval, sendAtOnce))
                 return null;
-
-            // The next slot is one interval after the previous slot, not after now: counting from now rounds every
-            // interval up to whole frames (30 Hz at 72 fps becomes 24 Hz). The lateness is carried over only while
-            // the object keeps sending; after a pause or an early send it starts afresh, so no backlog builds up.
-            var late = now - due;
-            _nextSendTime = late >= 0 && late < interval ? due + interval : now + interval;
-            _lastSendTime = now;
 
             var update = _nextUpdate;
             _nextUpdate = null;
