@@ -238,8 +238,7 @@ namespace HCIKonstanz.Colibri.Networking
         // Main thread only: reused by DeliverReceivedMessages from frame to frame.
         private readonly List<InPacket> _delivering = new List<InPacket>();
 
-        private long _lastHeartbeatTime;
-        private long _livenessStamps;
+        private readonly Liveness _liveness = new Liveness();
 
         // Main thread only: the OnMessageReceived value last delivered to, and its invocation list.
         private MessageAction _deliveringTo;
@@ -1376,11 +1375,7 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         // millisAgo is for the tests, which stand in for having heard from the server that long ago.
-        internal void StampLiveness(long millisAgo = 0)
-        {
-            Interlocked.Exchange(ref _lastHeartbeatTime, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - millisAgo);
-            Interlocked.Increment(ref _livenessStamps);
-        }
+        internal void StampLiveness(long millisAgo = 0) => _liveness.Stamp(millisAgo);
 
         /// <summary>
         /// How many times the server has been heard from: it changes whenever
@@ -1388,14 +1383,14 @@ namespace HCIKonstanz.Colibri.Networking
         /// clock when the server was last heard from (Sync.LastHeardAt), which the system clock behind the
         /// heartbeat times need not keep pace with.
         /// </summary>
-        internal long LivenessStamps => Interlocked.Read(ref _livenessStamps);
+        internal long LivenessStamps => _liveness.Stamps;
 
         /// <summary>
         /// How long ago the server was last heard from. Not a round-trip latency: the heartbeat carries the
         /// server's own clock, so the client cannot derive an RTT from it. Real latency figures are in the
         /// server's admin UI.
         /// </summary>
-        public long MillisSinceLastHeartbeat() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - Interlocked.Read(ref _lastHeartbeatTime);
+        public long MillisSinceLastHeartbeat() => _liveness.MillisSinceLastHeartbeat();
 
         /// <summary>Server the connection loop is currently using, as configured.</summary>
         public string ServerAddress => _serverAddress;
