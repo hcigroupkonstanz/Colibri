@@ -1,6 +1,7 @@
 # colibri-unity development
 
 For developers working on colibri-unity itself. Using Colibri: [README](../../README.md).
+Code conventions: [conventions.md](conventions.md).
 
 ## Running the tests
 
