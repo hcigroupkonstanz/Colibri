@@ -7,6 +7,7 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Networking.Protocol
 {
+    /// <summary>Encodes outgoing message frames, parses received payloads and sanitizes handshake fields.</summary>
     internal static class PayloadCodec
     {
         // The server's ClientLogger (client-logger.ts) reads this payload with asString(), so it goes out as

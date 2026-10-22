@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>Resolves the server host to the IP addresses to try, in order, and divides the connect time among them.</summary>
     internal static class AddressResolver
     {
         // Least time one address gets when several are tried in turn (see AttemptTimeoutMs), so a name with

@@ -9,6 +9,10 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>
+    /// The [Sync] members of a <see cref="SyncBehaviour{T}"/> type: found by reflection once per type,
+    /// with typed accessors and change trackers.
+    /// </summary>
     internal static class SyncMembers<T>
         where T : SyncBehaviour<T>
     {

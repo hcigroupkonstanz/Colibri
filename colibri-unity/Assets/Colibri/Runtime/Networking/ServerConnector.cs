@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>Opens a <see cref="ServerSession"/>: name lookup, TCP connect and, with TLS, the handshake.</summary>
     internal static class ServerConnector
     {
         /// <summary>

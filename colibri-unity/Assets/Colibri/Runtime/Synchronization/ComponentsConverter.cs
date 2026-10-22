@@ -5,6 +5,10 @@ using Newtonsoft.Json.Linq;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>
+    /// Base of the converters for Vector, Quaternion and Color: writes the components as an array, reads an
+    /// array or an object of named components.
+    /// </summary>
     // Non-generic JsonConverter so that it also takes TValue?.
     internal abstract class ComponentsConverter<TValue> : JsonConverter
         where TValue : struct

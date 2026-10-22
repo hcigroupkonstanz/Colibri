@@ -4,6 +4,7 @@ using UnityEditor.Build.Reporting;
 
 namespace HCIKonstanz.Colibri.Setup
 {
+    // Logs the issues AndroidSettingsCheck finds when a build starts.
     // Warns only: the build goes ahead regardless.
     internal sealed class AndroidSettingsBuildCheck : IPreprocessBuildWithReport
     {

@@ -1,5 +1,6 @@
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>Maps C# names to their names on the wire.</summary>
     internal static class WireName
     {
         /// <summary>The wire name of a C# name, for a model type or a [Sync] member.</summary>

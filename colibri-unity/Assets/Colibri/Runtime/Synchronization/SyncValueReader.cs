@@ -5,6 +5,7 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>Reads a received JSON value as the C# type of a [Sync] member.</summary>
     internal static class SyncValueReader
     {
         internal static readonly object UnsupportedValue = new object();

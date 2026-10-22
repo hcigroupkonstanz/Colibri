@@ -10,6 +10,7 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>Connects to the first of several server addresses that answers.</summary>
     internal static class ConnectRace
     {
         // How often WaitForConnectAsync checks whether the socket was closed, which Mono does not report by itself.

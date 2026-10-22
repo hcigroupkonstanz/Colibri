@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>Model commands in the connection's queues: which messages may be dropped, and which updates fold into a queued one.</summary>
     internal static class ModelCommands
     {
         private const string MODEL_REQUEST_COMMAND = "model::request";
