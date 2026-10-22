@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using HCIKonstanz.Colibri.Core;
 using HCIKonstanz.Colibri.Networking;
+using HCIKonstanz.Colibri.Networking.Protocol;
 using HCIKonstanz.Colibri.Synchronization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -302,7 +303,7 @@ namespace HCIKonstanz.Colibri.Tests
          */
 
         /// <summary>The payload as the connection hands it on when it arrives on the socket.</summary>
-        private static JToken AsReceived(string json) => WebServerConnection.ParsePayload(Encoding.UTF8.GetBytes(json));
+        private static JToken AsReceived(string json) => PayloadCodec.ParsePayload(Encoding.UTF8.GetBytes(json));
 
         private void Register<T>(string channel, Action<T> listener)
         {

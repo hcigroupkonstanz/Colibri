@@ -240,7 +240,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         // The value as a client reads it off the wire: written as the connection writes it, read back
-        // as it reads payloads, dates left as strings (see WebServerConnection.ParsePayload). A float
+        // as it reads payloads, dates left as strings (see PayloadCodec.ParsePayload). A float
         // member's 0.1f is held as a float, which is not the double 0.1 the server's answer reads as.
         private static JToken ToWireForm(JToken value)
         {

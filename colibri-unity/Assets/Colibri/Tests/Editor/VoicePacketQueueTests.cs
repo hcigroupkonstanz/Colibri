@@ -279,7 +279,7 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(VoicePacketCodec.TryDecode(packet, out var appId, out _), Is.True);
 
             // The app field as the server reads it out of the handshake frame.
-            var handshake = new FrameReader().Append(FrameCodec.EncodeHandshake("2", WebServerConnection.HandshakeAppName(appName), "device"));
+            var handshake = new FrameReader().Append(FrameCodec.EncodeHandshake("2", PayloadCodec.HandshakeAppName(appName), "device"));
             Assert.That(handshake.Count, Is.EqualTo(1));
             var handshakeApp = handshake[0].App;
 

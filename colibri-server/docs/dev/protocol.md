@@ -305,7 +305,7 @@ API. Unity routes the two commands to separate listener lists, so a Unity client
 from web clients with `Sync.Receive<float>`. colibri-web's `receiveNumber` listens for both commands.
 
 **The `log` channel is not JSON.** `ClientLogger` treats its payload as text, so colibri-unity sends it
-as raw UTF-8 (`WebServerConnection.EncodePayload`). The server unwraps a JSON string value before
+as raw UTF-8 (`PayloadCodec.EncodePayload`). The server unwraps a JSON string value before
 logging it, so a web client's log line reaches the admin UI without JSON quotes.
 
 ### Frame parsing
