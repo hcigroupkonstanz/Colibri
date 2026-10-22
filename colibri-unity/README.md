@@ -124,7 +124,7 @@ without any code, e.g. for a shared 3D object that one user moves and all others
 - Add `SyncTransform` to a GameObject to sync its active state, position, rotation and scale.
 - Late joiners receive the current state. The server discards the state when the app's last client disconnects.
 - Move an object from one client at a time. Concurrent updates make it jitter.
-- For dynamically created objects (instantiated at runtime), add the `[SyncTransformManager]` prefab from `Packages/Colibri/Prefabs/`
+- For dynamically created objects (instantiated at runtime), add the `[SyncTransformManager]` prefab from `Packages/Colibri/Runtime/Prefabs/`
   to the scene and set its `Template` to the object's prefab. Give the prefab a `ModelId` and leave its `Id`
   empty.
 - Physics:
@@ -174,7 +174,7 @@ another client creates a `Player`, the manager creates the copy on this client f
 
 The server's web page at `http://<server-address>:9211` shows the connected clients with their latency and
 throughput, and the synchronized objects. To also see a client's Unity console log there, add the
-`[RemoteLogger]` prefab from `Packages/Colibri/Prefabs/` to the scene. This needs no code and is the
+`[RemoteLogger]` prefab from `Packages/Colibri/Runtime/Prefabs/` to the scene. This needs no code and is the
 easiest way to read the log of an app built on a smartphone or head-mounted display.
 
 ### Data store

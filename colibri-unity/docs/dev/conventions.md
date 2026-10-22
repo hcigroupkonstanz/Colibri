@@ -38,14 +38,16 @@ Checked by the metrics report. Exceeding one needs a reason in review.
 
 ## Namespaces
 
-- Namespaces follow the folders under `HCIKonstanz.Colibri`.
+- Namespaces follow the feature folders under `HCIKonstanz.Colibri`.
+- `Runtime/` and `Editor/` are assembly roots, not namespace segments. Editor code keeps the namespace of its feature folder, e.g. `HCIKonstanz.Colibri.Setup`.
+- No namespace named `Editor`. It would shadow `UnityEditor.Editor`.
 - Nothing in the global namespace.
 
 ## Package layout
 
 - Unity's package layout: `Runtime/`, `Editor/`, `Tests/Editor/`, `Samples~/`.
 - One asmdef per folder: `HCIKonstanz.Colibri`, `HCIKonstanz.Colibri.Editor`, `HCIKonstanz.Colibri.Tests`.
-- Exception: the PlayMode/E2E tests stay in the development project (`colibri-unity/Assets/Tests`, assembly `Colibri.E2E`), because they need a running colibri-server.
+- Exception: the PlayMode/E2E tests stay in the development project (`colibri-unity/Assets/Tests`, assembly `HCIKonstanz.Colibri.E2E`), because they need a running colibri-server.
 
 ## Style
 

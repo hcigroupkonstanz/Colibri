@@ -3,6 +3,8 @@
 Colibri 2 does not work with Colibri 1. A Colibri 2 server refuses Colibri 1 clients, and a Colibri 2 Unity client
 cannot connect to a Colibri 1 server. Upgrade the server and all clients together.
 
+Already on Colibri 2.0? See [Unity package 2.0 to 2.1](#unity-package-20-to-21).
+
 ## Checklist
 
 1. [Upgrade the server](#server)
@@ -198,3 +200,14 @@ Where you meant that, e.g. when a component unmounts, call `detach()` instead.
    names match.
 3. **Look at the server's monitoring page** at `http://<server-address>:9211`. It lists every connected client. A
    client still on Colibri 1 is named in the log with the reason it was refused.
+
+## Unity package 2.0 to 2.1
+
+1. **`Codec` and `VoicePacket` are in a namespace.** If your code uses them, add
+   `using HCIKonstanz.Colibri.Communication.Codecs;` for `Codec` and `using HCIKonstanz.Colibri.Networking;` for
+   `VoicePacket`. Before, both were in the global namespace.
+2. **Seven types are internal.** `Resampler`, `SamplingUtility`, `Opus`, `OpusEncoder`, `OpusDecoder`, `OpusError`
+   and `OpusApplication` are no longer available to your code.
+3. **Files moved.** The package now has the folders `Runtime/` and `Editor/`, e.g. the prefabs are in
+   `Packages/Colibri/Runtime/Prefabs/`. GUIDs are unchanged, so references in scenes and prefabs keep working. Update
+   only paths written in code, e.g. in editor scripts or `AssetDatabase` lookups.

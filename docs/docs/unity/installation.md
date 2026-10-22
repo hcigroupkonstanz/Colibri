@@ -76,7 +76,7 @@ are part of your project and your builds.
 With the `.unitypackage`, the samples are already in `Assets/Samples/Colibri/<version>/`.
 
 The `[RemoteLogger]` and `[SyncTransformManager]` prefabs are part of the package, not of the samples. Drag them
-from `Packages/Colibri/Prefabs/` in the Project window into your scene.
+from `Packages/Colibri/Runtime/Prefabs/` in the Project window into your scene.
 
 ### TextMeshPro resources
 
