@@ -602,7 +602,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// </remarks>
         internal void EnqueueReceived(string channel, string command, JToken payload, CancellationToken token = default)
         {
-            var canDrop = IsDroppable(command);
+            var canDrop = ModelCommands.IsDroppable(command);
 
             lock (_queuedCommandsLock)
             {
@@ -614,7 +614,7 @@ namespace HCIKonstanz.Colibri.Networking
                 if (!_isReceivedBacklog && _queuedCommands.Count >= RECEIVED_FOLDING_THRESHOLD)
                     _isReceivedBacklog = true;
 
-                if (_isReceivedBacklog && IsFoldableUpdate(command, payload, out var update, out var id))
+                if (_isReceivedBacklog && ModelCommands.IsFoldableUpdate(command, payload, out var update, out var id))
                 {
                     var key = (channel, id);
                     if (_queuedReceivedUpdates.TryGetValue(key, out var queued))
@@ -651,24 +651,10 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        private static bool IsFoldableUpdate(string command, JToken payload, out JObject update, out string id)
-        {
-            if (command != MODEL_UPDATE_COMMAND || !TryGetModelId(payload, out update, out id))
-            {
-                update = null;
-                id = null;
-                return false;
-            }
-
-            // A bare { id } is the server's answer to a request for a model it does not hold, which
-            // SyncBehaviour acts on as such. Folded into an update with members, it would be lost.
-            return update.Count > 1;
-        }
-
         // Under _queuedCommandsLock.
         private void StopFoldingReceived(string channel, JToken payload)
         {
-            if (TryGetModelId(payload, out _, out var id))
+            if (ModelCommands.TryGetModelId(payload, out _, out var id))
             {
                 _queuedReceivedUpdates.Remove((channel, id));
                 return;
@@ -706,7 +692,7 @@ namespace HCIKonstanz.Colibri.Networking
 
             var packet = victim.Value;
             if (!packet.CanDrop
-                && TryGetModelId(packet.Payload, out _, out var id)
+                && ModelCommands.TryGetModelId(packet.Payload, out _, out var id)
                 && _queuedReceivedUpdates.TryGetValue((packet.Channel, id), out var indexed)
                 && ReferenceEquals(indexed, victim))
             {
@@ -1599,10 +1585,6 @@ namespace HCIKonstanz.Colibri.Networking
          *  behind it, and reconnecting ends every fold.
          */
 
-        private const string MODEL_REQUEST_COMMAND = "model::request";
-        private const string MODEL_UPDATE_COMMAND = "model::update";
-        private const string MODEL_DELETE_COMMAND = "model::delete";
-
         private sealed class Outgoing
         {
             public byte[] Frame;
@@ -1808,8 +1790,8 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 else
                 {
-                    _outbox.AddLast(new Outgoing { Frame = frame, Sent = sent, CanDrop = IsDroppable(command) });
-                    if (IsDroppable(command))
+                    _outbox.AddLast(new Outgoing { Frame = frame, Sent = sent, CanDrop = ModelCommands.IsDroppable(command) });
+                    if (ModelCommands.IsDroppable(command))
                         _droppableCount++;
 
                     if (!_isDraining)
@@ -1895,7 +1877,7 @@ namespace HCIKonstanz.Colibri.Networking
         private void Queue(string channel, string command, JToken payload, byte[] frame, TaskCompletionSource<bool> sent)
         {
             // Only what nobody awaits is folded: each awaited task has to complete for its own message.
-            if (sent == null && command == MODEL_UPDATE_COMMAND && TryGetModelId(payload, out var update, out var id))
+            if (sent == null && command == ModelCommands.MODEL_UPDATE_COMMAND && ModelCommands.TryGetModelId(payload, out var update, out var id))
             {
                 var key = (channel, id);
 
@@ -1922,7 +1904,7 @@ namespace HCIKonstanz.Colibri.Networking
                 return;
             }
 
-            var canDrop = IsDroppable(command);
+            var canDrop = ModelCommands.IsDroppable(command);
             if (!canDrop)
                 StopFolding(channel, payload);
 
@@ -1938,7 +1920,7 @@ namespace HCIKonstanz.Colibri.Networking
         // server then answers without them.
         private void StopFolding(string channel, JToken payload)
         {
-            if (TryGetModelId(payload, out _, out var id))
+            if (ModelCommands.TryGetModelId(payload, out _, out var id))
             {
                 _queuedModelUpdates.Remove((channel, id));
                 return;
@@ -1959,21 +1941,6 @@ namespace HCIKonstanz.Colibri.Networking
                 foreach (var key in onChannel)
                     _queuedModelUpdates.Remove(key);
             }
-        }
-
-        private static bool IsDroppable(string command)
-            => command != MODEL_REQUEST_COMMAND && command != MODEL_UPDATE_COMMAND && command != MODEL_DELETE_COMMAND;
-
-        private static bool TryGetModelId(JToken payload, out JObject update, out string id)
-        {
-            update = payload as JObject;
-            id = null;
-
-            if (update == null || !(update["id"] is JValue value) || value.Type != JTokenType.String)
-                return false;
-
-            id = (string)value;
-            return true;
         }
 
         /// <summary>
