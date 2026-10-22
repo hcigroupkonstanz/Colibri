@@ -2,7 +2,6 @@ using System;
 using System.Globalization;
 using System.Net.Security;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 namespace HCIKonstanz.Colibri.Networking
@@ -204,116 +203,6 @@ namespace HCIKonstanz.Colibri.Networking
             return $"{problems}. Use a certificate from a certificate authority this device trusts, or, for a self-signed "
                 + "certificate, tick 'Allow self-signed certificate' or enter the certificate's fingerprint "
                 + $"({certificate.Fingerprint}) as 'Server certificate SHA-256' in the Colibri configuration";
-        }
-    }
-
-    /// <summary>What <see cref="ServerCertificatePolicy"/> needs to know about a certificate, read once.</summary>
-    internal readonly struct ServerCertificate
-    {
-        /// <summary>As <see cref="ServerCertificatePolicy.Fingerprint"/> writes it; null for no certificate.</summary>
-        public readonly string Fingerprint;
-
-        /// <summary>Whether the dates and <see cref="IsSelfIssued"/> could be read.</summary>
-        public readonly bool IsKnown;
-
-        public readonly DateTime NotBeforeUtc;
-        public readonly DateTime NotAfterUtc;
-
-        /// <summary>Subject equals issuer.</summary>
-        public readonly bool IsSelfIssued;
-
-        public ServerCertificate(string fingerprint, DateTime notBeforeUtc, DateTime notAfterUtc, bool isSelfIssued)
-        {
-            Fingerprint = fingerprint;
-            IsKnown = true;
-            NotBeforeUtc = notBeforeUtc;
-            NotAfterUtc = notAfterUtc;
-            IsSelfIssued = isSelfIssued;
-        }
-
-        private ServerCertificate(string fingerprint)
-        {
-            Fingerprint = fingerprint;
-            IsKnown = false;
-            NotBeforeUtc = default;
-            NotAfterUtc = default;
-            IsSelfIssued = false;
-        }
-
-        /// <summary>
-        /// Reads a certificate as the TLS stack hands it over. If its dates or names cannot be read,
-        /// only the fingerprint is set.
-        /// </summary>
-        public static ServerCertificate From(X509Certificate certificate)
-        {
-            if (certificate == null)
-                return new ServerCertificate(null);
-
-            var fingerprint = ServerCertificatePolicy.Fingerprint(certificate.GetRawCertData());
-            try
-            {
-                var full = certificate as X509Certificate2 ?? new X509Certificate2(certificate);
-                return new ServerCertificate(fingerprint, full.NotBefore.ToUniversalTime(), full.NotAfter.ToUniversalTime(),
-                    full.Subject == full.Issuer);
-            }
-            catch (Exception)
-            {
-                return new ServerCertificate(fingerprint);
-            }
-        }
-    }
-
-    /// <summary>The certificate check of one TLS handshake. Keeps the outcome for the log.</summary>
-    internal sealed class ServerCertificateCheck
-    {
-        private readonly string _host;
-        private readonly bool _allowSelfSigned;
-        private readonly string _pin;
-
-        internal ServerCertificateCheck(string host, bool allowSelfSigned, string pin)
-        {
-            _host = host;
-            _allowSelfSigned = allowSelfSigned;
-            _pin = pin;
-        }
-
-        /// <summary><see cref="ServerCertificatePolicy.Verdict.Rejected"/> until the server's certificate was seen.</summary>
-        internal ServerCertificatePolicy.Verdict Verdict { get; private set; } = ServerCertificatePolicy.Verdict.Rejected;
-
-        /// <summary>Fingerprint of the certificate the server presented, or null.</summary>
-        internal string Fingerprint { get; private set; }
-
-        /// <summary>For <see cref="ServerCertificatePolicy.Verdict.AcceptedUntrusted"/>: what the system found wrong.</summary>
-        internal string Problems { get; private set; }
-
-        /// <summary>Why the certificate was rejected, or null if it was not (or not seen at all).</summary>
-        internal string Rejection { get; private set; }
-
-        /// <summary>The <see cref="RemoteCertificateValidationCallback"/> of the handshake.</summary>
-        internal bool Validate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors errors)
-        {
-            // An exception escaping here would fail the handshake with an error that does not mention the certificate.
-            try
-            {
-                var seen = ServerCertificate.From(certificate);
-                var now = DateTime.UtcNow;
-
-                Fingerprint = seen.Fingerprint;
-                Verdict = ServerCertificatePolicy.Decide(errors, seen.Fingerprint, _allowSelfSigned, _pin);
-
-                if (Verdict == ServerCertificatePolicy.Verdict.Rejected)
-                    Rejection = ServerCertificatePolicy.ExplainRejection(errors, seen, _host, _allowSelfSigned, _pin, now);
-                else if (Verdict == ServerCertificatePolicy.Verdict.AcceptedUntrusted)
-                    Problems = ServerCertificatePolicy.DescribeProblems(errors, seen, _host, now);
-
-                return Verdict != ServerCertificatePolicy.Verdict.Rejected;
-            }
-            catch (Exception e)
-            {
-                Verdict = ServerCertificatePolicy.Verdict.Rejected;
-                Rejection = $"it could not be checked ({e.GetType().Name}: {e.Message})";
-                return false;
-            }
         }
     }
 }

@@ -21,13 +21,6 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Networking
 {
     /// <summary>
-    /// <see cref="ConnectionStatus.ProtocolMismatch"/> is terminal: unlike
-    /// <see cref="ConnectionStatus.Disconnected"/> it is not followed by another attempt, since retrying
-    /// cannot fix a version mismatch.
-    /// </summary>
-    public enum ConnectionStatus { Connected, Disconnected, Connecting, Reconnecting, ProtocolMismatch };
-
-    /// <summary>
     /// TCP connection to a colibri-server, speaking the v3 binary protocol
     /// (see <see cref="Protocol.FrameCodec"/> and <c>colibri-server/docs/dev/protocol.md</c>).
     /// Requires colibri-server >= 2.0.0; the server accepts exactly one protocol version, so there
