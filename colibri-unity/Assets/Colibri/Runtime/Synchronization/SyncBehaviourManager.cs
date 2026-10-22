@@ -67,13 +67,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 .Where(o => o.ModelId == Template?.ModelId || (Template == null && String.IsNullOrEmpty(o.ModelId)))
                 .ToArray();
             _existingObjects.AddRange(existingBehaviours);
-
-            foreach (var dormant in UnityCompat.FindAll<T>(FindObjectsInactive.Include))
-            {
-                if (!dormant.HasAwoken && dormant != Template && !String.IsNullOrEmpty(dormant.Id)
-                    && (dormant.ModelId == Template?.ModelId || (Template == null && String.IsNullOrEmpty(dormant.ModelId))))
-                    _dormantObjects[dormant.Id] = dormant;
-            }
+            AddDormantObjects();
 
             foreach (var existingBehaviour in existingBehaviours)
                 existingBehaviour.TriggerSync();
@@ -85,6 +79,21 @@ namespace HCIKonstanz.Colibri.Synchronization
             SyncBehaviour<T>.ModelCreated += OnModelCreated;
             SyncBehaviour<T>.ModelDestroyed += OnModelDestroyed;
 
+            WarnOnModelIdOverlap();
+        }
+
+        private void AddDormantObjects()
+        {
+            foreach (var dormant in UnityCompat.FindAll<T>(FindObjectsInactive.Include))
+            {
+                if (!dormant.HasAwoken && dormant != Template && !String.IsNullOrEmpty(dormant.Id)
+                    && (dormant.ModelId == Template?.ModelId || (Template == null && String.IsNullOrEmpty(dormant.ModelId))))
+                    _dormantObjects[dormant.Id] = dormant;
+            }
+        }
+
+        private void WarnOnModelIdOverlap()
+        {
             // Avoid potential ModelId overlaps
             var hasConflict = UnityCompat.FindAll(GetType())
                 .Where(o => o != this)
@@ -92,6 +101,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (hasConflict)
                 Debug.LogWarning($"Warning: Multiple instances of '{GetType().FullName}' detected with overlapping ModelID. Please only use one manager for each synced model or specify unique ModelID!");
         }
+
         private void StopListening()
         {
             if (!_isListening)
@@ -161,25 +171,39 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (StoppedListening())
                 return;
             var id = data["id"].Value<string>();
-            if (_existingObjects.Any(t => t.Id == id))
+            if (IsKnownOrSuppressed(id, out var anchorId))
                 return;
+            if (TryWakeDormant(id, data))
+                return;
+            if (!CanBuild(id, anchorId))
+                return;
+            BuildCopy(id, anchorId, data);
+        }
+
+        private bool IsKnownOrSuppressed(string id, out string anchorId)
+        {
+            anchorId = null;
+            if (_existingObjects.Any(t => t.Id == id))
+                return true;
 
             // A remote update sent before the server had this client's delete. Building from it would bring
             // the object back with template values for every member the update lacks.
             if (LocallyDeletedModels.Contains(Channel, id) || _unbuildable.Contains(id))
-                return;
+                return true;
 
             // Live already: placed in the scene, or built with the object it is part of (it requests its own state).
             if (SyncedIds.IsLive(id))
-                return;
+                return true;
 
             // A part below an object's anchor (an avatar's hand) builds the whole object, from the anchor's id.
             // Not if that object exists already, live or placed and inactive, even without this part.
-            var anchorId = SyncedIds.AnchorOfPart(id, prefix => SyncedIds.IsLive(prefix) || _dormantObjects.ContainsKey(prefix)
+            anchorId = SyncedIds.AnchorOfPart(id, prefix => SyncedIds.IsLive(prefix) || _dormantObjects.ContainsKey(prefix)
                 || (Template && SyncedIds.TemplateHasPart(Template, typeof(T), prefix, id)));
-            if (anchorId != null && (SyncedIds.IsLive(anchorId) || _dormantObjects.ContainsKey(anchorId)))
-                return;
+            return anchorId != null && (SyncedIds.IsLive(anchorId) || _dormantObjects.ContainsKey(anchorId));
+        }
 
+        private bool TryWakeDormant(string id, JObject data)
+        {
             // A placed object that is inactive here. A remote update with active: true (SyncTransform) switches it
             // on, if its parent is active, and applies. Any other update is dropped: it requests its state on waking.
             if (_dormantObjects.TryGetValue(id, out var dormant))
@@ -210,10 +234,14 @@ namespace HCIKonstanz.Colibri.Synchronization
                             _existingObjects.Add(dormant);
                         dormant.OnModelUpdate(data);
                     }
-                    return;
+                    return true;
                 }
             }
+            return false;
+        }
 
+        private bool CanBuild(string id, string anchorId)
+        {
             // No Template is normal for a manager of placed objects: warn once, and only for a model it
             // would have to build.
             if (!Template)
@@ -225,7 +253,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                         + "which is not in this scene, and has no Template to build it from. Assign a Template to build "
                         + "the objects other clients create.");
                 }
-                return;
+                return false;
             }
 
             // A part of another client's object that the Template lacks must not be built as an object of its own.
@@ -238,9 +266,13 @@ namespace HCIKonstanz.Colibri.Synchronization
                         + $"another client's object that its Template '{Template.name}' does not have. Use the same prefab on "
                         + "every client.");
                 }
-                return;
+                return false;
             }
+            return true;
+        }
 
+        private void BuildCopy(string id, string anchorId, JObject data)
+        {
             _isCreatingObject = true;
             SyncBehaviour<T>.RemoteModelBeingBuilt = id;
             var prevEnabled = Template.enabled;
@@ -260,16 +292,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 holder = new GameObject("[Colibri copy being built]");
                 holder.SetActive(false);
                 go = Instantiate(Template, holder.transform);
-                var top = go.transform;
-                foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
-                {
-                    var component = (Component)part;
-                    if (ReferenceEquals(component, go))
-                        go.Id = baseId + SyncedIds.Suffix(top, component);
-                    else if (String.IsNullOrEmpty(part.Id))
-                        part.TakeId(baseId + SyncedIds.Suffix(top, component), false);
-                    part.MarkAsCopy();
-                }
+                AssignCopyIds(go, baseId);
 
                 // Out of the holder, where it wakes. A clone of an inactive template never runs Awake (no listener,
                 // no ticker), so it is switched on first. Awake latches the template's values; the update applied
@@ -287,23 +310,13 @@ namespace HCIKonstanz.Colibri.Synchronization
                 var target = go.GetComponentsInChildren<T>(true).FirstOrDefault(p => p.Id == id);
                 if (!target)
                 {
-                    _unbuildable.Add(id);
-                    foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
-                        part.MarkDiscarded();
-                    Destroy(go.gameObject);
-                    Debug.LogError($"Colibri: '{GetType().FullName}' cannot build '{id}', another client's {typeof(T).Name}: the copy "
-                        + "took another Id as it woke. A model script must not set Id in Awake when it has one already, "
-                        + "e.g. 'if (string.IsNullOrEmpty(Id)) Id = ...;'.");
+                    DiscardCopy(go, id);
                     return;
                 }
 
                 // Known before the update is applied, so a throw there cannot build a second object. Includes
                 // the clone's other parts of this type; they request their own state.
-                foreach (var part in go.GetComponentsInChildren<T>(true))
-                {
-                    if (part.ModelId == Template.ModelId && !_existingObjects.Contains(part))
-                        _existingObjects.Add(part);
-                }
+                RegisterCopyParts(go);
                 target.OnModelUpdate(data);
             }
             finally
@@ -316,6 +329,40 @@ namespace HCIKonstanz.Colibri.Synchronization
                 Template.enabled = prevEnabled;
                 _isCreatingObject = false;
                 SyncBehaviour<T>.RemoteModelBeingBuilt = null;
+            }
+        }
+
+        private static void AssignCopyIds(T go, string baseId)
+        {
+            var top = go.transform;
+            foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
+            {
+                var component = (Component)part;
+                if (ReferenceEquals(component, go))
+                    go.Id = baseId + SyncedIds.Suffix(top, component);
+                else if (String.IsNullOrEmpty(part.Id))
+                    part.TakeId(baseId + SyncedIds.Suffix(top, component), false);
+                part.MarkAsCopy();
+            }
+        }
+
+        private void DiscardCopy(T go, string id)
+        {
+            _unbuildable.Add(id);
+            foreach (var part in go.GetComponentsInChildren<ISyncedObject>(true))
+                part.MarkDiscarded();
+            Destroy(go.gameObject);
+            Debug.LogError($"Colibri: '{GetType().FullName}' cannot build '{id}', another client's {typeof(T).Name}: the copy "
+                + "took another Id as it woke. A model script must not set Id in Awake when it has one already, "
+                + "e.g. 'if (string.IsNullOrEmpty(Id)) Id = ...;'.");
+        }
+
+        private void RegisterCopyParts(T go)
+        {
+            foreach (var part in go.GetComponentsInChildren<T>(true))
+            {
+                if (part.ModelId == Template.ModelId && !_existingObjects.Contains(part))
+                    _existingObjects.Add(part);
             }
         }
 
