@@ -85,7 +85,7 @@ namespace HCIKonstanz.Colibri.Tests
             _disposables.Add(goneSocket);
 
             // Never connected, so it gets a stream that refuses every write.
-            var goneSession = new WebServerConnection.Session(goneSocket, new System.IO.MemoryStream(Array.Empty<byte>(), false));
+            var goneSession = new ServerSession(goneSocket, new System.IO.MemoryStream(Array.Empty<byte>(), false));
 
             _connection.SendLock.Wait();
             try
@@ -298,7 +298,7 @@ namespace HCIKonstanz.Colibri.Tests
                 listener.Stop();
             }
 
-            _connection.OpenOutbox(WebServerConnection.Session.Plain(endedClient), EndedLoop());
+            _connection.OpenOutbox(ServerSession.Plain(endedClient), EndedLoop());
             _connection.SendCommand(Channel, "broadcast::int", 1);
 
             Assert.That(endedServer.Poll(300 * 1000, SelectMode.SelectRead), Is.False, "A message went out on the ended loop's session");
@@ -379,7 +379,7 @@ namespace HCIKonstanz.Colibri.Tests
 
             var session = new CancellationTokenSource();
             _disposables.Add(session);
-            _connection.OpenOutbox(WebServerConnection.Session.Plain(client), session.Token);
+            _connection.OpenOutbox(ServerSession.Plain(client), session.Token);
             return server;
         }
 

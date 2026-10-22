@@ -213,34 +213,8 @@ namespace HCIKonstanz.Colibri.Networking
 
         private sealed class PendingEcho
         {
-            public Session Session;
+            public ServerSession Session;
             public byte[] Frame;
-        }
-
-        /// <summary>
-        /// One connection to the server: its socket, and the stream frames are read from and written to (the
-        /// socket's <see cref="NetworkStream"/>, or an <see cref="SslStream"/> over it). Closing the socket
-        /// ends the session and fails whatever is reading or writing.
-        /// </summary>
-        internal sealed class Session
-        {
-            public readonly Socket Socket;
-            public readonly Stream Stream;
-
-            // The server address the socket is connected to, for the log; null in the tests' sessions.
-            public readonly IPAddress Address;
-
-            public Session(Socket socket, Stream stream, IPAddress address = null)
-            {
-                Socket = socket;
-                Stream = stream;
-                Address = address;
-            }
-
-            /// <summary>A session without TLS on a connected socket. For the EditMode tests.</summary>
-            internal static Session Plain(Socket socket) => new Session(socket, new NetworkStream(socket, false));
-
-            public void Close() => CloseSocket(Socket);
         }
 
         // Every outgoing message in send order, until written to a socket (see "The outbox" below).
@@ -251,7 +225,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         // The session the outbox drains into, and its token. Null while not connected, which makes a send
         // wait in the outbox.
-        private Session _outboxSession;
+        private ServerSession _outboxSession;
         private CancellationToken _outboxToken;
 
         // True while a DrainOutbox is running. Only one runs at a time, which keeps the messages in order.
@@ -1126,7 +1100,7 @@ namespace HCIKonstanz.Colibri.Networking
                 ? new ServerCertificateCheck(host, _allowSelfSignedCertificate, _serverCertificateSha256)
                 : null;
 
-            Session session;
+            ServerSession session;
             try
             {
                 // Every address tried gets a socket of its own. The loop holds the one being tried, so OnDisable and
@@ -1201,7 +1175,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// <exception cref="OperationCanceledException"><paramref name="token"/> was cancelled first.</exception>
         /// <exception cref="ObjectDisposedException">A socket was closed while connecting.</exception>
         /// <exception cref="SocketException">The name does not resolve, or every address failed. See <see cref="ConnectAnyAsync"/> for which error.</exception>
-        internal static async Task<Session> OpenSessionAsync(string host, int port, ServerCertificateCheck tls, int timeoutMs,
+        internal static async Task<ServerSession> OpenSessionAsync(string host, int port, ServerCertificateCheck tls, int timeoutMs,
             Action<Socket> attempting, CancellationToken token)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -1216,11 +1190,11 @@ namespace HCIKonstanz.Colibri.Networking
                 // Does not own the socket: closing it is the one way to end a session, and whoever ends the session does that.
                 var plain = new NetworkStream(socket, false);
                 if (tls == null)
-                    return new Session(socket, plain, address);
+                    return new ServerSession(socket, plain, address);
 
                 remaining = (int)Math.Max(0, timeoutMs - clock.ElapsedMilliseconds);
                 var encrypted = await AuthenticateAsync(socket, plain, host, port, tls, remaining, timeoutMs, token).ConfigureAwait(false);
-                return new Session(socket, encrypted, address);
+                return new ServerSession(socket, encrypted, address);
             }
             catch (Exception)
             {
@@ -1762,7 +1736,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// attempt, fire OnConnected and flush the queue into a session about to fail. A server that says
         /// nothing is dropped by the watchdog in <see cref="Update"/>; a real one heartbeats every 100 ms.
         /// </summary>
-        private void BecomeConnected(Session session, string host, int port, string app, CancellationToken token)
+        private void BecomeConnected(ServerSession session, string host, int port, string app, CancellationToken token)
         {
             // A loop that OnDisable has ended does not connect: Connected, and the outbox, may
             // already be the next loop's.
@@ -1791,7 +1765,7 @@ namespace HCIKonstanz.Colibri.Networking
                 token.ThrowIfCancellationRequested();
         }
 
-        private async Task ReceiveLoop(ConnectionLoop loop, Session session, string host, int port, string app)
+        private async Task ReceiveLoop(ConnectionLoop loop, ServerSession session, string host, int port, string app)
         {
             var token = loop.Token;
             var reader = new FrameReader();
@@ -1946,7 +1920,7 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        private static void CloseSocket(Socket socket)
+        internal static void CloseSocket(Socket socket)
         {
             if (socket == null)
                 return;
@@ -2054,7 +2028,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         // All writes hold _sendLock, so a frame is never interleaved with another frame's bytes. Heartbeat
         // echoes come through EchoHeartbeat, which never waits for the lock, and are written between two frames.
-        private async Task SendFrame(Session session, byte[] frame, CancellationToken token)
+        private async Task SendFrame(ServerSession session, byte[] frame, CancellationToken token)
         {
             await _sendLock.WaitAsync(token).ConfigureAwait(false);
             try
@@ -2073,7 +2047,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         // Under _sendLock. A stream write completes only once the whole frame has been handed to
         // the socket (encrypted first, with TLS), so a frame is never cut short.
-        private static Task WriteAll(Session session, byte[] frame)
+        private static Task WriteAll(ServerSession session, byte[] frame)
             => session.Stream.WriteAsync(frame, 0, frame.Length);
 
         /// <summary>
@@ -2089,7 +2063,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// still receiving its bytes, which is what its idle timeout looks at; a skipped echo only costs it one
         /// latency sample.
         /// </remarks>
-        private void EchoHeartbeat(Session session, ulong pingTimestamp)
+        private void EchoHeartbeat(ServerSession session, ulong pingTimestamp)
         {
             Volatile.Write(ref _pendingEcho, new PendingEcho { Session = session, Frame = FrameCodec.EncodeHeartbeat(pingTimestamp) });
 
@@ -2116,7 +2090,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// and is dropped.
         /// </summary>
         /// <remarks>Never throws: a write that fails closes the socket, which ends the session.</remarks>
-        private async Task WritePendingEcho(Session session)
+        private async Task WritePendingEcho(ServerSession session)
         {
             var echo = Interlocked.Exchange(ref _pendingEcho, null);
             if (echo == null || (session != null && !ReferenceEquals(echo.Session, session)))
@@ -2209,7 +2183,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// Lets the outbox drain into this session. Called once it is Connected, with the token of the loop the
         /// session belongs to: once OnDisable has ended that loop this does nothing.
         /// </summary>
-        internal void OpenOutbox(Session session, CancellationToken token)
+        internal void OpenOutbox(ServerSession session, CancellationToken token)
         {
             bool startDraining;
             lock (_outboxLock)
@@ -2564,7 +2538,7 @@ namespace HCIKonstanz.Colibri.Networking
             {
                 LinkedListNode<Outgoing> node;
                 Outgoing next;
-                Session session;
+                ServerSession session;
                 CancellationToken token;
                 lock (_outboxLock)
                 {

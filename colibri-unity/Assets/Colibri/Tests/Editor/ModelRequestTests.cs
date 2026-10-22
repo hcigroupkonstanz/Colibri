@@ -427,7 +427,7 @@ namespace HCIKonstanz.Colibri.Tests
                 var session = new CancellationTokenSource();
                 _disposables.Add(session);
                 _cleanup.Add(connection.CloseOutbox);
-                connection.OpenOutbox(WebServerConnection.Session.Plain(client), session.Token);
+                connection.OpenOutbox(ServerSession.Plain(client), session.Token);
             }
             finally
             {
