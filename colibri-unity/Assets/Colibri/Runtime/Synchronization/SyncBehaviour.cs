@@ -1,10 +1,6 @@
 using UnityEngine;
-using System.Reflection;
 using System.Collections.Generic;
 using System;
-#if !ENABLE_IL2CPP
-using System.Linq.Expressions;
-#endif
 using Newtonsoft.Json.Linq;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,79 +15,6 @@ namespace HCIKonstanz.Colibri.Synchronization
     public abstract class SyncBehaviour<T> : MonoBehaviour, SyncTicker.ITickable, ISyncedObject
         where T : SyncBehaviour<T>
     {
-        private const string SupportedTypes = "bool, int, float, string, Vector2, Vector3, Quaternion, Color, JObject and arrays of those";
-
-        // Attribute metadata, built once per type. Typed throughout, so the change comparison never boxes.
-
-        private interface IChangeTracker
-        {
-            /// <summary>Latches the current value; true if it differs from the one latched before.</summary>
-            bool CaptureChange(T target);
-
-            /// <summary>Latches the current value without reporting it as a change.</summary>
-            void Latch(T target);
-        }
-
-        private abstract class SyncedAttribute
-        {
-            public string Name;
-
-            /// <summary>The C# name, which <see cref="IsSynced"/> is asked about.</summary>
-            public string MemberName;
-
-            public int Index;
-            public Type PropertyType;
-
-            /// <summary>Boxes, so only call it for a value that is about to be sent.</summary>
-            public abstract object GetBoxed(T target);
-            public abstract void SetBoxed(T target, object value);
-            public abstract IChangeTracker CreateTracker(T target);
-        }
-
-        private sealed class SyncedAttribute<TValue> : SyncedAttribute
-        {
-            public Func<T, TValue> Getter;
-            public Action<T, TValue> Setter;
-
-            public override object GetBoxed(T target) => Getter(target);
-            public override void SetBoxed(T target, object value) => Setter(target, (TValue)value);
-            public override IChangeTracker CreateTracker(T target) => new ChangeTracker<TValue>(Getter, target);
-        }
-
-        private sealed class ChangeTracker<TValue> : IChangeTracker
-        {
-            private static readonly Func<TValue, TValue, bool> AreEqual = SyncValues.EqualityFor<TValue>();
-            private static readonly Func<TValue, TValue> Keep = SyncValues.CopyFor<TValue>();
-
-            private readonly Func<T, TValue> _getter;
-            private TValue _lastValue;
-
-            public ChangeTracker(Func<T, TValue> getter, T target)
-            {
-                _getter = getter;
-                _lastValue = Keep(getter(target));
-            }
-
-            public bool CaptureChange(T target)
-            {
-                var current = _getter(target);
-
-                // Compared as on the wire (see SyncValues). Value types use EqualityComparer<TValue>.Default,
-                // which does not box.
-                if (AreEqual(current, _lastValue))
-                    return false;
-
-                _lastValue = Keep(current);
-                return true;
-            }
-
-            public void Latch(T target)
-            {
-                _lastValue = Keep(_getter(target));
-            }
-        }
-
-
         /// <summary>Raised when an instance registers its model: in Awake, and when it follows an Id change.</summary>
         public static event Action<SyncBehaviour<T>> ModelCreated;
         /// <summary>Raised when an instance leaves its model: in OnDestroy, and when it follows an Id change.</summary>
@@ -99,184 +22,6 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         // The id of the model a SyncBehaviourManager is building from a remote update, while it does; read in Awake.
         internal static string RemoteModelBeingBuilt;
-
-
-        private static readonly Dictionary<string, SyncedAttribute> _syncedAttributes = new Dictionary<string, SyncedAttribute>();
-        private static readonly List<SyncedAttribute> _attributeList = new List<SyncedAttribute>();
-        private static bool _isInitialized = false;
-
-        private static void Initialize()
-        {
-            if (_isInitialized)
-                return;
-
-            _isInitialized = true;
-
-            const BindingFlags memberFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-
-            foreach (var prop in typeof(T).GetProperties(memberFlags))
-                if (prop.IsDefined(typeof(SyncAttribute), true))
-                    RegisterAttribute(prop.Name, prop.PropertyType, prop);
-
-            foreach (var field in typeof(T).GetFields(memberFlags))
-                if (field.IsDefined(typeof(SyncAttribute), true))
-                    RegisterAttribute(field.Name, field.FieldType, field);
-        }
-
-        /// <summary>The wire names of this model type's [Sync] members. Exists for the test suite.</summary>
-        internal static IEnumerable<string> SyncedNames
-        {
-            get
-            {
-                Initialize();
-                return _syncedAttributes.Keys;
-            }
-        }
-
-        private static void RegisterAttribute(string memberName, Type valueType, MemberInfo member)
-        {
-            var name = WireName.Of(memberName);
-
-            // "id" is the model's id on the wire; a member of that name would be sent as the id of every update.
-            if (name == "id")
-            {
-                Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{memberName}': 'id' is the name of the model's own Id. Rename the member.");
-                return;
-            }
-
-            if (_syncedAttributes.ContainsKey(name))
-            {
-                Debug.LogError($"Colibri: '{typeof(T).Name}' has more than one [Sync] member named '{memberName}' (names are matched case-insensitively). Rename one of them.");
-                return;
-            }
-
-            var attribute = BuildAttribute(name, valueType, member);
-            if (attribute == null)
-                return;
-
-            attribute.Index = _attributeList.Count;
-            _attributeList.Add(attribute);
-            _syncedAttributes.Add(name, attribute);
-        }
-
-        // Dispatch by type instead of MakeGenericMethod, so IL2CPP sees every closed instantiation and
-        // compiles it ahead of time.
-        private static SyncedAttribute BuildAttribute(string name, Type valueType, MemberInfo member)
-        {
-            if (valueType == typeof(bool)) return BuildAttribute<bool>(name, member);
-            if (valueType == typeof(int)) return BuildAttribute<int>(name, member);
-            if (valueType == typeof(float)) return BuildAttribute<float>(name, member);
-            if (valueType == typeof(string)) return BuildAttribute<string>(name, member);
-            if (valueType == typeof(Vector2)) return BuildAttribute<Vector2>(name, member);
-            if (valueType == typeof(Vector3)) return BuildAttribute<Vector3>(name, member);
-            if (valueType == typeof(Quaternion)) return BuildAttribute<Quaternion>(name, member);
-            if (valueType == typeof(Color)) return BuildAttribute<Color>(name, member);
-            if (valueType == typeof(bool[])) return BuildAttribute<bool[]>(name, member);
-            if (valueType == typeof(int[])) return BuildAttribute<int[]>(name, member);
-            if (valueType == typeof(float[])) return BuildAttribute<float[]>(name, member);
-            if (valueType == typeof(string[])) return BuildAttribute<string[]>(name, member);
-            if (valueType == typeof(Vector2[])) return BuildAttribute<Vector2[]>(name, member);
-            if (valueType == typeof(Vector3[])) return BuildAttribute<Vector3[]>(name, member);
-            if (valueType == typeof(Quaternion[])) return BuildAttribute<Quaternion[]>(name, member);
-            if (valueType == typeof(Color[])) return BuildAttribute<Color[]>(name, member);
-            if (valueType == typeof(JObject)) return BuildAttribute<JObject>(name, member);
-
-            Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{member.Name}' - [Sync] does not support {valueType.Name}. Supported types are {SupportedTypes}. "
-                + $"For your own classes, sync a JObject: JObject.FromObject(value, ColibriJson.Serializer), and read it back with ToObject<{valueType.Name}>(ColibriJson.Serializer) - "
-                + "ColibriJson can convert the Vector3, Quaternion and Color members that Newtonsoft on its own cannot.");
-            return null;
-        }
-
-        private static SyncedAttribute BuildAttribute<TValue>(string name, MemberInfo member)
-        {
-            if (member is PropertyInfo property)
-            {
-                if (property.GetGetMethod(true) == null || property.GetSetMethod(true) == null)
-                {
-                    Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{member.Name}' - a [Sync] property needs both a getter and a setter.");
-                    return null;
-                }
-            }
-            else if (((FieldInfo)member).IsInitOnly)
-            {
-                Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{member.Name}' - a [Sync] field cannot be readonly.");
-                return null;
-            }
-
-            Func<T, TValue> getter;
-            Action<T, TValue> setter;
-            try
-            {
-#if ENABLE_IL2CPP
-                CreateReflectionAccessors<TValue>(member, out getter, out setter);
-#else
-                CreateCompiledAccessors<TValue>(member, out getter, out setter);
-#endif
-            }
-            catch (Exception e)
-            {
-                // Reported instead of thrown: it would escape the first Awake and leave the object half set up.
-                Debug.LogError($"Colibri: cannot synchronize '{typeof(T).Name}.{member.Name}' - {e.GetType().Name}: {e.Message}");
-                return null;
-            }
-
-            return new SyncedAttribute<TValue>
-            {
-                Name = name,
-                MemberName = member.Name,
-                PropertyType = typeof(TValue),
-                Getter = getter,
-                Setter = setter
-            };
-        }
-
-        /// <summary>Accessors for IL2CPP, which has no JIT.</summary>
-        // Compile() does not fail there but falls back to the expression interpreter, which is slow and, for
-        // value types, depends on generic code IL2CPP may not have generated.
-        // FieldInfo boxes a value-type field on every poll; a hot value-type member is cheaper as a property.
-        // Not behind #if so the Editor tests can run it (the Editor is always Mono). The member must have
-        // passed BuildAttribute<TValue>.
-        internal static void CreateReflectionAccessors<TValue>(MemberInfo member, out Func<T, TValue> getter, out Action<T, TValue> setter)
-        {
-            if (member is PropertyInfo property)
-            {
-                getter = (Func<T, TValue>)Delegate.CreateDelegate(typeof(Func<T, TValue>), property.GetGetMethod(true));
-                setter = (Action<T, TValue>)Delegate.CreateDelegate(typeof(Action<T, TValue>), property.GetSetMethod(true));
-                return;
-            }
-
-            var field = (FieldInfo)member;
-            getter = target => (TValue)field.GetValue(target);
-            setter = (target, value) => field.SetValue(target, value);
-        }
-
-#if !ENABLE_IL2CPP
-        /// <summary>Accessors for Mono, compiled from expression trees, so nothing boxes.</summary>
-        private static void CreateCompiledAccessors<TValue>(MemberInfo member, out Func<T, TValue> getter, out Action<T, TValue> setter)
-        {
-            var exTarget = Expression.Parameter(typeof(T), "target");
-            var exValue = Expression.Parameter(typeof(TValue), "value");
-
-            Expression exGet;
-            Expression exSet;
-
-            if (member is PropertyInfo property)
-            {
-                // see: https://stackoverflow.com/a/17669142/4090817
-                exGet = Expression.Call(exTarget, property.GetGetMethod(true));
-                exSet = Expression.Call(exTarget, property.GetSetMethod(true), exValue);
-            }
-            else
-            {
-                var field = (FieldInfo)member;
-                exGet = Expression.Field(exTarget, field);
-                exSet = Expression.Assign(Expression.Field(exTarget, field), exValue);
-            }
-
-            getter = Expression.Lambda<Func<T, TValue>>(exGet, exTarget).Compile();
-            setter = Expression.Lambda<Action<T, TValue>>(exSet, exTarget, exValue).Compile();
-        }
-#endif
 
 
         /// <summary>The model's id, unique per channel. Generated in Awake when empty.</summary>
@@ -291,8 +36,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         internal string Channel { get => ChannelOf(ModelId); }
         private string ChannelOf(string modelId) => ChannelPrefix + (String.IsNullOrEmpty(modelId) ? "" : $"_{modelId}");
 
-        // Parallel to _attributeList.
-        private IChangeTracker[] _trackers;
+        // Parallel to SyncMembers<T>.AttributeList.
+        private SyncMembers<T>.IChangeTracker[] _trackers;
         private bool[] _wasSynced; // IsSynced at the last poll
 
         private JObject _nextUpdate;
@@ -305,18 +50,18 @@ namespace HCIKonstanz.Colibri.Synchronization
         private bool _wasActive;  // activeSelf at the last poll
         private bool _sendAtOnce; // activeSelf changed: goes out past the rate limit
 
-        // Parallel to _attributeList, made lazily: when a member first sends or takes the server's value.
+        // Parallel to SyncMembers<T>.AttributeList, made lazily: when a member first sends or takes the server's value.
         private SentValues[] _sentValues;
 
         // The Sync.ReconnectRound the object is in: after a reconnect, or opened at its first answer to
         // keep changes made before it. Null otherwise.
         private Sync.ReconnectRound _round;
 
-        // Parallel to _attributeList: members that keep their local value for the rest of the round, and
+        // Parallel to SyncMembers<T>.AttributeList: members that keep their local value for the rest of the round, and
         // send it again.
         private bool[] _keptInRound;
 
-        // Parallel to _attributeList: members that sent after the round's requests went out; the server
+        // Parallel to SyncMembers<T>.AttributeList: members that sent after the round's requests went out; the server
         // reads what they sent after everything in the round.
         private bool[] _sentInRound;
 
@@ -381,7 +126,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (_trackers == null)
                 return;
             var self = this as T;
-            foreach (var attribute in _attributeList)
+            foreach (var attribute in SyncMembers<T>.AttributeList)
             {
                 if (attribute.MemberName == memberName)
                     _trackers[attribute.Index].Latch(self);
@@ -501,7 +246,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         protected virtual void Awake()
         {
-            Initialize();
+            SyncMembers<T>.Initialize();
 
             // Another synced component of the object may have given this one its id already (see SyncedIds).
             if (String.IsNullOrEmpty(Id))
@@ -509,12 +254,12 @@ namespace HCIKonstanz.Colibri.Synchronization
             SyncedIds.Register(Id);
 
             var self = this as T;
-            _trackers = new IChangeTracker[_attributeList.Count];
-            _wasSynced = new bool[_attributeList.Count];
-            for (var i = 0; i < _attributeList.Count; i++)
+            _trackers = new SyncMembers<T>.IChangeTracker[SyncMembers<T>.AttributeList.Count];
+            _wasSynced = new bool[SyncMembers<T>.AttributeList.Count];
+            for (var i = 0; i < SyncMembers<T>.AttributeList.Count; i++)
             {
-                _trackers[i] = _attributeList[i].CreateTracker(self);
-                _wasSynced[i] = IsSynced(_attributeList[i].MemberName);
+                _trackers[i] = SyncMembers<T>.AttributeList[i].CreateTracker(self);
+                _wasSynced[i] = IsSynced(SyncMembers<T>.AttributeList[i].MemberName);
             }
             _wasActive = gameObject.activeSelf;
 
@@ -618,7 +363,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             var self = this as T;
             for (var i = 0; i < _trackers.Length; i++)
             {
-                var attribute = _attributeList[i];
+                var attribute = SyncMembers<T>.AttributeList[i];
                 var isSynced = IsSynced(attribute.MemberName);
                 var switchedOn = isSynced && !_wasSynced[i];
                 _wasSynced[i] = isSynced;
@@ -711,19 +456,19 @@ namespace HCIKonstanz.Colibri.Synchronization
             for (var token = update.First; token != null; token = token.Next)
             {
                 var property = (JProperty)token;
-                if (!_syncedAttributes.TryGetValue(property.Name, out var attribute))
+                if (!SyncMembers<T>.SyncedAttributes.TryGetValue(property.Name, out var attribute))
                     continue;
 
                 SentValuesOf(attribute).Remember(ToKeep(attribute, property.Value), now, heardAt, answersPending);
 
                 if (answersPending)
-                    (_sentInRound ??= new bool[_attributeList.Count])[attribute.Index] = true;
+                    (_sentInRound ??= new bool[SyncMembers<T>.AttributeList.Count])[attribute.Index] = true;
             }
         }
 
-        private SentValues SentValuesOf(SyncedAttribute attribute)
+        private SentValues SentValuesOf(SyncMembers<T>.SyncedAttribute attribute)
         {
-            _sentValues ??= new SentValues[_attributeList.Count];
+            _sentValues ??= new SentValues[SyncMembers<T>.AttributeList.Count];
             return _sentValues[attribute.Index] ??= new SentValues();
         }
 
@@ -731,7 +476,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// A value as SentValues keeps it. A JObject member's value is the application's own object,
         /// which it may change in place later, so it is cloned.
         /// </summary>
-        private static JToken ToKeep(SyncedAttribute attribute, JToken value)
+        private static JToken ToKeep(SyncMembers<T>.SyncedAttribute attribute, JToken value)
             => attribute.PropertyType == typeof(JObject) ? value.DeepClone() : value;
 
 
@@ -739,7 +484,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         public void OnModelUpdate(JObject data)
         {
             // The member table is per type and built in Awake, which may not have run for any instance yet.
-            Initialize();
+            SyncMembers<T>.Initialize();
 
             var id = data["id"].Value<string>();
             if (id == Id)
@@ -812,7 +557,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private void AddFullState()
         {
             var self = this as T;
-            foreach (var attribute in _attributeList)
+            foreach (var attribute in SyncMembers<T>.AttributeList)
             {
                 if (IsSynced(attribute.MemberName))
                     AddUpdate(attribute, attribute.GetBoxed(self));
@@ -850,7 +595,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             var self = this as T;
             for (var i = 0; i < _trackers.Length; i++)
             {
-                var attribute = _attributeList[i];
+                var attribute = SyncMembers<T>.AttributeList[i];
 
                 // A switched-off member reads a placeholder, and the latched value of one switched on since the
                 // last poll may be a placeholder: neither is a change. The next poll sends the latter.
@@ -914,7 +659,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         private bool KeepsLocalValue(string name, JToken serverValue, Sync.ReconnectRound round)
         {
-            if (!_syncedAttributes.TryGetValue(name, out var attribute))
+            if (!SyncMembers<T>.SyncedAttributes.TryGetValue(name, out var attribute))
                 return false;
 
             // A switched-off member reads a placeholder: nothing to keep or send.
@@ -951,9 +696,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>Keeps the member's local value for the rest of the round, and sends it.</summary>
-        private void KeepAndSendAgain(SyncedAttribute attribute)
+        private void KeepAndSendAgain(SyncMembers<T>.SyncedAttribute attribute)
         {
-            _keptInRound ??= new bool[_attributeList.Count];
+            _keptInRound ??= new bool[SyncMembers<T>.AttributeList.Count];
             _keptInRound[attribute.Index] = true;
 
             if (_hasReceivedDestroyCommand)
@@ -982,7 +727,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        private void AddUpdate(SyncedAttribute attribute, object value)
+        private void AddUpdate(SyncMembers<T>.SyncedAttribute attribute, object value)
         {
             if (_nextUpdate == null)
                 _nextUpdate = new JObject { { "id", Id } };
@@ -999,7 +744,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         // Members whose unreadable value was reported; each is reported once.
         private HashSet<string> _warnedUnreadable;
 
-        private void WarnUnreadable(SyncedAttribute attribute, JToken value, Exception exception)
+        private void WarnUnreadable(SyncMembers<T>.SyncedAttribute attribute, JToken value, Exception exception)
         {
             if (!(_warnedUnreadable ??= new HashSet<string>()).Add(attribute.Name))
                 return;
@@ -1012,14 +757,14 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private void UpdateAttribute(string name, JToken value)
         {
-            if (!_syncedAttributes.ContainsKey(name))
+            if (!SyncMembers<T>.SyncedAttributes.ContainsKey(name))
             {
                 Debug.LogWarning($"Unable to sync attribute {name}");
                 return;
             }
 
             var self = this as T;
-            var attribute = _syncedAttributes[name];
+            var attribute = SyncMembers<T>.SyncedAttributes[name];
 
             // Read first and set after, so only an unreadable value is caught here: an exception from a [Sync]
             // setter in application code goes on to Sync's dispatch, which reports it. A bad value must not
