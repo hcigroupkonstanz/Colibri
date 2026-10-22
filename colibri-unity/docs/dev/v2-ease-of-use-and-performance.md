@@ -858,7 +858,7 @@ Two constraints shaped the implementation:
   `[WebServerConnection]` to the open scene outside Play mode. The window uses
   `FindFirstObjectByType` and renders a hint when nothing is running.
 - **Release builds pay nothing.** The traffic ring buffer and the calls that fill it are behind
-  `#if UNITY_EDITOR || DEVELOPMENT_BUILD`, and `RecordTraffic` carries `[Conditional("UNITY_EDITOR")]`
+  `#if UNITY_EDITOR || DEVELOPMENT_BUILD`, and `TrafficLog.Record` carries `[Conditional("UNITY_EDITOR")]`
   plus `[Conditional("DEVELOPMENT_BUILD")]`, so the call sites are removed by the compiler rather
   than merely doing nothing.
 

@@ -417,7 +417,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         // Internal so the EditMode tests can deliver a message without a socket.
         internal static void OnServerMessage(string channel, string command, JToken data)
         {
-            RecordTraffic(true, channel, command);
+            TrafficLog.Record(true, channel, command);
 
             // Colibri's own channel; never reaches listeners (see ReconnectRound).
             if (channel == ReconnectRoundChannel)
@@ -609,10 +609,6 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-
-        // Traffic log for the Colibri Status window. The buffer and the calls that fill it are compiled out of
-        // release builds.
-
         public struct TrafficEntry
         {
             public bool Incoming;
@@ -622,70 +618,14 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        private const int TrafficLogSize = 20;
-
-        private const float DefaultTrafficRetentionSeconds = 10f;
-
-        /// <summary>
-        /// How long an entry stays in the log, so an idle channel empties out instead of showing the last messages with
-        /// ever-growing ages. Settable for the test suite.
-        /// </summary>
-        internal static float TrafficRetentionSeconds = DefaultTrafficRetentionSeconds;
-
-        private static readonly TrafficEntry[] _traffic = new TrafficEntry[TrafficLogSize];
-        private static int _trafficCount;
-
-        // With domain reload disabled the log survives Play mode, and realtimeSinceStartup keeps running in edit mode,
-        // so the next session would start with the last one's messages, dated from before it began.
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetTraffic()
-        {
-            Array.Clear(_traffic, 0, _traffic.Length);
-            _trafficCount = 0;
-            TrafficRetentionSeconds = DefaultTrafficRetentionSeconds;
-        }
-
         /// <summary>
         /// The most recent messages sent and received, newest first, dropping anything older
-        /// than <see cref="TrafficRetentionSeconds"/>.
+        /// than <see cref="TrafficLog.RetentionSeconds"/>.
         /// </summary>
-        public static IEnumerable<TrafficEntry> RecentTraffic
-        {
-            get
-            {
-                var oldest = Time.realtimeSinceStartup - TrafficRetentionSeconds;
-                var count = Math.Min(_trafficCount, TrafficLogSize);
-
-                for (var i = 1; i <= count; i++)
-                {
-                    var entry = _traffic[(_trafficCount - i) % TrafficLogSize];
-
-                    // Newest first: once one is past the window, all the rest are older still.
-                    if (entry.Time < oldest)
-                        yield break;
-
-                    yield return entry;
-                }
-            }
-        }
+        public static IEnumerable<TrafficEntry> RecentTraffic => TrafficLog.RecentTraffic;
 #else
         public static IEnumerable<TrafficEntry> RecentTraffic => Enumerable.Empty<TrafficEntry>();
 #endif
-
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private static void RecordTraffic(bool incoming, string channel, string command)
-        {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            _traffic[_trafficCount % TrafficLogSize] = new TrafficEntry
-            {
-                Incoming = incoming,
-                Channel = channel,
-                Command = command,
-                Time = Time.realtimeSinceStartup
-            };
-            _trafficCount++;
-#endif
-        }
 
         private static void SendCommand(string channel, string command, JToken data)
         {
@@ -693,7 +633,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (connection == null)
                 return;
 
-            RecordTraffic(false, channel, command);
+            TrafficLog.Record(false, channel, command);
             connection.SendCommand(channel, command, data);
         }
 
