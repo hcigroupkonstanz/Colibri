@@ -123,11 +123,6 @@ namespace HCIKonstanz.Colibri.Synchronization
                     RegisterAttribute(field.Name, field.FieldType, field);
         }
 
-        /// <summary>The wire name of a C# name, for a model type or a [Sync] member.</summary>
-        // Invariant, not ToLower(): that turns 'I' into a dotless i on Turkish and Azerbaijani systems,
-        // and the name would no longer match the one other clients use.
-        internal static string ToWireName(string name) => name.ToLowerInvariant();
-
         /// <summary>The wire names of this model type's [Sync] members. Exists for the test suite.</summary>
         internal static IEnumerable<string> SyncedNames
         {
@@ -140,7 +135,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private static void RegisterAttribute(string memberName, Type valueType, MemberInfo member)
         {
-            var name = ToWireName(memberName);
+            var name = WireName.Of(memberName);
 
             // "id" is the model's id on the wire; a member of that name would be sent as the id of every update.
             if (name == "id")
@@ -292,7 +287,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// the objects whose ModelId matches its Template's.
         /// </summary>
         public string ModelId = "";
-        private readonly string ChannelPrefix = ToWireName(typeof(T).Name);
+        private readonly string ChannelPrefix = WireName.Of(typeof(T).Name);
         internal string Channel { get => ChannelOf(ModelId); }
         private string ChannelOf(string modelId) => ChannelPrefix + (String.IsNullOrEmpty(modelId) ? "" : $"_{modelId}");
 
@@ -1001,53 +996,6 @@ namespace HCIKonstanz.Colibri.Synchronization
             // while the rate limit holds it back.
         }
 
-        private static readonly object UnsupportedValue = new object();
-
-        private static object ReadValue(Type type, JToken value)
-        {
-            if (type == typeof(bool))
-                return value.Value<bool>();
-            if (type == typeof(int))
-                return value.Value<int>();
-            if (type == typeof(float))
-                return value.Value<float>();
-            if (type == typeof(string))
-                return value.Value<string>();
-            if (type == typeof(Vector2))
-                return value.ToVector2Strict();
-            if (type == typeof(Vector3))
-                return value.ToVector3Strict();
-            if (type == typeof(Quaternion))
-                return value.ToQuaternionStrict();
-            if (type == typeof(Color))
-                return value.ToColorStrict();
-            // ArrayStrict throws on a JSON null or a single value instead of making an empty array.
-            if (type == typeof(bool[]))
-                return value.ArrayStrict().Select(x => (bool)x).ToArray();
-            if (type == typeof(int[]))
-                return value.ArrayStrict().Select(x => (int)x).ToArray();
-            if (type == typeof(float[]))
-                return value.ArrayStrict().Select(x => (float)x).ToArray();
-            if (type == typeof(string[]))
-                return value.ArrayStrict().Select(x => (string)x).ToArray();
-            if (type == typeof(Vector2[]))
-                return value.ArrayStrict().Select(x => x.ToVector2Strict()).ToArray();
-            if (type == typeof(Vector3[]))
-                return value.ArrayStrict().Select(x => x.ToVector3Strict()).ToArray();
-            if (type == typeof(Quaternion[]))
-                return value.ArrayStrict().Select(x => x.ToQuaternionStrict()).ToArray();
-            if (type == typeof(Color[]))
-                return value.ArrayStrict().Select(x => x.ToColorStrict()).ToArray();
-            if (type == typeof(JObject))
-            {
-                // A null JObject member arrives as a JSON null, which is a JValue and not a JObject.
-                if (value.Type == JTokenType.Null)
-                    return null;
-                return value as JObject ?? throw new InvalidCastException($"{value.Type} is not a JSON object");
-            }
-            return UnsupportedValue;
-        }
-
         // Members whose unreadable value was reported; each is reported once.
         private HashSet<string> _warnedUnreadable;
 
@@ -1079,7 +1027,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             object read;
             try
             {
-                read = ReadValue(attribute.PropertyType, value);
+                read = SyncValueReader.ReadValue(attribute.PropertyType, value);
             }
             catch (Exception e) when (e is InvalidCastException || e is FormatException || e is OverflowException
                 || e is ArgumentException || e is InvalidOperationException)
@@ -1088,7 +1036,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             }
 
-            if (read == UnsupportedValue)
+            if (read == SyncValueReader.UnsupportedValue)
             {
                 Debug.LogError($"Unable to update attribute {name}: Unsupported type {attribute.PropertyType}");
                 return;
