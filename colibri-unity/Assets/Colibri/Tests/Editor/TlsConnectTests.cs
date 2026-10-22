@@ -232,7 +232,7 @@ namespace HCIKonstanz.Colibri.Tests
 
         /// <summary>Opens a session, keeping every socket it tries to close it afterwards.</summary>
         private Task<ServerSession> Opening(string host, int port, ServerCertificateCheck check, int timeoutMs, CancellationToken token)
-            => WebServerConnection.OpenSessionAsync(host, port, check, timeoutMs, Attempting, token);
+            => ServerConnector.OpenSessionAsync(host, port, check, timeoutMs, Attempting, token);
 
         private void Attempting(Socket socket)
         {

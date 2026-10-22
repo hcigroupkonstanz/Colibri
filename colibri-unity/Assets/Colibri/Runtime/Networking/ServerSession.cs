@@ -28,6 +28,6 @@ namespace HCIKonstanz.Colibri.Networking
         /// <summary>A session without TLS on a connected socket. For the EditMode tests.</summary>
         internal static ServerSession Plain(Socket socket) => new ServerSession(socket, new NetworkStream(socket, false));
 
-        public void Close() => WebServerConnection.CloseSocket(Socket);
+        public void Close() => ConnectRace.CloseSocket(Socket);
     }
 }

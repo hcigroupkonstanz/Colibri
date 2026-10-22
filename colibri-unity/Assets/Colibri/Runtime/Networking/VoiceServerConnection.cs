@@ -246,7 +246,7 @@ namespace HCIKonstanz.Colibri.Networking
                 string failure;
                 try
                 {
-                    var candidates = await WebServerConnection.ResolveAsync(host, 10_000, token);
+                    var candidates = await AddressResolver.ResolveAsync(host, 10_000, token);
                     address = ResolveServerAddress(host, port, candidates, out failure);
                 }
                 catch (OperationCanceledException)
@@ -341,7 +341,7 @@ namespace HCIKonstanz.Colibri.Networking
                 candidates[i] = resolved[i];
 
             failure = null;
-            var address = SelectServerAddress(candidates, candidate => WebServerConnection.HasRoute(candidate, port));
+            var address = SelectServerAddress(candidates, candidate => AddressResolver.HasRoute(candidate, port));
             if (address == null)
             {
                 var found = candidates.Length == 0 ? "no addresses at all" : string.Join<IPAddress>(", ", candidates);
@@ -372,7 +372,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// IPv6 was an option: a device still joining Wi-Fi has no route yet, and starts sending
         /// once it has one.
         /// </remarks>
-        /// <param name="hasRoute">Whether the device has a route to an IPv6 address; see <see cref="WebServerConnection.HasRoute"/>.</param>
+        /// <param name="hasRoute">Whether the device has a route to an IPv6 address; see <see cref="AddressResolver.HasRoute"/>.</param>
         /// <returns>An IPv4 or IPv6 address, or null when there is none voice can be sent to.</returns>
         internal static IPAddress SelectServerAddress(IPAddress[] candidates, Func<IPAddress, bool> hasRoute)
         {

@@ -98,7 +98,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void LocalhostOnThisMachineGivesAnIPv4Loopback()
         {
             var chosen = VoiceServerConnection.SelectServerAddress(Dns.GetHostAddresses("localhost"),
-                candidate => WebServerConnection.HasRoute(candidate, VoicePort));
+                candidate => AddressResolver.HasRoute(candidate, VoicePort));
 
             Assert.That(chosen, Is.Not.Null);
             Assert.That(chosen.AddressFamily, Is.EqualTo(AddressFamily.InterNetwork));
@@ -137,10 +137,10 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void TheLoopbacksHaveARoute()
         {
-            Assert.That(WebServerConnection.HasRoute(IPAddress.Loopback, VoicePort), Is.True);
+            Assert.That(AddressResolver.HasRoute(IPAddress.Loopback, VoicePort), Is.True);
 
             using (OpenIPv6Server())
-                Assert.That(WebServerConnection.HasRoute(IPAddress.IPv6Loopback, VoicePort), Is.True);
+                Assert.That(AddressResolver.HasRoute(IPAddress.IPv6Loopback, VoicePort), Is.True);
         }
 
         /// <summary>
@@ -170,7 +170,7 @@ namespace HCIKonstanz.Colibri.Tests
                 }
             }
 
-            Assert.That(WebServerConnection.HasRoute(to.Address, to.Port), Is.EqualTo(sent));
+            Assert.That(AddressResolver.HasRoute(to.Address, to.Port), Is.EqualTo(sent));
         }
 
         /// <summary>
@@ -216,7 +216,7 @@ namespace HCIKonstanz.Colibri.Tests
         {
             if (!Socket.OSSupportsIPv6)
                 Assert.Ignore("This machine has no IPv6.");
-            if (WebServerConnection.HasRoute(GlobalV6, 9))
+            if (AddressResolver.HasRoute(GlobalV6, 9))
                 Assert.Ignore("This machine has an IPv6 route to a global address.");
 
             var gameObject = new GameObject("voice-under-test");
