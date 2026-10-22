@@ -273,12 +273,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         // ColibriConfig.Load() goes through Resources.Load, which is main-thread only, so the connection loop
         // reads this snapshot (refreshed in OnEnable and Update).
-        private volatile string _serverAddress;
-        private volatile string _appName;
-        private volatile int _tcpPort;
-        private volatile bool _useTls;
-        private volatile bool _allowSelfSignedCertificate;
-        private volatile string _serverCertificateSha256;
+        private volatile ConnectionConfig _config = ConnectionConfig.Empty;
 
         // Set by each TLS handshake, for the Status window: the certificate the server presented and how it
         // was accepted. Null until a TLS connection has been made.
@@ -451,12 +446,10 @@ namespace HCIKonstanz.Colibri.Networking
             // RunConnectionLoop reports and waits on.
             var config = ColibriConfig.Load();
 
-            _serverAddress = config.Host;
-            _appName = config.App;
-            _tcpPort = config.TcpServerPort;
-            _useTls = config.IsSSL;
-            _allowSelfSignedCertificate = config.AllowSelfSignedCertificate;
-            _serverCertificateSha256 = config.ServerCertificateSha256;
+            var current = _config;
+            var refreshed = current.Refreshed(config);
+            if (refreshed != current)
+                _config = refreshed;
         }
 
         private void OnDisable()
@@ -531,7 +524,8 @@ namespace HCIKonstanz.Colibri.Networking
                 {
                     // Before the session loop sees the socket closed: see CountSessionWithoutAFrame.
                     loop.EndedSilent = true;
-                    Debug.Log($"Colibri: {_serverAddress}:{_tcpPort} accepted the connection but has not sent anything in "
+                    var config = _config;
+                    Debug.Log($"Colibri: {config.ServerAddress}:{config.TcpPort} accepted the connection but has not sent anything in "
                         + $"{HEARTBEAT_TIMEOUT_THRESHOLD_MS / 1000f:0.#} s, dropping it");
                 }
 
@@ -818,8 +812,9 @@ namespace HCIKonstanz.Colibri.Networking
             var token = loop.Token;
             while (!token.IsCancellationRequested)
             {
-                var address = _serverAddress;
-                var app = _appName;
+                var config = _config;
+                var address = config.ServerAddress;
+                var app = config.AppName;
 
                 // Whitespace counts as nothing, as in ColibriConfig.IsConfigured.
                 if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(app))
@@ -858,7 +853,7 @@ namespace HCIKonstanz.Colibri.Networking
                     loop.EndedSilent = false;
                     loop.DroppedByWatchdog = false;
                     loop.EndedOnBadFrame = false;
-                    await RunSession(loop, address, _tcpPort, handshakeApp, _useTls).ConfigureAwait(false);
+                    await RunSession(loop, config, handshakeApp).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -993,8 +988,9 @@ namespace HCIKonstanz.Colibri.Networking
                 _consecutiveUnansweredSessions++;
                 if (_consecutiveUnansweredSessions == EARLY_FRAME_FAILURES_BEFORE_HINT)
                 {
+                    var config = _config;
                     Debug.LogWarning(
-                        $"Colibri: {_consecutiveUnansweredSessions} connections in a row to {_serverAddress}:{_tcpPort} were accepted, " +
+                        $"Colibri: {_consecutiveUnansweredSessions} connections in a row to {config.ServerAddress}:{config.TcpPort} were accepted, " +
                         "but nothing was received on any of them: each was closed by the other end or dropped after " +
                         $"{HEARTBEAT_TIMEOUT_THRESHOLD_MS / 1000f:0.#} s of silence. " +
                         "Something accepts connections there and then closes them or forwards nothing (a proxy or port forwarding " +
@@ -1043,9 +1039,12 @@ namespace HCIKonstanz.Colibri.Networking
         // Tests only: sessions in a row counted towards the framing hint.
         internal int ConsecutiveEarlyFrameFailures => Volatile.Read(ref _consecutiveEarlyFrameFailures);
 
-        private async Task RunSession(ConnectionLoop loop, string host, int port, string app, bool useTls)
+        private async Task RunSession(ConnectionLoop loop, ConnectionConfig config, string app)
         {
             var token = loop.Token;
+            var host = config.ServerAddress;
+            var port = config.TcpPort;
+            var useTls = config.UseTls;
             lock (_statusLock)
             {
                 // A loop that OnDisable has ended starts nothing: the status, and the connection
@@ -1059,7 +1058,7 @@ namespace HCIKonstanz.Colibri.Networking
             Debug.Log($"Colibri: connecting to {host}:{port}{(useTls ? " (TLS)" : "")}");
 
             var certificateCheck = useTls
-                ? new ServerCertificateCheck(host, _allowSelfSignedCertificate, _serverCertificateSha256)
+                ? new ServerCertificateCheck(host, config.AllowSelfSignedCertificate, config.ServerCertificateSha256)
                 : null;
 
             ServerSession session;
@@ -1393,13 +1392,13 @@ namespace HCIKonstanz.Colibri.Networking
         public long MillisSinceLastHeartbeat() => _liveness.MillisSinceLastHeartbeat();
 
         /// <summary>Server the connection loop is currently using, as configured.</summary>
-        public string ServerAddress => _serverAddress;
+        public string ServerAddress => _config.ServerAddress;
 
         /// <summary>TCP port the connection loop is currently using.</summary>
-        public int TcpPort => _tcpPort;
+        public int TcpPort => _config.TcpPort;
 
         /// <summary>App name this client identifies as. Only clients sharing it can see each other.</summary>
-        public string AppName => _appName;
+        public string AppName => _config.AppName;
 
         /// <summary>Client-library protocol version sent in the handshake.</summary>
         public static string ClientVersion => CLIENT_VERSION;
