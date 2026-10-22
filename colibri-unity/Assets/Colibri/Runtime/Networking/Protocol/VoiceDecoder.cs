@@ -1,4 +1,5 @@
 using System;
+using HCIKonstanz.Colibri.Communication.Codecs;
 
 namespace HCIKonstanz.Colibri.Networking.Protocol
 {

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using HCIKonstanz.Colibri.Communication.Codecs;
 using HCIKonstanz.Colibri.Core;
 using HCIKonstanz.Colibri.Setup;
 using UnityEngine;

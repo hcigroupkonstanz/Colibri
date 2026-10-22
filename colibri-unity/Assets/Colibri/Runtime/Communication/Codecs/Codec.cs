@@ -1,5 +1,8 @@
-public enum Codec
+namespace HCIKonstanz.Colibri.Communication.Codecs
 {
-    PCM = 0,
-    OPUS = 1,
+    public enum Codec
+    {
+        PCM = 0,
+        OPUS = 1,
+    }
 }

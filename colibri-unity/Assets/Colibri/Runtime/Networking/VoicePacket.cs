@@ -1,18 +1,19 @@
 using System;
 using System.Buffers.Binary;
 using System.Text;
-
-public struct VoicePacket
-{
-    public short Id;
-    public short Sequence;
-    public short FrameSize;
-    public Codec Codec;
-    public byte[] Data;
-}
+using HCIKonstanz.Colibri.Communication.Codecs;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    public struct VoicePacket
+    {
+        public short Id;
+        public short Sequence;
+        public short FrameSize;
+        public Codec Codec;
+        public byte[] Data;
+    }
+
     /// <summary>Encodes and decodes the UDP voice packets that the Colibri server relays.</summary>
     public static class VoicePacketCodec
     {

@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Threading;
+using HCIKonstanz.Colibri.Communication.Codecs;
 using HCIKonstanz.Colibri.Networking;
 using NUnit.Framework;
 using UnityEngine;

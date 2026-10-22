@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using HCIKonstanz.Colibri.Communication.Codecs;
 using HCIKonstanz.Colibri.Networking;
 using HCIKonstanz.Colibri.Networking.Protocol;
 using HCIKonstanz.Colibri.Setup;
