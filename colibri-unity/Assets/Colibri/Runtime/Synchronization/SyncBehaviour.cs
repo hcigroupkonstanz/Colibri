@@ -49,20 +49,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private bool _wasActive;  // activeSelf at the last poll
         private bool _sendAtOnce; // activeSelf changed: goes out past the rate limit
 
-        // Parallel to SyncMembers<T>.AttributeList, made lazily: when a member first sends or takes the server's value.
-        private SentValues[] _sentValues;
-
-        // The ReconnectRound the object is in: after a reconnect, or opened at its first answer to
-        // keep changes made before it. Null otherwise.
-        private ReconnectRound _round;
-
-        // Parallel to SyncMembers<T>.AttributeList: members that keep their local value for the rest of the round, and
-        // send it again.
-        private bool[] _keptInRound;
-
-        // Parallel to SyncMembers<T>.AttributeList: members that sent after the round's requests went out; the server
-        // reads what they sent after everything in the round.
-        private bool[] _sentInRound;
+        private readonly MemberResync<T> _resync = new MemberResync<T>();
 
         private bool _isQuitting;
         private bool _hasReceivedDestroyCommand;
@@ -175,10 +162,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             _hasMadeItsId = false;
             _hasReceivedFirstUpdate = false;
             _isBuiltFromUpdate = false;
-            _round = null;
-            _keptInRound = null;
-            _sentInRound = null;
-            _sentValues = null;
+            _resync.Reset();
             _announceAtFirstAnswer = madeHere;
             var wasReady = _isReady;
             _isReady = new TaskCompletionSource<bool>();
@@ -191,7 +175,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             _registeredModelId = ModelId;
             SyncedIds.Register(Id);
             LocallyDeletedModels.Forget(Channel, Id);
-            Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, OnRequestedAgain);
+            Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, _resync.OnRequestedAgain);
             Sync.AddModelDeleteListener(Channel, OnModelDelete);
             ModelCreated?.Invoke(this);
         }
@@ -228,7 +212,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private protected bool KnowsServerState => _hasReceivedFirstUpdate || _hasMadeItsId;
 
         /// <summary>The id whose answer ends the round this object is in; null when it is in none. For the EditMode tests.</summary>
-        internal string RoundEndMarker => _round == null || _round.IsOver ? null : _round.EndMarkerId;
+        internal string RoundEndMarker => _resync.RoundEndMarker;
 
 
         /// <summary>
@@ -270,13 +254,13 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (RemoteModelBeingBuilt != null && RemoteModelBeingBuilt == Id)
             {
                 _isBuiltFromUpdate = true;
-                Sync.AddModelUpdateListenerWithoutRequest(Channel, OnModelUpdate, Id, OnRequestedAgain);
+                Sync.AddModelUpdateListenerWithoutRequest(Channel, OnModelUpdate, Id, _resync.OnRequestedAgain);
             }
             else
             {
                 // In this client's scene again: forget a local delete of this id.
                 LocallyDeletedModels.Forget(Channel, Id);
-                Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, OnRequestedAgain);
+                Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, _resync.OnRequestedAgain);
             }
             Sync.AddModelDeleteListener(Channel, OnModelDelete);
             _registeredId = Id;
@@ -428,44 +412,9 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             var update = _nextUpdate;
             _nextUpdate = null;
-            RememberSent(update, now, heardAt);
+            _resync.RememberSent(update, now, heardAt);
             return update;
         }
-
-        /// <summary>
-        /// Keeps the values of an outgoing update, for judging the server's answers after a reconnect
-        /// (see <see cref="KeepsLocalValue"/>).
-        /// </summary>
-        private void RememberSent(JObject update, double now, double heardAt)
-        {
-            var answersPending = _round != null && !_round.IsOver;
-
-            // By hand: Properties() would allocate an enumerator per update.
-            for (var token = update.First; token != null; token = token.Next)
-            {
-                var property = (JProperty)token;
-                if (!SyncMembers<T>.SyncedAttributes.TryGetValue(property.Name, out var attribute))
-                    continue;
-
-                SentValuesOf(attribute).Remember(ToKeep(attribute, property.Value), now, heardAt, answersPending);
-
-                if (answersPending)
-                    (_sentInRound ??= new bool[SyncMembers<T>.AttributeList.Count])[attribute.Index] = true;
-            }
-        }
-
-        private SentValues SentValuesOf(SyncMembers<T>.SyncedAttribute attribute)
-        {
-            _sentValues ??= new SentValues[SyncMembers<T>.AttributeList.Count];
-            return _sentValues[attribute.Index] ??= new SentValues();
-        }
-
-        /// <summary>
-        /// A value as SentValues keeps it. A JObject member's value is the application's own object,
-        /// which it may change in place later, so it is cloned.
-        /// </summary>
-        private static JToken ToKeep(SyncMembers<T>.SyncedAttribute attribute, JToken value)
-            => attribute.PropertyType == typeof(JObject) ? value.DeepClone() : value;
 
 
         /// <summary>Applies a remote update for this object; one for another Id is ignored.</summary>
@@ -482,9 +431,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
                 // While a round is open (after a reconnect, or after a first answer that kept local changes), what
                 // arrives is judged by KeepsLocalValue.
-                var round = _round;
-                if (round != null && round.IsOver)
-                    round = _round = null;
+                var round = _resync.CurrentRound();
 
                 if (isFirstUpdate)
                     KeepChangesMadeBeforeTheAnswer(data, ref round);
@@ -591,55 +538,17 @@ namespace HCIKonstanz.Colibri.Synchronization
                     continue;
 
                 if (round == null)
-                    round = _round = Sync.AskForEndOfAnswers();
+                    round = _resync.EnterRound(Sync.AskForEndOfAnswers());
 
                 // The value the server holds, which the one sent now goes out after; if that send is lost, the
                 // round after the next reconnect recognises it by this value.
                 if (answer.TryGetValue(attribute.Name, out var shown))
-                    SentValuesOf(attribute).ServerShowed(ToKeep(attribute, shown));
+                    _resync.ServerShowed(attribute, shown);
 
                 KeepAndSendAgain(attribute);
             }
         }
 
-
-        // The answers to the requests made again after a reconnect.
-        //
-        // A change made as the link dropped is lost and the server answers with the value from before it.
-        // Applied, that undoes the change here while every other client keeps the old value. So each member of
-        // what arrives in the round (see ReconnectRound) is judged against the values it sent recently and
-        // the one it held before them (SentValues):
-        //
-        // 1. The value sent last: it arrived, nothing to do.
-        // 2. A value sent before that, or the one held before them (all an object that sat still has: switched
-        //    off at the drop after a minute on, it sent only the lost `false`): what followed was lost. The local
-        //    value goes out again as an ordinary update under the rate limit, and the member takes nothing more
-        //    from the round. The answer's value becomes the value held before the resend, so a second loss is
-        //    recognised too. A remote reset to one of these values during the outage looks the same and is undone.
-        // 3. Any other value, or a member that did not send recently: another client set it, and it is applied.
-        //
-        // A member missing from what arrives is left alone: a remote update carries only what changed.
-        // Until the answers are in, a member keeps the values it had sent when the requests went out
-        // (SentValues.KeepUntilAnswered). What it sends after the requests reaches the server after everything
-        // in the round, so it keeps its value whatever arrives and is sent again, with what arrived as the
-        // value held before it.
-
-        /// <summary>Told by Sync that the model has just been asked for again after a reconnect.</summary>
-        private void OnRequestedAgain(ReconnectRound round)
-        {
-            _round = round;
-
-            if (_keptInRound != null)
-                Array.Clear(_keptInRound, 0, _keptInRound.Length);
-            if (_sentInRound != null)
-                Array.Clear(_sentInRound, 0, _sentInRound.Length);
-
-            if (_sentValues != null)
-            {
-                foreach (var sent in _sentValues)
-                    sent?.KeepUntilAnswered();
-            }
-        }
 
         /// <summary>
         /// Judges one member of what arrived in the round. True when the server's value is not applied:
@@ -654,40 +563,18 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (!IsSynced(attribute.MemberName))
                 return false;
 
-            // Includes a member kept at the first answer, which may not have sent yet.
-            if (_keptInRound != null && _keptInRound[attribute.Index])
-                return true;
-
-            var sent = _sentValues?[attribute.Index];
-            if (sent == null)
+            if (!_resync.KeepsLocalValue(attribute, serverValue, round, out var sendAgain))
                 return false;
 
-            switch (sent.Judge(serverValue, round.DisconnectedAt - SentValues.WindowSeconds))
-            {
-                case SentValues.Verdict.Arrived:
-                    return true;
-
-                case SentValues.Verdict.Lost:
-                    break;
-
-                default:
-                    // Sent after the requests, and read by the server after this value.
-                    if (_sentInRound == null || !_sentInRound[attribute.Index])
-                        return false;
-                    break;
-            }
-
-            // The server holds this value; if the resend is lost too, the next round recognises it by this value.
-            sent.ServerShowed(ToKeep(attribute, serverValue));
-            KeepAndSendAgain(attribute);
+            if (sendAgain)
+                KeepAndSendAgain(attribute);
             return true;
         }
 
         /// <summary>Keeps the member's local value for the rest of the round, and sends it.</summary>
         private void KeepAndSendAgain(SyncMembers<T>.SyncedAttribute attribute)
         {
-            _keptInRound ??= new bool[SyncMembers<T>.AttributeList.Count];
-            _keptInRound[attribute.Index] = true;
+            _resync.MarkKept(attribute);
 
             if (_hasReceivedDestroyCommand)
                 return;
@@ -785,7 +672,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             // The member holds the server's value now, so what it sent before says nothing about the server.
             // If an answer after a reconnect holds this value following the member's next change, that change
             // was lost.
-            SentValuesOf(attribute).ServerShowed(ToKeep(attribute, value));
+            _resync.ServerShowed(attribute, value);
 
             // A pending local change of this member (polled this frame, or held by the rate limit) was just
             // overwritten by the server's value. Sent anyway, it would replace that value on the server and
