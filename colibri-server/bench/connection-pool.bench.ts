@@ -1,5 +1,6 @@
 import { bench, describe } from 'vitest';
-import { Subject, Observable } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { Subject } from 'rxjs';
 import { Payload } from '../src/server/modules/core/payload.js';
 import { ConnectionPool } from '../src/server/modules/command-hooks/connection-pool.js';
 import { NetworkServer } from '../src/server/modules/networking/network.js';

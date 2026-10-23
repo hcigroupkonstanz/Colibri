@@ -1,8 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
-import { ADMIN_CHANNEL, LatencySnapshot } from './admin.service';
-import { ClientService, ColibriClient, LATENCY_KEEP_MILLIS } from './client.service';
-import { Reconnect, SocketIOService } from './socketio.service';
+import type { LatencySnapshot } from './admin.service';
+import { ADMIN_CHANNEL } from './admin.service';
+import type { ColibriClient } from './client.service';
+import { ClientService, LATENCY_KEEP_MILLIS } from './client.service';
+import type { Reconnect } from './socketio.service';
+import { SocketIOService } from './socketio.service';
 
 describe('ClientService', () => {
     let latencyChannel: Subject<{ command: string; payload: Record<string, [number, number][]> }>;

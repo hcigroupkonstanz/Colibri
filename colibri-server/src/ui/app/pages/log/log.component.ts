@@ -1,8 +1,11 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, HostListener, Injector, OnDestroy, afterNextRender, afterRenderEffect, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import type { AfterViewInit, ElementRef, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, Injector, afterNextRender, afterRenderEffect, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { LOG_LEVELS, LogMessage, LogService, SocketIOService } from '../../services';
+import type { LogMessage } from '../../services';
+import { LOG_LEVELS, LogService, SocketIOService } from '../../services';
 import { LogMessageComponent } from '../../components/log-message/log-message.component';
-import { LogNav, LogToolbarComponent, NavStep, PHONE } from '../../components/log-toolbar/log-toolbar.component';
+import type { LogNav, NavStep } from '../../components/log-toolbar/log-toolbar.component';
+import { LogToolbarComponent, PHONE } from '../../components/log-toolbar/log-toolbar.component';
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
 import { LEVEL_TAGS, matchesSearch, messageText, sourceOf } from '../../components/log-message/log-format';
 import { download, fileNamePart } from '../../format';

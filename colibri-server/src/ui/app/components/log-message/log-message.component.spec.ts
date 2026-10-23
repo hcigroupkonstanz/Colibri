@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { LogMessage, LogService } from '../../services';
+import type { LogMessage } from '../../services';
+import { LogService } from '../../services';
 import { LogMessageComponent } from './log-message.component';
 
 const message = (overrides: Partial<LogMessage>): LogMessage => ({

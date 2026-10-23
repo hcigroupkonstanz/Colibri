@@ -1,9 +1,12 @@
-import { Observable, Subject } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { Subject } from 'rxjs';
 import { Service } from './service.js';
-import {
+import type {
     CertificateInfo,
     TlsCredentials,
     Validity,
+} from './tls-files.js';
+import {
     checkTlsCredentials,
     describeCertificateInfo,
     readTlsFiles,

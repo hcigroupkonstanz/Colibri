@@ -1,4 +1,5 @@
-import { Observable, Subject } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { Subject } from 'rxjs';
 import { normalizeAddress } from '../networking/addresses.js';
 import { voiceAppId } from './voice-packet.js';
 

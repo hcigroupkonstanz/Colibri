@@ -4,7 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { DataRootCheck } from '../../src/server/modules/core/data-root-check.js';
 import { PRINTED_TO_CONSOLE } from '../../src/server/modules/core/console-log.js';
-import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
 
 // Permission bits do not stop root, so the unwritable-directory case cannot be set up as root.

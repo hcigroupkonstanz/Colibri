@@ -4,7 +4,8 @@ import { ConnectionPool } from '../../src/server/modules/command-hooks/connectio
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
 import { ClientLogger, MAX_CLIENT_LOG_CHARS } from '../../src/server/modules/command-hooks/client-logger.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Payload } from '../../src/server/modules/core/payload.js';
 
 class FakeServer implements NetworkServer {

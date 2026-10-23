@@ -1,8 +1,11 @@
-import { Server as SocketIoServer, Socket as SocketIoSocket, Event as SocketIoEvent } from 'socket.io';
-import { Server as HttpServer } from 'http';
-import { Observable, Subject } from 'rxjs';
+import type { Socket as SocketIoSocket, Event as SocketIoEvent } from 'socket.io';
+import { Server as SocketIoServer } from 'socket.io';
+import type { Server as HttpServer } from 'http';
+import type { Observable } from 'rxjs';
+import { Subject } from 'rxjs';
 
-import { CONNECTION_LINE, Metadata } from '../core/log-message.js';
+import type { Metadata } from '../core/log-message.js';
+import { CONNECTION_LINE } from '../core/log-message.js';
 import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../core/payload.js';
 import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from './network.js';
@@ -17,22 +20,26 @@ import {
     protocolAcceptance,
     protocolRejection,
 } from './protocol.js';
+import type {
+    HeldUpdate,
+    RateLimit,
+} from './inbound-limits.js';
 import {
     DEFAULT_RATE_LIMIT,
-    HeldUpdate,
     HeldUpdates,
     InboundRateLimiter,
     MODEL_UPDATE_COMMAND,
-    RateLimit,
     asModelUpdate,
     isLimitable,
     rateLimitEndWarning,
     rateLimitStartWarning,
     warnsAtEnd,
 } from './inbound-limits.js';
-import { TrustProxy, forwardedClientAddress, forwardedTls, trustNoProxy } from './trusted-proxies.js';
+import type { TrustProxy } from './trusted-proxies.js';
+import { forwardedClientAddress, forwardedTls, trustNoProxy } from './trusted-proxies.js';
 import { normalizeAddress } from './addresses.js';
-import { ClientActivity, RATE_WINDOW_MILLIS, TrafficMeter } from './client-activity.js';
+import type { ClientActivity } from './client-activity.js';
+import { RATE_WINDOW_MILLIS, TrafficMeter } from './client-activity.js';
 
 // How often held-back updates are passed on as a limited client's tokens refill, and finished
 // episodes reported.

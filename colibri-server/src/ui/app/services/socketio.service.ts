@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Injectable, NgZone, inject, signal } from '@angular/core';
-import { Subject, Observable, throttleTime } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { Subject, throttleTime } from 'rxjs';
 import * as io from 'socket.io-client';
 
 /** `connecting` until the first connection, `reconnecting` after it is lost. */

@@ -5,9 +5,13 @@ import * as net from 'net';
 import { networkInterfaces, tmpdir } from 'os';
 import * as path from 'path';
 import * as tls from 'tls';
-import { TCPServerWorker, TcpServerOptions } from '../../src/server/modules/networking/tcp-server-worker.js';
-import {
+import type * as workerThreads from 'worker_threads';
+import type { TcpServerOptions } from '../../src/server/modules/networking/tcp-server-worker.js';
+import { TCPServerWorker } from '../../src/server/modules/networking/tcp-server-worker.js';
+import type {
     DecodedFrame,
+} from '../../src/server/modules/networking/protocol.js';
+import {
     FrameReader,
     FrameType,
     PROTOCOL_VERSION,
@@ -16,11 +20,12 @@ import {
     encodeMessageFrame,
 } from '../../src/server/modules/networking/protocol.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
-import { TestCertificate, createTestCertificate } from '../tls-test-certificate.js';
+import type { TestCertificate } from '../tls-test-certificate.js';
+import { createTestCertificate } from '../tls-test-certificate.js';
 
 // See tcp-server-worker.test.ts: inert as a worker, so that it can run in the test's own thread.
 vi.mock('worker_threads', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('worker_threads')>();
+    const actual = await importOriginal<typeof workerThreads>();
     return { ...actual, isMainThread: true, parentPort: null, workerData: null };
 });
 

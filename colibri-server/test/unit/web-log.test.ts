@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { config, Subject } from 'rxjs';
 import { MAX_LOG_CHARS, WebLog } from '../../src/server/modules/web/web-log.js';
-import { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
+import type { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
 import type { NetworkMessage } from '../../src/server/modules/networking/network.js';
 import { Payload } from '../../src/server/modules/core/payload.js';
 import { Service } from '../../src/server/modules/core/service.js';

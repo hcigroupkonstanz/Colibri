@@ -1,4 +1,4 @@
-import { LogMessage } from '../../services';
+import type { LogMessage } from '../../services';
 import { appColor, highlight, isAddress, matchesSearch, messageText, sourceOf } from './log-format';
 
 const message = (overrides: Partial<LogMessage>): LogMessage => ({

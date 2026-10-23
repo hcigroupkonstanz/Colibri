@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import type * as net from 'net';
-import { HEARTBEAT_EVERY_BYTES, MAX_REPLY_BACKLOG_BYTES, TCPServerWorker, TcpServerOptions, WireNetworkMessage } from '../../src/server/modules/networking/tcp-server-worker.js';
+import type * as workerThreads from 'worker_threads';
+import type { TcpServerOptions, WireNetworkMessage } from '../../src/server/modules/networking/tcp-server-worker.js';
+import { HEARTBEAT_EVERY_BYTES, MAX_REPLY_BACKLOG_BYTES, TCPServerWorker } from '../../src/server/modules/networking/tcp-server-worker.js';
 import { MAX_HELD_OBJECTS } from '../../src/server/modules/networking/inbound-limits.js';
 import { FrameReader, FrameType, MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeHandshakeFrame, encodeHeartbeatFrame, encodeMessageFrame } from '../../src/server/modules/networking/protocol.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
@@ -11,7 +13,7 @@ import { LogLevel } from '../../src/server/modules/core/log-message.js';
 // try to start a second server. Pretending to be the main thread makes both inert - the
 // worker's outgoing messages are captured by spying on postMessage instead.
 vi.mock('worker_threads', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('worker_threads')>();
+    const actual = await importOriginal<typeof workerThreads>();
     return { ...actual, isMainThread: true, parentPort: null, workerData: null };
 });
 

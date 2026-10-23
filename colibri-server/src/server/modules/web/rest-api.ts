@@ -1,8 +1,10 @@
 import { Service } from '../core/service.js';
-import { hasEmptyJsonBody, hasRestMediaType, WebServer } from './web-server.js';
+import type { WebServer } from './web-server.js';
+import { hasEmptyJsonBody, hasRestMediaType } from './web-server.js';
 import { REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { StoreCheckpointer } from './store-checkpoint.js';
-import { STORE_DATABASE_FILENAME, StoreDatabase, StoreEntry, WAL_BACKSTOP_PAGES } from './store-database.js';
+import type { StoreEntry } from './store-database.js';
+import { STORE_DATABASE_FILENAME, StoreDatabase, WAL_BACKSTOP_PAGES } from './store-database.js';
 import { Router } from 'express';
 import { lstat, mkdir, readFile, rename } from 'fs/promises';
 import * as path from 'path';

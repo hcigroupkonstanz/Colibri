@@ -2,7 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
-import { ConnectionState, LogMessage, LogService, Reconnect, SocketIOService } from '../../services';
+import type { ConnectionState, LogMessage, Reconnect } from '../../services';
+import { LogService, SocketIOService } from '../../services';
 import { FLUSH_INTERVAL } from '../../services/log.service';
 import { LogComponent, PAGE_SIZE, textLine } from './log.component';
 

@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, Injector, OnDestroy, afterNextRender, computed, effect, inject, signal, untracked } from '@angular/core';
+import type { OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, Injector, afterNextRender, computed, effect, inject, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { AdminService, ModelRow, ModelSnapshot, ModelsSnapshot } from '../../services';
+import type { ModelRow, ModelSnapshot, ModelsSnapshot } from '../../services';
+import { AdminService } from '../../services';
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
 import { bytes, count, download, duration, fileNamePart } from '../../format';
 

@@ -1,7 +1,8 @@
 import { CONNECTION_LINE } from '../core/log-message.js';
 import { Service } from '../core/service.js';
 import * as dgram from 'dgram';
-import { AddressInfo, isIPv6 } from 'net';
+import type { AddressInfo } from 'net';
+import { isIPv6 } from 'net';
 import { readFileSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { endianness } from 'os';
@@ -13,9 +14,11 @@ import {
     VOICE_VERSION_AND_CODEC_OFFSET,
     VoiceCodec,
 } from './voice-packet.js';
-import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
+import type { TrustProxy } from '../networking/trusted-proxies.js';
+import { trustNoProxy } from '../networking/trusted-proxies.js';
 import { hostPort, ipv4OnlyWarning, normalizeAddress } from '../networking/addresses.js';
-import { UnityClientAddresses, UnityClientSource } from './unity-client-addresses.js';
+import type { UnityClientSource } from './unity-client-addresses.js';
+import { UnityClientAddresses } from './unity-client-addresses.js';
 
 // Recordings can run for minutes at 48kHz, so a plain number[] would mean millions of
 // boxed-double pushes. This keeps samples in a flat Int16Array, growing (doubling) only

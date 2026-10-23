@@ -1,4 +1,5 @@
-import { Observable, merge } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { merge } from 'rxjs';
 import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../networking/network.js';
 

@@ -1,5 +1,5 @@
 import { Service } from '../core/service.js';
-import { ConnectionPool } from './connection-pool.js';
+import type { ConnectionPool } from './connection-pool.js';
 import type { NetworkMessage } from '../networking/network.js';
 
 export class Broadcaster extends Service {

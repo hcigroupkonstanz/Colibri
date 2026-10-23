@@ -1,6 +1,7 @@
 import { Console } from 'console';
-import { Observable, Subscription } from 'rxjs';
-import { LogLevel, LogMessage, Metadata } from './log-message.js';
+import type { Observable, Subscription } from 'rxjs';
+import type { LogMessage, Metadata } from './log-message.js';
+import { LogLevel } from './log-message.js';
 
 /** Metadata flag for a message its logger already wrote to stdout/stderr; {@link ConsoleLog} skips it. */
 export const PRINTED_TO_CONSOLE = 'printedToConsole';

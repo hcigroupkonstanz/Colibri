@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
-import { FLUSH_INTERVAL, LogMessage, LogService, MAX_MESSAGES, readAddress, writeAddress } from './log.service';
-import { Reconnect, SocketIOService } from './socketio.service';
+import type { LogMessage } from './log.service';
+import { FLUSH_INTERVAL, LogService, MAX_MESSAGES, readAddress, writeAddress } from './log.service';
+import type { Reconnect } from './socketio.service';
+import { SocketIOService } from './socketio.service';
 
 const message = (overrides: Partial<LogMessage>): LogMessage => ({
     id: '1',

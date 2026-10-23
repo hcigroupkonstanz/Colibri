@@ -2,16 +2,16 @@
 // are asked for and sent. Every snapshot is read only and bounded in size: a page of models, not the
 // store; a model's JSON up to a limit; names cut to a length. None of these functions changes the
 // state it reads.
-import { BuildInfo } from '../core/build-info.js';
-import { CertificateInfo } from '../core/tls-files.js';
-import { ProxyCertificateResult } from '../core/proxy-certificate.js';
+import type { BuildInfo } from '../core/build-info.js';
+import type { CertificateInfo } from '../core/tls-files.js';
+import type { ProxyCertificateResult } from '../core/proxy-certificate.js';
 import { RingBuffer } from '../core/ring-buffer.js';
-import { DataStore, ModelEntry, Tombstone } from '../command-hooks/data-store.js';
+import type { DataStore, ModelEntry, Tombstone } from '../command-hooks/data-store.js';
 import type { NetworkClient } from '../networking/network.js';
-import { ClientActivity, LoadLimit, RateSample } from '../networking/client-activity.js';
+import type { ClientActivity, LoadLimit, RateSample } from '../networking/client-activity.js';
 import { PROTOCOL_VERSION } from '../networking/protocol.js';
-import { SocketIoClient } from '../networking/socket-io-server.js';
-import { TcpNetworkClient } from '../networking/tcp-server-proxy.js';
+import type { SocketIoClient } from '../networking/socket-io-server.js';
+import type { TcpNetworkClient } from '../networking/tcp-server-proxy.js';
 import { MAX_MODEL_JSON_LENGTH, ModelMeasures } from './model-measures.js';
 
 export { MAX_MODEL_JSON_LENGTH };

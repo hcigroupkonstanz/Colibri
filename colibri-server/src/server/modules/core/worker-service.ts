@@ -1,5 +1,6 @@
-import { WorkerMessage } from './worker-message.js';
-import { LogLevel, Metadata } from './log-message.js';
+import type { WorkerMessage } from './worker-message.js';
+import type { Metadata } from './log-message.js';
+import { LogLevel } from './log-message.js';
 import * as threads from 'worker_threads';
 import { Subject } from 'rxjs';
 

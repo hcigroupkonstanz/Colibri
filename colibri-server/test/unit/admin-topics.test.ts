@@ -3,12 +3,15 @@ import { fileURLToPath } from 'url';
 import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
 import { RingBuffer } from '../../src/server/modules/core/ring-buffer.js';
 import { UNKNOWN_BUILD } from '../../src/server/modules/core/build-info.js';
-import { CertificateInfo } from '../../src/server/modules/core/tls-files.js';
+import type { CertificateInfo } from '../../src/server/modules/core/tls-files.js';
 import { readServerVersion } from '../../src/server/modules/core/server-version.js';
-import { ClientActivity } from '../../src/server/modules/networking/client-activity.js';
+import type { ClientActivity } from '../../src/server/modules/networking/client-activity.js';
 import { PROTOCOL_VERSION } from '../../src/server/modules/networking/protocol.js';
-import { SocketIoClient } from '../../src/server/modules/networking/socket-io-server.js';
-import { TcpNetworkClient } from '../../src/server/modules/networking/tcp-server-proxy.js';
+import type { SocketIoClient } from '../../src/server/modules/networking/socket-io-server.js';
+import type { TcpNetworkClient } from '../../src/server/modules/networking/tcp-server-proxy.js';
+import type {
+    ServerSources,
+} from '../../src/server/modules/web/admin-topics.js';
 import {
     DEFAULT_MODELS_LIMIT,
     LATENCY_HISTORY_MILLIS,
@@ -21,7 +24,6 @@ import {
     MAX_MODEL_JSON_LENGTH,
     MAX_NAME_LENGTH,
     RATE_HISTORY_SECONDS,
-    ServerSources,
     clientsSnapshot,
     latencySnapshot,
     modelSnapshot,

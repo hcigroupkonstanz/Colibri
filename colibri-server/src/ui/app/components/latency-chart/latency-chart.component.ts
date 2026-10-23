@@ -1,7 +1,10 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, Injector, OnDestroy, computed, effect, inject, input, signal, viewChild } from '@angular/core';
-import { ClientService, ColibriClient } from '../../services';
+import type { AfterViewInit, ElementRef, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import type { ColibriClient } from '../../services';
+import { ClientService } from '../../services';
 import * as d3 from 'd3';
-import { BoxplotStats, boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
+import type { BoxplotStats } from './boxplot';
+import { boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';
 
 const margin = { top: 12, right: 12, bottom: 28, left: 44 };
 /** The span of the charts' time axis, in ms. The server's history snapshot goes 2 s further back. */

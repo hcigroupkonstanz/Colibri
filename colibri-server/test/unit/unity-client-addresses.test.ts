@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Subject } from 'rxjs';
-import { UnityClient, UnityClientAddresses, UnityClientLeft } from '../../src/server/modules/web/unity-client-addresses.js';
+import type { UnityClient, UnityClientLeft } from '../../src/server/modules/web/unity-client-addresses.js';
+import { UnityClientAddresses } from '../../src/server/modules/web/unity-client-addresses.js';
 import { voiceAppId } from '../../src/server/modules/web/voice-packet.js';
 
 const LAB = voiceAppId('lab');

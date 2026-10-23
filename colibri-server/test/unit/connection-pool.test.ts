@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Subject, Subscription, config as rxjsConfig } from 'rxjs';
+import type { Subscription } from 'rxjs';
+import { Subject, config as rxjsConfig } from 'rxjs';
 import { ConnectionPool, MAX_UNHANDLED_COMMAND_WARNINGS } from '../../src/server/modules/command-hooks/connection-pool.js';
 import type { Delivery, NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
 import { BroadcastLogger } from '../../src/server/modules/command-hooks/broadcast-logger.js';
@@ -10,7 +11,8 @@ import { DataStore } from '../../src/server/modules/command-hooks/data-store.js'
 import { ModelSynchronization } from '../../src/server/modules/command-hooks/model-sync.js';
 import { Payload } from '../../src/server/modules/core/payload.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 
 class FakeServer implements NetworkServer {
     public clientConnectedSource = new Subject<NetworkClient>();

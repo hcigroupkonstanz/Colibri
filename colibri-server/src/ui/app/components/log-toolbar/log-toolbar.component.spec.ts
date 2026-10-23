@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { ClientService, ColibriClient, LogService } from '../../services';
-import { LogNav, LogToolbarComponent, NavStep, PHONE, SEARCH_DELAY } from './log-toolbar.component';
+import type { ColibriClient } from '../../services';
+import { ClientService, LogService } from '../../services';
+import type { LogNav, NavStep } from './log-toolbar.component';
+import { LogToolbarComponent, PHONE, SEARCH_DELAY } from './log-toolbar.component';
 
 describe('LogToolbarComponent', () => {
     let log: {

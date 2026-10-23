@@ -1,12 +1,15 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Subject } from 'rxjs';
+import type {
+    ConsoleLogOptions,
+} from '../../src/server/modules/core/console-log.js';
 import {
     ConsoleLog,
-    ConsoleLogOptions,
     MAX_CONSOLE_MESSAGE_LENGTH,
     PRINTED_TO_CONSOLE,
 } from '../../src/server/modules/core/console-log.js';
-import { LogLevel, LogMessage, Metadata } from '../../src/server/modules/core/log-message.js';
+import type { LogMessage, Metadata } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
 
 const CREATED = new Date('2026-10-19T08:30:00.123Z');

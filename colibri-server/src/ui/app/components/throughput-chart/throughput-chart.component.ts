@@ -1,6 +1,8 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, Injector, OnDestroy, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import type { AfterViewInit, ElementRef, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import * as d3 from 'd3';
-import { ClientService, ClientsSnapshot } from '../../services';
+import type { ClientsSnapshot } from '../../services';
+import { ClientService } from '../../services';
 import { TIME_RANGE_MILLIS, clientColor, timeDomain } from '../latency-chart/latency-chart.component';
 
 const margin = { top: 12, right: 12, bottom: 28, left: 44 };

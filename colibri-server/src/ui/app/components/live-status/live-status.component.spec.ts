@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { ConnectionState, SocketIOService } from '../../services';
+import type { ConnectionState } from '../../services';
+import { SocketIOService } from '../../services';
 import { LiveStatusComponent } from './live-status.component';
 
 describe('LiveStatusComponent', () => {

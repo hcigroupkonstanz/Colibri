@@ -5,16 +5,20 @@ import * as net from 'net';
 import { networkInterfaces, tmpdir } from 'os';
 import * as path from 'path';
 import * as tls from 'tls';
-import { Subscription } from 'rxjs';
-import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import type { Subscription } from 'rxjs';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
+import type {
+    ProxyTlsAddress,
+} from '../../src/server/modules/core/proxy-certificate.js';
 import {
     ProxyCertificateCheck,
-    ProxyTlsAddress,
     formatProxyTlsAddress,
     parseProxyTlsAddresses,
 } from '../../src/server/modules/core/proxy-certificate.js';
-import { TestCertificate, createTestCertificate } from '../tls-test-certificate.js';
+import type { TestCertificate } from '../tls-test-certificate.js';
+import { createTestCertificate } from '../tls-test-certificate.js';
 
 const hasIPv6Loopback = Object.values(networkInterfaces()).some(addresses => addresses?.some(a => a.address === '::1'));
 

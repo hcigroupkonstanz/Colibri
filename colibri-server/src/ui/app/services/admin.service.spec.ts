@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { EnvironmentInjector, createEnvironmentInjector, runInInjectionContext, signal } from '@angular/core';
 import { Subject } from 'rxjs';
-import { ADMIN_CHANNEL, AdminFeed, AdminQuery, AdminService, Snapshot } from './admin.service';
-import { Reconnect, SocketIOService } from './socketio.service';
+import type { AdminFeed, AdminQuery, Snapshot } from './admin.service';
+import { ADMIN_CHANNEL, AdminService } from './admin.service';
+import type { Reconnect } from './socketio.service';
+import { SocketIOService } from './socketio.service';
 
 interface Answer extends Snapshot {
     value: string;

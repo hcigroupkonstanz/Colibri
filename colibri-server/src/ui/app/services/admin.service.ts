@@ -1,4 +1,5 @@
-import { DestroyRef, Injectable, Signal, effect, inject, signal, untracked } from '@angular/core';
+import type { Signal } from '@angular/core';
+import { DestroyRef, Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { SocketIOService } from './socketio.service';
 
 /** The channel the pages read server data on. See docs/dev/protocol.md, Admin UI channel. */

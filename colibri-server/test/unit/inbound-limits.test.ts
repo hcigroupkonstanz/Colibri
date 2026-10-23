@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import type {
+    EpisodeSummary,
+} from '../../src/server/modules/networking/inbound-limits.js';
 import {
     EPISODE_QUIET_MILLIS,
     EPISODE_WARNING_MILLIS,
-    EpisodeSummary,
     HeldUpdates,
     InboundBacklog,
     InboundRateLimiter,

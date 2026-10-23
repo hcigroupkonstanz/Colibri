@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Subject, Subscription } from 'rxjs';
+import type { Subscription } from 'rxjs';
+import { Subject } from 'rxjs';
 import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
 import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
 import { ModelSynchronization } from '../../src/server/modules/command-hooks/model-sync.js';
 import { MAX_PAYLOAD_DEPTH, Payload } from '../../src/server/modules/core/payload.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 
 // A transport without broadcastToApp, so every message the hooks send shows up in `sent` with
 // the clients it went to. The payload is written down as it is sent, the way a real transport

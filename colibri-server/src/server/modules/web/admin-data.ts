@@ -1,22 +1,26 @@
 import { filter } from 'rxjs';
 
-import { BuildInfo } from '../core/build-info.js';
-import { CertificateInfo } from '../core/tls-files.js';
+import type { BuildInfo } from '../core/build-info.js';
+import type { CertificateInfo } from '../core/tls-files.js';
 import { Payload } from '../core/payload.js';
-import { ProxyCertificateResult } from '../core/proxy-certificate.js';
+import type { ProxyCertificateResult } from '../core/proxy-certificate.js';
 import { Service } from '../core/service.js';
-import { DataStore } from '../command-hooks/data-store.js';
+import type { DataStore } from '../command-hooks/data-store.js';
 import type { NetworkMessage } from '../networking/network.js';
-import { RateLimit, TokenBucket } from '../networking/inbound-limits.js';
-import { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';
-import { CLIENT_ACTIVITY_TIMEOUT_MILLIS, TCPServerProxy } from '../networking/tcp-server-proxy.js';
-import { ClientActivity } from '../networking/client-activity.js';
-import {
-    ADMIN_APP,
+import type { RateLimit } from '../networking/inbound-limits.js';
+import { TokenBucket } from '../networking/inbound-limits.js';
+import type { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';
+import type { TCPServerProxy } from '../networking/tcp-server-proxy.js';
+import { CLIENT_ACTIVITY_TIMEOUT_MILLIS } from '../networking/tcp-server-proxy.js';
+import type { ClientActivity } from '../networking/client-activity.js';
+import type {
     ModelQuery,
     ModelsQuery,
     ServerSettings,
     VoiceStatus,
+} from './admin-topics.js';
+import {
+    ADMIN_APP,
     clientsSnapshot,
     latencySnapshot,
     modelSnapshot,

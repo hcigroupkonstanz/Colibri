@@ -1,6 +1,7 @@
-import * as d3 from 'd3';
-import { ClientRow, ClientsSnapshot } from '../../services';
-import { Sample, StackRow, addSample, edgeShown, historySamples, latestTotal, stackInput, withHistory } from './throughput-chart.component';
+import type * as d3 from 'd3';
+import type { ClientRow, ClientsSnapshot } from '../../services';
+import type { Sample, StackRow } from './throughput-chart.component';
+import { addSample, edgeShown, historySamples, latestTotal, stackInput, withHistory } from './throughput-chart.component';
 
 const sample = (at: number, clients: Record<string, { app?: string; in: number | null; out: number | null }>): Sample => ({
     at,

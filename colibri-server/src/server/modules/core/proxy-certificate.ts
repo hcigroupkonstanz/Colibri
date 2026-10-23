@@ -1,7 +1,8 @@
 import { isIP } from 'net';
 import * as tls from 'tls';
 import { Service } from './service.js';
-import { CertificateInfo, Validity, describeCertificate, describeCertificateInfo, validityAt } from './tls-files.js';
+import type { CertificateInfo, Validity } from './tls-files.js';
+import { describeCertificate, describeCertificateInfo, validityAt } from './tls-files.js';
 
 /**
  * How often the server checks the certificates of PROXY_TLS_ADDRESSES again. A renewal at the proxy

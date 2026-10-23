@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { readFile } from 'fs/promises';
-import { KeyObject, X509Certificate, createPrivateKey } from 'crypto';
+import type { KeyObject } from 'crypto';
+import { X509Certificate, createPrivateKey } from 'crypto';
 import * as tls from 'tls';
 
 /**

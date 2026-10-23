@@ -2,12 +2,15 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { copyFile, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
-import { Subscription, firstValueFrom } from 'rxjs';
-import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import type { Subscription } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
 import { TlsCertificate } from '../../src/server/modules/core/tls-certificate.js';
-import { TlsCredentials } from '../../src/server/modules/core/tls-files.js';
-import { TestCertificate, createTestCertificate } from '../tls-test-certificate.js';
+import type { TlsCredentials } from '../../src/server/modules/core/tls-files.js';
+import type { TestCertificate } from '../tls-test-certificate.js';
+import { createTestCertificate } from '../tls-test-certificate.js';
 
 const HOUR = 60 * 60 * 1000;
 

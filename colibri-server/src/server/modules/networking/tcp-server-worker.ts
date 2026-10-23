@@ -1,7 +1,7 @@
 import * as net from 'net';
 import * as tls from 'tls';
 import { CONNECTION_LINE } from '../core/log-message.js';
-import { WorkerMessage } from '../core/worker-message.js';
+import type { WorkerMessage } from '../core/worker-message.js';
 import { WorkerService } from '../core/worker-service.js';
 import * as threads from 'worker_threads';
 import { fileURLToPath } from 'url';
@@ -22,18 +22,20 @@ import {
     ownBytes,
     protocolRejection,
 } from './protocol.js';
+import type {
+    HeldUpdate,
+    Limited,
+    RateLimit,
+} from './inbound-limits.js';
 import {
     DEFAULT_RATE_LIMIT,
     EPISODE_QUIET_MILLIS,
-    HeldUpdate,
     HeldUpdates,
     InboundBacklog,
     InboundRateLimiter,
     LIMITED_TRAFFIC,
     LimitEpisode,
-    Limited,
     MODEL_UPDATE_COMMAND,
-    RateLimit,
     asModelUpdate,
     describeEpisode,
     isLimitable,
@@ -44,9 +46,11 @@ import {
 } from './inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from './addresses.js';
-import { ClientActivity, RATE_WINDOW_MILLIS, TrafficMeter } from './client-activity.js';
+import type { ClientActivity } from './client-activity.js';
+import { RATE_WINDOW_MILLIS, TrafficMeter } from './client-activity.js';
 import { readProxyHeader } from './proxy-protocol.js';
-import { TrustProxy, compileTrustedProxies, trustNoProxy } from './trusted-proxies.js';
+import type { TrustProxy } from './trusted-proxies.js';
+import { compileTrustedProxies, trustNoProxy } from './trusted-proxies.js';
 
 export const TCP_SERVER_WORKER = fileURLToPath(import.meta.url);
 

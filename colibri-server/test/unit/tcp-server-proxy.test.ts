@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Subject, config as rxjsConfig } from 'rxjs';
-import { TlsCredentials } from '../../src/server/modules/core/tls-files.js';
+import type { TlsCredentials } from '../../src/server/modules/core/tls-files.js';
 import { TCPServerProxy } from '../../src/server/modules/networking/tcp-server-proxy.js';
 import { WorkerServiceProxy } from '../../src/server/modules/core/worker-service-proxy.js';
-import { WorkerMessage } from '../../src/server/modules/core/worker-message.js';
+import type { WorkerMessage } from '../../src/server/modules/core/worker-message.js';
 import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
 import type { NetworkClient } from '../../src/server/modules/networking/network.js';
 import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';

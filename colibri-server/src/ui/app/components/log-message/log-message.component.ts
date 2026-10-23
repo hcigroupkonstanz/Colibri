@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { LOG_LEVELS, LogMessage, LogService } from '../../services';
+import type { LogMessage } from '../../services';
+import { LOG_LEVELS, LogService } from '../../services';
 import { LEVEL_TAGS, appColor, highlight, isAddress, messageText, shortId, sourceOf } from './log-format';
 
 @Component({

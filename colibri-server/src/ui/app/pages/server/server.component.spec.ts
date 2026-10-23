@@ -2,8 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
-import { ConnectionState, Reconnect, ServerSnapshot, SocketIOService } from '../../services';
-import { Fact, ServerComponent, serverSections } from './server.component';
+import type { ConnectionState, Reconnect, ServerSnapshot } from '../../services';
+import { SocketIOService } from '../../services';
+import type { Fact } from './server.component';
+import { ServerComponent, serverSections } from './server.component';
 
 const DAY = 24 * 60 * 60 * 1000;
 

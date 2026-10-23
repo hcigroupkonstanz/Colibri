@@ -1,4 +1,4 @@
-import { Routes } from '@angular/router';
+import type { Routes } from '@angular/router';
 import { LogComponent } from './app/pages/log/log.component';
 import { ClientsComponent } from './app/pages/clients/clients.component';
 import { ModelsComponent } from './app/pages/models/models.component';

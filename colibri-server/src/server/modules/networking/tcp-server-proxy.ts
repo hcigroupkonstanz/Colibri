@@ -1,17 +1,20 @@
-import {
-    TCP_SERVER_WORKER,
-    TCP_SERVER_WORKER_ROLE,
+import type {
     TcpClientActivityReport,
     TcpClientConnected,
     TcpServerOptions,
     WireNetworkMessage,
 } from './tcp-server-worker.js';
-import { ClientActivity } from './client-activity.js';
+import {
+    TCP_SERVER_WORKER,
+    TCP_SERVER_WORKER_ROLE,
+} from './tcp-server-worker.js';
+import type { ClientActivity } from './client-activity.js';
 import { Payload } from '../core/payload.js';
-import { TlsCredentialSource } from '../core/tls-certificate.js';
+import type { TlsCredentialSource } from '../core/tls-certificate.js';
 import { WorkerServiceProxy } from '../core/worker-service-proxy.js';
 import { ownBytes } from './protocol.js';
-import { Observable, Subject, Subscription } from 'rxjs';
+import type { Observable, Subscription } from 'rxjs';
+import { Subject } from 'rxjs';
 import type { Delivery, NetworkClient, NetworkMessage, NetworkServer } from './network.js';
 
 const toBuffer = function (value: Buffer | Uint8Array): Buffer {
