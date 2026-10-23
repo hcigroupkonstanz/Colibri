@@ -239,6 +239,36 @@ interface TcpClient {
     limitedAt: number;
 }
 
+const createTcpClient = function (id: string, socket: net.Socket, address: string): TcpClient {
+    return {
+        id,
+        socket,
+        reader: new FrameReader(maxBufferSize),
+        address,
+        app: '',
+        name: '',
+        version: '0',
+        disconnected: false,
+        closeTimer: undefined,
+        dropping: false,
+        droppedSinceWarning: 0,
+        bytesSinceHeartbeat: 0,
+        heartbeatsQueued: 0,
+        replyBytesQueued: 0,
+        droppingReplies: false,
+        droppedRepliesSinceWarning: 0,
+        lastInboundAt: performance.now(),
+        unreadLargeBytes: 0,
+        lastLargeWrittenAt: 0n,
+        receivedAny: false,
+        held: new HeldUpdates(),
+        connectedAt: Date.now(),
+        traffic: new TrafficMeter(performance.now()),
+        limitedBy: undefined,
+        limitedAt: 0,
+    };
+};
+
 export class TCPServerWorker extends WorkerService {
     private server: net.Server | undefined;
     // With TLS on: never listens itself, but is handed each connection to the port that starts a TLS
@@ -976,33 +1006,7 @@ export class TCPServerWorker extends WorkerService {
         // keepalive from ever probing it; the idle timeout in endIdleClients covers that case.
         socket.setKeepAlive(true, KEEPALIVE_INITIAL_DELAY_MILLIS);
 
-        const tcpClient: TcpClient = {
-            id,
-            socket,
-            reader: new FrameReader(maxBufferSize),
-            address,
-            app: '',
-            name: '',
-            version: '0',
-            disconnected: false,
-            closeTimer: undefined,
-            dropping: false,
-            droppedSinceWarning: 0,
-            bytesSinceHeartbeat: 0,
-            heartbeatsQueued: 0,
-            replyBytesQueued: 0,
-            droppingReplies: false,
-            droppedRepliesSinceWarning: 0,
-            lastInboundAt: performance.now(),
-            unreadLargeBytes: 0,
-            lastLargeWrittenAt: 0n,
-            receivedAny: false,
-            held: new HeldUpdates(),
-            connectedAt: Date.now(),
-            traffic: new TrafficMeter(performance.now()),
-            limitedBy: undefined,
-            limitedAt: 0,
-        };
+        const tcpClient = createTcpClient(id, socket, address);
         this.waitingClients.set(tcpClient.id, tcpClient);
 
         socket.on('data', (data) => {
