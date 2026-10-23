@@ -53,7 +53,7 @@ namespace HCIKonstanz.Colibri.Tests
 
             // This is about handing packets over, not about how much audio is kept: a main thread
             // that falls behind the producers here must not make the bound drop any.
-            _voice.MaxQueuedSeconds = 3600f;
+            _voice.ReceivedPackets.MaxQueuedSeconds = 3600f;
 
             var delivered = new int[threads + 1, packetsPerThread];
             for (short id = 1; id <= threads; id++)
@@ -62,7 +62,7 @@ namespace HCIKonstanz.Colibri.Tests
             var producers = Enumerable.Range(1, threads).Select(id => new Thread(() =>
             {
                 for (var sequence = 0; sequence < packetsPerThread; sequence++)
-                    _voice.EnqueueReceived(new VoicePacket { Id = (short)id, Sequence = (short)sequence, Codec = Codec.OPUS });
+                    _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = (short)id, Sequence = (short)sequence, Codec = Codec.OPUS });
             })).ToArray();
 
             foreach (var producer in producers)
@@ -109,9 +109,9 @@ namespace HCIKonstanz.Colibri.Tests
             // 20 ms frames at the voice server's 48 kHz: three seconds from one sender, a fifth of a
             // second from the other.
             for (short sequence = 0; sequence < 150; sequence++)
-                _voice.EnqueueReceived(new VoicePacket { Id = 1, Sequence = sequence, FrameSize = 960, Codec = Codec.OPUS });
+                _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = 1, Sequence = sequence, FrameSize = 960, Codec = Codec.OPUS });
             for (short sequence = 0; sequence < 10; sequence++)
-                _voice.EnqueueReceived(new VoicePacket { Id = 2, Sequence = sequence, FrameSize = 960, Codec = Codec.OPUS });
+                _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = 2, Sequence = sequence, FrameSize = 960, Codec = Codec.OPUS });
 
             _voice.DeliverReceivedPackets();
 
@@ -122,7 +122,7 @@ namespace HCIKonstanz.Colibri.Tests
 
             // Delivered is gone: the next second queues afresh.
             for (short sequence = 150; sequence < 160; sequence++)
-                _voice.EnqueueReceived(new VoicePacket { Id = 1, Sequence = sequence, FrameSize = 960, Codec = Codec.OPUS });
+                _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = 1, Sequence = sequence, FrameSize = 960, Codec = Codec.OPUS });
             _voice.DeliverReceivedPackets();
 
             Assert.That(busy.Skip(50), Is.EqualTo(Enumerable.Range(150, 10).Select(i => (short)i)));
@@ -139,7 +139,7 @@ namespace HCIKonstanz.Colibri.Tests
             _voice.AddVoicePacketListener(1, _ => delivered++);
 
             for (var sequence = 0; sequence < 2000; sequence++)
-                _voice.EnqueueReceived(new VoicePacket { Id = 1, Sequence = (short)sequence, FrameSize = 0, Codec = Codec.OPUS });
+                _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = 1, Sequence = (short)sequence, FrameSize = 0, Codec = Codec.OPUS });
             _voice.DeliverReceivedPackets();
 
             Assert.That(delivered, Is.EqualTo(400));
@@ -153,7 +153,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void ANewConnectionNeverDeliversTheOldOnesPackets()
         {
-            _voice.EnqueueReceived(new VoicePacket { Id = 1, Sequence = 7, Codec = Codec.OPUS });
+            _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = 1, Sequence = 7, Codec = Codec.OPUS });
 
             // The old connection goes away before its next Update; the next one takes over.
             Object.DestroyImmediate(_gameObject);
@@ -189,8 +189,8 @@ namespace HCIKonstanz.Colibri.Tests
 
             for (short sequence = 0; sequence < 3; sequence++)
             {
-                _voice.EnqueueReceived(new VoicePacket { Id = 1, Sequence = sequence, FrameSize = 960, Codec = Codec.PCM });
-                _voice.EnqueueReceived(new VoicePacket { Id = 2, Sequence = sequence, FrameSize = 960, Codec = Codec.PCM });
+                _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = 1, Sequence = sequence, FrameSize = 960, Codec = Codec.PCM });
+                _voice.ReceivedPackets.EnqueueReceived(new VoicePacket { Id = 2, Sequence = sequence, FrameSize = 960, Codec = Codec.PCM });
             }
 
             // The first line only: Unity's Test Framework matches a multi-line message by its first

@@ -19,27 +19,6 @@ namespace HCIKonstanz.Colibri.Networking
         private Thread udpThread;
         private CancellationTokenSource shutdown;
 
-        /// <summary>
-        /// The most audio, per sender, that waits for the main thread. Packets keep arriving while
-        /// Update does not run - a Quest paused with the headset off, a long scene load - and used
-        /// to queue without limit, to be played back all at once, long stale, when it ran again.
-        /// Past this the oldest of that sender's packets are dropped. Settable for the tests.
-        /// </summary>
-        internal float MaxQueuedSeconds = 1f;
-
-        /// <summary>
-        /// The shortest audio a packet counts as, in parts of a second: 2.5 ms, Opus's shortest
-        /// frame. Only a packet claiming a frame size of zero or less is that short, and this keeps
-        /// a stream of those bounded too.
-        /// </summary>
-        private const int MIN_PACKET_DIVISOR = 400;
-
-        private const int DEFAULT_SAMPLING_RATE = 48000;
-
-        // The voice server's, which a packet's FrameSize is counted in. Written by Connect, on the
-        // main thread, before the receive thread starts.
-        private volatile int samplingRate = DEFAULT_SAMPLING_RATE;
-
         // The app id every packet goes out with, and the one a received packet has to carry: the
         // server keeps the voice of different apps apart by it. Written on the main thread, read
         // by the receive thread too.
@@ -56,27 +35,14 @@ namespace HCIKonstanz.Colibri.Networking
         // Main thread only: whether a failed send has been reported since a send last worked.
         private bool hasReportedSendFailure;
 
-        // Receive thread in, main thread out - and there can be two receive threads at once:
-        // OnDisable waits only 500 ms for the old one, so after a quick disable and enable it may
-        // still be handing over a packet while the new one starts. Everything in the queues is
-        // under queueLock. Per instance rather than static, so a new connection never delivers an
-        // old one's packets.
-        private readonly object queueLock = new object();
-        private readonly Dictionary<short, SenderQueue> queuedVoicePackets = new Dictionary<short, SenderQueue>();
+        // Per instance rather than static, so a new connection never delivers an old one's packets.
+        internal VoicePacketQueue ReceivedPackets { get; } = new VoicePacketQueue();
 
         // Main thread only: the packets being delivered, taken out of the queues in one go.
         private readonly List<VoicePacket> deliveringPackets = new List<VoicePacket>();
 
         private readonly Dictionary<int, List<Action<VoicePacket>>> voicePacketListeners = new Dictionary<int, List<Action<VoicePacket>>>();
         private bool isConnected = false;
-
-        private sealed class SenderQueue
-        {
-            public readonly Queue<VoicePacket> Packets = new Queue<VoicePacket>();
-
-            // The audio in Packets, in samples at the voice server's sampling rate.
-            public long Samples;
-        }
 
 
         private void OnEnable()
@@ -138,7 +104,7 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Hands a received datagram to <see cref="EnqueueReceived"/> if it is a voice packet of
+        /// Hands a received datagram to <see cref="VoicePacketQueue.EnqueueReceived"/> if it is a voice packet of
         /// this client's app. The server relays nothing else, so this drops only what reaches the
         /// socket some other way: a datagram too short for the header, one with another header
         /// version, such as a packet from a Colibri 1.x client, and a packet of another app.
@@ -147,50 +113,13 @@ namespace HCIKonstanz.Colibri.Networking
         internal void HandleReceived(byte[] bytes)
         {
             if (VoicePacketCodec.TryDecode(bytes, out var packetAppId, out var packet) && packetAppId == appId && packet.Id != 0)
-                EnqueueReceived(packet);
-        }
-
-        /// <summary>
-        /// Hands a received packet to the main thread, where <see cref="Update"/> delivers it,
-        /// keeping no more than <see cref="MaxQueuedSeconds"/> of each sender's audio.
-        /// </summary>
-        /// <remarks>Called from the receive thread; internal so the EditMode tests can be several of them.</remarks>
-        internal void EnqueueReceived(VoicePacket packet)
-        {
-            var rate = samplingRate;
-            var maxSamples = (long)(MaxQueuedSeconds * rate);
-            var minSamples = rate / MIN_PACKET_DIVISOR;
-
-            lock (queueLock)
-            {
-                if (!queuedVoicePackets.TryGetValue(packet.Id, out var queue))
-                {
-                    queue = new SenderQueue();
-                    queuedVoicePackets.Add(packet.Id, queue);
-                }
-
-                queue.Packets.Enqueue(packet);
-                queue.Samples += Math.Max(packet.FrameSize, minSamples);
-
-                // The newest is what is worth playing. The packet just queued always stays.
-                while (queue.Samples > maxSamples && queue.Packets.Count > 1)
-                    queue.Samples -= Math.Max(queue.Packets.Dequeue().FrameSize, minSamples);
-            }
+                ReceivedPackets.EnqueueReceived(packet);
         }
 
         /// <remarks>Internal so the EditMode tests can drive it without a player loop.</remarks>
         internal void DeliverReceivedPackets()
         {
-            lock (queueLock)
-            {
-                // A struct enumerator, and queues that keep their arrays: nothing allocated per frame.
-                foreach (var queue in queuedVoicePackets.Values)
-                {
-                    while (queue.Packets.Count > 0)
-                        deliveringPackets.Add(queue.Packets.Dequeue());
-                    queue.Samples = 0;
-                }
-            }
+            ReceivedPackets.TakeAll(deliveringPackets);
 
             // Outside the lock, so a listener never holds up the receive thread.
             try
@@ -264,33 +193,47 @@ namespace HCIKonstanz.Colibri.Networking
                 if (token.IsCancellationRequested || !this)
                     return;
 
-                if (address != null)
-                {
-                    if (reported)
-                        Debug.Log($"Colibri voice: the server address '{host}' resolves now. Voice chat is on.");
-                    StartWith(address, config);
+                if (StartOrReport(address, config, host, failure, ref reported))
                     return;
-                }
 
-                if (!reported)
-                {
-                    reported = true;
-                    Debug.LogError($"Colibri voice: {failure}. Voice chat is off until it works; trying again. "
-                        + "Check the address in Window -> Colibri Configuration.");
-                }
-
-                try
-                {
-                    await System.Threading.Tasks.Task.Delay(delayMs, token);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-                if (!this)
+                if (!await WaitBeforeRetry(delayMs, token))
                     return;
                 delayMs = Math.Min(delayMs * 2, MAX_LOOKUP_RETRY_MS);
             }
+        }
+
+        private bool StartOrReport(IPAddress address, ColibriConfig config, string host, string failure, ref bool reported)
+        {
+            if (address != null)
+            {
+                if (reported)
+                    Debug.Log($"Colibri voice: the server address '{host}' resolves now. Voice chat is on.");
+                StartWith(address, config);
+                return true;
+            }
+
+            if (!reported)
+            {
+                reported = true;
+                Debug.LogError($"Colibri voice: {failure}. Voice chat is off until it works; trying again. "
+                    + "Check the address in Window -> Colibri Configuration.");
+            }
+            return false;
+        }
+
+        private async System.Threading.Tasks.Task<bool> WaitBeforeRetry(int delayMs, CancellationToken token)
+        {
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(delayMs, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+            if (!this)
+                return false;
+            return true;
         }
 
         private void StartWith(IPAddress address, ColibriConfig config)
@@ -301,7 +244,7 @@ namespace HCIKonstanz.Colibri.Networking
             if (udpClient != null)
             {
                 sendIPEndPoint = new IPEndPoint(address, config.VoiceServerPort);
-                samplingRate = config.VoiceServerSamplingRate > 0 ? config.VoiceServerSamplingRate : DEFAULT_SAMPLING_RATE;
+                ReceivedPackets.SamplingRate = config.VoiceServerSamplingRate > 0 ? config.VoiceServerSamplingRate : VoicePacketQueue.DEFAULT_SAMPLING_RATE;
                 UseAppName(config.App);
 
                 // colibri-server listens for voice on IPv6 by default (VOICE_HOST ::), but not with
