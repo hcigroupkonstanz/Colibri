@@ -1,4 +1,5 @@
-import { Payload, Service } from '../core/index.js';
+import { Payload } from '../core/payload.js';
+import { Service } from '../core/service.js';
 import { ConnectionPool } from './connection-pool.js';
 import type { NetworkClient, NetworkMessage } from '../networking/network.js';
 

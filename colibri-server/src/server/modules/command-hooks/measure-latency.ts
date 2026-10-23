@@ -1,4 +1,6 @@
-import { Payload, RingBuffer, Service } from '../core/index.js';
+import { Payload } from '../core/payload.js';
+import { RingBuffer } from '../core/ring-buffer.js';
+import { Service } from '../core/service.js';
 import { ConnectionPool } from './connection-pool.js';
 import { hrtime } from 'process';
 import type { NetworkServer } from '../networking/network.js';

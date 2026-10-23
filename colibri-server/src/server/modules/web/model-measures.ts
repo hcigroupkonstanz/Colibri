@@ -1,7 +1,7 @@
 // Size and indented JSON of models for the admin UI snapshots. Measuring costs main thread time in
 // proportion to the model, so it is budgeted per second for all pages together; formatting stops at
 // a fixed length.
-import { ModelEntry } from '../command-hooks/index.js';
+import { ModelEntry } from '../command-hooks/data-store.js';
 
 // Bytes measured per second for all pages together, about 20 ms of main thread. The bucket holds at
 // most one second's worth.

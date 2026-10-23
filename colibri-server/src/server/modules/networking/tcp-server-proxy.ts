@@ -7,7 +7,9 @@ import {
     WireNetworkMessage,
 } from './tcp-server-worker.js';
 import { ClientActivity } from './client-activity.js';
-import { Payload, TlsCredentialSource, WorkerServiceProxy } from '../core/index.js';
+import { Payload } from '../core/payload.js';
+import { TlsCredentialSource } from '../core/tls-certificate.js';
+import { WorkerServiceProxy } from '../core/worker-service-proxy.js';
 import { ownBytes } from './protocol.js';
 import { Observable, Subject, Subscription } from 'rxjs';
 import type { Delivery, NetworkClient, NetworkMessage, NetworkServer } from './network.js';

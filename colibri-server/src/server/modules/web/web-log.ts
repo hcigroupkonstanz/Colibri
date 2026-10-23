@@ -1,4 +1,7 @@
-import { CONNECTION_METADATA_KEY, LogLevel, LogMessage, Metadata, Payload, RingBuffer, Service } from '../core/index.js';
+import { CONNECTION_METADATA_KEY, LogLevel, LogMessage, Metadata } from '../core/log-message.js';
+import { Payload } from '../core/payload.js';
+import { RingBuffer } from '../core/ring-buffer.js';
+import { Service } from '../core/service.js';
 import type { NetworkMessage } from '../networking/network.js';
 import { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';
 import { filter } from 'rxjs';

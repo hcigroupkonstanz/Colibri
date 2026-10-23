@@ -11,7 +11,9 @@ import wavefile from 'wavefile';
 import { VoiceServer, ipv6SocketsTakeIPv4, voiceSocketOptions, wavHeader } from '../../src/server/modules/web/voice-server.js';
 import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../../src/server/modules/web/voice-packet.js';
 import { UnityClient, UnityClientSource } from '../../src/server/modules/web/unity-client-addresses.js';
-import { ConsoleLog, LogLevel, LogMessage, Service } from '../../src/server/modules/core/index.js';
+import { ConsoleLog } from '../../src/server/modules/core/console-log.js';
+import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import { Service } from '../../src/server/modules/core/service.js';
 import { compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
 
 const { WaveFile } = wavefile;

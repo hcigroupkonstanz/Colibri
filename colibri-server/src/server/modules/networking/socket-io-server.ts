@@ -2,7 +2,9 @@ import { Server as SocketIoServer, Socket as SocketIoSocket, Event as SocketIoEv
 import { Server as HttpServer } from 'http';
 import { Observable, Subject } from 'rxjs';
 
-import { CONNECTION_LINE, MAX_PAYLOAD_DEPTH, Metadata, Payload, Service, nestsDeeperThan } from '../core/index.js';
+import { CONNECTION_LINE, Metadata } from '../core/log-message.js';
+import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../core/payload.js';
+import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from './network.js';
 import { abbreviate } from '../command-hooks/connection-pool.js';
 import {

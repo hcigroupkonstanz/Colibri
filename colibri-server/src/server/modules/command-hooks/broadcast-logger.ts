@@ -1,4 +1,4 @@
-import { Service } from '../core/index.js';
+import { Service } from '../core/service.js';
 import { ConnectionPool } from './connection-pool.js';
 import type { NetworkMessage } from '../networking/network.js';
 

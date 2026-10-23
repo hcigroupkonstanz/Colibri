@@ -2,8 +2,11 @@
 // are asked for and sent. Every snapshot is read only and bounded in size: a page of models, not the
 // store; a model's JSON up to a limit; names cut to a length. None of these functions changes the
 // state it reads.
-import { BuildInfo, CertificateInfo, ProxyCertificateResult, RingBuffer } from '../core/index.js';
-import { DataStore, ModelEntry, Tombstone } from '../command-hooks/index.js';
+import { BuildInfo } from '../core/build-info.js';
+import { CertificateInfo } from '../core/tls-files.js';
+import { ProxyCertificateResult } from '../core/proxy-certificate.js';
+import { RingBuffer } from '../core/ring-buffer.js';
+import { DataStore, ModelEntry, Tombstone } from '../command-hooks/data-store.js';
 import type { NetworkClient } from '../networking/network.js';
 import { ClientActivity, LoadLimit, RateSample } from '../networking/client-activity.js';
 import { PROTOCOL_VERSION } from '../networking/protocol.js';

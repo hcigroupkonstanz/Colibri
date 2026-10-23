@@ -6,7 +6,8 @@ import { networkInterfaces, tmpdir } from 'os';
 import * as path from 'path';
 import * as tls from 'tls';
 import { Subscription } from 'rxjs';
-import { LogLevel, LogMessage, Service } from '../../src/server/modules/core/index.js';
+import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
+import { Service } from '../../src/server/modules/core/service.js';
 import {
     ProxyCertificateCheck,
     ProxyTlsAddress,

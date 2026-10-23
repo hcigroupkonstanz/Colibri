@@ -1,7 +1,11 @@
 import { filter } from 'rxjs';
 
-import { BuildInfo, CertificateInfo, Payload, ProxyCertificateResult, Service } from '../core/index.js';
-import { DataStore } from '../command-hooks/index.js';
+import { BuildInfo } from '../core/build-info.js';
+import { CertificateInfo } from '../core/tls-files.js';
+import { Payload } from '../core/payload.js';
+import { ProxyCertificateResult } from '../core/proxy-certificate.js';
+import { Service } from '../core/service.js';
+import { DataStore } from '../command-hooks/data-store.js';
 import type { NetworkMessage } from '../networking/network.js';
 import { RateLimit, TokenBucket } from '../networking/inbound-limits.js';
 import { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';

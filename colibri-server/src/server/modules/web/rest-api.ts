@@ -1,4 +1,4 @@
-import { Service } from '../core/index.js';
+import { Service } from '../core/service.js';
 import { hasEmptyJsonBody, hasRestMediaType, WebServer } from './web-server.js';
 import { REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { StoreCheckpointer } from './store-checkpoint.js';

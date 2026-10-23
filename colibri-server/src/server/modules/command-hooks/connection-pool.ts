@@ -1,5 +1,5 @@
 import { Observable, merge } from 'rxjs';
-import { Service } from '../core/index.js';
+import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../networking/network.js';
 
 export type MessageHandler = (message: NetworkMessage) => void;

@@ -1,6 +1,8 @@
 import * as net from 'net';
 import * as tls from 'tls';
-import { CONNECTION_LINE, WorkerMessage, WorkerService } from '../core/index.js';
+import { CONNECTION_LINE } from '../core/log-message.js';
+import { WorkerMessage } from '../core/worker-message.js';
+import { WorkerService } from '../core/worker-service.js';
 import * as threads from 'worker_threads';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';

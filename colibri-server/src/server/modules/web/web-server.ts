@@ -5,7 +5,9 @@ import express from 'express';
 import cors from 'cors';
 import { Subscription } from 'rxjs';
 
-import { Service, TlsCredentialSource, TlsCredentials } from '../core/index.js';
+import { Service } from '../core/service.js';
+import { TlsCredentialSource } from '../core/tls-certificate.js';
+import { TlsCredentials } from '../core/tls-files.js';
 import { MAX_FRAME_LENGTH, REST_MEDIA_TYPE } from '../networking/protocol.js';
 import { TrustProxy, trustNoProxy } from '../networking/trusted-proxies.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost } from '../networking/addresses.js';

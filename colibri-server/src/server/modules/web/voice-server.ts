@@ -1,4 +1,5 @@
-import { CONNECTION_LINE, Service } from '../core/index.js';
+import { CONNECTION_LINE } from '../core/log-message.js';
+import { Service } from '../core/service.js';
 import * as dgram from 'dgram';
 import { AddressInfo, isIPv6 } from 'net';
 import { readFileSync } from 'fs';

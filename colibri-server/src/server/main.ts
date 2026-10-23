@@ -1,5 +1,28 @@
 import { fileURLToPath } from 'url';
-import * as colibri from './modules/index.js';
+import { BroadcastLogger } from './modules/command-hooks/broadcast-logger.js';
+import { Broadcaster } from './modules/command-hooks/broadcaster.js';
+import { ClientBroadcast } from './modules/command-hooks/client-broadcast.js';
+import { ClientLogger } from './modules/command-hooks/client-logger.js';
+import { ConnectionPool } from './modules/command-hooks/connection-pool.js';
+import { DataStore } from './modules/command-hooks/data-store.js';
+import { MeasureLatency } from './modules/command-hooks/measure-latency.js';
+import { ModelSynchronization } from './modules/command-hooks/model-sync.js';
+import { readBuildInfo } from './modules/core/build-info.js';
+import { ConsoleLog } from './modules/core/console-log.js';
+import { DataRootCheck } from './modules/core/data-root-check.js';
+import { ProxyCertificateCheck, formatProxyTlsAddress } from './modules/core/proxy-certificate.js';
+import { ServerProcess } from './modules/core/server-process.js';
+import { readServerVersion } from './modules/core/server-version.js';
+import { Service } from './modules/core/service.js';
+import { TlsCertificate } from './modules/core/tls-certificate.js';
+import { SocketIOServer } from './modules/networking/socket-io-server.js';
+import { TCPServerProxy } from './modules/networking/tcp-server-proxy.js';
+import { compileTrustedProxies } from './modules/networking/trusted-proxies.js';
+import { AdminData } from './modules/web/admin-data.js';
+import { RestAPI } from './modules/web/rest-api.js';
+import { VoiceServer } from './modules/web/voice-server.js';
+import { WebLog } from './modules/web/web-log.js';
+import { WebServer } from './modules/web/web-server.js';
 import { Config, configurationWarnings, tcpTlsAtProxyInEffect } from './configuration.js';
 
 /**
@@ -12,13 +35,13 @@ Error.stackTraceLimit = Config.STACK_TRACE_LIMIT;
 // Attached before any service exists, so nothing logged during construction or init() is missed
 // - the admin UI's WebLog only starts listening once its own init() has run. The options are
 // read here rather than when modules/ is imported, which happens before Config loads .env.
-new colibri.ConsoleLog(colibri.ConsoleLog.optionsFromEnv(process.env)).attach(colibri.Service.output$);
+new ConsoleLog(ConsoleLog.optionsFromEnv(process.env)).attach(Service.output$);
 
 // The release, and the commit it was built from: dist/server/build-info.json, next to this file.
-const version = colibri.readServerVersion(fileURLToPath(new URL('../../package.json', import.meta.url)));
-const build = colibri.readBuildInfo(fileURLToPath(new URL('./build-info.json', import.meta.url)));
+const version = readServerVersion(fileURLToPath(new URL('../../package.json', import.meta.url)));
+const build = readBuildInfo(fileURLToPath(new URL('./build-info.json', import.meta.url)));
 
-const dataStore = new colibri.DataStore();
+const dataStore = new DataStore();
 dataStore.tombstoneMillis = Config.MODEL_TOMBSTONE_SECONDS * 1000;
 
 /**
@@ -28,20 +51,20 @@ dataStore.tombstoneMillis = Config.MODEL_TOMBSTONE_SECONDS * 1000;
 // With TLS_CERT and TLS_KEY set, the TCP port and the web port serve TLS with the same certificate,
 // and take up a renewed one together. Config has checked both files already.
 const tlsCertificate = Config.TLS_CERT && Config.TLS_KEY
-    ? new colibri.TlsCertificate(Config.TLS_CERT, Config.TLS_KEY)
+    ? new TlsCertificate(Config.TLS_CERT, Config.TLS_KEY)
     : undefined;
 
 // The certificates the proxy in front of the server presents to clients, which the server cannot
 // see otherwise, for the monitoring page.
 const proxyCertificates = Config.PROXY_TLS_ADDRESSES.length > 0
-    ? new colibri.ProxyCertificateCheck(Config.PROXY_TLS_ADDRESSES)
+    ? new ProxyCertificateCheck(Config.PROXY_TLS_ADDRESSES)
     : undefined;
 
 // Behind these proxies, a web client's address is taken from X-Forwarded-For. The TCP worker
 // compiles its own from the same list, for the PROXY protocol.
-const trustProxy = colibri.compileTrustedProxies(Config.TRUSTED_PROXIES);
+const trustProxy = compileTrustedProxies(Config.TRUSTED_PROXIES);
 
-const webServer = new colibri.WebServer(
+const webServer = new WebServer(
     Config.WEBSERVER_HOST,
     Config.WEBSERVER_PORT,
     Config.WEBSERVER_ROOT,
@@ -50,22 +73,22 @@ const webServer = new colibri.WebServer(
     trustProxy
 );
 
-const tcpServer = new colibri.TCPServerProxy();
+const tcpServer = new TCPServerProxy();
 // Relays voice only from the address of a Unity client of the packet's app, or unchecked from a
 // trusted proxy.
-const voiceServer = new colibri.VoiceServer(Config.VOICE_SAMPLING_RATE, Config.DATA_ROOT, Config.VOICE_RECORDING, tcpServer, trustProxy);
-const socketioServer = new colibri.SocketIOServer();
-const connectionPool = new colibri.ConnectionPool(tcpServer, socketioServer);
+const voiceServer = new VoiceServer(Config.VOICE_SAMPLING_RATE, Config.DATA_ROOT, Config.VOICE_RECORDING, tcpServer, trustProxy);
+const socketioServer = new SocketIOServer();
+const connectionPool = new ConnectionPool(tcpServer, socketioServer);
 connectionPool.appClientWarningThreshold = Config.APP_CLIENT_WARNING_THRESHOLD;
 
 /**
  *    APIs
  */
-const restApi = new colibri.RestAPI(Config.DATA_ROOT, webServer, {
+const restApi = new RestAPI(Config.DATA_ROOT, webServer, {
     expiryDays: Config.STORE_EXPIRY_DAYS,
     maxBytes: Config.STORE_MAX_MB * 1024 * 1024,
 });
-const dataRootCheck = new colibri.DataRootCheck(Config.DATA_ROOT);
+const dataRootCheck = new DataRootCheck(Config.DATA_ROOT);
 
 /**
  *    Plumbing
@@ -74,17 +97,17 @@ const dataRootCheck = new colibri.DataRootCheck(Config.DATA_ROOT);
  *    registers itself as a Service in its constructor) - never referenced again, so none
  *    of these are assigned to a variable.
  */
-new colibri.ClientLogger(connectionPool);
-new colibri.WebLog(socketioServer);
-new colibri.ModelSynchronization(connectionPool, dataStore);
-new colibri.Broadcaster(connectionPool);
-new colibri.BroadcastLogger(connectionPool);
-new colibri.ClientBroadcast(connectionPool);
-new colibri.MeasureLatency(connectionPool, socketioServer);
+new ClientLogger(connectionPool);
+new WebLog(socketioServer);
+new ModelSynchronization(connectionPool, dataStore);
+new Broadcaster(connectionPool);
+new BroadcastLogger(connectionPool);
+new ClientBroadcast(connectionPool);
+new MeasureLatency(connectionPool, socketioServer);
 
 // Read-only data for the admin UI's pages. The settings by the names of the variables that set
 // them; TLS_CERT and TLS_KEY only as the certificate's description, never their paths or contents.
-const adminData = new colibri.AdminData({
+const adminData = new AdminData({
     store: dataStore,
     socketio: socketioServer,
     tcp: tcpServer,
@@ -112,7 +135,7 @@ const adminData = new colibri.AdminData({
         TRUSTED_PROXIES: Config.TRUSTED_PROXIES,
         TCP_PROXY_PROTOCOL: Config.TCP_PROXY_PROTOCOL,
         TCP_TLS_AT_PROXY: Config.TCP_TLS_AT_PROXY,
-        PROXY_TLS_ADDRESSES: Config.PROXY_TLS_ADDRESSES.map(colibri.formatProxyTlsAddress),
+        PROXY_TLS_ADDRESSES: Config.PROXY_TLS_ADDRESSES.map(formatProxyTlsAddress),
     },
     tls: tlsCertificate,
     proxyTls: proxyCertificates,
@@ -126,7 +149,7 @@ const adminData = new colibri.AdminData({
 // saves the voice recordings still in progress, which can take a while for long ones, and must
 // not leave the data store's close to the watchdog.
 const SHUTDOWN_TIMEOUT_MILLIS = 5000;
-const serverProcess = new colibri.ServerProcess([
+const serverProcess = new ServerProcess([
     { name: 'AdminData', stop: () => adminData.stop() },
     { name: 'WebServer', stop: () => webServer.stop() },
     { name: 'SocketIOServer', stop: () => socketioServer.stop() },
@@ -140,7 +163,7 @@ const serverProcess = new colibri.ServerProcess([
  */
 
 const startup = async () => {
-    for (const service of colibri.Service.Current) {
+    for (const service of Service.Current) {
         await service.init();
     }
 

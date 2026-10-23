@@ -1,4 +1,5 @@
-import { MAX_PAYLOAD_DEPTH, Payload, Service, nestsDeeperThan } from '../core/index.js';
+import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../core/payload.js';
+import { Service } from '../core/service.js';
 import { ConnectionPool } from './connection-pool.js';
 import type { NetworkMessage } from '../networking/network.js';
 import { DataStore, SyncModel } from './data-store.js';
