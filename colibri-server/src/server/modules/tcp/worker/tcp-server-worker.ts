@@ -50,6 +50,7 @@ import { AddressThrottle } from './address-throttle.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from '../../net/addresses.js';
 import type { ClientActivity } from '../../limits/client-activity.js';
 import { RATE_WINDOW_MILLIS, TrafficMeter } from '../../limits/client-activity.js';
+import { toBuffer } from '../../protocol/to-buffer.js';
 import { readProxyHeader } from './proxy-protocol.js';
 import type { TrustProxy } from '../../net/trusted-proxies.js';
 import { compileTrustedProxies, trustNoProxy } from '../../net/trusted-proxies.js';
@@ -307,11 +308,6 @@ export interface WireNetworkMessage {
     command: string;
     payload: Buffer;
 }
-
-const toBuffer = function (value: Buffer | Uint8Array): Buffer {
-    if (Buffer.isBuffer(value)) return value;
-    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
-};
 
 const secureContextOptions = function (credentials: TcpTlsCredentials): { cert: Buffer; key: Buffer } {
     return { cert: toBuffer(credentials.cert), key: toBuffer(credentials.key) };

@@ -14,14 +14,10 @@ import { Payload } from '../protocol/payload.js';
 import type { TlsCredentialSource } from '../tls/tls-certificate.js';
 import { WorkerServiceProxy } from '../core/worker/worker-service-proxy.js';
 import { ownBytes } from '../protocol/protocol.js';
+import { toBuffer } from '../protocol/to-buffer.js';
 import type { Observable, Subscription } from 'rxjs';
 import { Subject } from 'rxjs';
 import type { Delivery, NetworkClient, NetworkMessage, NetworkServer } from '../protocol/network.js';
-
-const toBuffer = function (value: Buffer | Uint8Array): Buffer {
-    if (Buffer.isBuffer(value)) return value;
-    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
-};
 
 // Bounded so a worker that dies right on start (port in use, say) is not respawned forever.
 // Reset when a client connects, which shows the restarted worker works.
