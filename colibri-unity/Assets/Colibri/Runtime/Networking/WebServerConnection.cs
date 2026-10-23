@@ -63,17 +63,6 @@ namespace HCIKonstanz.Colibri.Networking
         // oldest droppable messages go first, then the oldest model messages.
         private const int MAX_OUTBOX_MESSAGES = 10000;
 
-        // Received messages waiting for Update past which model updates are folded per object, newer fields
-        // winning. The receive thread keeps reading while Update does not run (Quest paused, Editor in the
-        // background), so model state is bounded by the number of objects, not by how long Update stalled.
-        // A listener that records every update sees only the newest state of each object for that stretch.
-        private const int RECEIVED_FOLDING_THRESHOLD = 1000;
-
-        // Cap on all received messages waiting for Update, the backstop for RECEIVED_FOLDING_THRESHOLD as
-        // MAX_OUTBOX_MESSAGES is for the outbox. The oldest broadcasts and other non-model messages are
-        // dropped first, then the oldest model messages.
-        private const int MAX_RECEIVED_MESSAGES = 10000;
-
         // How long OnDisable waits for the outbox when quitting or ending Play mode. Short, since the app is
         // closing: what SyncTicker flushes from the send rate limit then is only a few frames.
         private const int QUIT_DRAIN_TIMEOUT_MS = 100;
@@ -151,23 +140,7 @@ namespace HCIKonstanz.Colibri.Networking
         private bool _isRefused;
         private bool _hasWarnedAboutRefusal;
 
-        // Receive loop in, main thread out. Everything up to _hasWarnedAboutReceivedBacklog is guarded by
-        // _queuedCommandsLock. See EnqueueReceived for how the queue is bounded.
-        private readonly LinkedList<InPacket> _queuedCommands = new LinkedList<InPacket>();
-        private readonly object _queuedCommandsLock = new object();
-
-        // During a backlog (from RECEIVED_FOLDING_THRESHOLD messages until Update takes them): the model::update
-        // queued for each object that later ones can still be folded into, i.e. with nothing else about the
-        // object queued behind it.
-        private readonly Dictionary<(string Channel, string Id), LinkedListNode<InPacket>> _queuedReceivedUpdates
-            = new Dictionary<(string Channel, string Id), LinkedListNode<InPacket>>();
-        private bool _isReceivedBacklog;
-        private int _droppableReceivedCount;
-        private int _foldedReceivedCount;
-        private int _droppedReceivedCount;
-
-        // Reset on every connection, so a backlog is logged once per connection.
-        private bool _hasWarnedAboutReceivedBacklog;
+        private readonly ReceiveQueue _receiveQueue = new ReceiveQueue();
 
         // Main thread only: reused by DeliverReceivedMessages from frame to frame.
         private readonly List<InPacket> _delivering = new List<InPacket>();
@@ -338,16 +311,6 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        private struct InPacket
-        {
-            public string Channel;
-            public string Command;
-            public JToken Payload;
-
-            // Dropped before any model message when the queue is over its bound; false for model commands, as in the outbox.
-            public bool CanDrop;
-        }
-
 
         private void OnEnable()
         {
@@ -515,117 +478,8 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>
-        /// Hands a received message to the main thread, where <see cref="Update"/> delivers it. Bounded like
-        /// the outbox for the stretches Update does not run: past <see cref="RECEIVED_FOLDING_THRESHOLD"/>
-        /// waiting messages a model::update is folded into the one queued for the same object, and past
-        /// <see cref="MAX_RECEIVED_MESSAGES"/> the oldest messages are dropped, broadcasts first.
-        /// Does nothing once OnDisable has ended the connection loop that <paramref name="token"/> belongs
-        /// to: the next loop's messages may be queued by then, and this one would land behind them.
-        /// </summary>
-        /// <remarks>
-        /// Called from the receive loop. The queue owns <paramref name="payload"/> from here on: a fold writes
-        /// newer fields into it.
-        /// </remarks>
         internal void EnqueueReceived(string channel, string command, JToken payload, CancellationToken token = default)
-        {
-            var canDrop = ModelCommands.IsDroppable(command);
-
-            lock (_queuedCommandsLock)
-            {
-                // Checked and queued under one lock: the next loop starts only after OnDisable has cancelled the
-                // token, so its messages queue behind this one.
-                if (token.IsCancellationRequested)
-                    return;
-
-                if (!_isReceivedBacklog && _queuedCommands.Count >= RECEIVED_FOLDING_THRESHOLD)
-                    _isReceivedBacklog = true;
-
-                if (_isReceivedBacklog && ModelCommands.IsFoldableUpdate(command, payload, out var update, out var id))
-                {
-                    var key = (channel, id);
-                    if (_queuedReceivedUpdates.TryGetValue(key, out var queued))
-                    {
-                        // The queued payload was parsed off the socket and nothing else holds it yet. To the back of the
-                        // queue: it now carries the newest change.
-                        var merged = (JObject)queued.Value.Payload;
-                        foreach (var property in update.Properties())
-                            merged[property.Name] = property.Value;
-
-                        _queuedCommands.Remove(queued);
-                        _queuedCommands.AddLast(queued);
-                        _foldedReceivedCount++;
-                        return;
-                    }
-
-                    _queuedReceivedUpdates[key] = _queuedCommands.AddLast(
-                        new InPacket { Channel = channel, Command = command, Payload = payload, CanDrop = false });
-                }
-                else
-                {
-                    // A delete, or a bare { id } that answers a request, ends the fold for its object: an older update
-                    // folded past it would arrive after it. StopFolding is the outbox's counterpart.
-                    if (_isReceivedBacklog && !canDrop)
-                        StopFoldingReceived(channel, payload);
-
-                    _queuedCommands.AddLast(new InPacket { Channel = channel, Command = command, Payload = payload, CanDrop = canDrop });
-                    if (canDrop)
-                        _droppableReceivedCount++;
-                }
-
-                while (_queuedCommands.Count > MAX_RECEIVED_MESSAGES)
-                    DropOldestReceived();
-            }
-        }
-
-        // Under _queuedCommandsLock.
-        private void StopFoldingReceived(string channel, JToken payload)
-        {
-            if (ModelCommands.TryGetModelId(payload, out _, out var id))
-            {
-                _queuedReceivedUpdates.Remove((channel, id));
-                return;
-            }
-
-            // No id: about every object on the channel, as far as anyone can tell.
-            List<(string Channel, string Id)> onChannel = null;
-            foreach (var key in _queuedReceivedUpdates.Keys)
-            {
-                if (key.Channel == channel)
-                    (onChannel ??= new List<(string Channel, string Id)>()).Add(key);
-            }
-
-            if (onChannel != null)
-            {
-                foreach (var key in onChannel)
-                    _queuedReceivedUpdates.Remove(key);
-            }
-        }
-
-        // Under _queuedCommandsLock. The oldest message that may be dropped goes first, and only
-        // when none is left the oldest of the rest.
-        private void DropOldestReceived()
-        {
-            var victim = _queuedCommands.First;
-            if (_droppableReceivedCount > 0)
-            {
-                while (!victim.Value.CanDrop)
-                    victim = victim.Next;
-                _droppableReceivedCount--;
-            }
-
-            _queuedCommands.Remove(victim);
-            _droppedReceivedCount++;
-
-            var packet = victim.Value;
-            if (!packet.CanDrop
-                && ModelCommands.TryGetModelId(packet.Payload, out _, out var id)
-                && _queuedReceivedUpdates.TryGetValue((packet.Channel, id), out var indexed)
-                && ReferenceEquals(indexed, victim))
-            {
-                _queuedReceivedUpdates.Remove((packet.Channel, id));
-            }
-        }
+            => _receiveQueue.EnqueueReceived(channel, command, payload, token);
 
         /// <summary>
         /// Delivers everything received since the last frame. Handlers run on the main thread, one at a time,
@@ -633,48 +487,11 @@ namespace HCIKonstanz.Colibri.Networking
         /// </summary>
         internal void DeliverReceivedMessages()
         {
-            int folded;
-            int dropped;
-            var warnAboutBacklog = false;
-
             // Reused from frame to frame, except by a handler that delivers again from inside one.
             var batch = _delivering.Count == 0 ? _delivering : new List<InPacket>();
 
-            // Taken in one go, so the receive thread is held up once per frame rather than once per
-            // message. What arrives while these are delivered waits for the next frame.
-            lock (_queuedCommandsLock)
-            {
-                if (_queuedCommands.Count == 0)
-                    return;
-
-                batch.AddRange(_queuedCommands);
-                _queuedCommands.Clear();
-
-                folded = _foldedReceivedCount;
-                dropped = _droppedReceivedCount;
-                if ((folded > 0 || dropped > 0) && !_hasWarnedAboutReceivedBacklog)
-                {
-                    _hasWarnedAboutReceivedBacklog = true;
-                    warnAboutBacklog = true;
-                }
-
-                // The backlog, if there was one, is over.
-                _isReceivedBacklog = false;
-                _queuedReceivedUpdates.Clear();
-                _droppableReceivedCount = 0;
-                _foldedReceivedCount = 0;
-                _droppedReceivedCount = 0;
-            }
-
-            if (warnAboutBacklog)
-            {
-                var lost = dropped > 0
-                    ? $" and the {dropped} oldest messages were dropped, broadcasts first"
-                    : "; nothing was dropped";
-                Debug.LogWarning($"Colibri: {batch.Count + folded + dropped} received messages waited for Update, which did not run "
-                    + "for a while (the app was paused, or the Editor was in the background without Run In Background). To keep memory "
-                    + $"bounded, {folded} model updates were folded into the newest state of their object{lost}. Said once per connection.");
-            }
+            if (!_receiveQueue.TryTakeAll(batch))
+                return;
 
             try
             {
@@ -737,7 +554,7 @@ namespace HCIKonstanz.Colibri.Networking
          *  The loop starts on the main thread (OnEnable), so an await without it captures Unity's
          *  SynchronizationContext and every continuation (connect, receive, heartbeat echo, send) waits
          *  for the player loop, which an unfocused Editor throttles. Messages reach user code through
-         *  _queuedCommands and Update.
+         *  _receiveQueue and Update.
          */
 
         // One long-lived task per run, rather than Update retrying every frame while disconnected.
@@ -1123,8 +940,7 @@ namespace HCIKonstanz.Colibri.Networking
 
             StampLiveness();
 
-            lock (_queuedCommandsLock)
-                _hasWarnedAboutReceivedBacklog = false;
+            _receiveQueue.ResetBacklogWarning();
 
             // A TLS failure after this one is news again.
             _reportedTlsFailure = null;
@@ -1205,7 +1021,7 @@ namespace HCIKonstanz.Colibri.Networking
                             break;
 
                         case FrameType.Message:
-                            EnqueueReceived(frame.Channel, frame.Command, PayloadCodec.ParsePayload(frame.Payload), token);
+                            _receiveQueue.EnqueueReceived(frame.Channel, frame.Command, PayloadCodec.ParsePayload(frame.Payload), token);
                             break;
 
                         case FrameType.Handshake:
