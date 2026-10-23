@@ -7,56 +7,56 @@ namespace HCIKonstanz.Colibri.Synchronization
     public static partial class Sync
     {
         public static void Receive(string channel, Action<bool> listener) => AddListener(channel, _boolListeners, listener);
-        public static void Unregister(string channel, Action<bool> listener) => RemoveListener(channel, _boolListeners, listener);
+        public static void Unregister(string channel, Action<bool> listener) => _boolListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<int> listener) => AddListener(channel, _intListeners, listener);
-        public static void Unregister(string channel, Action<int> listener) => RemoveListener(channel, _intListeners, listener);
+        public static void Unregister(string channel, Action<int> listener) => _intListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<float> listener) => AddListener(channel, _floatListeners, listener);
-        public static void Unregister(string channel, Action<float> listener) => RemoveListener(channel, _floatListeners, listener);
+        public static void Unregister(string channel, Action<float> listener) => _floatListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<string> listener) => AddListener(channel, _stringListeners, listener);
-        public static void Unregister(string channel, Action<string> listener) => RemoveListener(channel, _stringListeners, listener);
+        public static void Unregister(string channel, Action<string> listener) => _stringListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Vector2> listener) => AddListener(channel, _vector2Listeners, listener);
-        public static void Unregister(string channel, Action<Vector2> listener) => RemoveListener(channel, _vector2Listeners, listener);
+        public static void Unregister(string channel, Action<Vector2> listener) => _vector2Listeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Vector3> listener) => AddListener(channel, _vector3Listeners, listener);
-        public static void Unregister(string channel, Action<Vector3> listener) => RemoveListener(channel, _vector3Listeners, listener);
+        public static void Unregister(string channel, Action<Vector3> listener) => _vector3Listeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Quaternion> listener) => AddListener(channel, _quaternionListeners, listener);
-        public static void Unregister(string channel, Action<Quaternion> listener) => RemoveListener(channel, _quaternionListeners, listener);
+        public static void Unregister(string channel, Action<Quaternion> listener) => _quaternionListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Color> listener) => AddListener(channel, _colorListeners, listener);
-        public static void Unregister(string channel, Action<Color> listener) => RemoveListener(channel, _colorListeners, listener);
+        public static void Unregister(string channel, Action<Color> listener) => _colorListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<bool[]> listener) => AddListener(channel, _boolArrayListeners, listener);
-        public static void Unregister(string channel, Action<bool[]> listener) => RemoveListener(channel, _boolArrayListeners, listener);
+        public static void Unregister(string channel, Action<bool[]> listener) => _boolArrayListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<int[]> listener) => AddListener(channel, _intArrayListeners, listener);
-        public static void Unregister(string channel, Action<int[]> listener) => RemoveListener(channel, _intArrayListeners, listener);
+        public static void Unregister(string channel, Action<int[]> listener) => _intArrayListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<float[]> listener) => AddListener(channel, _floatArrayListeners, listener);
-        public static void Unregister(string channel, Action<float[]> listener) => RemoveListener(channel, _floatArrayListeners, listener);
+        public static void Unregister(string channel, Action<float[]> listener) => _floatArrayListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<string[]> listener) => AddListener(channel, _stringArrayListeners, listener);
-        public static void Unregister(string channel, Action<string[]> listener) => RemoveListener(channel, _stringArrayListeners, listener);
+        public static void Unregister(string channel, Action<string[]> listener) => _stringArrayListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Vector2[]> listener) => AddListener(channel, _vector2ArrayListeners, listener);
-        public static void Unregister(string channel, Action<Vector2[]> listener) => RemoveListener(channel, _vector2ArrayListeners, listener);
+        public static void Unregister(string channel, Action<Vector2[]> listener) => _vector2ArrayListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Vector3[]> listener) => AddListener(channel, _vector3ArrayListeners, listener);
-        public static void Unregister(string channel, Action<Vector3[]> listener) => RemoveListener(channel, _vector3ArrayListeners, listener);
+        public static void Unregister(string channel, Action<Vector3[]> listener) => _vector3ArrayListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Quaternion[]> listener) => AddListener(channel, _quaternionArrayListeners, listener);
-        public static void Unregister(string channel, Action<Quaternion[]> listener) => RemoveListener(channel, _quaternionArrayListeners, listener);
+        public static void Unregister(string channel, Action<Quaternion[]> listener) => _quaternionArrayListeners.Remove(channel, listener);
 
         public static void Receive(string channel, Action<Color[]> listener) => AddListener(channel, _colorArrayListeners, listener);
-        public static void Unregister(string channel, Action<Color[]> listener) => RemoveListener(channel, _colorArrayListeners, listener);
+        public static void Unregister(string channel, Action<Color[]> listener) => _colorArrayListeners.Remove(channel, listener);
 
 
         public static void Receive(string channel, Action<JToken> listener) => AddListener(channel, _jsonListeners, listener);
-        public static void Unregister(string channel, Action<JToken> listener) => RemoveListener(channel, _jsonListeners, listener);
+        public static void Unregister(string channel, Action<JToken> listener) => _jsonListeners.Remove(channel, listener);
 
         public static void AddModelUpdateListener(string channel, Action<JObject> listener)
         {
@@ -91,10 +91,10 @@ namespace HCIKonstanz.Colibri.Synchronization
             Action<ReconnectRound> requestedAgain)
             => AddListener(channel, _modelUpdateListeners, listener, track: false, fetchId: id, requestedAgain: requestedAgain);
 
-        public static void RemoveModelUpdateListener(string channel, Action<JObject> listener) => RemoveListener(channel, _modelUpdateListeners, listener, track: false);
+        public static void RemoveModelUpdateListener(string channel, Action<JObject> listener) => _modelUpdateListeners.Remove(channel, listener, track: false);
 
         public static void AddModelDeleteListener(string channel, Action<JObject> listener) => AddListener(channel, _modelDeleteListeners, listener, track: false);
-        public static void RemoveModelDeleteListener(string channel, Action<JObject> listener) => RemoveListener(channel, _modelDeleteListeners, listener, track: false);
+        public static void RemoveModelDeleteListener(string channel, Action<JObject> listener) => _modelDeleteListeners.Remove(channel, listener, track: false);
 
         // Receive is overloaded once per supported type, so Sync.Receive("MyChannel", MyHandler) is ambiguous and every
         // call site needs a cast. Sync.Receive<float>("MyChannel", MyHandler) is not: type arguments rule the overloads

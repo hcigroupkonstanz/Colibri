@@ -12,53 +12,26 @@ namespace HCIKonstanz.Colibri.Synchronization
     {
         private static WebServerConnection _connection;
 
-        // A callback with the Unity object it belongs to, so the listener goes away with that object.
-        private readonly struct Listener<T>
-        {
-            public readonly Action<T> Callback;
+        private static readonly ListenerTable<bool> _boolListeners = new ListenerTable<bool>();
+        private static readonly ListenerTable<int> _intListeners = new ListenerTable<int>();
+        private static readonly ListenerTable<float> _floatListeners = new ListenerTable<float>();
+        private static readonly ListenerTable<string> _stringListeners = new ListenerTable<string>();
+        private static readonly ListenerTable<Vector2> _vector2Listeners = new ListenerTable<Vector2>();
+        private static readonly ListenerTable<Vector3> _vector3Listeners = new ListenerTable<Vector3>();
+        private static readonly ListenerTable<Quaternion> _quaternionListeners = new ListenerTable<Quaternion>();
+        private static readonly ListenerTable<Color> _colorListeners = new ListenerTable<Color>();
+        private static readonly ListenerTable<bool[]> _boolArrayListeners = new ListenerTable<bool[]>();
+        private static readonly ListenerTable<int[]> _intArrayListeners = new ListenerTable<int[]>();
+        private static readonly ListenerTable<float[]> _floatArrayListeners = new ListenerTable<float[]>();
+        private static readonly ListenerTable<string[]> _stringArrayListeners = new ListenerTable<string[]>();
+        private static readonly ListenerTable<Vector2[]> _vector2ArrayListeners = new ListenerTable<Vector2[]>();
+        private static readonly ListenerTable<Vector3[]> _vector3ArrayListeners = new ListenerTable<Vector3[]>();
+        private static readonly ListenerTable<Quaternion[]> _quaternionArrayListeners = new ListenerTable<Quaternion[]>();
+        private static readonly ListenerTable<Color[]> _colorArrayListeners = new ListenerTable<Color[]>();
+        private static readonly ListenerTable<JToken> _jsonListeners = new ListenerTable<JToken>();
 
-            // Model listeners only: the id of the model, or null for a listener of every model on the channel.
-            // Requested again after a reconnect.
-            public readonly string FetchId;
-
-            // SyncBehaviour model listeners only: called with the round when FetchId is requested again after a reconnect.
-            public readonly Action<ReconnectRound> RequestedAgain;
-
-            private readonly UnityEngine.Object _owner;
-            private readonly bool _isOwned;
-
-            public Listener(Action<T> callback, string fetchId = null, Action<ReconnectRound> requestedAgain = null)
-            {
-                Callback = callback;
-                FetchId = fetchId;
-                RequestedAgain = requestedAgain;
-                _owner = ListenerOwner.Of(callback);
-                _isOwned = !ReferenceEquals(_owner, null);
-            }
-
-            public bool IsOrphaned => _isOwned && _owner == null;
-        }
-
-        private static readonly Dictionary<string, List<Listener<bool>>> _boolListeners = new Dictionary<string, List<Listener<bool>>>();
-        private static readonly Dictionary<string, List<Listener<int>>> _intListeners = new Dictionary<string, List<Listener<int>>>();
-        private static readonly Dictionary<string, List<Listener<float>>> _floatListeners = new Dictionary<string, List<Listener<float>>>();
-        private static readonly Dictionary<string, List<Listener<string>>> _stringListeners = new Dictionary<string, List<Listener<string>>>();
-        private static readonly Dictionary<string, List<Listener<Vector2>>> _vector2Listeners = new Dictionary<string, List<Listener<Vector2>>>();
-        private static readonly Dictionary<string, List<Listener<Vector3>>> _vector3Listeners = new Dictionary<string, List<Listener<Vector3>>>();
-        private static readonly Dictionary<string, List<Listener<Quaternion>>> _quaternionListeners = new Dictionary<string, List<Listener<Quaternion>>>();
-        private static readonly Dictionary<string, List<Listener<Color>>> _colorListeners = new Dictionary<string, List<Listener<Color>>>();
-        private static readonly Dictionary<string, List<Listener<bool[]>>> _boolArrayListeners = new Dictionary<string, List<Listener<bool[]>>>();
-        private static readonly Dictionary<string, List<Listener<int[]>>> _intArrayListeners = new Dictionary<string, List<Listener<int[]>>>();
-        private static readonly Dictionary<string, List<Listener<float[]>>> _floatArrayListeners = new Dictionary<string, List<Listener<float[]>>>();
-        private static readonly Dictionary<string, List<Listener<string[]>>> _stringArrayListeners = new Dictionary<string, List<Listener<string[]>>>();
-        private static readonly Dictionary<string, List<Listener<Vector2[]>>> _vector2ArrayListeners = new Dictionary<string, List<Listener<Vector2[]>>>();
-        private static readonly Dictionary<string, List<Listener<Vector3[]>>> _vector3ArrayListeners = new Dictionary<string, List<Listener<Vector3[]>>>();
-        private static readonly Dictionary<string, List<Listener<Quaternion[]>>> _quaternionArrayListeners = new Dictionary<string, List<Listener<Quaternion[]>>>();
-        private static readonly Dictionary<string, List<Listener<Color[]>>> _colorArrayListeners = new Dictionary<string, List<Listener<Color[]>>>();
-        private static readonly Dictionary<string, List<Listener<JToken>>> _jsonListeners = new Dictionary<string, List<Listener<JToken>>>();
-
-        private static readonly Dictionary<string, List<Listener<JObject>>> _modelUpdateListeners = new Dictionary<string, List<Listener<JObject>>>();
-        private static readonly Dictionary<string, List<Listener<JObject>>> _modelDeleteListeners = new Dictionary<string, List<Listener<JObject>>>();
+        private static readonly ListenerTable<JObject> _modelUpdateListeners = new ListenerTable<JObject>();
+        private static readonly ListenerTable<JObject> _modelDeleteListeners = new ListenerTable<JObject>();
 
         // Null while the application is quitting.
         private static WebServerConnection Connection()
@@ -316,15 +289,15 @@ namespace HCIKonstanz.Colibri.Synchronization
         {
             List<Action<ReconnectRound>> toTell = null;
 
-            foreach (var entry in _modelUpdateListeners.ToArray())
+            foreach (var entry in _modelUpdateListeners.Snapshot())
             {
                 var channel = entry.Key;
                 var channelListeners = entry.Value;
 
-                Prune(channel, channelListeners, track: false);
+                ListenerTable<JObject>.Prune(channel, channelListeners, track: false);
                 if (channelListeners.Count == 0)
                 {
-                    _modelUpdateListeners.Remove(channel);
+                    _modelUpdateListeners.RemoveChannel(channel);
                     continue;
                 }
 
@@ -486,12 +459,12 @@ namespace HCIKonstanz.Colibri.Synchronization
                     // Not through Invoke<T>: a model message with nothing listening is not a type mismatch,
                     // only a model this client does not have.
                     if (data is JObject updated)
-                        Dispatch(channel, command, _modelUpdateListeners, updated, track: false);
+                        _modelUpdateListeners.Dispatch(channel, command, updated, track: false);
                     break;
 
                 case "model::delete":
                     if (data is JObject deleted)
-                        Dispatch(channel, command, _modelDeleteListeners, deleted, track: false);
+                        _modelDeleteListeners.Dispatch(channel, command, deleted, track: false);
                     break;
             }
         }
@@ -499,9 +472,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         // Converts only if this type has a listener on the channel: a channel this client ignores needs neither the
         // conversion nor a warning about a malformed value.
         private static void Deliver<T>(string channel, string command, JToken data,
-            Dictionary<string, List<Listener<T>>> listeners, Func<JToken, T> convert)
+            ListenerTable<T> listeners, Func<JToken, T> convert)
         {
-            if (!listeners.ContainsKey(channel))
+            if (!listeners.HasChannel(channel))
             {
                 ReportMismatch<T>(channel);
                 return;
@@ -544,12 +517,12 @@ namespace HCIKonstanz.Colibri.Synchronization
             return text.Length <= maxLength ? text : text.Substring(0, maxLength) + "...";
         }
 
-        private static void Invoke<T>(string channel, string command, Dictionary<string, List<Listener<T>>> listeners, T val)
+        private static void Invoke<T>(string channel, string command, ListenerTable<T> listeners, T val)
         {
             if (val == null)
                 return;
 
-            if (Dispatch(channel, command, listeners, val, track: true))
+            if (listeners.Dispatch(channel, command, val, track: true))
                 return;
 
             ReportMismatch<T>(channel);
@@ -560,53 +533,6 @@ namespace HCIKonstanz.Colibri.Synchronization
             // Reported only if the channel has listeners of another type; a channel without listeners is normal.
             if (ChannelListenerRegistry.TryDescribeMismatch(channel, typeof(T), out var message))
                 Debug.LogWarning(message);
-        }
-
-        // Calls the channel's listeners, pruning those whose owner was destroyed. False when none is left.
-        private static bool Dispatch<T>(string channel, string command, Dictionary<string, List<Listener<T>>> listeners, T val, bool track)
-        {
-            if (!listeners.TryGetValue(channel, out var channelListeners))
-                return false;
-
-            Prune(channel, channelListeners, track);
-            if (channelListeners.Count == 0)
-            {
-                // Not left empty: it would keep answering the lookup above, and later messages on this channel would be
-                // dropped without a word.
-                listeners.Remove(channel);
-                return false;
-            }
-
-            // Copied, because a listener is allowed to register or unregister while being called.
-            foreach (var listener in channelListeners.ToArray())
-            {
-                try
-                {
-                    listener.Callback.Invoke(val);
-                }
-                catch (Exception e)
-                {
-                    // One listener's exception must not stop the others or the messages queued behind it.
-                    Debug.LogError($"Colibri: a listener for {command} on channel '{channel}' threw an exception. "
-                        + $"The other listeners still received the message.\n{e}");
-                }
-            }
-
-            return true;
-        }
-
-        // Drops listeners whose owner was destroyed (see ListenerOwner); track also updates ChannelListenerRegistry.
-        private static void Prune<T>(string channel, List<Listener<T>> channelListeners, bool track)
-        {
-            for (var i = channelListeners.Count - 1; i >= 0; i--)
-            {
-                if (!channelListeners[i].IsOrphaned)
-                    continue;
-
-                channelListeners.RemoveAt(i);
-                if (track)
-                    ChannelListenerRegistry.Remove(channel, typeof(T));
-            }
         }
 
         public struct TrafficEntry
@@ -693,59 +619,14 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         // track is off for the model channels: Colibri's own plumbing, which never goes through Invoke<T> and would
         // only bury the application's channels in the registry.
-        private static void AddListener<T>(string channel, Dictionary<string, List<Listener<T>>> listeners, Action<T> listener,
+        private static void AddListener<T>(string channel, ListenerTable<T> listeners, Action<T> listener,
             bool track = true, string fetchId = null, Action<ReconnectRound> requestedAgain = null)
         {
             // Ensure the connection is in the scene and subscribed to, on every registration: a channel's entry outlives
             // a destroyed connection GameObject, and a client that only listens would never get a connection again.
             Connection();
 
-            if (!listeners.TryGetValue(channel, out var channelListeners))
-            {
-                channelListeners = new List<Listener<T>>();
-                listeners.Add(channel, channelListeners);
-            }
-            else
-            {
-                // Sweep on registration too: a scene reload registers everything again, and the old scene's listeners would
-                // pile up on a channel nothing sends on.
-                Prune(channel, channelListeners, track);
-
-                // Skip a duplicate (same method, same object). Nothing prunes a static method or a lambda that captures
-                // nothing (the compiler caches it), so it would be added again on every scene reload.
-                for (var i = 0; i < channelListeners.Count; i++)
-                {
-                    if (channelListeners[i].Callback.Equals(listener) && channelListeners[i].FetchId == fetchId)
-                        return;
-                }
-            }
-
-            channelListeners.Add(new Listener<T>(listener, fetchId, requestedAgain));
-
-            if (track)
-                ChannelListenerRegistry.Add(channel, typeof(T));
-        }
-
-        private static void RemoveListener<T>(string channel, Dictionary<string, List<Listener<T>>> listeners, Action<T> listener, bool track = true)
-        {
-            if (!listeners.TryGetValue(channel, out var channelListeners))
-                return;
-
-            for (var i = 0; i < channelListeners.Count; i++)
-            {
-                if (!channelListeners[i].Callback.Equals(listener))
-                    continue;
-
-                channelListeners.RemoveAt(i);
-                if (track)
-                    ChannelListenerRegistry.Remove(channel, typeof(T));
-                break;
-            }
-
-            Prune(channel, channelListeners, track);
-
-            if (channelListeners.Count == 0)
-                listeners.Remove(channel);
+            listeners.Add(channel, listener, track, fetchId, requestedAgain);
         }
     }
 }
