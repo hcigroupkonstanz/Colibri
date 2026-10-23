@@ -48,8 +48,8 @@ const escapeControl = function (char: string): string {
     return `\\x${char.charCodeAt(0).toString(16).padStart(2, '0')}`;
 };
 
-// Not the global console: RedirectConsole replaces console.* with functions that log back onto
-// Service.output$.
+// Not the global console: anything that replaces console.* to log back onto Service.output$ would
+// feed this writer its own output.
 let defaultWriter: ConsoleLogWriter | undefined;
 const getDefaultWriter = function (): ConsoleLogWriter {
     if (!defaultWriter) {

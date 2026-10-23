@@ -18,8 +18,6 @@ new colibri.ConsoleLog(colibri.ConsoleLog.optionsFromEnv(process.env)).attach(co
 const version = colibri.readServerVersion(fileURLToPath(new URL('../../package.json', import.meta.url)));
 const build = colibri.readBuildInfo(fileURLToPath(new URL('./build-info.json', import.meta.url)));
 
-// Print console errors in GUI
-// const redirectConsole = new colibri.RedirectConsole();
 const dataStore = new colibri.DataStore();
 dataStore.tombstoneMillis = Config.MODEL_TOMBSTONE_SECONDS * 1000;
 
