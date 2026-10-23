@@ -2,7 +2,6 @@ using HCIKonstanz.Colibri.Networking;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
@@ -35,6 +34,9 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         private static readonly UnreadDeletes _unreadDeletes = new UnreadDeletes();
         private static readonly ServerHeardClock _heardClock = new ServerHeardClock();
+        private static readonly ServerAbsence _serverAbsence = new ServerAbsence();
+        private static readonly ReconnectRounds _reconnectRounds = new ReconnectRounds();
+        private static readonly Func<bool> _isConnectedOrConnecting = IsConnectedOrConnecting;
 
         // Null while the application is quitting.
         private static WebServerConnection Connection()
@@ -51,12 +53,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 _connection.OnDisconnected += OnDisconnected;
 
                 // The replaced connection's rounds never get their answers on this one, and its queued deletes are gone.
-                if (_reconnectRound != null)
-                {
-                    _reconnectRound.IsOver = true;
-                    _reconnectRound = null;
-                }
-                EndAnswerRounds();
+                _reconnectRounds.EndAll();
                 _unreadDeletes.ForgetAll();
 
                 // The heard-from state belongs to the replaced connection.
@@ -64,19 +61,13 @@ namespace HCIKonstanz.Colibri.Synchronization
 
                 // Connected already if something else created the connection first (the [RemoteLogger], say):
                 // its OnConnected fired before this class subscribed.
-                _withoutServerSince = _connection.Status == ConnectionStatus.Connected
-                    ? double.PositiveInfinity
-                    : Time.unscaledTimeAsDouble;
+                if (_connection.Status == ConnectionStatus.Connected)
+                    _serverAbsence.End();
+                else
+                    _serverAbsence.Begin(Time.unscaledTimeAsDouble);
             }
             return _connection;
         }
-
-        // Since when this client has had no server, on SyncTicker's clock: from taking up the connection or
-        // noticing it gone. Positive infinity while connected; NaN from the session start until a connection is taken
-        // up or StopsWaitingForServer is first asked.
-        private static double _withoutServerSince = double.NaN;
-
-        private static bool _hasWarnedAboutNoServer;
 
         /// <summary>
         /// Whether a placed body waiting for the server's state (see GenericSyncTransform) is simulated without it at
@@ -85,34 +76,21 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         internal static bool StopsWaitingForServer(double now)
         {
-            if (double.IsNaN(_withoutServerSince))
-                _withoutServerSince = now;
-
             var timeout = WebServerConnection.CONNECT_TIMEOUT_MS / 1000.0;
-            if (now - _withoutServerSince < timeout)
-                return false;
+            return _serverAbsence.StopsWaitingForServer(now, timeout, _isConnectedOrConnecting);
+        }
 
-            // Not while connected or connecting. The connection comes up on a worker thread but OnConnected only
-            // follows in the next Update, and an attempt can start later than _withoutServerSince (seconds later in a
-            // frame that loads a scene) and gives up after the connect timeout itself.
+        private static bool IsConnectedOrConnecting()
+        {
             var connection = _connection;
             if (!ReferenceEquals(connection, null))
             {
                 var status = connection.Status;
                 if (status == ConnectionStatus.Connected || status == ConnectionStatus.Connecting
                     || status == ConnectionStatus.Reconnecting)
-                    return false;
+                    return true;
             }
-
-            if (!_hasWarnedAboutNoServer)
-            {
-                _hasWarnedAboutNoServer = true;
-                Debug.LogWarning($"Colibri: no connection to a server for {timeout.ToString("0.#", CultureInfo.InvariantCulture)} s, "
-                    + "so placed SyncTransforms with a Rigidbody and PhysicsAuthority ticked are simulated without the server's state; "
-                    + "once a server answers, the positions they reached replace the shared ones. Start colibri-server, or check the "
-                    + "server address in the Colibri configuration. Said once per session.");
-            }
-            return true;
+            return false;
         }
 
         // When the last outage was noticed, on SyncTicker's clock; negative infinity before the first.
@@ -129,7 +107,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         internal static void OnDisconnected(double now)
         {
             _disconnectedAt = now;
-            _withoutServerSince = now;
+            _serverAbsence.Begin(now);
 
             var madeAtTheDrop = LocallyDeletedModels.Since(LastHeardAt(now) - 1, now);
 
@@ -172,14 +150,8 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         internal const string ReconnectRoundChannel = "colibri::reconnect";
 
-        private static ReconnectRound _reconnectRound;
-
         /// <summary>The id whose answer ends the current round; null when none is open. For the EditMode tests.</summary>
-        internal static string ReconnectRoundEndMarker => _reconnectRound?.EndMarkerId;
-
-        // Rounds an object opened at its first answer (see AskForEndOfAnswers), by the id their last request asks for,
-        // until it is answered.
-        private static readonly Dictionary<string, ReconnectRound> _answerRounds = new Dictionary<string, ReconnectRound>();
+        internal static string ReconnectRoundEndMarker => _reconnectRounds.CurrentEndMarker;
 
         /// <summary>
         /// For a SyncBehaviour that keeps changes of its own at its first answer: sends one more request now, ahead of
@@ -193,17 +165,8 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             // Added after sending: SendCommand may replace the connection, which ends the rounds of the old one.
             SendCommand(ReconnectRoundChannel, "model::request", new JObject { { "id", round.EndMarkerId }, { "again", true } });
-            _answerRounds[round.EndMarkerId] = round;
+            _reconnectRounds.AddAnswerRound(round);
             return round;
-        }
-
-        // These rounds' end markers were requested on a connection that is gone. After a reconnect the requests made
-        // again open the round those objects are in.
-        private static void EndAnswerRounds()
-        {
-            foreach (var round in _answerRounds.Values)
-                round.IsOver = true;
-            _answerRounds.Clear();
         }
 
         /// <summary>
@@ -214,7 +177,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         internal static void OnConnected()
         {
             // A body waiting for the server's state now waits for its answer (see StopsWaitingForServer).
-            _withoutServerSince = double.PositiveInfinity;
+            _serverAbsence.End();
 
             var connection = _connection;
             if (connection == null || connection.ConnectedSessions < 2)
@@ -280,24 +243,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 }
             }
 
-            // A round still open lost its answers: the link dropped again soon after the last reconnect. A change lost at
-            // the earlier drop is still in question, so the new round counts from that outage. Counted from this one, that
-            // change would predate DisconnectedAt and the stale answer would be applied.
-            if (_reconnectRound != null)
-            {
-                disconnectedAt = Math.Min(disconnectedAt, _reconnectRound.DisconnectedAt);
-                _reconnectRound.IsOver = true;
-            }
-
-            // Same for a round an object opened at its first answer: the object is in the new round now, and what it sent
-            // in place of the server's values is judged like any other value sent.
-            EndAnswerRounds();
-
             // After every other request, on every channel, so its answer comes after all of theirs. Sent even when no model
             // was requested: its answer also says the server has read the deletes sent again, and a round that is never
             // answered would carry its outage into a much later one and judge as lost what other clients changed in between.
-            var round = new ReconnectRound(disconnectedAt);
-            _reconnectRound = round;
+            var round = _reconnectRounds.OpenReconnectRound(disconnectedAt);
             SendCommand(ReconnectRoundChannel, "model::request", new JObject { { "id", round.EndMarkerId }, { "again", true } });
 
             // Values sent from here on go out after the requests, so the answers cannot hold them: hearing from the
@@ -319,19 +268,11 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
 
             var marker = (string)id;
-            if (_answerRounds.TryGetValue(marker, out var answerRound))
-            {
-                _answerRounds.Remove(marker);
-                answerRound.IsOver = true;
-                return;
-            }
-
-            var round = _reconnectRound;
-            if (round == null || marker != round.EndMarkerId)
+            if (_reconnectRounds.TryEndAnswerRound(marker))
                 return;
 
-            round.IsOver = true;
-            _reconnectRound = null;
+            if (!_reconnectRounds.TryEndReconnectRound(marker))
+                return;
 
             // The server has read everything queued ahead of the request, the resent deletes included. Later deletes are
             // resent only if made around when the server was last heard from (see OnDisconnected).
@@ -560,12 +501,10 @@ namespace HCIKonstanz.Colibri.Synchronization
             // session is in its rounds.
             _disconnectedAt = double.NegativeInfinity;
             _unreadDeletes.ForgetAll();
-            _reconnectRound = null;
-            EndAnswerRounds();
+            _reconnectRounds.Reset();
             _heardClock.Reset();
 
-            _withoutServerSince = double.NaN;
-            _hasWarnedAboutNoServer = false;
+            _serverAbsence.Reset();
         }
 
         // track is off for the model channels: Colibri's own plumbing, which never goes through Invoke<T> and would
