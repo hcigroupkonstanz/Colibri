@@ -12,7 +12,22 @@ namespace HCIKonstanz.Colibri.Synchronization
     public class SyncTransformEditor : Editor
     {
         [InitializeOnLoadMethod]
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void WatchDuplicateIds()
+        {
+            // Entering Play mode with a domain reload runs this again; OnPlayModeStateChanged checks then.
+            if (!EditorApplication.isPlayingOrWillChangePlaymode)
+                CheckDuplicateIds();
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        // Not RuntimeInitializeOnLoadMethod(BeforeSceneLoad), which runs before the scene's objects exist.
+        // EnteredPlayMode comes after the scene is loaded, with or without a domain reload.
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state == PlayModeStateChange.EnteredPlayMode)
+                CheckDuplicateIds();
+        }
+
         private static void CheckDuplicateIds()
         {
             var transforms = UnityCompat.FindAll<SyncTransform>();

@@ -14,6 +14,10 @@ All notable changes to Colibri for Unity. Upgrading from Colibri 1: [Migration G
   inspector are the assembly `HCIKonstanz.Colibri.Editor`. Files moved, e.g. the prefabs are now in
   `Packages/Colibri/Runtime/Prefabs/`. GUIDs are unchanged, so references in scenes and prefabs keep working.
 
+### Fixed
+
+- The warning for overlapping `SyncTransform` IDs also appears when you enter Play mode with domain reload disabled.
+
 ## [2.0.0] - Unreleased
 
 Works only with colibri-server 2.0.0 or newer.
