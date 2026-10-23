@@ -3,11 +3,9 @@ import type {
     TcpClientConnected,
     TcpServerOptions,
     WireNetworkMessage,
-} from './worker/tcp-server-worker.js';
-import {
-    TCP_SERVER_WORKER,
-    TCP_SERVER_WORKER_ROLE,
-} from './worker/tcp-server-worker.js';
+} from './worker-messages.js';
+import { TCP_SERVER_WORKER_ROLE } from './worker-messages.js';
+import { TCP_SERVER_WORKER } from './worker/tcp-server-worker.js';
 import { AppIndex } from '../core/app-index.js';
 import type { ClientActivity } from '../limits/client-activity.js';
 import { Payload } from '../protocol/payload.js';

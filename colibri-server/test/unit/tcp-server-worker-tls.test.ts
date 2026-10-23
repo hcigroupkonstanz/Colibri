@@ -6,7 +6,7 @@ import { networkInterfaces, tmpdir } from 'os';
 import * as path from 'path';
 import * as tls from 'tls';
 import type * as workerThreads from 'worker_threads';
-import type { TcpServerOptions } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
+import type { TcpServerOptions } from '../../src/server/modules/tcp/worker-messages.js';
 import { TCPServerWorker } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
 import type {
     DecodedFrame,
