@@ -51,6 +51,28 @@ export default tseslint.config(
             '@typescript-eslint/no-explicit-any': 'warn',
             '@typescript-eslint/no-inferrable-types': ['warn', { ignoreParameters: true }],
             '@typescript-eslint/no-unused-vars': 'warn',
+            '@typescript-eslint/naming-convention': ['error',
+                { selector: 'default', format: ['camelCase'], leadingUnderscore: 'allow' },
+                { selector: 'variable', modifiers: ['const'], format: ['camelCase', 'UPPER_CASE', 'PascalCase'], leadingUnderscore: 'allowDouble' },
+                { selector: 'typeLike', format: ['PascalCase'] },
+                { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
+                // Constants a template reads, and static members such as Service.Current.
+                { selector: 'classProperty', modifiers: ['readonly'], format: ['camelCase', 'UPPER_CASE', 'PascalCase'], leadingUnderscore: 'allow' },
+                // Wire formats, headers and settings keep the names they have outside this code.
+                { selector: ['objectLiteralProperty', 'typeProperty', 'import'], format: null },
+            ],
+        },
+    },
+    // Size guides from docs/dev/conventions.md. Warnings until the refactor brings the code under them.
+    {
+        files: ['src/**/*.ts'],
+        ignores: ['**/*.spec.ts'],
+        rules: {
+            'max-lines': ['warn', { max: 400, skipBlankLines: true, skipComments: true }],
+            'max-lines-per-function': ['warn', { max: 40, skipBlankLines: true, skipComments: true }],
+            'complexity': ['warn', 15],
+            'max-depth': ['warn', 4],
+            'max-params': ['warn', 5],
         },
     },
 );
