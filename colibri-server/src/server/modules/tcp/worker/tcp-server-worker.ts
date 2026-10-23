@@ -24,6 +24,7 @@ import {
     ownBytes,
     protocolRejection,
 } from '../../protocol/protocol.js';
+import type { DecodedFrame } from '../../protocol/protocol.js';
 import type {
     HeldUpdate,
     Limited,
@@ -179,6 +180,8 @@ const NOTHING_READ = Buffer.alloc(0);
 // gets there with: whatever followed its PROXY protocol header in the same read.
 type ConnectionHandler = (socket: net.Socket, alreadyRead: Buffer) => void;
 
+type FrameOf<T extends FrameType> = Extract<DecodedFrame, { type: T }>;
+
 const secureContextOptions = function (credentials: TcpTlsCredentials): { cert: Buffer; key: Buffer } {
     return { cert: toBuffer(credentials.cert), key: toBuffer(credentials.key) };
 };
@@ -224,7 +227,7 @@ interface TcpClient {
     // heartbeat from after that. See DEFAULT_IDLE_TIMEOUT_MILLIS.
     unreadLargeBytes: number;
     lastLargeWrittenAt: bigint;
-    // Whether any bytes have been received from it yet; see handleSocketData.
+    // Whether any bytes have been received from it yet; see acceptChunk.
     receivedAny: boolean;
     // Model updates over a limit, waiting for room; see HeldUpdates.
     held: HeldUpdates;
@@ -1028,6 +1031,34 @@ export class TCPServerWorker extends WorkerService {
         if (client.disconnected) return;
 
         const now = performance.now();
+        if (!this.acceptChunk(client, data, now)) return;
+
+        const frames = this.readFrames(client, data);
+        if (!frames) return;
+
+        for (const frame of frames) {
+            // A handshake earlier in this same chunk may have refused the client; the frames
+            // queued behind it must not be relayed or logged as orphans.
+            if (client.disconnected) return;
+
+            switch (frame.type) {
+                case FrameType.Handshake:
+                    this.onHandshakeFrame(client, frame);
+                    break;
+
+                case FrameType.Heartbeat:
+                    this.onHeartbeatFrame(client, frame);
+                    break;
+
+                case FrameType.Message:
+                    if (!this.onMessageFrame(client, frame, now)) return;
+                    break;
+            }
+        }
+    }
+
+    // False if it closed the client: nothing in the chunk is read.
+    private acceptChunk(client: TcpClient, data: Buffer, now: number): boolean {
         client.lastInboundAt = now;
 
         // A TLS client on an unencrypted port. Its handshake would otherwise go into the frame
@@ -1039,13 +1070,16 @@ export class TCPServerWorker extends WorkerService {
             if (!(client.socket as tls.TLSSocket).encrypted && looksLikeTlsHandshake(data)) {
                 this.reportTlsClientWithoutTlsPort(client);
                 this.closeClient(client);
-                return;
+                return false;
             }
         }
+        return true;
+    }
 
-        let frames;
+    // Undefined if the bytes are no valid frames and it closed the client.
+    private readFrames(client: TcpClient, data: Buffer): DecodedFrame[] | undefined {
         try {
-            frames = client.reader.append(data);
+            return client.reader.append(data);
         } catch (err) {
             if (err instanceof V1FramingError) {
                 this.reportV1Client(client);
@@ -1058,68 +1092,62 @@ export class TCPServerWorker extends WorkerService {
             }
             client.reader.reset();
             this.closeClient(client);
-            return;
+            return undefined;
         }
+    }
 
-        for (const frame of frames) {
-            // A handshake earlier in this same chunk may have refused the client; the frames
-            // queued behind it must not be relayed or logged as orphans.
-            if (client.disconnected) return;
+    private onHandshakeFrame(client: TcpClient, frame: FrameOf<FrameType.Handshake>): void {
+        // A re-handshake can move the client to another app; what it sent in the old
+        // one has to reach the main thread while it is still in the old one.
+        this.releaseHeld(client);
+        try {
+            this.assignApp(client, frame.app, frame.name, frame.version);
+        } catch (err) {
+            this.logError(
+                `Invalid handshake packet received from client ${client.id}`,
+                false
+            );
+            if (err instanceof Error) this.logError(err.stack || '', false);
+            else console.error(err);
+        }
+    }
 
-            switch (frame.type) {
-                case FrameType.Handshake:
-                    // A re-handshake can move the client to another app; what it sent in the old
-                    // one has to reach the main thread while it is still in the old one.
-                    this.releaseHeld(client);
-                    try {
-                        this.assignApp(client, frame.app, frame.name, frame.version);
-                    } catch (err) {
-                        this.logError(
-                            `Invalid handshake packet received from client ${client.id}`,
-                            false
-                        );
-                        if (err instanceof Error) this.logError(err.stack || '', false);
-                        else console.error(err);
-                    }
-                    break;
+    private onHeartbeatFrame(client: TcpClient, frame: FrameOf<FrameType.Heartbeat>): void {
+        // One written after the client's large messages: it has read them all.
+        if (frame.pingTimestamp > client.lastLargeWrittenAt) client.unreadLargeBytes = 0;
+        this.handlePong(client, frame.pingTimestamp);
+    }
 
-                case FrameType.Heartbeat:
-                    // One written after the client's large messages: it has read them all.
-                    if (frame.pingTimestamp > client.lastLargeWrittenAt) client.unreadLargeBytes = 0;
-                    this.handlePong(client, frame.pingTimestamp);
-                    break;
-
-                case FrameType.Message:
-                    // A Colibri client handshakes before it sends anything else, so this is no
-                    // Colibri client, or not one this server can serve. Each such message used to
-                    // log an ERROR line, and a peer that kept sending was never closed: what it
-                    // sent kept it from looking idle. A loop of them stalled the main thread with
-                    // log lines.
-                    if (!client.app) {
-                        if (this.noHandshakeWarnedAt.shouldWarn(client.address, now)) {
-                            this.logWarning(
-                                `Closing the connection of client ${client.id} from ${client.address}: it sent a message ` +
-                                    `(${abbreviateName(frame.channel)} / ${abbreviateName(frame.command)}) before a handshake naming its app. ` +
-                                    'Logged at most once a minute per address.'
-                            );
-                        }
-                        this.closeClient(client);
-                        return;
-                    }
-
-                    client.traffic.received += 1;
-                    if (!isLimitable(frame.channel, frame.command)) {
-                        // Nothing may overtake what the client sent before it, so whatever of its
-                        // updates is held back goes first - a model::delete must not arrive ahead
-                        // of an update to the same object and have that update bring it back.
-                        this.releaseHeld(client);
-                        this.postClientMessage(client, frame.channel, frame.command, frame.payload);
-                    } else {
-                        this.acceptLimitable(client, frame.channel, frame.command, frame.payload, now);
-                    }
-                    break;
+    // False if it closed the client: the rest of the chunk is not read.
+    private onMessageFrame(client: TcpClient, frame: FrameOf<FrameType.Message>, now: number): boolean {
+        // A Colibri client handshakes before it sends anything else, so this is no
+        // Colibri client, or not one this server can serve. Each such message used to
+        // log an ERROR line, and a peer that kept sending was never closed: what it
+        // sent kept it from looking idle. A loop of them stalled the main thread with
+        // log lines.
+        if (!client.app) {
+            if (this.noHandshakeWarnedAt.shouldWarn(client.address, now)) {
+                this.logWarning(
+                    `Closing the connection of client ${client.id} from ${client.address}: it sent a message ` +
+                        `(${abbreviateName(frame.channel)} / ${abbreviateName(frame.command)}) before a handshake naming its app. ` +
+                        'Logged at most once a minute per address.'
+                );
             }
+            this.closeClient(client);
+            return false;
         }
+
+        client.traffic.received += 1;
+        if (!isLimitable(frame.channel, frame.command)) {
+            // Nothing may overtake what the client sent before it, so whatever of its
+            // updates is held back goes first - a model::delete must not arrive ahead
+            // of an update to the same object and have that update bring it back.
+            this.releaseHeld(client);
+            this.postClientMessage(client, frame.channel, frame.command, frame.payload);
+        } else {
+            this.acceptLimitable(client, frame.channel, frame.command, frame.payload, now);
+        }
+        return true;
     }
 
     private assignApp(client: TcpClient, app: string, name: string, version: string): void {
