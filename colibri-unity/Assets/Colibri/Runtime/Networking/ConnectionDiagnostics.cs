@@ -19,6 +19,8 @@ namespace HCIKonstanz.Colibri.Networking
 
         private readonly ConnectionState _state;
         private readonly Func<ConnectionConfig> _currentConfig;
+        private readonly long _heartbeatTimeoutMs;
+        private readonly string _clientVersion;
 
         // Connection loop only.
         private bool _hasReportedMissingConfig;
@@ -49,10 +51,12 @@ namespace HCIKonstanz.Colibri.Networking
 
         private volatile string _lastConnectFailure;
 
-        internal ConnectionDiagnostics(ConnectionState state, Func<ConnectionConfig> currentConfig)
+        internal ConnectionDiagnostics(ConnectionState state, Func<ConnectionConfig> currentConfig, long heartbeatTimeoutMs, string clientVersion)
         {
             _state = state;
             _currentConfig = currentConfig;
+            _heartbeatTimeoutMs = heartbeatTimeoutMs;
+            _clientVersion = clientVersion;
         }
 
         internal string ServerVersion
@@ -146,7 +150,7 @@ namespace HCIKonstanz.Colibri.Networking
                     Debug.LogWarning(
                         $"Colibri: {_consecutiveUnansweredSessions} connections in a row to {config.ServerAddress}:{config.TcpPort} were accepted, " +
                         "but nothing was received on any of them: each was closed by the other end or dropped after " +
-                        $"{WebServerConnection.HEARTBEAT_TIMEOUT_THRESHOLD_MS / 1000f:0.#} s of silence. " +
+                        $"{_heartbeatTimeoutMs / 1000f:0.#} s of silence. " +
                         "Something accepts connections there and then closes them or forwards nothing (a proxy or port forwarding " +
                         "whose backend is down, a captive portal, a firewall), or the server there does not answer or is not a " +
                         "colibri-server. Check that colibri-server is running and reachable at this address and port. Retrying...");
@@ -161,7 +165,7 @@ namespace HCIKonstanz.Colibri.Networking
 
             var suspicion =
                 $"{_consecutiveEarlyFrameFailures} connections in a row were accepted but ended before a single frame could be read. " +
-                $"This usually means a protocol mismatch: this client speaks v{WebServerConnection.ClientVersion} and needs colibri-server >= 2.0.0. " +
+                $"This usually means a protocol mismatch: this client speaks v{_clientVersion} and needs colibri-server >= 2.0.0. " +
                 "Check the server's version.";
 
             // A server with TLS turned on hangs up on a client that is not using it, before a

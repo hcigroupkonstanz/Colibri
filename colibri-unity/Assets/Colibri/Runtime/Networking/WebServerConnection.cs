@@ -35,7 +35,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         // The server heartbeats every 100 ms, so this much silence means the connection is gone even if
         // the socket has not noticed.
-        internal const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
+        private const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
 
         private const int RECEIVE_BUFFER_SIZE = 64 * 1024;
 
@@ -164,7 +164,7 @@ namespace HCIKonstanz.Colibri.Networking
         public WebServerConnection()
         {
             _outbox = new Outbox(_frameWriter);
-            _diagnostics = new ConnectionDiagnostics(_state, () => _config);
+            _diagnostics = new ConnectionDiagnostics(_state, () => _config, HEARTBEAT_TIMEOUT_THRESHOLD_MS, CLIENT_VERSION);
         }
 
         private void OnEnable()
