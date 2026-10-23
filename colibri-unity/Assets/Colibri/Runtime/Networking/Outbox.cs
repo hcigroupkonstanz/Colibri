@@ -289,58 +289,40 @@ namespace HCIKonstanz.Colibri.Networking
                 else if (_outboxSession == null)
                 {
                     Queue(channel, command, payload, frame, sent);
-
-                    while (_droppableCount > MAX_QUEUED_MESSAGES)
-                    {
-                        var oldest = _outbox.First;
-                        while (!oldest.Value.CanDrop)
-                            oldest = oldest.Next;
-
-                        (dropped ??= new List<Outgoing>()).Add(oldest.Value);
-                        RemoveFromOutbox(oldest);
-                    }
-
-                    if (dropped != null && !_hasWarnedAboutDrops)
-                    {
-                        _hasWarnedAboutDrops = true;
-                        warnAboutDrops = true;
-                    }
+                    warnAboutDrops = EnforceOutageBound(ref dropped);
                 }
                 else
                 {
-                    _outbox.AddLast(new Outgoing { Frame = frame, Sent = sent, CanDrop = ModelCommands.IsDroppable(command) });
-                    if (ModelCommands.IsDroppable(command))
-                        _droppableCount++;
-
-                    if (!_isDraining)
-                    {
-                        _isDraining = true;
-                        startDraining = true;
-                    }
+                    startDraining = AddWhileConnected(command, frame, sent);
                 }
 
                 if (!refused && _outbox.Count > MAX_OUTBOX_MESSAGES)
-                {
-                    EnforceOutboxLimit(ref dropped);
-
-                    warnAboutOutboxLimit = !_hasWarnedAboutOutboxLimit;
-                    _hasWarnedAboutOutboxLimit = true;
-                }
+                    warnAboutOutboxLimit = EnforceOutboxLimit(ref dropped);
             }
 
             // Logged, and the dropped tasks completed, outside the lock: both can run other code.
             if (refused)
             {
-                if (warnAboutRefusal)
-                {
-                    Debug.LogWarning($"Colibri: not sending {command} on channel '{channel}' - the server refused this client's protocol version, "
-                        + "so nothing is sent any more. Every later message is dropped the same way; this is said once.");
-                }
-
-                sent?.TrySetResult(false);
+                FinishRefusedPost(channel, command, sent, warnAboutRefusal);
                 return;
             }
 
+            FinishPost(dropped, warnAboutDrops, warnAboutOutboxLimit, startDraining);
+        }
+
+        private static void FinishRefusedPost(string channel, string command, TaskCompletionSource<bool> sent, bool warnAboutRefusal)
+        {
+            if (warnAboutRefusal)
+            {
+                Debug.LogWarning($"Colibri: not sending {command} on channel '{channel}' - the server refused this client's protocol version, "
+                    + "so nothing is sent any more. Every later message is dropped the same way; this is said once.");
+            }
+
+            sent?.TrySetResult(false);
+        }
+
+        private void FinishPost(List<Outgoing> dropped, bool warnAboutDrops, bool warnAboutOutboxLimit, bool startDraining)
+        {
             if (warnAboutDrops)
             {
                 Debug.LogWarning($"Colibri: more than {MAX_QUEUED_MESSAGES} messages are waiting for the connection to come back, "
@@ -367,10 +349,32 @@ namespace HCIKonstanz.Colibri.Networking
                 _ = DrainOutbox();
         }
 
+        // Under _outboxLock.
+        private bool EnforceOutageBound(ref List<Outgoing> dropped)
+        {
+            while (_droppableCount > MAX_QUEUED_MESSAGES)
+            {
+                var oldest = _outbox.First;
+                while (!oldest.Value.CanDrop)
+                    oldest = oldest.Next;
+
+                (dropped ??= new List<Outgoing>()).Add(oldest.Value);
+                RemoveFromOutbox(oldest);
+            }
+
+            if (dropped != null && !_hasWarnedAboutDrops)
+            {
+                _hasWarnedAboutDrops = true;
+                return true;
+            }
+
+            return false;
+        }
+
         // Under _outboxLock. The oldest message that may be dropped goes first, and only when none
         // is left the oldest of the rest. Never the message the drainer is writing at this moment:
         // dropping that one would report as dropped a message that may well arrive.
-        private void EnforceOutboxLimit(ref List<Outgoing> dropped)
+        private bool EnforceOutboxLimit(ref List<Outgoing> dropped)
         {
             while (_outbox.Count > MAX_OUTBOX_MESSAGES)
             {
@@ -389,6 +393,10 @@ namespace HCIKonstanz.Colibri.Networking
                 (dropped ??= new List<Outgoing>()).Add(victim.Value);
                 RemoveFromOutbox(victim);
             }
+
+            var warnAboutOutboxLimit = !_hasWarnedAboutOutboxLimit;
+            _hasWarnedAboutOutboxLimit = true;
+            return warnAboutOutboxLimit;
         }
 
         // Under _outboxLock, while not connected.
@@ -431,6 +439,22 @@ namespace HCIKonstanz.Colibri.Networking
                 _droppableCount++;
         }
 
+        // Under _outboxLock.
+        private bool AddWhileConnected(string command, byte[] frame, TaskCompletionSource<bool> sent)
+        {
+            _outbox.AddLast(new Outgoing { Frame = frame, Sent = sent, CanDrop = ModelCommands.IsDroppable(command) });
+            if (ModelCommands.IsDroppable(command))
+                _droppableCount++;
+
+            if (!_isDraining)
+            {
+                _isDraining = true;
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Writes the outbox to the current session's socket, head first, until it is empty or
         /// the session is gone. Only ever one running (<c>_isDraining</c>), and it reads the session
@@ -467,20 +491,7 @@ namespace HCIKonstanz.Colibri.Networking
                     // The message stays at the head of the outbox and is the first thing the
                     // next session sends. This session is finished: close it, so the receive loop
                     // notices now rather than at the next heartbeat.
-                    lock (_outboxLock)
-                    {
-                        if (ReferenceEquals(_outboxSession, session))
-                        {
-                            _outboxSession = null;
-                            _outboxToken = CancellationToken.None;
-                            Monitor.PulseAll(_outboxLock);
-                        }
-                    }
-
-                    if (!token.IsCancellationRequested)
-                        Debug.Log($"Colibri: sending failed ({e.GetType().Name}: {e.Message}); queued messages will be sent after reconnecting");
-
-                    session.Close();
+                    CloseFailedSession(session, token, e);
                     continue;
                 }
 
@@ -498,6 +509,24 @@ namespace HCIKonstanz.Colibri.Networking
 
                 next.Sent?.TrySetResult(true);
             }
+        }
+
+        private void CloseFailedSession(ServerSession session, CancellationToken token, Exception e)
+        {
+            lock (_outboxLock)
+            {
+                if (ReferenceEquals(_outboxSession, session))
+                {
+                    _outboxSession = null;
+                    _outboxToken = CancellationToken.None;
+                    Monitor.PulseAll(_outboxLock);
+                }
+            }
+
+            if (!token.IsCancellationRequested)
+                Debug.Log($"Colibri: sending failed ({e.GetType().Name}: {e.Message}); queued messages will be sent after reconnecting");
+
+            session.Close();
         }
     }
 }
