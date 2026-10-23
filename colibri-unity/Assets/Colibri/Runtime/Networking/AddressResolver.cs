@@ -134,7 +134,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// </summary>
         /// <remarks>
         /// IPv4 first because voice goes to an IPv4 address whenever the name has one
-        /// (VoiceServerConnection.SelectServerAddress), and colibri-server relays voice only from the source
+        /// (VoiceServerAddress.SelectServerAddress), and colibri-server relays voice only from the source
         /// address of a TCP connection of the same app (voice-server.ts, admit). With TCP on IPv6 and voice on
         /// IPv4 the addresses differ and every voice packet is dropped, e.g. "localhost" on Windows against a
         /// server on TCP_HOST ::. A name with only IPv6 addresses still connects over IPv6, and voice follows.
