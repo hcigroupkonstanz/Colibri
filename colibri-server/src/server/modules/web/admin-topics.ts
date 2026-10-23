@@ -3,7 +3,8 @@
 // store; a model's JSON up to a limit; names cut to a length. None of these functions changes the
 // state it reads.
 import { BuildInfo, CertificateInfo, ProxyCertificateResult, RingBuffer } from '../core/index.js';
-import { DataStore, ModelEntry, NetworkClient, Tombstone } from '../command-hooks/index.js';
+import { DataStore, ModelEntry, Tombstone } from '../command-hooks/index.js';
+import type { NetworkClient } from '../networking/network.js';
 import { ClientActivity, LoadLimit, RateSample } from '../networking/client-activity.js';
 import { PROTOCOL_VERSION } from '../networking/protocol.js';
 import { SocketIoClient } from '../networking/socket-io-server.js';

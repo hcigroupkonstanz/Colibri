@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Subject } from 'rxjs';
-import { ConnectionPool, NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/command-hooks/connection-pool.js';
+import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
+import type { NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
 import { Broadcaster } from '../../src/server/modules/command-hooks/broadcaster.js';
 import { BroadcastLogger } from '../../src/server/modules/command-hooks/broadcast-logger.js';
 import { Service } from '../../src/server/modules/core/service.js';

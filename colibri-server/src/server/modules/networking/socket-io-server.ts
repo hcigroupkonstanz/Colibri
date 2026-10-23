@@ -3,7 +3,7 @@ import { Server as HttpServer } from 'http';
 import { Observable, Subject } from 'rxjs';
 
 import { CONNECTION_LINE, MAX_PAYLOAD_DEPTH, Metadata, Payload, Service, nestsDeeperThan } from '../core/index.js';
-import { NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks/index.js';
+import type { NetworkClient, NetworkMessage, NetworkServer } from './network.js';
 import { abbreviate } from '../command-hooks/connection-pool.js';
 import {
     COLIBRI_CHANNEL,

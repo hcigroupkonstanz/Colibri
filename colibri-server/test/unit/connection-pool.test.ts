@@ -1,13 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Subject, Subscription, config as rxjsConfig } from 'rxjs';
-import {
-    ConnectionPool,
-    Delivery,
-    MAX_UNHANDLED_COMMAND_WARNINGS,
-    NetworkClient,
-    NetworkMessage,
-    NetworkServer,
-} from '../../src/server/modules/command-hooks/connection-pool.js';
+import { ConnectionPool, MAX_UNHANDLED_COMMAND_WARNINGS } from '../../src/server/modules/command-hooks/connection-pool.js';
+import type { Delivery, NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
 import { BroadcastLogger } from '../../src/server/modules/command-hooks/broadcast-logger.js';
 import { Broadcaster } from '../../src/server/modules/command-hooks/broadcaster.js';
 import { ClientBroadcast } from '../../src/server/modules/command-hooks/client-broadcast.js';

@@ -1,5 +1,5 @@
 import { CONNECTION_METADATA_KEY, LogLevel, LogMessage, Metadata, Payload, RingBuffer, Service } from '../core/index.js';
-import { NetworkMessage } from '../command-hooks/index.js';
+import type { NetworkMessage } from '../networking/network.js';
 import { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';
 import { filter } from 'rxjs';
 import { randomUUID } from 'crypto';

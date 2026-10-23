@@ -1,5 +1,6 @@
 import { Payload, Service } from '../core/index.js';
-import { ConnectionPool, NetworkClient, NetworkMessage } from './connection-pool.js';
+import { ConnectionPool } from './connection-pool.js';
+import type { NetworkClient, NetworkMessage } from '../networking/network.js';
 
 /**
  *  Broadcasts infos about current clients (i.e., client dis-/connected)

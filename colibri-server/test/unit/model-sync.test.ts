@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Subject, Subscription } from 'rxjs';
-import { ConnectionPool, NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/command-hooks/connection-pool.js';
+import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
+import type { NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
 import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
 import { ModelSynchronization } from '../../src/server/modules/command-hooks/model-sync.js';
 import { MAX_PAYLOAD_DEPTH, Payload } from '../../src/server/modules/core/payload.js';

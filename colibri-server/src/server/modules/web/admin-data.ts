@@ -1,7 +1,8 @@
 import { filter } from 'rxjs';
 
 import { BuildInfo, CertificateInfo, Payload, ProxyCertificateResult, Service } from '../core/index.js';
-import { DataStore, NetworkMessage } from '../command-hooks/index.js';
+import { DataStore } from '../command-hooks/index.js';
+import type { NetworkMessage } from '../networking/network.js';
 import { RateLimit, TokenBucket } from '../networking/inbound-limits.js';
 import { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';
 import { CLIENT_ACTIVITY_TIMEOUT_MILLIS, TCPServerProxy } from '../networking/tcp-server-proxy.js';

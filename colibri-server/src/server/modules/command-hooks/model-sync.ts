@@ -1,5 +1,6 @@
 import { MAX_PAYLOAD_DEPTH, Payload, Service, nestsDeeperThan } from '../core/index.js';
-import { ConnectionPool, NetworkMessage } from './connection-pool.js';
+import { ConnectionPool } from './connection-pool.js';
+import type { NetworkMessage } from '../networking/network.js';
 import { DataStore, SyncModel } from './data-store.js';
 
 export class ModelSynchronization extends Service {

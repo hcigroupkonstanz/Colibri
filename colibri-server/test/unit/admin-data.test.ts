@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Subject } from 'rxjs';
 import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
-import { NetworkClient, NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
+import type { NetworkClient, NetworkMessage } from '../../src/server/modules/networking/network.js';
 import { Payload } from '../../src/server/modules/core/payload.js';
 import { RingBuffer } from '../../src/server/modules/core/ring-buffer.js';
 import { ClientActivity } from '../../src/server/modules/networking/client-activity.js';

@@ -1,5 +1,6 @@
 import { Service } from '../core/index.js';
-import { ConnectionPool, NetworkMessage } from './connection-pool.js';
+import { ConnectionPool } from './connection-pool.js';
+import type { NetworkMessage } from '../networking/network.js';
 
 // Per-line cap: RemoteLogger sends whatever the app logs, and every line is printed and kept in
 // the admin UI history (WebLog).

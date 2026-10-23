@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { config, Subject } from 'rxjs';
 import { MAX_LOG_CHARS, WebLog } from '../../src/server/modules/web/web-log.js';
 import { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
-import { NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
+import type { NetworkMessage } from '../../src/server/modules/networking/network.js';
 import { Payload, Service } from '../../src/server/modules/core/index.js';
 
 class FakeSocketIOServer {

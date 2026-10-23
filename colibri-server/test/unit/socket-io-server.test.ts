@@ -10,7 +10,8 @@ import { MAX_HELD_OBJECTS } from '../../src/server/modules/networking/inbound-li
 import { Service } from '../../src/server/modules/core/service.js';
 import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/core/payload.js';
 import { LogLevel, LogMessage } from '../../src/server/modules/core/log-message.js';
-import { ConnectionPool, NetworkClient, NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
+import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
+import type { NetworkClient, NetworkMessage } from '../../src/server/modules/networking/network.js';
 import { TrustProxy, compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
 
 interface ColibriEvent {

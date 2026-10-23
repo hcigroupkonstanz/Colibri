@@ -1,7 +1,7 @@
 import { Payload, RingBuffer, Service } from '../core/index.js';
 import { ConnectionPool } from './connection-pool.js';
 import { hrtime } from 'process';
-import { SocketIOServer } from '../networking/index.js';
+import type { NetworkServer } from '../networking/network.js';
 
 // 125 s of 100 ms pings: the admin UI asks for the chart's 120 s, plus the 2 s it slides, when it opens.
 const MAX_LATENCY_SAMPLES = 1250;
@@ -10,7 +10,7 @@ export class MeasureLatency extends Service {
     public get serviceName(): string { return 'MeasureLatency'; }
     public get groupName(): string { return 'hook'; }
 
-    public constructor(pool: ConnectionPool, frontendConnection: SocketIOServer) {
+    public constructor(pool: ConnectionPool, frontendConnection: NetworkServer) {
         super();
 
         // Send out latency message

@@ -10,7 +10,7 @@ import { ClientActivity } from './client-activity.js';
 import { Payload, TlsCredentialSource, WorkerServiceProxy } from '../core/index.js';
 import { ownBytes } from './protocol.js';
 import { Observable, Subject, Subscription } from 'rxjs';
-import { Delivery, NetworkClient, NetworkMessage, NetworkServer } from '../command-hooks/index.js';
+import type { Delivery, NetworkClient, NetworkMessage, NetworkServer } from './network.js';
 
 const toBuffer = function (value: Buffer | Uint8Array): Buffer {
     if (Buffer.isBuffer(value)) return value;

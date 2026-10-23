@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Subject } from 'rxjs';
-import { ConnectionPool, NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/command-hooks/connection-pool.js';
+import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
+import type { NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
 import { MeasureLatency } from '../../src/server/modules/command-hooks/measure-latency.js';
 import { SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
 import { Payload } from '../../src/server/modules/core/payload.js';

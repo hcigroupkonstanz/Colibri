@@ -1,5 +1,6 @@
 import { Service } from '../core/index.js';
-import { ConnectionPool, NetworkMessage } from './connection-pool.js';
+import { ConnectionPool } from './connection-pool.js';
+import type { NetworkMessage } from '../networking/network.js';
 
 export class BroadcastLogger extends Service {
     public get serviceName(): string { return 'BroadcastLogger'; }
