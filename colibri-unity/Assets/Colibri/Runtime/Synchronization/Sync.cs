@@ -218,23 +218,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                     continue;
                 }
 
-                // A SyncBehaviour asks for its own id as well as the manager's whole-channel request: only a request for
-                // that id gets the server's bare { id } answer for a model it does not have.
-                var requestedAll = false;
-                var requestedIds = new HashSet<string>();
-                foreach (var listener in channelListeners)
-                {
-                    if (listener.FetchId == null)
-                    {
-                        if (!requestedAll)
-                            SendCommand(channel, "model::request", null);
-                        requestedAll = true;
-                    }
-                    else if (requestedIds.Add(listener.FetchId))
-                    {
-                        SendCommand(channel, "model::request", new JObject { { "id", listener.FetchId }, { "again", true } });
-                    }
-                }
+                SendModelRequests(channel, channelListeners);
 
                 foreach (var listener in channelListeners)
                 {
@@ -258,6 +242,27 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             foreach (var tell in toTell)
                 tell(round);
+        }
+
+        private static void SendModelRequests(string channel, List<Listener<JObject>> channelListeners)
+        {
+            // A SyncBehaviour asks for its own id as well as the manager's whole-channel request: only a request for
+            // that id gets the server's bare { id } answer for a model it does not have.
+            var requestedAll = false;
+            var requestedIds = new HashSet<string>();
+            foreach (var listener in channelListeners)
+            {
+                if (listener.FetchId == null)
+                {
+                    if (!requestedAll)
+                        SendCommand(channel, "model::request", null);
+                    requestedAll = true;
+                }
+                else if (requestedIds.Add(listener.FetchId))
+                {
+                    SendCommand(channel, "model::request", new JObject { { "id", listener.FetchId }, { "again", true } });
+                }
+            }
         }
 
         // The answer that ends a round. An id from an earlier round answers a request a failed write kept for this
@@ -294,58 +299,11 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             }
 
+            if (DeliverValue(channel, command, data) || DeliverArray(channel, command, data))
+                return;
+
             switch (command)
             {
-                case "broadcast::bool":
-                    Deliver(channel, command, data, _boolListeners, token => token.Value<bool>());
-                    break;
-                case "broadcast::int":
-                    Deliver(channel, command, data, _intListeners, token => token.Value<int>());
-                    break;
-                case "broadcast::float":
-                    Deliver(channel, command, data, _floatListeners, token => token.Value<float>());
-                    break;
-                case "broadcast::string":
-                    Deliver(channel, command, data, _stringListeners, token => token.Value<string>());
-                    break;
-                case "broadcast::vector2":
-                    Deliver(channel, command, data, _vector2Listeners, token => token.ToVector2());
-                    break;
-                case "broadcast::vector3":
-                    Deliver(channel, command, data, _vector3Listeners, token => token.ToVector3());
-                    break;
-                case "broadcast::quaternion":
-                    Deliver(channel, command, data, _quaternionListeners, token => token.ToQuaternion());
-                    break;
-                case "broadcast::color":
-                    Deliver(channel, command, data, _colorListeners, token => token.ToColor());
-                    break;
-
-                case "broadcast::bool[]":
-                    Deliver(channel, command, data, _boolArrayListeners, token => ToArray(token, x => (bool)x));
-                    break;
-                case "broadcast::int[]":
-                    Deliver(channel, command, data, _intArrayListeners, token => ToArray(token, x => (int)x));
-                    break;
-                case "broadcast::float[]":
-                    Deliver(channel, command, data, _floatArrayListeners, token => ToArray(token, x => (float)x));
-                    break;
-                case "broadcast::string[]":
-                    Deliver(channel, command, data, _stringArrayListeners, token => ToArray(token, x => (string)x));
-                    break;
-                case "broadcast::vector2[]":
-                    Deliver(channel, command, data, _vector2ArrayListeners, token => ToArray(token, x => x.ToVector2()));
-                    break;
-                case "broadcast::vector3[]":
-                    Deliver(channel, command, data, _vector3ArrayListeners, token => ToArray(token, x => x.ToVector3()));
-                    break;
-                case "broadcast::quaternion[]":
-                    Deliver(channel, command, data, _quaternionArrayListeners, token => ToArray(token, x => x.ToQuaternion()));
-                    break;
-                case "broadcast::color[]":
-                    Deliver(channel, command, data, _colorArrayListeners, token => ToArray(token, x => x.ToColor()));
-                    break;
-
                 case "broadcast::json":
                     Invoke(channel, command, _jsonListeners, data);
                     break;
@@ -361,6 +319,72 @@ namespace HCIKonstanz.Colibri.Synchronization
                     if (data is JObject deleted)
                         _modelDeleteListeners.Dispatch(channel, command, deleted, track: false);
                     break;
+            }
+        }
+
+        private static bool DeliverValue(string channel, string command, JToken data)
+        {
+            switch (command)
+            {
+                case "broadcast::bool":
+                    Deliver(channel, command, data, _boolListeners, token => token.Value<bool>());
+                    return true;
+                case "broadcast::int":
+                    Deliver(channel, command, data, _intListeners, token => token.Value<int>());
+                    return true;
+                case "broadcast::float":
+                    Deliver(channel, command, data, _floatListeners, token => token.Value<float>());
+                    return true;
+                case "broadcast::string":
+                    Deliver(channel, command, data, _stringListeners, token => token.Value<string>());
+                    return true;
+                case "broadcast::vector2":
+                    Deliver(channel, command, data, _vector2Listeners, token => token.ToVector2());
+                    return true;
+                case "broadcast::vector3":
+                    Deliver(channel, command, data, _vector3Listeners, token => token.ToVector3());
+                    return true;
+                case "broadcast::quaternion":
+                    Deliver(channel, command, data, _quaternionListeners, token => token.ToQuaternion());
+                    return true;
+                case "broadcast::color":
+                    Deliver(channel, command, data, _colorListeners, token => token.ToColor());
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool DeliverArray(string channel, string command, JToken data)
+        {
+            switch (command)
+            {
+                case "broadcast::bool[]":
+                    Deliver(channel, command, data, _boolArrayListeners, token => ToArray(token, x => (bool)x));
+                    return true;
+                case "broadcast::int[]":
+                    Deliver(channel, command, data, _intArrayListeners, token => ToArray(token, x => (int)x));
+                    return true;
+                case "broadcast::float[]":
+                    Deliver(channel, command, data, _floatArrayListeners, token => ToArray(token, x => (float)x));
+                    return true;
+                case "broadcast::string[]":
+                    Deliver(channel, command, data, _stringArrayListeners, token => ToArray(token, x => (string)x));
+                    return true;
+                case "broadcast::vector2[]":
+                    Deliver(channel, command, data, _vector2ArrayListeners, token => ToArray(token, x => x.ToVector2()));
+                    return true;
+                case "broadcast::vector3[]":
+                    Deliver(channel, command, data, _vector3ArrayListeners, token => ToArray(token, x => x.ToVector3()));
+                    return true;
+                case "broadcast::quaternion[]":
+                    Deliver(channel, command, data, _quaternionArrayListeners, token => ToArray(token, x => x.ToQuaternion()));
+                    return true;
+                case "broadcast::color[]":
+                    Deliver(channel, command, data, _colorArrayListeners, token => ToArray(token, x => x.ToColor()));
+                    return true;
+                default:
+                    return false;
             }
         }
 
