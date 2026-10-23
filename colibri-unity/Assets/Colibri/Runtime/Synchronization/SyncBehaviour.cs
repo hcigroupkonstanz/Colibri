@@ -37,7 +37,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         private string ChannelOf(string modelId) => ChannelPrefix + (String.IsNullOrEmpty(modelId) ? "" : $"_{modelId}");
 
         // Parallel to SyncMembers<T>.AttributeList.
-        private SyncMembers<T>.IChangeTracker[] _trackers;
+        private IChangeTracker<T>[] _trackers;
         private bool[] _wasSynced; // IsSynced at the last poll
 
         private JObject _nextUpdate;
@@ -246,7 +246,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             SyncedIds.Register(Id);
 
             var self = this as T;
-            _trackers = new SyncMembers<T>.IChangeTracker[SyncMembers<T>.AttributeList.Count];
+            _trackers = new IChangeTracker<T>[SyncMembers<T>.AttributeList.Count];
             _wasSynced = new bool[SyncMembers<T>.AttributeList.Count];
             for (var i = 0; i < SyncMembers<T>.AttributeList.Count; i++)
             {
@@ -586,7 +586,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         }
 
         /// <summary>Keeps the member's local value for the rest of the round, and sends it.</summary>
-        private void KeepAndSendAgain(SyncMembers<T>.SyncedAttribute attribute)
+        private void KeepAndSendAgain(SyncedAttribute<T> attribute)
         {
             _resync.MarkKept(attribute);
 
@@ -616,7 +616,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        private void AddUpdate(SyncMembers<T>.SyncedAttribute attribute, object value)
+        private void AddUpdate(SyncedAttribute<T> attribute, object value)
         {
             if (_nextUpdate == null)
                 _nextUpdate = new JObject { { "id", Id } };
@@ -633,7 +633,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         // Members whose unreadable value was reported; each is reported once.
         private HashSet<string> _warnedUnreadable;
 
-        private void WarnUnreadable(SyncMembers<T>.SyncedAttribute attribute, JToken value, Exception exception)
+        private void WarnUnreadable(SyncedAttribute<T> attribute, JToken value, Exception exception)
         {
             if (!(_warnedUnreadable ??= new HashSet<string>()).Add(attribute.Name))
                 return;

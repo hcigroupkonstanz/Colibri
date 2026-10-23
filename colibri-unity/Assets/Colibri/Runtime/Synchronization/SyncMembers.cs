@@ -18,79 +18,8 @@ namespace HCIKonstanz.Colibri.Synchronization
     {
         private const string SupportedTypes = "bool, int, float, string, Vector2, Vector3, Quaternion, Color, JObject and arrays of those";
 
-        // Attribute metadata, built once per type. Typed throughout, so the change comparison never boxes.
-
-        internal interface IChangeTracker
-        {
-            /// <summary>Latches the current value; true if it differs from the one latched before.</summary>
-            bool CaptureChange(T target);
-
-            /// <summary>Latches the current value without reporting it as a change.</summary>
-            void Latch(T target);
-        }
-
-        internal abstract class SyncedAttribute
-        {
-            public string Name;
-
-            /// <summary>The C# name, which <see cref="SyncBehaviour{T}.IsSynced"/> is asked about.</summary>
-            public string MemberName;
-
-            public int Index;
-            public Type PropertyType;
-
-            /// <summary>Boxes, so only call it for a value that is about to be sent.</summary>
-            public abstract object GetBoxed(T target);
-            public abstract void SetBoxed(T target, object value);
-            public abstract IChangeTracker CreateTracker(T target);
-        }
-
-        private sealed class SyncedAttribute<TValue> : SyncedAttribute
-        {
-            public Func<T, TValue> Getter;
-            public Action<T, TValue> Setter;
-
-            public override object GetBoxed(T target) => Getter(target);
-            public override void SetBoxed(T target, object value) => Setter(target, (TValue)value);
-            public override IChangeTracker CreateTracker(T target) => new ChangeTracker<TValue>(Getter, target);
-        }
-
-        private sealed class ChangeTracker<TValue> : IChangeTracker
-        {
-            private static readonly Func<TValue, TValue, bool> AreEqual = SyncValues.EqualityFor<TValue>();
-            private static readonly Func<TValue, TValue> Keep = SyncValues.CopyFor<TValue>();
-
-            private readonly Func<T, TValue> _getter;
-            private TValue _lastValue;
-
-            public ChangeTracker(Func<T, TValue> getter, T target)
-            {
-                _getter = getter;
-                _lastValue = Keep(getter(target));
-            }
-
-            public bool CaptureChange(T target)
-            {
-                var current = _getter(target);
-
-                // Compared as on the wire (see SyncValues). Value types use EqualityComparer<TValue>.Default,
-                // which does not box.
-                if (AreEqual(current, _lastValue))
-                    return false;
-
-                _lastValue = Keep(current);
-                return true;
-            }
-
-            public void Latch(T target)
-            {
-                _lastValue = Keep(_getter(target));
-            }
-        }
-
-
-        internal static readonly Dictionary<string, SyncedAttribute> SyncedAttributes = new Dictionary<string, SyncedAttribute>();
-        internal static readonly List<SyncedAttribute> AttributeList = new List<SyncedAttribute>();
+        internal static readonly Dictionary<string, SyncedAttribute<T>> SyncedAttributes = new Dictionary<string, SyncedAttribute<T>>();
+        internal static readonly List<SyncedAttribute<T>> AttributeList = new List<SyncedAttribute<T>>();
         private static bool _isInitialized = false;
 
         internal static void Initialize()
@@ -149,7 +78,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
         // Dispatch by type instead of MakeGenericMethod, so IL2CPP sees every closed instantiation and
         // compiles it ahead of time.
-        private static SyncedAttribute BuildAttribute(string name, Type valueType, MemberInfo member)
+        private static SyncedAttribute<T> BuildAttribute(string name, Type valueType, MemberInfo member)
         {
             if (valueType == typeof(bool)) return BuildAttribute<bool>(name, member);
             if (valueType == typeof(int)) return BuildAttribute<int>(name, member);
@@ -175,7 +104,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return null;
         }
 
-        private static SyncedAttribute BuildAttribute<TValue>(string name, MemberInfo member)
+        private static SyncedAttribute<T> BuildAttribute<TValue>(string name, MemberInfo member)
         {
             if (member is PropertyInfo property)
             {
@@ -208,7 +137,7 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return null;
             }
 
-            return new SyncedAttribute<TValue>
+            return new SyncedAttribute<T, TValue>
             {
                 Name = name,
                 MemberName = member.Name,

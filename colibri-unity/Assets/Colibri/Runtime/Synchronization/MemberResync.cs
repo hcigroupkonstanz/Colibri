@@ -63,10 +63,10 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        internal void ServerShowed(SyncMembers<T>.SyncedAttribute attribute, JToken value)
+        internal void ServerShowed(SyncedAttribute<T> attribute, JToken value)
             => SentValuesOf(attribute).ServerShowed(ToKeep(attribute, value));
 
-        private SentValues SentValuesOf(SyncMembers<T>.SyncedAttribute attribute)
+        private SentValues SentValuesOf(SyncedAttribute<T> attribute)
         {
             _sentValues ??= new SentValues[SyncMembers<T>.AttributeList.Count];
             return _sentValues[attribute.Index] ??= new SentValues();
@@ -76,7 +76,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// A value as SentValues keeps it. A JObject member's value is the application's own object,
         /// which it may change in place later, so it is cloned.
         /// </summary>
-        private static JToken ToKeep(SyncMembers<T>.SyncedAttribute attribute, JToken value)
+        private static JToken ToKeep(SyncedAttribute<T> attribute, JToken value)
             => attribute.PropertyType == typeof(JObject) ? value.DeepClone() : value;
 
 
@@ -118,7 +118,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             }
         }
 
-        internal bool KeepsLocalValue(SyncMembers<T>.SyncedAttribute attribute, JToken serverValue, ReconnectRound round,
+        internal bool KeepsLocalValue(SyncedAttribute<T> attribute, JToken serverValue, ReconnectRound round,
             out bool sendAgain)
         {
             sendAgain = false;
@@ -152,7 +152,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return true;
         }
 
-        internal void MarkKept(SyncMembers<T>.SyncedAttribute attribute)
+        internal void MarkKept(SyncedAttribute<T> attribute)
         {
             _keptInRound ??= new bool[SyncMembers<T>.AttributeList.Count];
             _keptInRound[attribute.Index] = true;
