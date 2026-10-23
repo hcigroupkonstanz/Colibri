@@ -107,10 +107,26 @@ export interface ServerSnapshot {
     };
 }
 
-export const serverSnapshot = function (sources: ServerSources): ServerSnapshot {
-    const now = Date.now();
-    const { store } = sources;
+const proxyTlsSnapshot = function (results: ReadonlyArray<ProxyCertificateResult> | undefined): ServerSnapshot['proxyTls'] {
+    if (!results) return null;
+    return results.map(result => ({
+        addresses: [ ...result.addresses ],
+        checkedAt: result.checkedAt,
+        certificate: result.certificate
+            ? { ...tlsSnapshot(result.certificate), trusted: result.certificate.trusted, trustError: result.certificate.trustError ?? null }
+            : null,
+        error: result.error ?? null,
+    }));
+};
 
+interface ModelCounts {
+    models: number;
+    modelApps: number;
+    modelChannels: number;
+    deletedModels: number;
+}
+
+const modelCounts = function (store: DataStore): ModelCounts {
     let models = 0;
     let modelChannels = 0;
     const modelApps = new Set<string>();
@@ -125,7 +141,18 @@ export const serverSnapshot = function (sources: ServerSources): ServerSnapshot 
         const tombstones = store.liveTombstones(app);
         while (!tombstones.next().done) deletedModels += 1;
     }
+    return { models, modelApps: modelApps.size, modelChannels, deletedModels };
+};
 
+interface ClientCounts {
+    webClients: number;
+    adminPages: number;
+    apps: number;
+    // A web client or admin page connected now reached the proxy over TLS.
+    webTlsAtProxy: boolean;
+}
+
+const clientCounts = function (sources: ServerSources): ClientCounts {
     const apps = new Set<string>(sources.tcpClients.map(client => client.app));
     let webClients = 0;
     let adminPages = 0;
@@ -139,6 +166,13 @@ export const serverSnapshot = function (sources: ServerSources): ServerSnapshot 
             apps.add(client.app);
         }
     }
+    return { webClients, adminPages, apps: apps.size, webTlsAtProxy };
+};
+
+export const serverSnapshot = function (sources: ServerSources): ServerSnapshot {
+    const now = Date.now();
+    const models = modelCounts(sources.store);
+    const clients = clientCounts(sources);
 
     const tls = sources.tls;
     return {
@@ -151,27 +185,18 @@ export const serverSnapshot = function (sources: ServerSources): ServerSnapshot 
         uptime: Math.max(0, Math.round((now - sources.startedAt) / 1000)),
         settings: sources.settings,
         tls: tls ? tlsSnapshot(tls) : null,
-        proxyTls: sources.proxyTls
-            ? sources.proxyTls.map(result => ({
-                addresses: [ ...result.addresses ],
-                checkedAt: result.checkedAt,
-                certificate: result.certificate
-                    ? { ...tlsSnapshot(result.certificate), trusted: result.certificate.trusted, trustError: result.certificate.trustError ?? null }
-                    : null,
-                error: result.error ?? null,
-            }))
-            : null,
-        tlsAtProxy: { web: webTlsAtProxy, tcp: sources.tcpTlsAtProxy },
+        proxyTls: proxyTlsSnapshot(sources.proxyTls),
+        tlsAtProxy: { web: clients.webTlsAtProxy, tcp: sources.tcpTlsAtProxy },
         voice: sources.voice ?? null,
         counts: {
             tcpClients: sources.tcpClients.length,
-            webClients,
-            adminPages,
-            apps: apps.size,
-            models,
-            modelApps: modelApps.size,
-            modelChannels,
-            deletedModels,
+            webClients: clients.webClients,
+            adminPages: clients.adminPages,
+            apps: clients.apps,
+            models: models.models,
+            modelApps: models.modelApps,
+            modelChannels: models.modelChannels,
+            deletedModels: models.deletedModels,
             storeApps: sources.restStore?.apps ?? 0,
             storeKeys: sources.restStore?.keys ?? 0,
             storeBytes: sources.restStore?.bytes ?? 0,
