@@ -6,6 +6,7 @@ import type { TcpServerOptions, WireNetworkMessage } from '../../src/server/modu
 import { HEARTBEAT_EVERY_BYTES, MAX_REPLY_BACKLOG_BYTES, TCPServerWorker } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
 import { MAX_HELD_OBJECTS } from '../../src/server/modules/limits/inbound-limits.js';
 import { FrameReader, FrameType, MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeHandshakeFrame, encodeHeartbeatFrame, encodeMessageFrame } from '../../src/server/modules/protocol/protocol.js';
+import type { AppIndex } from '../../src/server/modules/core/app-index.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
 
 // Vitest runs suites inside worker threads, so the real `parentPort` here is the test
@@ -134,7 +135,7 @@ interface WorkerInternals {
     postMessage(channel: string, content: Record<string, unknown>): void;
     clients: Map<string, { id: string; app: string; socket: net.Socket }>;
     waitingClients: Map<string, { id: string; socket: net.Socket }>;
-    clientsByApp: Map<string, Set<{ id: string }>>;
+    clientsByApp: AppIndex<{ id: string }>;
     v1WarnedAt: { size: number };
     stop(): void;
 }

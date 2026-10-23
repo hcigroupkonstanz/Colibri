@@ -1,5 +1,6 @@
 import type { Observable } from 'rxjs';
 import { merge } from 'rxjs';
+import { AppIndex } from '../core/app-index.js';
 import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../protocol/network.js';
 
@@ -51,7 +52,7 @@ export class ConnectionPool extends Service {
     // Owning server of a client, for emit() and clientsForApp().
     private readonly serverByClientId = new Map<string, NetworkServer>();
     // Recipients for the broadcast() fallback, so it does not scan a transport's whole client list.
-    private readonly clientsByApp = new Map<string, Set<NetworkClient>>();
+    private readonly clientsByApp = new AppIndex<NetworkClient>();
     // The client object each id was last reported as. A transport may report an id connected again in
     // another app (TCP re-handshake), and the object it replaces has to leave its app's Set.
     private readonly clientById = new Map<string, NetworkClient>();
@@ -256,25 +257,17 @@ export class ConnectionPool extends Service {
     }
 
     private addToAppIndex(client: NetworkClient): void {
-        let clients = this.clientsByApp.get(client.app);
-        if (!clients) {
-            clients = new Set();
-            this.clientsByApp.set(client.app, clients);
-        }
-        clients.add(client);
-        this.checkAppSize(client.app, clients.size);
+        this.checkAppSize(client.app, this.clientsByApp.add(client.app, client));
     }
 
     private removeFromAppIndex(client: NetworkClient): void {
-        const clients = this.clientsByApp.get(client.app);
-        if (!clients) return;
+        const remaining = this.clientsByApp.remove(client.app, client);
+        if (remaining === undefined) return;
 
-        clients.delete(client);
-        if (clients.size <= this.appClientWarningThreshold) {
+        if (remaining <= this.appClientWarningThreshold) {
             this.appsOverThreshold.delete(client.app);
         }
-        if (clients.size === 0) {
-            this.clientsByApp.delete(client.app);
+        if (remaining === 0) {
             this.forgetUnhandledWarnings(client.app);
         }
     }

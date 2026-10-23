@@ -1,5 +1,6 @@
 import * as net from 'net';
 import * as tls from 'tls';
+import { AppIndex } from '../../core/app-index.js';
 import { CONNECTION_LINE } from '../../core/log-message.js';
 import type { WorkerMessage } from '../../core/worker/worker-message.js';
 import { WorkerService } from '../../core/worker/worker-service.js';
@@ -398,7 +399,7 @@ export class TCPServerWorker extends WorkerService {
     private readonly clients = new Map<string, TcpClient>();
     // clients grouped by app, so broadcast() can resolve recipients without scanning
     // every connected client
-    private readonly clientsByApp = new Map<string, Set<TcpClient>>();
+    private readonly clientsByApp = new AppIndex<TcpClient>();
 
     private heartbeatInterval: NodeJS.Timeout | undefined;
 
@@ -1585,22 +1586,11 @@ export class TCPServerWorker extends WorkerService {
     }
 
     private addToAppIndex(client: TcpClient): void {
-        let clients = this.clientsByApp.get(client.app);
-        if (!clients) {
-            clients = new Set();
-            this.clientsByApp.set(client.app, clients);
-        }
-        clients.add(client);
+        this.clientsByApp.add(client.app, client);
     }
 
     private removeFromAppIndex(client: TcpClient): void {
-        const clients = this.clientsByApp.get(client.app);
-        if (!clients) return;
-
-        clients.delete(client);
-        if (clients.size === 0) {
-            this.clientsByApp.delete(client.app);
-        }
+        this.clientsByApp.remove(client.app, client);
     }
 
     // Only clients whose handshake was accepted. colibri-unity counts a session as connected from

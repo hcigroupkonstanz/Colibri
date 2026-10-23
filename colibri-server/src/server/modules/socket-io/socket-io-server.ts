@@ -4,6 +4,7 @@ import type { Server as HttpServer } from 'http';
 import type { Observable } from 'rxjs';
 import { Subject } from 'rxjs';
 
+import { AppIndex } from '../core/app-index.js';
 import type { Metadata } from '../core/log-message.js';
 import { CONNECTION_LINE } from '../core/log-message.js';
 import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../protocol/payload.js';
@@ -99,7 +100,7 @@ export class SocketIOServer extends Service implements NetworkServer {
     // "does this app have any recipient at all?" without touching the adapter or the
     // payload. Ids rather than a plain count, so the very common "the only member of this
     // app is the client the message came from" case can early-out too.
-    private readonly clientIdsByApp = new Map<string, Set<string>>();
+    private readonly clientIdsByApp = new AppIndex<string>();
     private readonly clientsById = new Map<string, SocketIoClient>();
     private readonly clientStream = new Subject<SocketIoClient[]>();
     private readonly clientConnectedStream = new Subject<SocketIoClient>();
@@ -326,10 +327,7 @@ export class SocketIOServer extends Service implements NetworkServer {
     }
 
     public hasRecipients(app: string, exceptClientId?: string): boolean {
-        const ids = this.clientIdsByApp.get(app);
-        if (!ids || ids.size === 0) return false;
-        if (exceptClientId !== undefined && ids.size === 1 && ids.has(exceptClientId)) return false;
-        return true;
+        return this.clientIdsByApp.hasRecipients(app, exceptClientId);
     }
 
     private resolvePayload(msg: NetworkMessage): unknown {
@@ -513,24 +511,13 @@ export class SocketIOServer extends Service implements NetworkServer {
 
     private addToAppIndex(client: SocketIoClient): void {
         this.clientsById.set(client.id, client);
-
-        let ids = this.clientIdsByApp.get(client.app);
-        if (!ids) {
-            ids = new Set();
-            this.clientIdsByApp.set(client.app, ids);
-        }
-        ids.add(client.id);
+        this.clientIdsByApp.add(client.app, client.id);
     }
 
     private removeFromAppIndex(client: SocketIoClient): void {
         this.clientsById.delete(client.id);
 
-        const ids = this.clientIdsByApp.get(client.app);
-        if (!ids) return;
-
-        ids.delete(client.id);
-        if (ids.size === 0) {
-            this.clientIdsByApp.delete(client.app);
+        if (this.clientIdsByApp.remove(client.app, client.id) === 0) {
             this.roomEmits.delete(client.app);
         }
     }

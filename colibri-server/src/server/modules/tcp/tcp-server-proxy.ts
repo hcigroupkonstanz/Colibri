@@ -8,6 +8,7 @@ import {
     TCP_SERVER_WORKER,
     TCP_SERVER_WORKER_ROLE,
 } from './worker/tcp-server-worker.js';
+import { AppIndex } from '../core/app-index.js';
 import type { ClientActivity } from '../limits/client-activity.js';
 import { Payload } from '../protocol/payload.js';
 import type { TlsCredentialSource } from '../tls/tls-certificate.js';
@@ -57,7 +58,7 @@ export class TCPServerProxy
 
     private readonly clients = new Map<string, TcpNetworkClient>();
     // Mirrors the worker's clientsByApp, so broadcastToApp can tell there is no recipient without posting.
-    private readonly clientIdsByApp = new Map<string, Set<string>>();
+    private readonly clientIdsByApp = new AppIndex<string>();
     private clientStream = new Subject<ReadonlyArray<NetworkClient>>();
     private clientAddedStream = new Subject<TcpNetworkClient>();
     private clientRemovedStream = new Subject<TcpNetworkClient>();
@@ -288,10 +289,7 @@ export class TCPServerProxy
     }
 
     public hasRecipients(app: string, exceptClientId?: string): boolean {
-        const ids = this.clientIdsByApp.get(app);
-        if (!ids || ids.size === 0) return false;
-        if (exceptClientId !== undefined && ids.size === 1 && ids.has(exceptClientId)) return false;
-        return true;
+        return this.clientIdsByApp.hasRecipients(app, exceptClientId);
     }
 
     // ownBytes: the structured clone into the worker copies the payload's whole ArrayBuffer, and
@@ -333,22 +331,11 @@ export class TCPServerProxy
     }
 
     private addToAppIndex(client: TcpNetworkClient): void {
-        let ids = this.clientIdsByApp.get(client.app);
-        if (!ids) {
-            ids = new Set();
-            this.clientIdsByApp.set(client.app, ids);
-        }
-        ids.add(client.id);
+        this.clientIdsByApp.add(client.app, client.id);
     }
 
     private removeFromAppIndex(client: TcpNetworkClient): void {
-        const ids = this.clientIdsByApp.get(client.app);
-        if (!ids) return;
-
-        ids.delete(client.id);
-        if (ids.size === 0) {
-            this.clientIdsByApp.delete(client.app);
-        }
+        this.clientIdsByApp.remove(client.app, client.id);
     }
 
     private onClientMessage(msg: NetworkMessage): void {
