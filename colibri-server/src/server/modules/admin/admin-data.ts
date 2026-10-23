@@ -14,13 +14,13 @@ import type { SocketIoClient, SocketIOServer } from '../socket-io/socket-io-serv
 import type { TCPServerProxy } from '../tcp/tcp-server-proxy.js';
 import { CLIENT_ACTIVITY_TIMEOUT_MILLIS } from '../tcp/tcp-server-proxy.js';
 import type { ClientActivity } from '../limits/client-activity.js';
+import type { AdminTopic, Query } from './admin-message.js';
+import { parseAdminMessage } from './admin-message.js';
 import { ModelMeasures } from './model-measures.js';
 import { clientsSnapshot } from './topics/clients-snapshot.js';
 import { latencySnapshot } from './topics/latency-snapshot.js';
-import type { ModelQuery } from './topics/model-snapshot.js';
-import { modelSnapshot, parseModelQuery } from './topics/model-snapshot.js';
-import type { ModelsQuery } from './topics/models-snapshot.js';
-import { modelsSnapshot, parseModelsQuery } from './topics/models-snapshot.js';
+import { modelSnapshot } from './topics/model-snapshot.js';
+import { modelsSnapshot } from './topics/models-snapshot.js';
 import type { ServerSettings, VoiceStatus } from './topics/server-snapshot.js';
 import { ADMIN_APP, serverSnapshot } from './topics/server-snapshot.js';
 
@@ -35,17 +35,6 @@ export const ADMIN_REFRESH_MILLIS = 1000;
 // through its views does. One past it is ignored. A snapshot can cost a pass over the whole model
 // store, so this keeps a script in a loop from having the server do that without end.
 export const ADMIN_REQUEST_LIMIT: RateLimit = { messagesPerSecond: 10, burst: 20 };
-
-export const ADMIN_TOPICS = ['server', 'clients', 'models', 'model', 'latency'] as const;
-export type AdminTopic = typeof ADMIN_TOPICS[number];
-
-// Topics a page asks for once and cannot subscribe to. The latency history is up to
-// MAX_LATENCY_HISTORY_SAMPLES samples, and colibri::latency brings the new ones every second.
-const REQUEST_ONLY_TOPICS: ReadonlySet<AdminTopic> = new Set([ 'latency' ]);
-
-const isTopic = function (value: unknown): value is AdminTopic {
-    return typeof value === 'string' && (ADMIN_TOPICS as readonly string[]).includes(value);
-};
 
 // What AdminData reads. All of it read only: nothing in here is ever called to change anything.
 export interface AdminSources {
@@ -66,12 +55,6 @@ export interface AdminSources {
     restStore?: { counts(): { apps: number; keys: number; bytes: number } };
 }
 
-// What one page asked for: a topic, with its query for the two that take one.
-type Query =
-    | { topic: 'server' | 'clients' | 'latency' }
-    | { topic: 'models'; models: ModelsQuery }
-    | { topic: 'model'; model: ModelQuery };
-
 interface Subscription {
     query: Query;
     // Equal for two pages asking for the same thing, which then share one snapshot.
@@ -79,17 +62,6 @@ interface Subscription {
     // The request number of the request or subscribe, echoed in every snapshot it is sent.
     request: number | null;
 }
-
-const parseQuery = function (topic: AdminTopic, body: unknown): Query {
-    switch (topic) {
-        case 'models':
-            return { topic, models: parseModelsQuery(body) };
-        case 'model':
-            return { topic, model: parseModelQuery(body) };
-        default:
-            return { topic };
-    }
-};
 
 interface Due {
     page: AdminPage;
@@ -172,40 +144,27 @@ export class AdminData extends Service {
         const client = msg.origin && this.sources.socketio.getClient(msg.origin.id);
         if (!client || client.app !== ADMIN_APP) return;
 
-        const body = msg.payload?.asValue();
-        const fields = (body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
-        const topic = fields.topic;
-
-        // Without a topic: every topic, for a page that is going away.
-        if (msg.command === 'unsubscribe') {
+        const message = parseAdminMessage(msg.command, msg.payload?.asValue());
+        if (message.kind === 'unsubscribe') {
             const subscriptions = this.pages.get(client.id)?.subscriptions;
-            if (topic === undefined) subscriptions?.clear();
-            else if (isTopic(topic)) subscriptions?.delete(topic);
+            if (message.topic === undefined) subscriptions?.clear();
+            else if (message.topic !== null) subscriptions?.delete(message.topic);
             this.updateRefreshTimer();
             return;
         }
-        if (msg.command !== 'request' && msg.command !== 'subscribe') return;
-        if (!isTopic(topic)) {
-            this.logDebug(`Ignoring ${ADMIN_CHANNEL} '${msg.command}' from admin page ${client.id}: unknown topic`);
-            return;
-        }
-        if (msg.command === 'subscribe' && REQUEST_ONLY_TOPICS.has(topic)) {
-            this.logDebug(`Ignoring ${ADMIN_CHANNEL} 'subscribe' from admin page ${client.id}: '${topic}' is request only`);
+        if (message.kind === 'ignore') {
+            if (message.reason !== undefined) this.logDebug(`Ignoring ${ADMIN_CHANNEL} '${msg.command}' from admin page ${client.id}: ${message.reason}`);
             return;
         }
 
         const page = this.pageOf(client);
         if (!page.requests.take(performance.now())) return;
 
-        const query = parseQuery(topic, body);
-        const subscription: Subscription = {
-            query,
-            key: JSON.stringify(query),
-            request: typeof fields.request === 'number' && Number.isFinite(fields.request) ? fields.request : null,
-        };
-        if (msg.command === 'subscribe') {
+        const { query, key, request } = message;
+        const subscription: Subscription = { query, key, request };
+        if (message.kind === 'subscribe') {
             // One subscription per topic and page: a new one replaces the query.
-            page.subscriptions.set(topic, subscription);
+            page.subscriptions.set(message.topic, subscription);
             this.updateRefreshTimer();
         }
         void this.send([ { page, subscription } ]);
