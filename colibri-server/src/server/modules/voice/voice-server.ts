@@ -8,11 +8,10 @@ import { readFileSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import * as path from 'path';
 import {
-    VOICE_APP_ID_OFFSET,
     VOICE_HEADER_LENGTH,
     VOICE_HEADER_VERSION,
-    VOICE_VERSION_AND_CODEC_OFFSET,
     VoiceCodec,
+    readVoiceHeader,
 } from './voice-packet.js';
 import type { TrustProxy } from '../net/trusted-proxies.js';
 import { trustNoProxy } from '../net/trusted-proxies.js';
@@ -229,27 +228,13 @@ export class VoiceServer extends Service {
             const nowMillis = now.getTime();
             const clientKey = voiceClientKey(remote.address, remote.port);
 
-            // A Colibri 1.x client's header has no appId, so there is no app to relay its
-            // packets to. Its codec byte (0 or 1) is where the header version is now, which
-            // makes its version 0.
-            if (message.length > VOICE_VERSION_AND_CODEC_OFFSET) {
-                const version = message.readUInt8(VOICE_VERSION_AND_CODEC_OFFSET) >> 4;
-                if (version === 0) {
-                    this.reportV1Packet(clientKey, nowMillis);
-                    return;
-                }
-                if (version !== VOICE_HEADER_VERSION) {
-                    this.reportMalformedPacket(clientKey, `its header version is ${version}, not ${VOICE_HEADER_VERSION}`, nowMillis);
-                    return;
-                }
+            const reading = readVoiceHeader(message);
+            if (reading.kind === 'v1') {
+                this.reportV1Packet(clientKey, nowMillis);
+                return;
             }
-
-            // Every header read below is at a fixed offset, so the whole header has to be
-            // there. This used to check for only 2 bytes: a single 2-6 byte datagram then
-            // reached readInt16LE(2)/readInt8(6), and the ERR_OUT_OF_RANGE thrown out of this
-            // listener was an uncaught exception that shut the whole server down.
-            if (message.length < VOICE_HEADER_LENGTH) {
-                this.reportMalformedPacket(clientKey, `${message.length} bytes is shorter than the ${VOICE_HEADER_LENGTH}-byte header`, nowMillis);
+            if (reading.kind === 'malformed') {
+                this.reportMalformedPacket(clientKey, reading.reason, nowMillis);
                 return;
             }
 
@@ -264,12 +249,7 @@ export class VoiceServer extends Service {
                 return;
             }
 
-            // |userId(2)|sequence(2)|frameSize(2)|version and codec(1)|appId(4)|data|, see voice-packet.ts
-            const userId = message.readInt16LE(0); // .net (Unity) decodes default in little-endian order
-            const sequence = message.readInt16LE(2);
-            const frameSize = message.readInt16LE(4);
-            const codec: VoiceCodec = message.readUInt8(VOICE_VERSION_AND_CODEC_OFFSET) & 0x0f;
-            const appId = message.readUInt32LE(VOICE_APP_ID_OFFSET);
+            const { userId, sequence, frameSize, codec, appId } = reading.header;
 
             // Current voice client
             let voiceClient = this.clients.get(clientKey);

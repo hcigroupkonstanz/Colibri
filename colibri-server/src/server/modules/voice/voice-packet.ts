@@ -56,3 +56,42 @@ export const encodeVoicePacket = function (packet: VoicePacket): Buffer {
     buffer.set(packet.data, VOICE_HEADER_LENGTH);
     return buffer;
 };
+
+export type VoiceHeader = Omit<VoicePacket, 'data'>;
+
+// What readVoiceHeader makes of a datagram: a header to relay by, a Colibri 1.x client's packet,
+// or a malformed packet and the reason the server reports.
+export type VoiceHeaderReading =
+    | { kind: 'header'; header: VoiceHeader }
+    | { kind: 'v1' }
+    | { kind: 'malformed'; reason: string };
+
+/** Reads the header of the voice packet `message`, or says why it has none the relay can use. */
+export const readVoiceHeader = function (message: Buffer): VoiceHeaderReading {
+    // A Colibri 1.x client's header has no appId, so there is no app to relay its
+    // packets to. Its codec byte (0 or 1) is where the header version is now, which
+    // makes its version 0.
+    if (message.length > VOICE_VERSION_AND_CODEC_OFFSET) {
+        const version = message.readUInt8(VOICE_VERSION_AND_CODEC_OFFSET) >> 4;
+        if (version === 0) {
+            return { kind: 'v1' };
+        }
+        if (version !== VOICE_HEADER_VERSION) {
+            return { kind: 'malformed', reason: `its header version is ${version}, not ${VOICE_HEADER_VERSION}` };
+        }
+    }
+
+    // Every header read below is at a fixed offset and throws ERR_OUT_OF_RANGE past the end of the
+    // buffer, so the whole header has to be there.
+    if (message.length < VOICE_HEADER_LENGTH) {
+        return { kind: 'malformed', reason: `${message.length} bytes is shorter than the ${VOICE_HEADER_LENGTH}-byte header` };
+    }
+
+    // |userId(2)|sequence(2)|frameSize(2)|version and codec(1)|appId(4)|data|
+    const userId = message.readInt16LE(0); // .net (Unity) decodes default in little-endian order
+    const sequence = message.readInt16LE(2);
+    const frameSize = message.readInt16LE(4);
+    const codec: VoiceCodec = message.readUInt8(VOICE_VERSION_AND_CODEC_OFFSET) & 0x0f;
+    const appId = message.readUInt32LE(VOICE_APP_ID_OFFSET);
+    return { kind: 'header', header: { userId, sequence, frameSize, codec, appId } };
+};
