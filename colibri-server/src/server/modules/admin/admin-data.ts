@@ -4,6 +4,7 @@ import type { BuildInfo } from '../core/build-info.js';
 import type { CertificateInfo } from '../tls/tls-files.js';
 import { Payload } from '../protocol/payload.js';
 import type { ProxyCertificateResult } from '../tls/proxy-certificate.js';
+import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import type { DataStore } from '../models/data-store.js';
 import type { NetworkMessage } from '../protocol/network.js';
@@ -332,7 +333,3 @@ export class AdminData extends Service {
         }
     }
 }
-
-const errorMessage = function (err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
-};

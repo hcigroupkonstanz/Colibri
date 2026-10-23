@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises';
 import type { KeyObject } from 'crypto';
 import { X509Certificate, createPrivateKey } from 'crypto';
 import * as tls from 'tls';
+import { errorMessage } from '../core/error-message.js';
 
 /**
  * A certificate and its private key, both PEM, as read from TLS_CERT and TLS_KEY. The certificate
@@ -35,10 +36,6 @@ export class TlsFileError extends Error {}
 const errorCode = function (error: unknown): string | undefined {
     const code = (error as NodeJS.ErrnoException | undefined)?.code;
     return typeof code === 'string' ? code : undefined;
-};
-
-const errorMessage = function (error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
 };
 
 // PKCS #8 ("BEGIN ENCRYPTED PRIVATE KEY") or a traditional PEM header ("Proc-Type: 4,ENCRYPTED").

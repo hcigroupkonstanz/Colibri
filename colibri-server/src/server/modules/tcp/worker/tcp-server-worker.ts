@@ -1,6 +1,7 @@
 import * as net from 'net';
 import * as tls from 'tls';
 import { AppIndex } from '../../core/app-index.js';
+import { errorMessage } from '../../core/error-message.js';
 import { CONNECTION_LINE } from '../../core/log-message.js';
 import type { WorkerMessage } from '../../core/worker/worker-message.js';
 import { WorkerService } from '../../core/worker/worker-service.js';
@@ -446,7 +447,7 @@ export class TCPServerWorker extends WorkerService {
                 this.handleParentMessage(msg);
             } catch (err) {
                 this.logError(
-                    `Error handling '${msg.channel}' from the main thread: ${err instanceof Error ? err.message : String(err)}`,
+                    `Error handling '${msg.channel}' from the main thread: ${errorMessage(err)}`,
                     false
                 );
             }
@@ -521,7 +522,7 @@ export class TCPServerWorker extends WorkerService {
             this.tlsServer.setSecureContext(secureContextOptions(credentials));
         } catch (err) {
             this.logError(
-                `Could not switch the TCP server to the renewed TLS certificate: ${err instanceof Error ? err.message : String(err)}`,
+                `Could not switch the TCP server to the renewed TLS certificate: ${errorMessage(err)}`,
                 false
             );
         }
@@ -599,7 +600,7 @@ export class TCPServerWorker extends WorkerService {
                 header = readProxyHeader(received);
             } catch (err) {
                 stopReading();
-                const problem = err instanceof Error ? err.message : String(err);
+                const problem = errorMessage(err);
                 if (trusted) {
                     this.refuseProxyConnection(socket, peer, `its PROXY protocol header is invalid: ${problem}`);
                 } else {
@@ -962,7 +963,7 @@ export class TCPServerWorker extends WorkerService {
             // maxBufferSize) is dropped as a single bad message. Emitting it anyway would
             // produce a frame this server's own FrameReader would reject.
             this.logError(
-                `Dropping unencodable message (${msg.channel} / ${msg.command}): ${err instanceof Error ? err.message : String(err)}`,
+                `Dropping unencodable message (${msg.channel} / ${msg.command}): ${errorMessage(err)}`,
                 false
             );
             return;
@@ -1522,7 +1523,7 @@ export class TCPServerWorker extends WorkerService {
         } catch (err) {
             this.logWarning(
                 `Dropped a held model::update for '${update.model.id}' on channel '${update.channel}' from client ${client.id}: ` +
-                    `it could not be written out again (${err instanceof Error ? err.message : String(err)})`
+                    `it could not be written out again (${errorMessage(err)})`
             );
             return;
         }

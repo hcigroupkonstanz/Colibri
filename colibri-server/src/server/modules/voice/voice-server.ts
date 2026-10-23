@@ -1,4 +1,5 @@
 import { CONNECTION_LINE } from '../core/log-message.js';
+import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import * as dgram from 'dgram';
 import type { AddressInfo } from 'net';
@@ -654,7 +655,7 @@ export class VoiceServer extends Service {
         // Keyed apart from the peer's own malformed packets, so neither report hides the other.
         if (!this.claimReport(`relay to ${target}`, nowMillis)) return;
 
-        this.logError(`Failed to relay voice packet to ${target}: ${err instanceof Error ? err.message : String(err)}`
+        this.logError(`Failed to relay voice packet to ${target}: ${errorMessage(err)}`
             + ` (further failures for this peer are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
     }
 
@@ -749,7 +750,7 @@ export class VoiceServer extends Service {
         } catch (err) {
             // An fs error names the file itself.
             this.logError(`Failed to save the voice recording of client ID ${client.userId} (${voiceClientKey(client.ip, client.port)}, ${seconds} s): `
-                + `${err instanceof Error ? err.message : String(err)}`, false);
+                + `${errorMessage(err)}`, false);
         }
     }
 }

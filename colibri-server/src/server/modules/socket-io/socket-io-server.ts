@@ -8,6 +8,7 @@ import { AppIndex } from '../core/app-index.js';
 import type { Metadata } from '../core/log-message.js';
 import { CONNECTION_LINE } from '../core/log-message.js';
 import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../protocol/payload.js';
+import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../protocol/network.js';
 import { abbreviate } from '../hooks/connection-pool.js';
@@ -478,7 +479,7 @@ export class SocketIOServer extends Service implements NetworkServer {
         // Only Socket.IO's own errors get here (see socket.use above). JSON.stringify of an Error
         // gave '{}'.
         socket.on('error', (error: unknown) => {
-            this.logError(`Socket.IO error for client ${client.id}: ${error instanceof Error ? error.message : String(error)}`, false, aboutClient(client));
+            this.logError(`Socket.IO error for client ${client.id}: ${errorMessage(error)}`, false, aboutClient(client));
         });
 
         socket.on('disconnect', () => {

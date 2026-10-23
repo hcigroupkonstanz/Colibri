@@ -1,6 +1,7 @@
 import type { LogMessage, Metadata } from '../core/log-message.js';
 import { CONNECTION_METADATA_KEY, LogLevel } from '../core/log-message.js';
 import { Payload } from '../protocol/payload.js';
+import { errorMessage } from '../core/error-message.js';
 import { RingBuffer } from '../core/ring-buffer.js';
 import { Service } from '../core/service.js';
 import type { NetworkMessage } from '../protocol/network.js';
@@ -87,7 +88,7 @@ export class WebLog extends Service {
                 try {
                     this.handleRequestLog(networkMsg);
                 } catch (err) {
-                    this.logError(`Ignoring requestLog from client ${networkMsg.origin?.id}: ${err instanceof Error ? err.message : String(err)}`, false);
+                    this.logError(`Ignoring requestLog from client ${networkMsg.origin?.id}: ${errorMessage(err)}`, false);
                 }
             });
 

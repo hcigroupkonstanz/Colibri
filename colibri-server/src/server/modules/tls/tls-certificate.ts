@@ -1,5 +1,6 @@
 import type { Observable } from 'rxjs';
 import { Subject } from 'rxjs';
+import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import type {
     CertificateInfo,
@@ -26,8 +27,6 @@ import {
 export const TLS_FILE_CHECK_MILLIS = 10_000;
 
 const sameCredentials = (a: TlsCredentials, b: TlsCredentials): boolean => a.cert.equals(b.cert) && a.key.equals(b.key);
-
-const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /** The certificate and key a TLS server uses now, and each one it should switch to. */
 export interface TlsCredentialSource {

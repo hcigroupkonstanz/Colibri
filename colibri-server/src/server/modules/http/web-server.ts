@@ -5,6 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import type { Subscription } from 'rxjs';
 
+import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import type { TlsCredentialSource } from '../tls/tls-certificate.js';
 import type { TlsCredentials } from '../tls/tls-files.js';
@@ -162,7 +163,7 @@ export class WebServer extends Service {
             try {
                 server.setSecureContext(this.secureContextOptions(credentials));
             } catch (err) {
-                this.logError(`Could not switch the web server to the renewed TLS certificate: ${err instanceof Error ? err.message : String(err)}`, false);
+                this.logError(`Could not switch the web server to the renewed TLS certificate: ${errorMessage(err)}`, false);
             }
         });
         return server;

@@ -1,3 +1,4 @@
+import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import type { WebServer } from '../http/web-server.js';
 import { hasEmptyJsonBody, hasRestMediaType } from '../http/web-server.js';
@@ -22,10 +23,6 @@ const FULL_WARNING_INTERVAL_MILLIS = 60_000;
 // checkpoint that keeps failing is logged.
 const CHECKPOINT_INTERVAL_MILLIS = 1000;
 const CHECKPOINT_WARNING_INTERVAL_MILLIS = 60_000;
-
-const errorMessage = function (err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
-};
 
 export interface RestStoreOptions {
     // Values not written for this many days are deleted. 0 keeps them for good.
