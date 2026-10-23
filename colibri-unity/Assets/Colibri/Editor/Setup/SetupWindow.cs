@@ -1,9 +1,5 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Reflection;
-using HCIKonstanz.Colibri.Networking;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -33,7 +29,7 @@ namespace HCIKonstanz.Colibri.Setup
         // Play mode. The unsaved object outlives the reload, and Unity restores the reference to it.
         /// <summary>
         /// What the fields show and change: <see cref="Config"/>'s settings, except those in
-        /// <see cref="_refused"/>. Changes reach Config through <see cref="ApplyValidSettings"/>.
+        /// <see cref="_refused"/>. Changes reach Config through <see cref="ConfigValidation.ApplyValidSettings"/>.
         /// </summary>
         [SerializeField] private ColibriConfig _edited;
 
@@ -141,7 +137,7 @@ namespace HCIKonstanz.Colibri.Setup
         {
             // Every draw, so a change made elsewhere (Inspector, Undo) shows here, and a later edit
             // here cannot write the old value back.
-            ShowSettings(Config, _edited, _refused);
+            ConfigValidation.ShowSettings(Config, _edited, _refused);
 
             var labelWidth = EditorGUIUtility.labelWidth;
             EditorGUIUtility.labelWidth = Mathf.Max(labelWidth, TlsLabelWidth());
@@ -149,6 +145,27 @@ namespace HCIKonstanz.Colibri.Setup
             // The Android section at the bottom can run past the edge of the window.
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
 
+            DrawHeader();
+            DrawAppSettings();
+            DrawOptionalConfig();
+
+            // Every draw, even with no change here: a change elsewhere can make a refused value valid.
+            _refused = ConfigValidation.ApplyValidSettings(_edited, Config);
+
+            var errors = ConfigValidation.ConfigurationErrors(_edited);
+
+            DrawSaveButton(errors);
+            DrawSendRateWarning();
+
+            DrawAndroidIssues();
+
+            EditorGUILayout.EndScrollView();
+
+            EditorGUIUtility.labelWidth = labelWidth;
+        }
+
+        private static void DrawHeader()
+        {
             // Stretched, not fixed: the scroll view's vertical scrollbar takes part of the width,
             // and a fixed width would overflow it.
             GUILayout.Label("Colibri Setup", new GUIStyle(EditorStyles.largeLabel)
@@ -170,7 +187,10 @@ namespace HCIKonstanz.Colibri.Setup
 
             GUILayout.Space(15f);
             EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
+        }
 
+        private void DrawAppSettings()
+        {
             EditorGUILayout.HelpBox("Choose an App Name unique to this project. Every client that should share objects and messages "
                 + "must use the same App Name.", MessageType.Info);
 
@@ -181,45 +201,53 @@ namespace HCIKonstanz.Colibri.Setup
                 EditorGUILayout.HelpBox(sharedAppName, MessageType.Warning);
 
             _edited.ServerAddress = EditorGUILayout.TextField("Server Address: ", _edited.ServerAddress);
+        }
+
+        private void DrawOptionalConfig()
+        {
             GUILayout.Space(16);
             _portSettings = EditorGUILayout.Foldout(_portSettings, "Optional Config");
             if (_portSettings)
-            {
-                var x = EditorGUILayout.BeginVertical();
-                x.position = new Vector2(5, 5);
-                EditorGUILayout.HelpBox("The ports, SSL/TLS and the voice sampling rate must match the server. Change them only "
-                    + "if the server does not use the defaults.", MessageType.Warning);
-                _edited.IsSSL = EditorGUILayout.Toggle(new GUIContent("Server supports SSL/TLS?",
-                    "The server has TLS turned on (TLS_CERT and TLS_KEY): the TCP connection is encrypted, and the Store uses https."), _edited.IsSSL);
-                if (_edited.IsSSL)
-                {
-                    EditorGUI.indentLevel++;
-                    _edited.AllowSelfSignedCertificate = EditorGUILayout.Toggle(new GUIContent(AllowSelfSignedLabel,
-                        "Also accept a server certificate this device does not trust, such as a self-signed one. The connection "
-                        + "is still encrypted, but nothing checks that it goes to your server."), _edited.AllowSelfSignedCertificate);
-                    _edited.ServerCertificateSha256 = EditorGUILayout.TextField(new GUIContent(CertificateSha256Label,
-                        "Optional. The fingerprint of the one certificate to accept, trusted or not, as colibri-server logs it "
-                        + "when it starts; every other certificate is rejected. Leave it empty for a certificate from Let's Encrypt, "
-                        + "which changes with every renewal."), _edited.ServerCertificateSha256);
-                    EditorGUI.indentLevel--;
-                }
-                _edited.WebServerPort = EditorGUILayout.IntField("Web server Port: ", _edited.WebServerPort);
-                _edited.TcpServerPort = EditorGUILayout.IntField("TCP server Port: ", _edited.TcpServerPort);
-                _edited.VoiceServerPort = EditorGUILayout.IntField("Voice server Port: ", _edited.VoiceServerPort);
-                _edited.VoiceServerSamplingRate = EditorGUILayout.IntField("Voice Sampling Rate: ", _edited.VoiceServerSamplingRate);
-                _edited.MaxSendRate = EditorGUILayout.IntField(new GUIContent("Max Send Rate (Hz): ",
-                    "The most updates per second one synced object (SyncTransform, SyncBehaviour) sends. "
-                    + "Nothing is lost: a single change goes out at once, and the latest values of quicker "
-                    + "changes go out when the interval is up. 0 = no limit, one update per frame. "
-                    + "Code can change it at runtime through SyncSettings.MaxSendRate."), _edited.MaxSendRate);
-                EditorGUILayout.EndVertical();
-            }
+                DrawPortSettings();
+        }
 
-            // Every draw, even with no change here: a change elsewhere can make a refused value valid.
-            _refused = ApplyValidSettings(_edited, Config);
+        private void DrawPortSettings()
+        {
+            var x = EditorGUILayout.BeginVertical();
+            x.position = new Vector2(5, 5);
+            EditorGUILayout.HelpBox("The ports, SSL/TLS and the voice sampling rate must match the server. Change them only "
+                + "if the server does not use the defaults.", MessageType.Warning);
+            _edited.IsSSL = EditorGUILayout.Toggle(new GUIContent("Server supports SSL/TLS?",
+                "The server has TLS turned on (TLS_CERT and TLS_KEY): the TCP connection is encrypted, and the Store uses https."), _edited.IsSSL);
+            if (_edited.IsSSL)
+                DrawTlsSettings();
+            _edited.WebServerPort = EditorGUILayout.IntField("Web server Port: ", _edited.WebServerPort);
+            _edited.TcpServerPort = EditorGUILayout.IntField("TCP server Port: ", _edited.TcpServerPort);
+            _edited.VoiceServerPort = EditorGUILayout.IntField("Voice server Port: ", _edited.VoiceServerPort);
+            _edited.VoiceServerSamplingRate = EditorGUILayout.IntField("Voice Sampling Rate: ", _edited.VoiceServerSamplingRate);
+            _edited.MaxSendRate = EditorGUILayout.IntField(new GUIContent("Max Send Rate (Hz): ",
+                "The most updates per second one synced object (SyncTransform, SyncBehaviour) sends. "
+                + "Nothing is lost: a single change goes out at once, and the latest values of quicker "
+                + "changes go out when the interval is up. 0 = no limit, one update per frame. "
+                + "Code can change it at runtime through SyncSettings.MaxSendRate."), _edited.MaxSendRate);
+            EditorGUILayout.EndVertical();
+        }
 
-            var errors = ConfigurationErrors(_edited);
+        private void DrawTlsSettings()
+        {
+            EditorGUI.indentLevel++;
+            _edited.AllowSelfSignedCertificate = EditorGUILayout.Toggle(new GUIContent(AllowSelfSignedLabel,
+                "Also accept a server certificate this device does not trust, such as a self-signed one. The connection "
+                + "is still encrypted, but nothing checks that it goes to your server."), _edited.AllowSelfSignedCertificate);
+            _edited.ServerCertificateSha256 = EditorGUILayout.TextField(new GUIContent(CertificateSha256Label,
+                "Optional. The fingerprint of the one certificate to accept, trusted or not, as colibri-server logs it "
+                + "when it starts; every other certificate is rejected. Leave it empty for a certificate from Let's Encrypt, "
+                + "which changes with every renewal."), _edited.ServerCertificateSha256);
+            EditorGUI.indentLevel--;
+        }
 
+        private void DrawSaveButton(List<string> errors)
+        {
             GUILayout.Space(15f);
 
             EditorGUI.BeginDisabledGroup(errors.Count != 0);
@@ -234,7 +262,10 @@ namespace HCIKonstanz.Colibri.Setup
 
             foreach (var error in errors)
                 EditorGUILayout.HelpBox(error, MessageType.Error);
+        }
 
+        private void DrawSendRateWarning()
+        {
             // Outside the foldout, which starts closed each time the window opens.
             if (_edited.MaxSendRate == 0)
             {
@@ -242,12 +273,6 @@ namespace HCIKonstanz.Colibri.Setup
                     + "in every frame, 72 to 120 a second on a headset. One server and one Wi-Fi network cannot keep up "
                     + $"with dozens of clients doing that. The default is {ColibriConfig.DEFAULT_MAX_SEND_RATE}.", MessageType.Warning);
             }
-
-            DrawAndroidIssues();
-
-            EditorGUILayout.EndScrollView();
-
-            EditorGUIUtility.labelWidth = labelWidth;
         }
 
         /// <summary>
@@ -262,143 +287,6 @@ namespace HCIKonstanz.Colibri.Setup
 
             // Their indent, and a few pixels between the text and the field.
             return IndentPerLevel + widest + 4f;
-        }
-
-        /// <summary>Every public serialized field of ColibriConfig, so one added later is copied too.</summary>
-        private static readonly FieldInfo[] Settings = typeof(ColibriConfig)
-            .GetFields(BindingFlags.Public | BindingFlags.Instance)
-            .Where(field => !field.IsNotSerialized)
-            .ToArray();
-
-        /// <summary>
-        /// Copies <paramref name="config"/>'s settings to <paramref name="shown"/>, except the
-        /// <paramref name="refused"/> ones, which keep the value typed in.
-        /// </summary>
-        internal static void ShowSettings(ColibriConfig config, ColibriConfig shown, ICollection<string> refused)
-        {
-            foreach (var setting in Settings)
-                if (!refused.Contains(setting.Name))
-                    setting.SetValue(shown, setting.GetValue(config));
-        }
-
-        /// <summary>
-        /// Copies to <paramref name="config"/>, the configuration in use, each setting in which
-        /// <paramref name="shown"/> differs from it, unless a check that Save makes on that setting
-        /// then fails. So a valid change takes effect at once, even while another setting shows an
-        /// error, and a refused value does not reach Play mode or the next asset save.
-        /// </summary>
-        /// <returns>The settings it did not copy, by name.</returns>
-        internal static List<string> ApplyValidSettings(ColibriConfig shown, ColibriConfig config)
-        {
-            var changed = Settings.Where(setting => !Equals(setting.GetValue(shown), setting.GetValue(config))).ToList();
-            if (changed.Count == 0)
-                return new List<string>();
-
-            var candidate = CreateInstance<ColibriConfig>();
-            candidate.hideFlags = HideFlags.HideAndDontSave;
-            try
-            {
-                // The settings a failing check looks at, with shown's value for those in the list
-                // and config's for the rest.
-                List<FieldInfo> Failing(List<FieldInfo> settings)
-                {
-                    foreach (var setting in Settings)
-                        setting.SetValue(candidate, setting.GetValue(settings.Contains(setting) ? shown : config));
-                    var looked = Checks.Where(check => check.Error(candidate) != null).SelectMany(check => check.LooksAt).ToList();
-                    return settings.Where(setting => looked.Contains(setting.Name)).ToList();
-                }
-
-                // Two ports can only change together, so start with all and drop the failing ones
-                // until the rest pass.
-                var applied = changed.ToList();
-                for (var failing = Failing(applied); failing.Count != 0; failing = Failing(applied))
-                    applied = applied.Except(failing).ToList();
-
-                // Then each of the others alone, so a refused value does not hold back a valid one
-                // that shares a check with it.
-                foreach (var setting in changed.Except(applied).ToList())
-                    if (Failing(applied.Append(setting).ToList()).Count == 0)
-                        applied.Add(setting);
-
-                foreach (var setting in applied)
-                    setting.SetValue(config, setting.GetValue(shown));
-                return changed.Except(applied).Select(setting => setting.Name).ToList();
-            }
-            finally
-            {
-                DestroyImmediate(candidate);
-            }
-        }
-
-        /// <summary>
-        /// The checks that Save makes, each with the settings it looks at, and its error if it
-        /// fails, or null.
-        /// </summary>
-        private static readonly (string[] LooksAt, Func<ColibriConfig, string> Error)[] Checks =
-        {
-            // IsConfigured, the status window's test, which treats a name of spaces as empty.
-            (new[] { nameof(ColibriConfig.AppName) },
-                config => config.IsConfigured ? null : "App Name must not be empty!"),
-            (new[] { nameof(ColibriConfig.ServerAddress) }, ServerAddressError),
-            (new[] { nameof(ColibriConfig.WebServerPort) },
-                config => IsPort(config.WebServerPort) ? null
-                    : "Web server port invalid (must be a number between 1 - 65535, default 9211)"),
-            (new[] { nameof(ColibriConfig.TcpServerPort) },
-                config => IsPort(config.TcpServerPort) ? null
-                    : "TCP server port invalid (must be a number between 1 - 65535, default 9212)"),
-            (new[] { nameof(ColibriConfig.VoiceServerPort) },
-                config => IsPort(config.VoiceServerPort) ? null
-                    : "Voice server port invalid (must be a number between 1 - 65535, default 9213)"),
-            (new[] { nameof(ColibriConfig.WebServerPort), nameof(ColibriConfig.TcpServerPort), nameof(ColibriConfig.VoiceServerPort) },
-                config => new[] { config.WebServerPort, config.TcpServerPort, config.VoiceServerPort }.Distinct().Count() == 3 ? null
-                    : "Two ports may not have the same value!"),
-            (new[] { nameof(ColibriConfig.VoiceServerSamplingRate) },
-                config => config.VoiceServerSamplingRate >= 16000 && config.VoiceServerSamplingRate <= 48000 ? null
-                    : "Voice server sampling rate invalid (must be a number between 16000 - 48000, default 48000)"),
-            (new[] { nameof(ColibriConfig.MaxSendRate) },
-                config => config.MaxSendRate >= 0 ? null
-                    : $"Max send rate invalid (updates per second per synced object; 0 = no limit, default {ColibriConfig.DEFAULT_MAX_SEND_RATE})"),
-            (new[] { nameof(ColibriConfig.IsSSL), nameof(ColibriConfig.ServerCertificateSha256) }, CertificateSettingsError),
-        };
-
-        private static bool IsPort(int port) => port > 0 && port <= 65535;
-
-        /// <summary>
-        /// What is wrong with the server address, or null. Only a host name or an IP address is
-        /// valid: with a path or a port, the client cannot resolve it.
-        /// </summary>
-        internal static string ServerAddressError(ColibriConfig config)
-        {
-            var address = config.Host;
-            if (address.Length == 0)
-                return "Server address must not be empty!";
-            if (address.Contains("://"))
-                return "Server address should not contain a protocol (only IP or domain name)";
-            if (address.Contains("/") || address.Any(char.IsWhiteSpace))
-                return "Server address must be an IP address or a domain name only, without a path or spaces";
-
-            // A host name has no colon, and an IPv6 address has two or more or brackets. So one colon,
-            // or a colon after "]", is a port.
-            var colons = address.Count(c => c == ':');
-            if ((colons == 1 && !address.StartsWith("[")) || address.Contains("]:"))
-                return "Server address must not contain a port: enter the ports in their own fields";
-            return null;
-        }
-
-        /// <summary>What keeps the configuration from being saved; empty if nothing does.</summary>
-        internal static List<string> ConfigurationErrors(ColibriConfig config)
-            => Checks.Select(check => check.Error(config)).Where(error => error != null).ToList();
-
-        /// <summary>
-        /// What is wrong with the certificate settings, or null. A fingerprint that matches no
-        /// certificate would reject every connection. Without TLS they are neither used nor checked.
-        /// </summary>
-        internal static string CertificateSettingsError(ColibriConfig config)
-        {
-            if (!config.IsSSL || ServerCertificatePolicy.TryNormalizeFingerprint(config.ServerCertificateSha256, out _))
-                return null;
-
-            return "Server certificate SHA-256 invalid (64 hexadecimal digits, with or without colons, as colibri-server logs it; or empty)";
         }
 
         /// <summary>

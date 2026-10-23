@@ -53,9 +53,9 @@ namespace HCIKonstanz.Colibri.Tests
             Object.DestroyImmediate(_edited);
         }
 
-        private void Show() => SetupWindow.ShowSettings(_config, _edited, _refused);
+        private void Show() => ConfigValidation.ShowSettings(_config, _edited, _refused);
 
-        private void Apply() => _refused = SetupWindow.ApplyValidSettings(_edited, _config);
+        private void Apply() => _refused = ConfigValidation.ApplyValidSettings(_edited, _config);
 
         [Test]
         public void AMalformedFingerprintDoesNotReachTheConfigurationInUse()
@@ -262,7 +262,7 @@ namespace HCIKonstanz.Colibri.Tests
             try
             {
                 config.ServerAddress = address;
-                Assert.That(SetupWindow.ServerAddressError(config), Is.Null);
+                Assert.That(ConfigValidation.ServerAddressError(config), Is.Null);
             }
             finally
             {
