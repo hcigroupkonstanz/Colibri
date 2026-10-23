@@ -11,7 +11,7 @@ namespace HCIKonstanz.Colibri.Setup
     internal static class ConfigValidation
     {
         /// <summary>Every public serialized field of ColibriConfig, so one added later is copied too.</summary>
-        private static readonly FieldInfo[] Settings = typeof(ColibriConfig)
+        private static readonly FieldInfo[] _settings = typeof(ColibriConfig)
             .GetFields(BindingFlags.Public | BindingFlags.Instance)
             .Where(field => !field.IsNotSerialized)
             .ToArray();
@@ -20,7 +20,7 @@ namespace HCIKonstanz.Colibri.Setup
         /// The checks that Save makes, each with the settings it looks at, and its error if it
         /// fails, or null.
         /// </summary>
-        private static readonly (string[] LooksAt, Func<ColibriConfig, string> Error)[] Checks =
+        private static readonly (string[] LooksAt, Func<ColibriConfig, string> Error)[] _checks =
         {
             // IsConfigured, the status window's test, which treats a name of spaces as empty.
             (new[] { nameof(ColibriConfig.AppName) },
@@ -53,7 +53,7 @@ namespace HCIKonstanz.Colibri.Setup
         /// </summary>
         internal static void ShowSettings(ColibriConfig config, ColibriConfig shown, ICollection<string> refused)
         {
-            foreach (var setting in Settings)
+            foreach (var setting in _settings)
                 if (!refused.Contains(setting.Name))
                     setting.SetValue(shown, setting.GetValue(config));
         }
@@ -67,7 +67,7 @@ namespace HCIKonstanz.Colibri.Setup
         /// <returns>The settings it did not copy, by name.</returns>
         internal static List<string> ApplyValidSettings(ColibriConfig shown, ColibriConfig config)
         {
-            var changed = Settings.Where(setting => !Equals(setting.GetValue(shown), setting.GetValue(config))).ToList();
+            var changed = _settings.Where(setting => !Equals(setting.GetValue(shown), setting.GetValue(config))).ToList();
             if (changed.Count == 0)
                 return new List<string>();
 
@@ -79,9 +79,9 @@ namespace HCIKonstanz.Colibri.Setup
                 // and config's for the rest.
                 List<FieldInfo> Failing(List<FieldInfo> settings)
                 {
-                    foreach (var setting in Settings)
+                    foreach (var setting in _settings)
                         setting.SetValue(candidate, setting.GetValue(settings.Contains(setting) ? shown : config));
-                    var looked = Checks.Where(check => check.Error(candidate) != null).SelectMany(check => check.LooksAt).ToList();
+                    var looked = _checks.Where(check => check.Error(candidate) != null).SelectMany(check => check.LooksAt).ToList();
                     return settings.Where(setting => looked.Contains(setting.Name)).ToList();
                 }
 
@@ -133,7 +133,7 @@ namespace HCIKonstanz.Colibri.Setup
 
         /// <summary>What keeps the configuration from being saved; empty if nothing does.</summary>
         internal static List<string> ConfigurationErrors(ColibriConfig config)
-            => Checks.Select(check => check.Error(config)).Where(error => error != null).ToList();
+            => _checks.Select(check => check.Error(config)).Where(error => error != null).ToList();
 
         /// <summary>
         /// What is wrong with the certificate settings, or null. A fingerprint that matches no

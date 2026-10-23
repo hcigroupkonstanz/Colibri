@@ -6,30 +6,30 @@ namespace HCIKonstanz.Colibri.Synchronization
     /// </summary>
     internal interface ISyncedObject
     {
-        string Id { get; }
+        public string Id { get; }
 
         // Id generated on this client: the server holds nothing for it yet.
-        bool MadeItsId { get; }
+        public bool MadeItsId { get; }
 
         // No-op if the id is set already.
-        void TakeId(string id, bool madeHere);
+        public void TakeId(string id, bool madeHere);
 
         // Part of a copy built from a remote update: keeps its Id.
-        void MarkAsCopy();
+        public void MarkAsCopy();
 
         // Part of a copy that is destroyed at once: sends no delete.
-        void MarkDiscarded();
+        public void MarkDiscarded();
 
         // A remote update moved a synced parent and this object with it: latches the pose so it is not sent
         // as a change.
-        void LatchMovedWithParent();
+        public void LatchMovedWithParent();
 
-        bool IsCopy { get; }
+        public bool IsCopy { get; }
 
         // Null before Awake.
-        string RegisteredId { get; }
+        public string RegisteredId { get; }
 
         // Restores the registered Id and ModelId if they changed, and logs an error.
-        void KeepRegisteredId();
+        public void KeepRegisteredId();
     }
 }

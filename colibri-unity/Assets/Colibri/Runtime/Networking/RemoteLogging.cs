@@ -42,18 +42,18 @@ namespace HCIKonstanz.Colibri.Networking
         internal int BufferedLineCount => Volatile.Read(ref _bufferedLines);
         internal string[] BufferedLines => _messages.Select(m => m.Message).ToArray();
 
-        void OnEnable()
+        private void OnEnable()
         {
             _server = WebServerConnection.Instance;
             Application.logMessageReceivedThreaded += OnLogMessage;
         }
 
-        void OnDisable()
+        private void OnDisable()
         {
             Application.logMessageReceivedThreaded -= OnLogMessage;
         }
 
-        void Update()
+        private void Update()
         {
             // Fetch again: Instance was null in OnEnable, or the connection has been destroyed since.
             if (_server == null)

@@ -5,20 +5,20 @@ namespace HCIKonstanz.Colibri.Communication
 {
     internal sealed class Resampler
     {
-        public int sourceRate { get; private set; }
-        public int targetRate { get; private set; }
+        public int SourceRate { get; private set; }
+        public int TargetRate { get; private set; }
 
         // Null if either rate is zero or less; ResampleStream then returns an empty array. VoiceReceiver
         // passes AudioSettings.outputSampleRate as the target, which can be zero without an audio device.
-        private readonly StreamingResampler resampler;
-        private float[] output = Array.Empty<float>();
+        private readonly StreamingResampler _resampler;
+        private float[] _output = Array.Empty<float>();
 
         public Resampler(int sourceRate, int targetRate)
         {
-            this.sourceRate = sourceRate;
-            this.targetRate = targetRate;
+            SourceRate = sourceRate;
+            TargetRate = targetRate;
             if (sourceRate > 0 && targetRate > 0)
-                resampler = new StreamingResampler(sourceRate, targetRate);
+                _resampler = new StreamingResampler(sourceRate, targetRate);
         }
 
         /// <summary>
@@ -27,16 +27,16 @@ namespace HCIKonstanz.Colibri.Communication
         /// </summary>
         public float[] ResampleStream(float[] inputChunk)
         {
-            if (resampler == null || inputChunk == null || inputChunk.Length == 0)
+            if (_resampler == null || inputChunk == null || inputChunk.Length == 0)
                 return Array.Empty<float>();
 
-            var max = resampler.MaxOutput(inputChunk.Length);
-            if (output.Length < max)
-                output = new float[max];
+            var max = _resampler.MaxOutput(inputChunk.Length);
+            if (_output.Length < max)
+                _output = new float[max];
 
-            var written = resampler.Process(inputChunk, inputChunk.Length, output);
+            var written = _resampler.Process(inputChunk, inputChunk.Length, _output);
             var result = new float[written];
-            Array.Copy(output, result, written);
+            Array.Copy(_output, result, written);
             return result;
         }
     }

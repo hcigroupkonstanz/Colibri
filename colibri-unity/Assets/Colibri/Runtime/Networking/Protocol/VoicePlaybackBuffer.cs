@@ -21,17 +21,17 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         private const int MinCapacity = 1024;
         private const int MaxCapacity = 1 << 30;
 
-        private readonly float[] ring;
-        private readonly int mask;
+        private readonly float[] _ring;
+        private readonly int _mask;
 
         // Written by the writer only.
-        private int written;
-        private int clearedTo;
+        private int _written;
+        private int _clearedTo;
 
         // Written by the reader only.
-        private int read;
-        private int appliedClear;
-        private long fastForwarded;
+        private int _read;
+        private int _appliedClear;
+        private long _fastForwarded;
 
         /// <param name="capacity">The samples it holds at least; rounded up to a power of two.</param>
         /// <param name="startCount">Initial counter value; tests start just short of wrapping around.</param>
@@ -40,24 +40,24 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             var length = MinCapacity;
             while (length < capacity && length < MaxCapacity)
                 length <<= 1;
-            ring = new float[length];
-            mask = length - 1;
-            written = clearedTo = read = appliedClear = startCount;
+            _ring = new float[length];
+            _mask = length - 1;
+            _written = _clearedTo = _read = _appliedClear = startCount;
         }
 
-        internal int Capacity => ring.Length;
+        internal int Capacity => _ring.Length;
 
         /// <summary>The samples waiting to be read. Any thread, and only a snapshot.</summary>
         internal int Count
         {
             get
             {
-                // appliedClear before read: the reader publishes appliedClear after read, so an
+                // _appliedClear before _read: the reader publishes _appliedClear after _read, so an
                 // applied clear comes with that read count.
-                var applied = Volatile.Read(ref appliedClear);
-                var from = Volatile.Read(ref read);
-                var cleared = Volatile.Read(ref clearedTo);
-                var to = Volatile.Read(ref written);
+                var applied = Volatile.Read(ref _appliedClear);
+                var from = Volatile.Read(ref _read);
+                var cleared = Volatile.Read(ref _clearedTo);
+                var to = Volatile.Read(ref _written);
                 if (cleared != applied && unchecked(cleared - from) > 0)
                     from = cleared;
                 return unchecked(to - from);
@@ -65,7 +65,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         }
 
         /// <summary>The samples fast-forward has dropped so far. Any thread.</summary>
-        internal long FastForwarded => Interlocked.Read(ref fastForwarded);
+        internal long FastForwarded => Interlocked.Read(ref _fastForwarded);
 
         /// <summary>
         /// Writer only: appends up to <paramref name="count"/> of <paramref name="samples"/> and
@@ -76,16 +76,16 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             if (samples == null)
                 throw new ArgumentNullException(nameof(samples));
 
-            var writeCount = written;
-            var free = ring.Length - unchecked(writeCount - Volatile.Read(ref read));
+            var writeCount = _written;
+            var free = _ring.Length - unchecked(writeCount - Volatile.Read(ref _read));
             var n = Math.Min(Math.Max(0, Math.Min(count, samples.Length)), free);
 
-            var start = writeCount & mask;
-            var first = Math.Min(n, ring.Length - start);
-            Array.Copy(samples, 0, ring, start, first);
-            Array.Copy(samples, first, ring, 0, n - first);
+            var start = writeCount & _mask;
+            var first = Math.Min(n, _ring.Length - start);
+            Array.Copy(samples, 0, _ring, start, first);
+            Array.Copy(samples, first, _ring, 0, n - first);
 
-            Volatile.Write(ref written, unchecked(writeCount + n));
+            Volatile.Write(ref _written, unchecked(writeCount + n));
             return n;
         }
 
@@ -93,7 +93,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         /// Writer only: drops everything written so far. The reader skips it at its next read;
         /// until then it still takes up room.
         /// </summary>
-        internal void Clear() => Volatile.Write(ref clearedTo, written);
+        internal void Clear() => Volatile.Write(ref _clearedTo, _written);
 
         /// <summary>
         /// Reader only: fills <paramref name="data"/> (<paramref name="channels"/> interleaved
@@ -107,14 +107,14 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         /// <param name="keep">The samples fast-forward leaves; clamped to what is waiting.</param>
         internal int Read(float[] data, int channels, int fastForwardAbove = int.MaxValue, int keep = 0)
         {
-            var readCount = read;
-            // Before written, so the mark is never ahead of the written count.
-            var cleared = Volatile.Read(ref clearedTo);
-            var writeCount = Volatile.Read(ref written);
+            var readCount = _read;
+            // Before _written, so the mark is never ahead of the written count.
+            var cleared = Volatile.Read(ref _clearedTo);
+            var writeCount = Volatile.Read(ref _written);
             // Only an unapplied mark: an applied one stays put and would look ahead of the reader
             // again after 2^31 samples (12.4 h at 48 kHz). Not one the reader is already past: it
             // can read samples written after the mark before it sees the mark.
-            if (cleared != appliedClear && unchecked(cleared - readCount) > 0)
+            if (cleared != _appliedClear && unchecked(cleared - readCount) > 0)
                 readCount = cleared;
 
             var available = unchecked(writeCount - readCount);
@@ -125,7 +125,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 {
                     readCount = unchecked(readCount + skip);
                     available -= skip;
-                    Interlocked.Add(ref fastForwarded, skip);
+                    Interlocked.Add(ref _fastForwarded, skip);
                 }
             }
 
@@ -134,15 +134,15 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             var index = 0;
             for (var i = 0; i < samples; i++)
             {
-                var sample = ring[unchecked(readCount + i) & mask];
+                var sample = _ring[unchecked(readCount + i) & _mask];
                 for (var channel = 0; channel < channels; channel++)
                     data[index++] = sample;
             }
             Array.Clear(data, index, data.Length - index);
 
-            Volatile.Write(ref read, unchecked(readCount + samples));
+            Volatile.Write(ref _read, unchecked(readCount + samples));
             // After the read count, for Count.
-            Volatile.Write(ref appliedClear, cleared);
+            Volatile.Write(ref _appliedClear, cleared);
             return samples;
         }
     }

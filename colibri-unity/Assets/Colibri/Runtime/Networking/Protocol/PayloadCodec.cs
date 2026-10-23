@@ -14,7 +14,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         // raw text instead of JSON. Quoted, the admin UI's log page would show stray quotes.
         private const string LOG_CHANNEL = "log";
 
-        private static readonly Encoding Utf8 = new UTF8Encoding(false, false);
+        private static readonly Encoding _utf8 = new UTF8Encoding(false, false);
 
         internal static byte[] EncodeFrame(string channel, string command, JToken payload)
         {
@@ -52,9 +52,9 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             // is not valid JSON, so the server's Payload.asValue() would throw and fall back to asString(), and a
             // Unity string and a web client's string would not round-trip identically.
             if (channel == LOG_CHANNEL)
-                return Utf8.GetBytes(payload.Type == JTokenType.String ? payload.Value<string>() : payload.ToString(Formatting.None));
+                return _utf8.GetBytes(payload.Type == JTokenType.String ? payload.Value<string>() : payload.ToString(Formatting.None));
 
-            return Utf8.GetBytes(payload.ToString(Formatting.None));
+            return _utf8.GetBytes(payload.ToString(Formatting.None));
         }
 
         /// <summary>
@@ -71,7 +71,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             if (payload == null || payload.Length == 0)
                 return JValue.CreateNull();
 
-            var text = Utf8.GetString(payload);
+            var text = _utf8.GetString(payload);
             try
             {
                 // What JToken.Parse does, but with dates left as strings.

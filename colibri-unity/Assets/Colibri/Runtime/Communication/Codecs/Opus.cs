@@ -1,6 +1,9 @@
 using System;
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN || UNITY_STANDALONE_LINUX || UNITY_EDITOR_LINUX || UNITY_ANDROID
 using System.Runtime.InteropServices;
+#else
 using UnityEngine;
+#endif
 
 namespace HCIKonstanz.Colibri.Communication.Codecs
 {
@@ -8,11 +11,11 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
     {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN || UNITY_STANDALONE_LINUX || UNITY_EDITOR_LINUX || UNITY_ANDROID
         #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-        const string DllName = "opus";
+        private const string DllName = "opus";
         #elif UNITY_STANDALONE_LINUX || UNITY_EDITOR_LINUX
-        const string DllName = "libopus";
+        private const string DllName = "libopus";
         #elif UNITY_ANDROID
-        const string DllName = "libopus";
+        private const string DllName = "libopus";
         #endif
 
         // Also true in the macOS Editor with Android as the build target, where the library does not load.

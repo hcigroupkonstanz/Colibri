@@ -8,23 +8,23 @@ namespace HCIKonstanz.Colibri.Core
          *  Functions below taken from http://wiki.unity3d.com/index.php/3d_Math_functions
          */
 
-        private static Transform tempChild = null;
-        private static Transform tempParent = null;
+        private static Transform _tempChild = null;
+        private static Transform _tempParent = null;
 
         public static void Init()
         {
 
-            tempChild = (new GameObject("Math3d_TempChild")).transform;
-            tempParent = (new GameObject("Math3d_TempParent")).transform;
+            _tempChild = (new GameObject("Math3d_TempChild")).transform;
+            _tempParent = (new GameObject("Math3d_TempParent")).transform;
 
-            tempChild.gameObject.hideFlags = HideFlags.HideAndDontSave;
-            MonoBehaviour.DontDestroyOnLoad(tempChild.gameObject);
+            _tempChild.gameObject.hideFlags = HideFlags.HideAndDontSave;
+            MonoBehaviour.DontDestroyOnLoad(_tempChild.gameObject);
 
-            tempParent.gameObject.hideFlags = HideFlags.HideAndDontSave;
-            MonoBehaviour.DontDestroyOnLoad(tempParent.gameObject);
+            _tempParent.gameObject.hideFlags = HideFlags.HideAndDontSave;
+            MonoBehaviour.DontDestroyOnLoad(_tempParent.gameObject);
 
             //set the parent
-            tempChild.parent = tempParent;
+            _tempChild.parent = _tempParent;
         }
     }
 }

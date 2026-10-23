@@ -12,8 +12,8 @@ namespace HCIKonstanz.Colibri.Synchronization
     public abstract class SyncBehaviourManager<T> : MonoBehaviour
         where T : SyncBehaviour<T>
     {
-        private readonly string ChannelPrefix = WireName.Of(typeof(T).Name);
-        internal string Channel { get => ChannelPrefix + (String.IsNullOrEmpty(Template?.ModelId) ? "" : $"_{Template.ModelId}"); }
+        private readonly string _channelPrefix = WireName.Of(typeof(T).Name);
+        internal string Channel { get => _channelPrefix + (String.IsNullOrEmpty(Template?.ModelId) ? "" : $"_{Template.ModelId}"); }
 
         public T Template;
 

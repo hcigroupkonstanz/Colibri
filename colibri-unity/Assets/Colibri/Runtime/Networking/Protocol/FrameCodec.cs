@@ -35,7 +35,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         public const string FieldSeparator = "::";
 
         // GetBytes never emits a BOM.
-        private static readonly Encoding Utf8 = Encoding.UTF8;
+        private static readonly Encoding _utf8 = Encoding.UTF8;
 
         /// <summary>Encodes a heartbeat that echoes the server's timestamp back unchanged.</summary>
         public static byte[] EncodeHeartbeat(ulong pingTimestamp)
@@ -58,7 +58,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             RejectSeparator(nameof(app), app);
             RejectSeparator(nameof(name), name);
 
-            var body = Utf8.GetBytes($"{version}{FieldSeparator}{app}{FieldSeparator}{name}");
+            var body = _utf8.GetBytes($"{version}{FieldSeparator}{app}{FieldSeparator}{name}");
             if (TypeFieldSize + body.Length > MaxFrameLength)
                 throw new FrameException($"Frame exceeds the maximum length of {MaxFrameLength} bytes ({TypeFieldSize + body.Length})");
 
@@ -78,8 +78,8 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         public static byte[] EncodeMessage(string channel, string command, ReadOnlySpan<byte> payload,
             int maxFrameLength = MaxFrameLength)
         {
-            var channelLength = Utf8.GetByteCount(channel ?? string.Empty);
-            var commandLength = Utf8.GetByteCount(command ?? string.Empty);
+            var channelLength = _utf8.GetByteCount(channel ?? string.Empty);
+            var commandLength = _utf8.GetByteCount(command ?? string.Empty);
 
             if (channelLength > MaxFieldLength)
                 throw new FrameException($"Channel exceeds {MaxFieldLength} bytes ({channelLength})");
@@ -101,13 +101,13 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(offset), (ushort)channelLength);
             offset += 2;
             if (channelLength > 0)
-                Utf8.GetBytes(channel, 0, channel.Length, frame, offset);
+                _utf8.GetBytes(channel, 0, channel.Length, frame, offset);
             offset += channelLength;
 
             BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(offset), (ushort)commandLength);
             offset += 2;
             if (commandLength > 0)
-                Utf8.GetBytes(command, 0, command.Length, frame, offset);
+                _utf8.GetBytes(command, 0, command.Length, frame, offset);
             offset += commandLength;
 
             payload.CopyTo(frame.AsSpan(offset));

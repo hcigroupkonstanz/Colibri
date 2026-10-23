@@ -47,7 +47,7 @@ namespace HCIKonstanz.Colibri.Setup
         public bool IsConfigured => !string.IsNullOrWhiteSpace(AppName);
 
         // Example and placeholder names, in lowercase. colibri-web's samples use "myAppName".
-        private static readonly string[] CommonAppNames =
+        private static readonly string[] _commonAppNames =
         {
             "myappname", "myapp", "appname", "app", "test", "testapp", "demo", "example", "colibri", "default"
         };
@@ -64,7 +64,7 @@ namespace HCIKonstanz.Colibri.Setup
                 return null;
 
             var name = appName.Trim();
-            if (System.Array.IndexOf(CommonAppNames, name.ToLowerInvariant()) < 0)
+            if (System.Array.IndexOf(_commonAppNames, name.ToLowerInvariant()) < 0)
                 return null;
 
             return $"'{name}' is a generic App Name that other people are likely to pick too. "

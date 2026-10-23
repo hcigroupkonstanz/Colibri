@@ -2,7 +2,9 @@ using HCIKonstanz.Colibri.Networking;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+#if !(UNITY_EDITOR || DEVELOPMENT_BUILD)
 using System.Linq;
+#endif
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization

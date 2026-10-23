@@ -1,12 +1,11 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using HCIKonstanz.Colibri.Communication.Codecs;
 using HCIKonstanz.Colibri.Networking;
 using HCIKonstanz.Colibri.Networking.Protocol;
+#if UNITY_ANDROID
 using UnityEngine.Android;
+#endif
 using HCIKonstanz.Colibri.Setup;
-using System;
 
 namespace HCIKonstanz.Colibri.Communication
 {
@@ -25,37 +24,37 @@ namespace HCIKonstanz.Colibri.Communication
 
 
         // Debug
-        private static readonly string DEBUG_HEADER = "[VoiceBroadcast] ";
+        private static readonly string _debugHeader = "[VoiceBroadcast] ";
 
         // Microphone recording
-        private int serverSamplingRate = 48000;
-        private AudioClip recordingAudioClip;
-        private int lastRecordingSamplePosition = 0;
-        private bool isInitialized = false;
-        private bool startAfterInitialized = false;
-        private short startId = -1;
-        private int microphoneSamplingRate;
-        private bool broadcast = false;
+        private int _serverSamplingRate = 48000;
+        private AudioClip _recordingAudioClip;
+        private int _lastRecordingSamplePosition = 0;
+        private bool _isInitialized = false;
+        private bool _startAfterInitialized = false;
+        private short _startId = -1;
+        private int _microphoneSamplingRate;
+        private bool _broadcast = false;
 
         // Null for the default microphone. Chosen once, in InitBroadcast.
-        private string microphoneDevice;
+        private string _microphoneDevice;
 
         // Networking
-        private VoiceServerConnection voiceServerConnection;
-        private VoiceFramer framer;
-        private int frameSize = 960;
-        private short localUserId;
+        private VoiceServerConnection _voiceServerConnection;
+        private VoiceFramer _framer;
+        private int _frameSize = 960;
+        private short _localUserId;
 
         // Opus codec
-        private OpusEncoder opusEncoder;
+        private OpusEncoder _opusEncoder;
 
 #if UNITY_ANDROID
         // Permission callbacks may not run on the main thread: they only set the volatile flags, and Update acts on them.
-        private bool waitingForPermission;
-        private float permissionCheckedAt;
-        private bool permissionAskedAgain;
-        private volatile bool permissionGranted;
-        private volatile bool permissionDismissed;
+        private bool _waitingForPermission;
+        private float _permissionCheckedAt;
+        private bool _permissionAskedAgain;
+        private volatile bool _permissionGranted;
+        private volatile bool _permissionDismissed;
 #endif
 
         private void Start()
@@ -63,7 +62,7 @@ namespace HCIKonstanz.Colibri.Communication
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
             {
-                waitingForPermission = true;
+                _waitingForPermission = true;
                 RequestMicrophonePermission();
                 return;
             }
@@ -75,11 +74,11 @@ namespace HCIKonstanz.Colibri.Communication
         private void RequestMicrophonePermission()
         {
             PermissionCallbacks microphonePermissionCallbacks = new PermissionCallbacks();
-            microphonePermissionCallbacks.PermissionGranted += _ => permissionGranted = true;
+            microphonePermissionCallbacks.PermissionGranted += _ => _permissionGranted = true;
             microphonePermissionCallbacks.PermissionDenied += OnMicrophonePermissionDenied;
 #if UNITY_2023_1_OR_NEWER
             // PermissionRequestDismissed exists from Unity 2023.1.
-            microphonePermissionCallbacks.PermissionRequestDismissed += _ => permissionDismissed = true;
+            microphonePermissionCallbacks.PermissionRequestDismissed += _ => _permissionDismissed = true;
 #endif
             Permission.RequestUserPermission(Permission.Microphone, microphonePermissionCallbacks);
         }
@@ -88,13 +87,13 @@ namespace HCIKonstanz.Colibri.Communication
         // Asked once more; after that, Update's poll picks up a later grant.
         private void OnMicrophonePermissionDismissed()
         {
-            if (!permissionAskedAgain)
+            if (!_permissionAskedAgain)
             {
-                permissionAskedAgain = true;
+                _permissionAskedAgain = true;
                 RequestMicrophonePermission();
                 return;
             }
-            Debug.LogWarning(DEBUG_HEADER + "The microphone permission request was closed without an answer. Voice starts once the "
+            Debug.LogWarning(_debugHeader + "The microphone permission request was closed without an answer. Voice starts once the "
                 + "permission is granted, e.g. in the device's settings for this app.");
         }
 #endif
@@ -102,27 +101,27 @@ namespace HCIKonstanz.Colibri.Communication
         private void Update()
         {
 #if UNITY_ANDROID
-            if (permissionDismissed)
+            if (_permissionDismissed)
             {
-                permissionDismissed = false;
+                _permissionDismissed = false;
                 OnMicrophonePermissionDismissed();
             }
 
             // A grant by the request sets the flag; one made outside it (device settings, another request) is polled for.
             // Once a second, since the check goes through Java.
-            if (permissionGranted)
+            if (_permissionGranted)
             {
-                permissionGranted = false;
+                _permissionGranted = false;
                 InitBroadcast();
             }
-            else if (waitingForPermission && Time.unscaledTime - permissionCheckedAt >= 1f)
+            else if (_waitingForPermission && Time.unscaledTime - _permissionCheckedAt >= 1f)
             {
-                permissionCheckedAt = Time.unscaledTime;
+                _permissionCheckedAt = Time.unscaledTime;
                 if (Permission.HasUserAuthorizedPermission(Permission.Microphone))
                     InitBroadcast();
             }
 #endif
-            if (isInitialized && broadcast)
+            if (_isInitialized && _broadcast)
             {
                 SendRecordedSamples();
             }
@@ -130,13 +129,13 @@ namespace HCIKonstanz.Colibri.Communication
 
         private void OnApplicationQuit()
         {
-            opusEncoder?.Destroy();
+            _opusEncoder?.Destroy();
         }
 
 
         private void OnMicrophonePermissionDenied(string permissionName)
         {
-            Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: Microphone permission NOT granted. Voice starts "
+            Debug.LogError(_debugHeader + "Voice Broadcast initialization failed: Microphone permission NOT granted. Voice starts "
                 + "once it is granted, e.g. in the device's settings for this app.");
         }
 
@@ -149,7 +148,7 @@ namespace HCIKonstanz.Colibri.Communication
             if (MicrophoneID >= 0 && MicrophoneID < devices.Length)
                 return devices[MicrophoneID];
 
-            Debug.LogWarning(DEBUG_HEADER + "Microphone ID " + MicrophoneID + " is not a microphone of this device, which has "
+            Debug.LogWarning(_debugHeader + "Microphone ID " + MicrophoneID + " is not a microphone of this device, which has "
                 + devices.Length + ". Using the default one.");
             return null;
         }
@@ -160,104 +159,104 @@ namespace HCIKonstanz.Colibri.Communication
             {
                 for (int i = 0; i < recordingDevices.Length; i++)
                 {
-                    Debug.Log(DEBUG_HEADER + "Recording device found: " + recordingDevices[i] + " ID: " + i);
+                    Debug.Log(_debugHeader + "Recording device found: " + recordingDevices[i] + " ID: " + i);
                 }
-                Debug.Log(DEBUG_HEADER + "Using recording device: " + (microphoneDevice ?? "the default one"));
+                Debug.Log(_debugHeader + "Using recording device: " + (_microphoneDevice ?? "the default one"));
             }
         }
 
         private void ApplyFrameSize()
         {
             // Frames are cut after resampling, so they count samples at the server's rate, not the microphone's.
-            frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, FrameSizeMilliseconds);
-            if (frameSize < 1 || frameSize > VoiceFramer.MaxFrameSamples)
+            _frameSize = VoiceFramer.FrameSampleCount(_serverSamplingRate, FrameSizeMilliseconds);
+            if (_frameSize < 1 || _frameSize > VoiceFramer.MaxFrameSamples)
             {
-                Debug.LogError(DEBUG_HEADER + "Frame Size Milliseconds " + FrameSizeMilliseconds + " makes frames of " + frameSize + " samples at " + serverSamplingRate + " Hz, which a voice packet cannot carry. Using 20 ms.");
-                frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, 20);
+                Debug.LogError(_debugHeader + "Frame Size Milliseconds " + FrameSizeMilliseconds + " makes frames of " + _frameSize + " samples at " + _serverSamplingRate + " Hz, which a voice packet cannot carry. Using 20 ms.");
+                _frameSize = VoiceFramer.FrameSampleCount(_serverSamplingRate, 20);
             }
-            if (Debugging) Debug.Log(DEBUG_HEADER + "Frame size: " + FrameSizeMilliseconds + " ms, " + frameSize + " samples");
+            if (Debugging) Debug.Log(_debugHeader + "Frame size: " + FrameSizeMilliseconds + " ms, " + _frameSize + " samples");
         }
 
         private void InitBroadcast()
         {
 #if UNITY_ANDROID
-            waitingForPermission = false;
+            _waitingForPermission = false;
 #endif
             // Reached from the grant flag and from the poll in Update, whichever comes first.
-            if (isInitialized)
+            if (_isInitialized)
                 return;
 
             // Same fallback as VoiceServerConnection; at 0 frames would hold no samples.
             int configuredSamplingRate = ColibriConfig.Load().VoiceServerSamplingRate;
-            serverSamplingRate = configuredSamplingRate > 0 ? configuredSamplingRate : 48000;
+            _serverSamplingRate = configuredSamplingRate > 0 ? configuredSamplingRate : 48000;
             // Get all available recording devices and select recording device
             string[] recordingDevices = Microphone.devices;
             if (recordingDevices.Length == 0)
             {
-                Debug.LogError(DEBUG_HEADER + "Voice Broadcast initialization failed: No recording device found");
+                Debug.LogError(_debugHeader + "Voice Broadcast initialization failed: No recording device found");
                 return;
             }
-            microphoneDevice = ChooseMicrophone(recordingDevices);
+            _microphoneDevice = ChooseMicrophone(recordingDevices);
             LogRecordingDevices(recordingDevices);
 
             // Get supported sampling rates of the selected recording device
             int minSupportedSamplingRate;
             int maxSupportedSamplingRate;
-            Microphone.GetDeviceCaps(microphoneDevice, out minSupportedSamplingRate, out maxSupportedSamplingRate);
-            if (Debugging) Debug.Log(DEBUG_HEADER + "Sampling rates supported: " + minSupportedSamplingRate + " - " + maxSupportedSamplingRate);
+            Microphone.GetDeviceCaps(_microphoneDevice, out minSupportedSamplingRate, out maxSupportedSamplingRate);
+            if (Debugging) Debug.Log(_debugHeader + "Sampling rates supported: " + minSupportedSamplingRate + " - " + maxSupportedSamplingRate);
 
             // Decide on sampling rate
-            microphoneSamplingRate = VoiceFramer.RecordingRate(minSupportedSamplingRate, maxSupportedSamplingRate, serverSamplingRate);
-            if (Debugging) Debug.Log(DEBUG_HEADER + "Use sampling rate: " + microphoneSamplingRate);
+            _microphoneSamplingRate = VoiceFramer.RecordingRate(minSupportedSamplingRate, maxSupportedSamplingRate, _serverSamplingRate);
+            if (Debugging) Debug.Log(_debugHeader + "Use sampling rate: " + _microphoneSamplingRate);
 
             // Calculate package size based on requested frame size (milliseconds)
             ApplyFrameSize();
 
             // Init server connection
-            voiceServerConnection = VoiceServerConnection.Instance;
+            _voiceServerConnection = VoiceServerConnection.Instance;
 
             // Init opus
-            opusEncoder = UseOpusCodec ? CreateOpusEncoder() : null;
+            _opusEncoder = UseOpusCodec ? CreateOpusEncoder() : null;
 
-            isInitialized = true;
-            Debug.Log(DEBUG_HEADER + "Ready for Voice Broadcast");
+            _isInitialized = true;
+            Debug.Log(_debugHeader + "Ready for Voice Broadcast");
 
-            if (startAfterInitialized)
+            if (_startAfterInitialized)
             {
-                StartBroadcast(startId);
+                StartBroadcast(_startId);
             }
         }
 
         public void StartBroadcast(short id)
         {
-            if (isInitialized)
+            if (_isInitialized)
             {
-                localUserId = id;
+                _localUserId = id;
 
                 // Start recording using selected recording device
-                Debug.Log(DEBUG_HEADER + "Start voice broadcasting");
-                recordingAudioClip = Microphone.Start(microphoneDevice, true, MicrophoneBufferLengthSeconds, microphoneSamplingRate);
-                if (Debugging) Debug.Log(DEBUG_HEADER + "Channel count: " + recordingAudioClip.channels);
-                lastRecordingSamplePosition = Microphone.GetPosition(microphoneDevice);
+                Debug.Log(_debugHeader + "Start voice broadcasting");
+                _recordingAudioClip = Microphone.Start(_microphoneDevice, true, MicrophoneBufferLengthSeconds, _microphoneSamplingRate);
+                if (Debugging) Debug.Log(_debugHeader + "Channel count: " + _recordingAudioClip.channels);
+                _lastRecordingSamplePosition = Microphone.GetPosition(_microphoneDevice);
 
                 // New per broadcast, so no samples left over from the last one go out.
-                framer = new VoiceFramer(microphoneSamplingRate, serverSamplingRate, frameSize,
-                    opusEncoder != null ? EncodeOpus : (VoiceFrameEncoder)null, SendFrame, ReportEncodeFailure);
-                broadcast = true;
+                _framer = new VoiceFramer(_microphoneSamplingRate, _serverSamplingRate, _frameSize,
+                    _opusEncoder != null ? EncodeOpus : (VoiceFrameEncoder)null, SendFrame, ReportEncodeFailure);
+                _broadcast = true;
             }
             else
             {
-                startId = id;
-                startAfterInitialized = true;
+                _startId = id;
+                _startAfterInitialized = true;
             }
         }
 
         public void StopBroadcast()
         {
-            if (broadcast)
+            if (_broadcast)
             {
-                broadcast = false;
-                Microphone.End(microphoneDevice);
+                _broadcast = false;
+                Microphone.End(_microphoneDevice);
             }
         }
 
@@ -265,15 +264,15 @@ namespace HCIKonstanz.Colibri.Communication
         // Voice then goes out as PCM.
         private OpusEncoder CreateOpusEncoder()
         {
-            if (!VoiceFramer.IsOpusFrame(serverSamplingRate, frameSize))
+            if (!VoiceFramer.IsOpusFrame(_serverSamplingRate, _frameSize))
             {
-                Debug.LogWarning(DEBUG_HEADER + "Use Opus Codec is on, but Opus encodes only 8, 12, 16, 24 or 48 kHz in frames of 2.5, 5, 10, 20, 40 or 60 ms, not frames of " + frameSize + " samples at " + serverSamplingRate + " Hz. Sending voice as PCM.");
+                Debug.LogWarning(_debugHeader + "Use Opus Codec is on, but Opus encodes only 8, 12, 16, 24 or 48 kHz in frames of 2.5, 5, 10, 20, 40 or 60 ms, not frames of " + _frameSize + " samples at " + _serverSamplingRate + " Hz. Sending voice as PCM.");
                 return null;
             }
 
-            if (!OpusEncoder.TryCreate(serverSamplingRate, 1, OpusApplication.VOIP, out OpusEncoder encoder, out string error))
+            if (!OpusEncoder.TryCreate(_serverSamplingRate, 1, OpusApplication.VOIP, out OpusEncoder encoder, out string error))
             {
-                Debug.LogWarning(DEBUG_HEADER + "Use Opus Codec is on, but " + error + ". Sending voice as PCM.");
+                Debug.LogWarning(_debugHeader + "Use Opus Codec is on, but " + error + ". Sending voice as PCM.");
                 return null;
             }
 
@@ -285,14 +284,14 @@ namespace HCIKonstanz.Colibri.Communication
             int differenceSinceLastAdd = 0;
 
             // Get sample count since last adding
-            int currentSamplePosition = Microphone.GetPosition(microphoneDevice);
-            if (currentSamplePosition > lastRecordingSamplePosition)
+            int currentSamplePosition = Microphone.GetPosition(_microphoneDevice);
+            if (currentSamplePosition > _lastRecordingSamplePosition)
             {
-                differenceSinceLastAdd = currentSamplePosition - lastRecordingSamplePosition;
+                differenceSinceLastAdd = currentSamplePosition - _lastRecordingSamplePosition;
             }
-            else if (currentSamplePosition < lastRecordingSamplePosition)
+            else if (currentSamplePosition < _lastRecordingSamplePosition)
             {
-                differenceSinceLastAdd = recordingAudioClip.samples - lastRecordingSamplePosition + currentSamplePosition;
+                differenceSinceLastAdd = _recordingAudioClip.samples - _lastRecordingSamplePosition + currentSamplePosition;
             }
             else
             {
@@ -301,28 +300,28 @@ namespace HCIKonstanz.Colibri.Communication
 
             // Get samples since last adding
             float[] data = new float[differenceSinceLastAdd];
-            recordingAudioClip.GetData(data, lastRecordingSamplePosition);
-            lastRecordingSamplePosition = currentSamplePosition;
+            _recordingAudioClip.GetData(data, _lastRecordingSamplePosition);
+            _lastRecordingSamplePosition = currentSamplePosition;
 
             // Sends each frame the samples fill; the remainder waits for the next call.
-            framer.Add(data);
+            _framer.Add(data);
         }
 
         private byte[] EncodeOpus(byte[] pcm, int frameSamples, out string error)
         {
-            byte[] encoded = opusEncoder.TryEncode(pcm, frameSamples, out OpusError opusError);
+            byte[] encoded = _opusEncoder.TryEncode(pcm, frameSamples, out OpusError opusError);
             error = encoded == null ? opusError.ToString() : null;
             return encoded;
         }
 
         private void SendFrame(short frameSamples, Codec codec, byte[] data)
         {
-            voiceServerConnection.SendByteData(localUserId, 0, frameSamples, codec, data);
+            _voiceServerConnection.SendByteData(_localUserId, 0, frameSamples, codec, data);
         }
 
         private void ReportEncodeFailure(string error)
         {
-            Debug.LogWarning(DEBUG_HEADER + "Opus could not encode a frame (" + error + "). Frames it fails on go out as PCM. Reported once per broadcast.");
+            Debug.LogWarning(_debugHeader + "Opus could not encode a frame (" + error + "). Frames it fails on go out as PCM. Reported once per broadcast.");
         }
     }
 }

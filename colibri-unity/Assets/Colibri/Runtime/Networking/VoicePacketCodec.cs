@@ -24,13 +24,13 @@ namespace HCIKonstanz.Colibri.Networking
         private const uint FnvPrime = 0x01000193;
 
         // GetBytes writes no BOM, so the hash covers only the name's bytes.
-        private static readonly Encoding Utf8 = Encoding.UTF8;
+        private static readonly Encoding _utf8 = Encoding.UTF8;
 
         /// <summary>The app id of <paramref name="appName"/>: the 32-bit FNV-1a hash of its UTF-8 bytes.</summary>
         public static uint AppId(string appName)
         {
             var hash = FnvOffsetBasis;
-            foreach (var b in Utf8.GetBytes(appName ?? string.Empty))
+            foreach (var b in _utf8.GetBytes(appName ?? string.Empty))
                 hash = unchecked((hash ^ b) * FnvPrime);
             return hash;
         }

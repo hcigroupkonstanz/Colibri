@@ -9,29 +9,29 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
     /// </summary>
     internal sealed class VoicePlayback
     {
-        private readonly Action<short> addListener;
-        private readonly Action<short> removeListener;
+        private readonly Action<short> _addListener;
+        private readonly Action<short> _removeListener;
 
         // Written on the main thread, read on the audio thread too.
-        private volatile bool isPlaying;
+        private volatile bool _isPlaying;
 
-        private short id;
+        private short _id;
 
         /// <param name="addListener">Starts delivering the voice of an id to the buffer.</param>
         /// <param name="removeListener">Stops that delivery.</param>
         internal VoicePlayback(VoicePlaybackBuffer buffer, Action<short> addListener, Action<short> removeListener)
         {
             Buffer = buffer ?? throw new ArgumentNullException(nameof(buffer));
-            this.addListener = addListener ?? throw new ArgumentNullException(nameof(addListener));
-            this.removeListener = removeListener ?? throw new ArgumentNullException(nameof(removeListener));
+            _addListener = addListener ?? throw new ArgumentNullException(nameof(addListener));
+            _removeListener = removeListener ?? throw new ArgumentNullException(nameof(removeListener));
         }
 
         internal VoicePlaybackBuffer Buffer { get; }
 
-        internal bool IsPlaying => isPlaying;
+        internal bool IsPlaying => _isPlaying;
 
         /// <summary>The voice id played, or last played.</summary>
-        internal short Id => id;
+        internal short Id => _id;
 
         /// <summary>
         /// Main thread: plays the voice of <paramref name="voiceId"/>, replacing any other. False,
@@ -40,32 +40,32 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         internal bool Start(short voiceId)
         {
             // A second listener for the same id would deliver every packet twice.
-            if (isPlaying && voiceId == id)
+            if (_isPlaying && voiceId == _id)
                 return false;
 
-            if (isPlaying)
+            if (_isPlaying)
             {
-                isPlaying = false;
-                removeListener(id);
+                _isPlaying = false;
+                _removeListener(_id);
             }
 
-            // Drop what is left of the previous playback. isPlaying goes true only after this,
+            // Drop what is left of the previous playback. _isPlaying goes true only after this,
             // so the audio thread never reads those samples.
             Buffer.Clear();
-            id = voiceId;
-            addListener(voiceId);
-            isPlaying = true;
+            _id = voiceId;
+            _addListener(voiceId);
+            _isPlaying = true;
             return true;
         }
 
         /// <summary>Main thread: stops playing. False if it was not playing.</summary>
         internal bool Stop()
         {
-            if (!isPlaying)
+            if (!_isPlaying)
                 return false;
 
-            isPlaying = false;
-            removeListener(id);
+            _isPlaying = false;
+            _removeListener(_id);
             return true;
         }
 
@@ -75,7 +75,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         /// </summary>
         internal int Read(float[] data, int channels, int fastForwardAbove = int.MaxValue, int keep = 0)
         {
-            if (!isPlaying)
+            if (!_isPlaying)
             {
                 Array.Clear(data, 0, data.Length);
                 return 0;

@@ -14,12 +14,12 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         internal int TargetRate { get; }
 
         // Left end of the interval the next output sample falls into.
-        private float previous;
-        private bool hasPrevious;
+        private float _previous;
+        private bool _hasPrevious;
 
-        // Position of the next output sample after previous, in 1/TargetRate input samples. An
+        // Position of the next output sample after _previous, in 1/TargetRate input samples. An
         // integer, so the output count does not drift on a long stream.
-        private int phase;
+        private int _phase;
 
         internal StreamingResampler(int sourceRate, int targetRate)
         {
@@ -57,18 +57,18 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 var current = input[i];
 
                 // The first input sample is the first output sample, written once the next input arrives.
-                if (!hasPrevious)
+                if (!_hasPrevious)
                 {
-                    previous = current;
-                    hasPrevious = true;
+                    _previous = current;
+                    _hasPrevious = true;
                     continue;
                 }
 
-                for (; phase < TargetRate; phase += SourceRate)
-                    output[written++] = previous + (current - previous) * ((float)phase / TargetRate);
+                for (; _phase < TargetRate; _phase += SourceRate)
+                    output[written++] = _previous + (current - _previous) * ((float)_phase / TargetRate);
 
-                phase -= TargetRate;
-                previous = current;
+                _phase -= TargetRate;
+                _previous = current;
             }
 
             return written;

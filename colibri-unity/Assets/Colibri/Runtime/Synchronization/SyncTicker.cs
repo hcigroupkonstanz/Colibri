@@ -23,9 +23,9 @@ namespace HCIKonstanz.Colibri.Synchronization
             /// Slot in the ticker's list, or -1 while unregistered. Owned by the ticker; implementations
             /// only store it, initialized to -1.
             /// </summary>
-            int TickIndex { get; set; }
+            public int TickIndex { get; set; }
 
-            void PollChanges();
+            public void PollChanges();
 
             /// <param name="now">The ticker's clock, in seconds.</param>
             /// <param name="interval">
@@ -35,7 +35,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             /// When the server was last heard from, on the same clock. Anything sent after it may have gone
             /// into a dead link (see <see cref="SentValues"/>).
             /// </param>
-            void FlushUpdate(double now, double interval, double heardAt);
+            public void FlushUpdate(double now, double interval, double heardAt);
         }
 
         private static readonly List<ITickable> _tickables = new List<ITickable>();

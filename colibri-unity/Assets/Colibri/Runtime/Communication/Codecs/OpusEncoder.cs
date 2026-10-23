@@ -9,7 +9,7 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
         public int Channels { get; private set; }
         public OpusApplication Application { get; private set; }
 
-        private IntPtr pointer;
+        private IntPtr _pointer;
 
         public OpusEncoder(int samplingRate, int channels, OpusApplication application)
         {
@@ -17,7 +17,7 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
             Channels = channels;
             Application = application;
             int error;
-            pointer = Opus.opus_encoder_create(SamplingRate, Channels, (int)Application, out error);
+            _pointer = Opus.opus_encoder_create(SamplingRate, Channels, (int)Application, out error);
             if ((OpusError)error != OpusError.OK)
             {
                 Debug.LogError("Opus encoder can not be created: " + (OpusError)error);
@@ -29,7 +29,7 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
             SamplingRate = samplingRate;
             Channels = channels;
             Application = application;
-            this.pointer = pointer;
+            _pointer = pointer;
         }
 
         /// <summary>
@@ -85,14 +85,14 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
         internal byte[] TryEncode(byte[] data, int frameSize, out OpusError error)
         {
             // opus_encode does not check its encoder: a destroyed one, or none, can crash the app.
-            if (pointer == IntPtr.Zero)
+            if (_pointer == IntPtr.Zero)
             {
                 error = OpusError.INVALID_STATE;
                 return null;
             }
 
             byte[] buffer = new byte[data.Length];
-            int encodedLength = Opus.opus_encode(pointer, data, frameSize, buffer, buffer.Length);
+            int encodedLength = Opus.opus_encode(_pointer, data, frameSize, buffer, buffer.Length);
             if (encodedLength < 0)
             {
                 error = (OpusError)encodedLength;
@@ -107,10 +107,10 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
         public void Destroy()
         {
             // Once only: a second opus_encoder_destroy frees the encoder twice.
-            if (pointer == IntPtr.Zero)
+            if (_pointer == IntPtr.Zero)
                 return;
-            Opus.opus_encoder_destroy(pointer);
-            pointer = IntPtr.Zero;
+            Opus.opus_encoder_destroy(_pointer);
+            _pointer = IntPtr.Zero;
         }
     }
 }

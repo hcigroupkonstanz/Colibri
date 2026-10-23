@@ -26,22 +26,22 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
         // What Opus encodes (RFC 6716): these rates, and frames of 2.5, 5, 10, 20, 40 or 60 ms
         // (in half milliseconds here). Anything else is refused.
-        private static readonly int[] OpusSamplingRates = { 8000, 12000, 16000, 24000, 48000 };
-        private static readonly int[] OpusFrameHalfMilliseconds = { 5, 10, 20, 40, 80, 120 };
+        private static readonly int[] _opusSamplingRates = { 8000, 12000, 16000, 24000, 48000 };
+        private static readonly int[] _opusFrameHalfMilliseconds = { 5, 10, 20, 40, 80, 120 };
 
         // Null when the recording rate is the server's rate.
-        private readonly StreamingResampler resampler;
+        private readonly StreamingResampler _resampler;
 
-        private readonly VoiceFrameEncoder encoder;
+        private readonly VoiceFrameEncoder _encoder;
 
-        private readonly Action<short, Codec, byte[]> send;
-        private readonly Action<string> reportEncodeFailure;
+        private readonly Action<short, Codec, byte[]> _send;
+        private readonly Action<string> _reportEncodeFailure;
 
-        private readonly float[] frame;
-        private readonly byte[] pcm;
-        private float[] resampled = Array.Empty<float>();
-        private int frameFill;
-        private bool encodeFailureReported;
+        private readonly float[] _frame;
+        private readonly byte[] _pcm;
+        private float[] _resampled = Array.Empty<float>();
+        private int _frameFill;
+        private bool _encodeFailureReported;
 
         /// <param name="recordingRate">The sampling rate of the audio passed to <see cref="Add"/>.</param>
         /// <param name="serverRate">The voice server's sampling rate.</param>
@@ -61,18 +61,18 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                 throw new ArgumentOutOfRangeException(nameof(serverRate), serverRate, "A sampling rate is positive.");
 
             if (recordingRate != serverRate)
-                resampler = new StreamingResampler(recordingRate, serverRate);
-            this.encoder = encoder;
-            this.send = send ?? throw new ArgumentNullException(nameof(send));
-            this.reportEncodeFailure = reportEncodeFailure;
-            frame = new float[frameSamples];
-            pcm = new byte[frameSamples * 2];
+                _resampler = new StreamingResampler(recordingRate, serverRate);
+            _encoder = encoder;
+            _send = send ?? throw new ArgumentNullException(nameof(send));
+            _reportEncodeFailure = reportEncodeFailure;
+            _frame = new float[frameSamples];
+            _pcm = new byte[frameSamples * 2];
         }
 
-        internal int FrameSamples => frame.Length;
+        internal int FrameSamples => _frame.Length;
 
         /// <summary>The samples, at the server's rate, waiting for a frame to fill. Fewer than <see cref="FrameSamples"/>.</summary>
-        internal int PendingSamples => frameFill;
+        internal int PendingSamples => _frameFill;
 
         /// <summary>The samples in a frame of <paramref name="frameMilliseconds"/> at <paramref name="samplingRate"/>, rounded down.</summary>
         internal static int FrameSampleCount(int samplingRate, int frameMilliseconds)
@@ -92,10 +92,10 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
         /// <summary>Whether Opus encodes frames of <paramref name="frameSamples"/> samples at <paramref name="samplingRate"/>.</summary>
         internal static bool IsOpusFrame(int samplingRate, int frameSamples)
         {
-            if (Array.IndexOf(OpusSamplingRates, samplingRate) < 0)
+            if (Array.IndexOf(_opusSamplingRates, samplingRate) < 0)
                 return false;
 
-            foreach (var halfMilliseconds in OpusFrameHalfMilliseconds)
+            foreach (var halfMilliseconds in _opusFrameHalfMilliseconds)
             {
                 if ((long)frameSamples * 2000 == (long)samplingRate * halfMilliseconds)
                     return true;
@@ -109,31 +109,31 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             if (samples == null)
                 throw new ArgumentNullException(nameof(samples));
 
-            if (resampler == null)
+            if (_resampler == null)
             {
                 Append(samples, samples.Length);
                 return;
             }
 
-            var max = resampler.MaxOutput(samples.Length);
-            if (resampled.Length < max)
-                resampled = new float[max];
-            Append(resampled, resampler.Process(samples, samples.Length, resampled));
+            var max = _resampler.MaxOutput(samples.Length);
+            if (_resampled.Length < max)
+                _resampled = new float[max];
+            Append(_resampled, _resampler.Process(samples, samples.Length, _resampled));
         }
 
         private void Append(float[] samples, int count)
         {
             for (var offset = 0; offset < count;)
             {
-                var take = Math.Min(count - offset, frame.Length - frameFill);
-                Array.Copy(samples, offset, frame, frameFill, take);
+                var take = Math.Min(count - offset, _frame.Length - _frameFill);
+                Array.Copy(samples, offset, _frame, _frameFill, take);
                 offset += take;
-                frameFill += take;
+                _frameFill += take;
 
-                if (frameFill == frame.Length)
+                if (_frameFill == _frame.Length)
                 {
                     // Reset before sending, so a send that throws does not leave the frame to be sent again.
-                    frameFill = 0;
+                    _frameFill = 0;
                     SendFrame();
                 }
             }
@@ -141,15 +141,15 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
         private void SendFrame()
         {
-            ToPcm16(frame, pcm);
+            ToPcm16(_frame, _pcm);
 
-            if (encoder != null)
+            if (_encoder != null)
             {
                 byte[] encoded;
                 string error;
                 try
                 {
-                    encoded = encoder(pcm, frame.Length, out error);
+                    encoded = _encoder(_pcm, _frame.Length, out error);
                 }
                 // A throwing encoder (e.g. a missing native library) fails the frame like a null return.
                 catch (Exception e)
@@ -160,20 +160,20 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
                 if (encoded != null)
                 {
-                    send((short)frame.Length, Codec.OPUS, encoded);
+                    _send((short)_frame.Length, Codec.OPUS, encoded);
                     return;
                 }
 
-                if (!encodeFailureReported)
+                if (!_encodeFailureReported)
                 {
-                    encodeFailureReported = true;
-                    reportEncodeFailure?.Invoke(error ?? "no reason given");
+                    _encodeFailureReported = true;
+                    _reportEncodeFailure?.Invoke(error ?? "no reason given");
                 }
             }
 
             // A frame the encoder fails on goes out as PCM instead of being dropped. The codec is
             // per packet: VoiceReceiver decodes by it, whatever its Use Opus Codec says.
-            send((short)frame.Length, Codec.PCM, pcm);
+            _send((short)_frame.Length, Codec.PCM, _pcm);
         }
 
         // As SamplingUtility.ConvertFloatToShortBytes, but clamped: past full scale the cast to

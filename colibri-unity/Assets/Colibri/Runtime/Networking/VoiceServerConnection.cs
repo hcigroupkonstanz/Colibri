@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
@@ -14,35 +13,35 @@ namespace HCIKonstanz.Colibri.Networking
 {
     public class VoiceServerConnection : SingletonBehaviour<VoiceServerConnection>
     {
-        private UdpClient udpClient;
-        private IPEndPoint sendIPEndPoint;
-        private Thread udpThread;
-        private CancellationTokenSource shutdown;
+        private UdpClient _udpClient;
+        private IPEndPoint _sendIPEndPoint;
+        private Thread _udpThread;
+        private CancellationTokenSource _shutdown;
 
         // The app id every packet goes out with, and the one a received packet has to carry: the
         // server keeps the voice of different apps apart by it. Written on the main thread, read
         // by the receive thread too.
-        private volatile uint appId = VoicePacketCodec.AppId(string.Empty);
+        private volatile uint _appId = VoicePacketCodec.AppId(string.Empty);
 
-        // Main thread only: the App Name appId was computed from.
-        private string appIdName = string.Empty;
+        // Main thread only: the App Name _appId was computed from.
+        private string _appIdName = string.Empty;
 
-        // Main thread only: whether appIdName is an App Name at all, as ColibriConfig.IsConfigured
+        // Main thread only: whether _appIdName is an App Name at all, as ColibriConfig.IsConfigured
         // has it, and whether sending without one has been reported since there last was one.
-        private bool hasAppName;
-        private bool hasReportedMissingAppName;
+        private bool _hasAppName;
+        private bool _hasReportedMissingAppName;
 
         // Main thread only: whether a failed send has been reported since a send last worked.
-        private bool hasReportedSendFailure;
+        private bool _hasReportedSendFailure;
 
         // Per instance rather than static, so a new connection never delivers an old one's packets.
         internal VoicePacketQueue ReceivedPackets { get; } = new VoicePacketQueue();
 
         // Main thread only: the packets being delivered, taken out of the queues in one go.
-        private readonly List<VoicePacket> deliveringPackets = new List<VoicePacket>();
+        private readonly List<VoicePacket> _deliveringPackets = new List<VoicePacket>();
 
-        private readonly Dictionary<int, List<Action<VoicePacket>>> voicePacketListeners = new Dictionary<int, List<Action<VoicePacket>>>();
-        private bool isConnected = false;
+        private readonly Dictionary<int, List<Action<VoicePacket>>> _voicePacketListeners = new Dictionary<int, List<Action<VoicePacket>>>();
+        private bool _isConnected = false;
 
 
         private void OnEnable()
@@ -54,24 +53,24 @@ namespace HCIKonstanz.Colibri.Networking
 
         private void OnDisable()
         {
-            isConnected = false;
-            connecting?.Cancel();
+            _isConnected = false;
+            _connecting?.Cancel();
 
             // Thread.Abort is unsupported on .NET Core / IL2CPP and would leave the socket in
             // an undefined state anyway. Cancelling and closing the client is what actually
             // unblocks the blocking Receive() the thread is parked in.
-            shutdown?.Cancel();
+            _shutdown?.Cancel();
 
-            udpClient?.Close();
-            udpClient = null;
+            _udpClient?.Close();
+            _udpClient = null;
 
             // Every field here is null if Connect() bailed out (or was never reached), which
-            // used to make OnDisable throw on udpThread.Abort().
-            udpThread?.Join(500);
-            udpThread = null;
+            // used to make OnDisable throw on _udpThread.Abort().
+            _udpThread?.Join(500);
+            _udpThread = null;
 
-            shutdown?.Dispose();
-            shutdown = null;
+            _shutdown?.Dispose();
+            _shutdown = null;
         }
 
         private void Update()
@@ -79,7 +78,7 @@ namespace HCIKonstanz.Colibri.Networking
             // Every frame, so a packet goes out with the App Name configured now.
             UseAppName(ColibriConfig.Load().App);
 
-            if (isConnected)
+            if (_isConnected)
                 DeliverReceivedPackets();
         }
 
@@ -90,17 +89,17 @@ namespace HCIKonstanz.Colibri.Networking
         internal void UseAppName(string appName)
         {
             appName = appName ?? string.Empty;
-            if (appName == appIdName)
+            if (appName == _appIdName)
                 return;
 
-            appIdName = appName;
+            _appIdName = appName;
             // Of the app the TCP handshake sends, which is not the App Name when that contains
             // '::' or starts or ends with ':'. The server compares the hash of the app its Unity
             // client sent with the packet's app id, and dropped all voice of such an App Name.
-            appId = VoicePacketCodec.AppId(PayloadCodec.HandshakeAppName(appName));
-            hasAppName = !string.IsNullOrWhiteSpace(appName);
-            if (hasAppName)
-                hasReportedMissingAppName = false;
+            _appId = VoicePacketCodec.AppId(PayloadCodec.HandshakeAppName(appName));
+            _hasAppName = !string.IsNullOrWhiteSpace(appName);
+            if (_hasAppName)
+                _hasReportedMissingAppName = false;
         }
 
         /// <summary>
@@ -112,29 +111,29 @@ namespace HCIKonstanz.Colibri.Networking
         /// <remarks>Called from the receive thread; internal for the EditMode tests.</remarks>
         internal void HandleReceived(byte[] bytes)
         {
-            if (VoicePacketCodec.TryDecode(bytes, out var packetAppId, out var packet) && packetAppId == appId && packet.Id != 0)
+            if (VoicePacketCodec.TryDecode(bytes, out var packetAppId, out var packet) && packetAppId == _appId && packet.Id != 0)
                 ReceivedPackets.EnqueueReceived(packet);
         }
 
         /// <remarks>Internal so the EditMode tests can drive it without a player loop.</remarks>
         internal void DeliverReceivedPackets()
         {
-            ReceivedPackets.TakeAll(deliveringPackets);
+            ReceivedPackets.TakeAll(_deliveringPackets);
 
             // Outside the lock, so a listener never holds up the receive thread.
             try
             {
-                foreach (var packet in deliveringPackets)
+                foreach (var packet in _deliveringPackets)
                     Invoke(packet);
             }
             finally
             {
-                deliveringPackets.Clear();
+                _deliveringPackets.Clear();
             }
         }
 
         // Cancelled in OnDisable: the lookup of the server address, while it is retried.
-        private CancellationTokenSource connecting;
+        private CancellationTokenSource _connecting;
 
         // The longest wait between two lookups of the server address.
         private const int MAX_LOOKUP_RETRY_MS = 30_000;
@@ -146,17 +145,17 @@ namespace HCIKonstanz.Colibri.Networking
         /// </summary>
         private async void Connect()
         {
-            connecting?.Cancel();
+            _connecting?.Cancel();
             var source = new CancellationTokenSource();
-            connecting = source;
+            _connecting = source;
             try
             {
                 await ConnectWhenResolved(source.Token);
             }
             finally
             {
-                if (connecting == source)
-                    connecting = null;
+                if (_connecting == source)
+                    _connecting = null;
                 source.Dispose();
             }
         }
@@ -239,11 +238,11 @@ namespace HCIKonstanz.Colibri.Networking
         private void StartWith(IPAddress address, ColibriConfig config)
         {
             var host = config.Host;
-            udpClient = VoiceServerAddress.OpenSocket(address);
+            _udpClient = VoiceServerAddress.OpenSocket(address);
 
-            if (udpClient != null)
+            if (_udpClient != null)
             {
-                sendIPEndPoint = new IPEndPoint(address, config.VoiceServerPort);
+                _sendIPEndPoint = new IPEndPoint(address, config.VoiceServerPort);
                 ReceivedPackets.SamplingRate = config.VoiceServerSamplingRate > 0 ? config.VoiceServerSamplingRate : VoicePacketQueue.DEFAULT_SAMPLING_RATE;
                 UseAppName(config.App);
 
@@ -256,21 +255,21 @@ namespace HCIKonstanz.Colibri.Networking
                         + "The server has to listen for voice on IPv6: VOICE_HOST=:: (the default), and a proxy in front of it on IPv6 as well.");
                 }
 
-                shutdown = new CancellationTokenSource();
+                _shutdown = new CancellationTokenSource();
 
                 // Handed over here rather than read by the thread when it starts. A thread that
                 // has not run by the time OnDisable's 500 ms Join gives up on it finds both fields
                 // already cleared, and used to die of a NullReferenceException reading them.
-                var client = udpClient;
-                var token = shutdown.Token;
-                udpThread = new Thread(() => Receive(client, token))
+                var client = _udpClient;
+                var token = _shutdown.Token;
+                _udpThread = new Thread(() => Receive(client, token))
                 {
                     Name = "Voice UDP Thread",
                     IsBackground = true
                 };
-                udpThread.Start();
+                _udpThread.Start();
 
-                isConnected = true;
+                _isConnected = true;
             }
         }
 
@@ -313,11 +312,11 @@ namespace HCIKonstanz.Colibri.Networking
 
         public void SendByteData(short id, short sequence, short frameSize, Codec codec, byte[] data)
         {
-            var client = udpClient;
+            var client = _udpClient;
             if (client == null || !TryEncodeToSend(id, sequence, frameSize, codec, data, out var bytes))
                 return;
 
-            SendPacket(client, sendIPEndPoint, bytes);
+            SendPacket(client, _sendIPEndPoint, bytes);
         }
 
         /// <summary>
@@ -335,13 +334,13 @@ namespace HCIKonstanz.Colibri.Networking
             try
             {
                 client.Send(packet, packet.Length, to);
-                hasReportedSendFailure = false;
+                _hasReportedSendFailure = false;
             }
             catch (SocketException e)
             {
-                if (!hasReportedSendFailure)
+                if (!_hasReportedSendFailure)
                 {
-                    hasReportedSendFailure = true;
+                    _hasReportedSendFailure = true;
                     Debug.LogWarning($"Colibri voice: sending to {to} failed ({e.SocketErrorCode}), dropping voice until a send works again");
                 }
             }
@@ -356,44 +355,44 @@ namespace HCIKonstanz.Colibri.Networking
         /// <remarks>Main thread only; internal for the EditMode tests.</remarks>
         internal bool TryEncodeToSend(short id, short sequence, short frameSize, Codec codec, byte[] data, out byte[] packet)
         {
-            if (!hasAppName)
+            if (!_hasAppName)
             {
                 packet = null;
-                if (!hasReportedMissingAppName)
+                if (!_hasReportedMissingAppName)
                 {
-                    hasReportedMissingAppName = true;
+                    _hasReportedMissingAppName = true;
                     Debug.LogError($"Colibri voice: no voice is sent without an App Name. {ColibriConfig.NOT_CONFIGURED_MESSAGE}");
                 }
                 return false;
             }
 
-            packet = VoicePacketCodec.Encode(appId, id, sequence, frameSize, codec, data);
+            packet = VoicePacketCodec.Encode(_appId, id, sequence, frameSize, codec, data);
             return true;
         }
 
         public void AddVoicePacketListener(short id, Action<VoicePacket> listener)
         {
-            if (!voicePacketListeners.ContainsKey(id))
-                voicePacketListeners.Add(id, new List<Action<VoicePacket>>());
-            voicePacketListeners[id].Add(listener);
+            if (!_voicePacketListeners.ContainsKey(id))
+                _voicePacketListeners.Add(id, new List<Action<VoicePacket>>());
+            _voicePacketListeners[id].Add(listener);
         }
 
         public void RemoveVoicePacketListener(short id, Action<VoicePacket> listener)
         {
-            if (voicePacketListeners.ContainsKey(id))
+            if (_voicePacketListeners.ContainsKey(id))
         {
-            var list = voicePacketListeners[id];
+            var list = _voicePacketListeners[id];
             list.Remove(listener);
             if (list.Count == 0)
-                voicePacketListeners.Remove(id);
+                _voicePacketListeners.Remove(id);
         }
         }
 
         private void Invoke(VoicePacket voicePacket)
         {
-            if (voicePacketListeners.ContainsKey(voicePacket.Id))
+            if (_voicePacketListeners.ContainsKey(voicePacket.Id))
             {
-                foreach (var voicePacketListener in voicePacketListeners[voicePacket.Id].ToArray())
+                foreach (var voicePacketListener in _voicePacketListeners[voicePacket.Id].ToArray())
                 {
                     try
                     {

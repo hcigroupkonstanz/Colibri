@@ -13,7 +13,7 @@ namespace HCIKonstanz.Colibri.Synchronization
     {
         [InitializeOnLoadMethod]
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        static void CheckDuplicateIds()
+        private static void CheckDuplicateIds()
         {
             var transforms = UnityCompat.FindAll<SyncTransform>();
             var uniqueIds = transforms.Select(t => t.Id).Distinct();

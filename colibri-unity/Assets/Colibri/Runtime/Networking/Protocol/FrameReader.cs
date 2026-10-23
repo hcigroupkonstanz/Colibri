@@ -11,8 +11,8 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
     /// </summary>
     public sealed class FrameReader
     {
-        private static readonly IReadOnlyList<DecodedFrame> NoFrames = Array.Empty<DecodedFrame>();
-        private static readonly Encoding Utf8 = new UTF8Encoding(false, false);
+        private static readonly IReadOnlyList<DecodedFrame> _noFrames = Array.Empty<DecodedFrame>();
+        private static readonly Encoding _utf8 = new UTF8Encoding(false, false);
 
         private readonly int _maxFrameLength;
         private byte[] _buffer;
@@ -84,7 +84,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             }
 
             Compact();
-            return frames ?? NoFrames;
+            return frames ?? _noFrames;
         }
 
         private DecodedFrame DecodeFrame(byte type, int bodyStart, int bodyEnd)
@@ -101,7 +101,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
                 case FrameType.Handshake:
                 {
-                    var text = Utf8.GetString(_buffer, bodyStart, bodyEnd - bodyStart);
+                    var text = _utf8.GetString(_buffer, bodyStart, bodyEnd - bodyStart);
                     // '::' separates the three fields and is not allowed inside one.
                     var parts = text.Split(new[] { FrameCodec.FieldSeparator }, StringSplitOptions.None);
                     if (parts.Length != 3)
@@ -119,7 +119,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                     offset += 2;
                     if (offset + channelLength > bodyEnd)
                         throw new FrameException("Malformed message frame: channel overruns body");
-                    var channel = Utf8.GetString(_buffer, offset, channelLength);
+                    var channel = _utf8.GetString(_buffer, offset, channelLength);
                     offset += channelLength;
 
                     if (offset + 2 > bodyEnd)
@@ -128,7 +128,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
                     offset += 2;
                     if (offset + commandLength > bodyEnd)
                         throw new FrameException("Malformed message frame: command overruns body");
-                    var command = Utf8.GetString(_buffer, offset, commandLength);
+                    var command = _utf8.GetString(_buffer, offset, commandLength);
                     offset += commandLength;
 
                     // Copied: the buffer is reused and compacted by later Append calls.

@@ -85,22 +85,22 @@ namespace HCIKonstanz.Colibri.Core
             childPosition = Vector3.zero;
 
             //set the parent start transform
-            tempParent.rotation = startParentRotation;
-            tempParent.position = startParentPosition;
-            tempParent.localScale = Vector3.one; //to prevent scale wandering
+            _tempParent.rotation = startParentRotation;
+            _tempParent.position = startParentPosition;
+            _tempParent.localScale = Vector3.one; //to prevent scale wandering
 
             //set the child start transform
-            tempChild.rotation = startChildRotation;
-            tempChild.position = startChildPosition;
-            tempChild.localScale = Vector3.one; //to prevent scale wandering
+            _tempChild.rotation = startChildRotation;
+            _tempChild.position = startChildPosition;
+            _tempChild.localScale = Vector3.one; //to prevent scale wandering
 
             //translate and rotate the child by moving the parent
-            tempParent.rotation = parentRotation;
-            tempParent.position = parentPosition;
+            _tempParent.rotation = parentRotation;
+            _tempParent.position = parentPosition;
 
             //get the child transform
-            childRotation = tempChild.rotation;
-            childPosition = tempChild.position;
+            childRotation = _tempChild.rotation;
+            childPosition = _tempChild.position;
         }
 
         //With this function you can align a triangle of an object with any transform.

@@ -8,13 +8,13 @@ namespace HCIKonstanz.Colibri.Core
          *  Functions below taken from http://wiki.unity3d.com/index.php/3d_Math_functions
          */
 
-        private static Vector3[] positionRegister;
-        private static float[] posTimeRegister;
-        private static int positionSamplesTaken = 0;
+        private static Vector3[] _positionRegister;
+        private static float[] _posTimeRegister;
+        private static int _positionSamplesTaken = 0;
 
-        private static Quaternion[] rotationRegister;
-        private static float[] rotTimeRegister;
-        private static int rotationSamplesTaken = 0;
+        private static Quaternion[] _rotationRegister;
+        private static float[] _rotTimeRegister;
+        private static int _rotationSamplesTaken = 0;
 
         //This function calculates the acceleration vector in meter/second^2.
         //Input: position. If the output is used for motion simulation, the input transform
@@ -42,37 +42,37 @@ namespace HCIKonstanz.Colibri.Core
             }
 
             //Initialize
-            if (positionRegister == null)
+            if (_positionRegister == null)
             {
 
-                positionRegister = new Vector3[samples];
-                posTimeRegister = new float[samples];
+                _positionRegister = new Vector3[samples];
+                _posTimeRegister = new float[samples];
             }
 
             //Fill the position and time sample array and shift the location in the array to the left
             //each time a new sample is taken. This way index 0 will always hold the oldest sample and the
             //highest index will always hold the newest sample. 
-            for (int i = 0; i < positionRegister.Length - 1; i++)
+            for (int i = 0; i < _positionRegister.Length - 1; i++)
             {
 
-                positionRegister[i] = positionRegister[i + 1];
-                posTimeRegister[i] = posTimeRegister[i + 1];
+                _positionRegister[i] = _positionRegister[i + 1];
+                _posTimeRegister[i] = _posTimeRegister[i + 1];
             }
-            positionRegister[positionRegister.Length - 1] = position;
-            posTimeRegister[posTimeRegister.Length - 1] = Time.time;
+            _positionRegister[_positionRegister.Length - 1] = position;
+            _posTimeRegister[_posTimeRegister.Length - 1] = Time.time;
 
-            positionSamplesTaken++;
+            _positionSamplesTaken++;
 
             //The output acceleration can only be calculated if enough samples are taken.
-            if (positionSamplesTaken >= samples)
+            if (_positionSamplesTaken >= samples)
             {
 
                 //Calculate average speed change.
-                for (int i = 0; i < positionRegister.Length - 2; i++)
+                for (int i = 0; i < _positionRegister.Length - 2; i++)
                 {
 
-                    deltaDistance = positionRegister[i + 1] - positionRegister[i];
-                    deltaTime = posTimeRegister[i + 1] - posTimeRegister[i];
+                    deltaDistance = _positionRegister[i + 1] - _positionRegister[i];
+                    deltaTime = _posTimeRegister[i + 1] - _posTimeRegister[i];
 
                     //If deltaTime is 0, the output is invalid.
                     if (deltaTime == 0)
@@ -82,8 +82,8 @@ namespace HCIKonstanz.Colibri.Core
                     }
 
                     speedA = deltaDistance / deltaTime;
-                    deltaDistance = positionRegister[i + 2] - positionRegister[i + 1];
-                    deltaTime = posTimeRegister[i + 2] - posTimeRegister[i + 1];
+                    deltaDistance = _positionRegister[i + 2] - _positionRegister[i + 1];
+                    deltaTime = _posTimeRegister[i + 2] - _posTimeRegister[i + 1];
 
                     if (deltaTime == 0)
                     {
@@ -98,10 +98,10 @@ namespace HCIKonstanz.Colibri.Core
                 }
 
                 //Now this is the average speed change.
-                averageSpeedChange /= positionRegister.Length - 2;
+                averageSpeedChange /= _positionRegister.Length - 2;
 
                 //Get the total time difference.
-                float deltaTimeTotal = posTimeRegister[posTimeRegister.Length - 1] - posTimeRegister[0];
+                float deltaTimeTotal = _posTimeRegister[_posTimeRegister.Length - 1] - _posTimeRegister[0];
 
                 //Now calculate the acceleration, which is an average over the amount of samples taken.
                 vector = averageSpeedChange / deltaTimeTotal;
@@ -159,37 +159,37 @@ namespace HCIKonstanz.Colibri.Core
             }
 
             //Initialize
-            if (rotationRegister == null)
+            if (_rotationRegister == null)
             {
 
-                rotationRegister = new Quaternion[samples];
-                rotTimeRegister = new float[samples];
+                _rotationRegister = new Quaternion[samples];
+                _rotTimeRegister = new float[samples];
             }
 
             //Fill the rotation and time sample array and shift the location in the array to the left
             //each time a new sample is taken. This way index 0 will always hold the oldest sample and the
             //highest index will always hold the newest sample. 
-            for (int i = 0; i < rotationRegister.Length - 1; i++)
+            for (int i = 0; i < _rotationRegister.Length - 1; i++)
             {
 
-                rotationRegister[i] = rotationRegister[i + 1];
-                rotTimeRegister[i] = rotTimeRegister[i + 1];
+                _rotationRegister[i] = _rotationRegister[i + 1];
+                _rotTimeRegister[i] = _rotTimeRegister[i + 1];
             }
-            rotationRegister[rotationRegister.Length - 1] = rotation;
-            rotTimeRegister[rotTimeRegister.Length - 1] = Time.time;
+            _rotationRegister[_rotationRegister.Length - 1] = rotation;
+            _rotTimeRegister[_rotTimeRegister.Length - 1] = Time.time;
 
-            rotationSamplesTaken++;
+            _rotationSamplesTaken++;
 
             //The output acceleration can only be calculated if enough samples are taken.
-            if (rotationSamplesTaken >= samples)
+            if (_rotationSamplesTaken >= samples)
             {
 
                 //Calculate average speed change.
-                for (int i = 0; i < rotationRegister.Length - 2; i++)
+                for (int i = 0; i < _rotationRegister.Length - 2; i++)
                 {
 
-                    deltaRotation = SubtractRotation(rotationRegister[i + 1], rotationRegister[i]);
-                    deltaTime = rotTimeRegister[i + 1] - rotTimeRegister[i];
+                    deltaRotation = SubtractRotation(_rotationRegister[i + 1], _rotationRegister[i]);
+                    deltaTime = _rotTimeRegister[i + 1] - _rotTimeRegister[i];
 
                     //If deltaTime is 0, the output is invalid.
                     if (deltaTime == 0)
@@ -199,8 +199,8 @@ namespace HCIKonstanz.Colibri.Core
                     }
 
                     speedA = RotDiffToSpeedVec(deltaRotation, deltaTime);
-                    deltaRotation = SubtractRotation(rotationRegister[i + 2], rotationRegister[i + 1]);
-                    deltaTime = rotTimeRegister[i + 2] - rotTimeRegister[i + 1];
+                    deltaRotation = SubtractRotation(_rotationRegister[i + 2], _rotationRegister[i + 1]);
+                    deltaTime = _rotTimeRegister[i + 2] - _rotTimeRegister[i + 1];
 
                     if (deltaTime == 0)
                     {
@@ -215,10 +215,10 @@ namespace HCIKonstanz.Colibri.Core
                 }
 
                 //Now this is the average speed change.
-                averageSpeedChange /= rotationRegister.Length - 2;
+                averageSpeedChange /= _rotationRegister.Length - 2;
 
                 //Get the total time difference.
-                float deltaTimeTotal = rotTimeRegister[rotTimeRegister.Length - 1] - rotTimeRegister[0];
+                float deltaTimeTotal = _rotTimeRegister[_rotTimeRegister.Length - 1] - _rotTimeRegister[0];
 
                 //Now calculate the acceleration, which is an average over the amount of samples taken.
                 vector = averageSpeedChange / deltaTimeTotal;

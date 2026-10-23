@@ -5,8 +5,8 @@ namespace HCIKonstanz.Colibri.Synchronization
     internal sealed class ChangeTracker<T, TValue> : IChangeTracker<T>
         where T : SyncBehaviour<T>
     {
-        private static readonly Func<TValue, TValue, bool> AreEqual = SyncValues.EqualityFor<TValue>();
-        private static readonly Func<TValue, TValue> Keep = SyncValues.CopyFor<TValue>();
+        private static readonly Func<TValue, TValue, bool> _areEqual = SyncValues.EqualityFor<TValue>();
+        private static readonly Func<TValue, TValue> _keep = SyncValues.CopyFor<TValue>();
 
         private readonly Func<T, TValue> _getter;
         private TValue _lastValue;
@@ -14,7 +14,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         public ChangeTracker(Func<T, TValue> getter, T target)
         {
             _getter = getter;
-            _lastValue = Keep(getter(target));
+            _lastValue = _keep(getter(target));
         }
 
         public bool CaptureChange(T target)
@@ -23,16 +23,16 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             // Compared as on the wire (see SyncValues). Value types use EqualityComparer<TValue>.Default,
             // which does not box.
-            if (AreEqual(current, _lastValue))
+            if (_areEqual(current, _lastValue))
                 return false;
 
-            _lastValue = Keep(current);
+            _lastValue = _keep(current);
             return true;
         }
 
         public void Latch(T target)
         {
-            _lastValue = Keep(_getter(target));
+            _lastValue = _keep(_getter(target));
         }
     }
 }

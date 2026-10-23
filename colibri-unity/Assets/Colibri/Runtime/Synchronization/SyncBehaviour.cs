@@ -32,9 +32,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// the objects whose ModelId matches its Template's.
         /// </summary>
         public string ModelId = "";
-        private readonly string ChannelPrefix = WireName.Of(typeof(T).Name);
+        private readonly string _channelPrefix = WireName.Of(typeof(T).Name);
         internal string Channel { get => ChannelOf(ModelId); }
-        private string ChannelOf(string modelId) => ChannelPrefix + (String.IsNullOrEmpty(modelId) ? "" : $"_{modelId}");
+        private string ChannelOf(string modelId) => _channelPrefix + (String.IsNullOrEmpty(modelId) ? "" : $"_{modelId}");
 
         // Parallel to SyncMembers<T>.AttributeList.
         private IChangeTracker<T>[] _trackers;

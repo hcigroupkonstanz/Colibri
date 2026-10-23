@@ -3,15 +3,14 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace HCIKonstanz.Colibri.Setup
 {
     [InitializeOnLoad]
     public class SetupWindow : EditorWindow
     {
-        private static SetupWindow Instance;
-        private static bool IsOpen => Instance != null;
+        private static SetupWindow _instance;
+        private static bool IsOpen => _instance != null;
         private static bool _waitingToLoad;
         private static bool _portSettings = false;
 
@@ -23,23 +22,23 @@ namespace HCIKonstanz.Colibri.Setup
         private const float IndentPerLevel = 15f;
 
         /// <summary>The configuration asset, which Play mode and builds use.</summary>
-        private ColibriConfig Config;
+        private ColibriConfig _config;
 
         // Serialized like _refused, so a refused value survives a domain reload, such as entering
         // Play mode. The unsaved object outlives the reload, and Unity restores the reference to it.
         /// <summary>
-        /// What the fields show and change: <see cref="Config"/>'s settings, except those in
-        /// <see cref="_refused"/>. Changes reach Config through <see cref="ConfigValidation.ApplyValidSettings"/>.
+        /// What the fields show and change: <see cref="_config"/>'s settings, except those in
+        /// <see cref="_refused"/>. Changes reach _config through <see cref="ConfigValidation.ApplyValidSettings"/>.
         /// </summary>
         [SerializeField] private ColibriConfig _edited;
 
-        /// <summary>Settings whose value in <see cref="_edited"/> failed the checks, so Config keeps its own.</summary>
+        /// <summary>Settings whose value in <see cref="_edited"/> failed the checks, so _config keeps its own.</summary>
         [SerializeField] private List<string> _refused = new List<string>();
 
         private Vector2 _scroll;
 
         [DidReloadScripts]
-        static void OnReload()
+        private static void OnReload()
         {
             Init();
         }
@@ -47,7 +46,7 @@ namespace HCIKonstanz.Colibri.Setup
         // TODO: this is rather inflexible. Maybe there's a better way to detect the configuration (Resources.Load is not allowed in static methods)?
         private static bool ConfigExists() => File.Exists(Path.Combine(Application.dataPath, "Resources", ColibriConfig.CONFIG_NAME));
 
-        static void Init()
+        private static void Init()
         {
             if (!ConfigExists())
             {
@@ -78,7 +77,7 @@ namespace HCIKonstanz.Colibri.Setup
             // There should be only one configurator window open as a "pop-up". If already open, then just force focus on our instance
             if (IsOpen)
             {
-                Instance.Focus();
+                _instance.Focus();
             }
             else
             {
@@ -91,24 +90,24 @@ namespace HCIKonstanz.Colibri.Setup
 
         private void OnEnable()
         {
-            Instance = this;
+            _instance = this;
 
-            Config = ColibriConfig.Load();
+            _config = ColibriConfig.Load();
             if (!ConfigExists())
             {
                 // Load() returns a shared, hidden defaults object when there is no asset. Saving that
                 // object would make it the asset, so create a new one.
-                Config = CreateInstance<ColibriConfig>();
+                _config = CreateInstance<ColibriConfig>();
                 SaveConfig();
             }
 
-            // Survives a domain reload, so only a new window creates it. OnGUI copies Config into it.
+            // Survives a domain reload, so only a new window creates it. OnGUI copies _config into it.
             if (_edited == null)
             {
                 _edited = CreateInstance<ColibriConfig>();
                 _edited.hideFlags = HideFlags.HideAndDontSave;
 
-                // Names left over from the old copy would keep the new one from taking Config's values.
+                // Names left over from the old copy would keep the new one from taking _config's values.
                 _refused.Clear();
             }
         }
@@ -125,7 +124,7 @@ namespace HCIKonstanz.Colibri.Setup
             Directory.CreateDirectory(Path.Combine(Application.dataPath, "Resources"));
             string path = Path.Combine("Assets", "Resources", ColibriConfig.CONFIG_NAME);
             if (!ConfigExists())
-                AssetDatabase.CreateAsset(Config, path);
+                AssetDatabase.CreateAsset(_config, path);
             else
             {
                 AssetDatabase.SaveAssets();
@@ -137,7 +136,7 @@ namespace HCIKonstanz.Colibri.Setup
         {
             // Every draw, so a change made elsewhere (Inspector, Undo) shows here, and a later edit
             // here cannot write the old value back.
-            ConfigValidation.ShowSettings(Config, _edited, _refused);
+            ConfigValidation.ShowSettings(_config, _edited, _refused);
 
             var labelWidth = EditorGUIUtility.labelWidth;
             EditorGUIUtility.labelWidth = Mathf.Max(labelWidth, TlsLabelWidth());
@@ -150,7 +149,7 @@ namespace HCIKonstanz.Colibri.Setup
             DrawOptionalConfig();
 
             // Every draw, even with no change here: a change elsewhere can make a refused value valid.
-            _refused = ConfigValidation.ApplyValidSettings(_edited, Config);
+            _refused = ConfigValidation.ApplyValidSettings(_edited, _config);
 
             var errors = ConfigValidation.ConfigurationErrors(_edited);
 
@@ -254,7 +253,7 @@ namespace HCIKonstanz.Colibri.Setup
             // Enabled only when nothing shown has an error, so everything shown has been applied.
             if (GUILayout.Button("Save Config"))
             {
-                EditorUtility.SetDirty(Config);
+                EditorUtility.SetDirty(_config);
                 SaveConfig();
                 Close();
             }

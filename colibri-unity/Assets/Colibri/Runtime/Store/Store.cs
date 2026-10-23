@@ -17,7 +17,7 @@ namespace HCIKonstanz.Colibri.Store
         private const int TimeoutSeconds = 10;
 
         // Colibri's converters for Vector2/3/4, Quaternion and Color.
-        private static readonly JsonSerializerSettings JsonSettings = ColibriJson.CreateSettings();
+        private static readonly JsonSerializerSettings _jsonSettings = ColibriJson.CreateSettings();
 
         // Sent as Accept on every request and as Content-Type on Put. colibri-server 2.x refuses a value as
         // plain application/json; a reverse proxy can route by the Accept header.
@@ -143,7 +143,7 @@ namespace HCIKonstanz.Colibri.Store
         {
             try
             {
-                json = JsonConvert.SerializeObject(value, JsonSettings);
+                json = JsonConvert.SerializeObject(value, _jsonSettings);
                 return true;
             }
             catch (JsonException e)
@@ -158,7 +158,7 @@ namespace HCIKonstanz.Colibri.Store
         {
             try
             {
-                value = JsonConvert.DeserializeObject<T>(json, JsonSettings);
+                value = JsonConvert.DeserializeObject<T>(json, _jsonSettings);
                 return true;
             }
             catch (JsonException e)

@@ -8,14 +8,14 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
         public int SamplingRate { get; private set; }
         public int Channels { get; private set; }
 
-        private IntPtr pointer;
+        private IntPtr _pointer;
 
         public OpusDecoder(int samplingRate, int channels)
         {
             SamplingRate = samplingRate;
             Channels = channels;
             int error;
-            pointer = Opus.opus_decoder_create(SamplingRate, Channels, out error);
+            _pointer = Opus.opus_decoder_create(SamplingRate, Channels, out error);
             if ((OpusError)error != OpusError.OK)
             {
                 Debug.LogError("Opus decoder can not be created: " + (OpusError)error);
@@ -26,7 +26,7 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
         {
             SamplingRate = samplingRate;
             Channels = channels;
-            this.pointer = pointer;
+            _pointer = pointer;
         }
 
         // Unlike the constructor, logs nothing: the caller reports the failure.
@@ -77,7 +77,7 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
         internal byte[] TryDecode(byte[] encodedBytes, int frameSize, out OpusError error, bool fec = false)
         {
             // opus_decode does not check its decoder: a destroyed one, or none, can crash the app.
-            if (pointer == IntPtr.Zero)
+            if (_pointer == IntPtr.Zero)
             {
                 error = OpusError.INVALID_STATE;
                 return null;
@@ -93,7 +93,7 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
 
             // opus_decode's frame size is per channel: the buffer holds Channels times as many 16-bit samples.
             byte[] decodedBytes = new byte[maxSamples * Channels * 2];
-            int decodedSamples = Opus.opus_decode(pointer, encodedBytes, encodedBytes.Length, decodedBytes, maxSamples, fec ? 1 : 0);
+            int decodedSamples = Opus.opus_decode(_pointer, encodedBytes, encodedBytes.Length, decodedBytes, maxSamples, fec ? 1 : 0);
             if (decodedSamples < 0)
             {
                 error = (OpusError)decodedSamples;
@@ -113,10 +113,10 @@ namespace HCIKonstanz.Colibri.Communication.Codecs
         public void Destroy()
         {
             // Once only: a second opus_decoder_destroy frees the decoder twice.
-            if (pointer == IntPtr.Zero)
+            if (_pointer == IntPtr.Zero)
                 return;
-            Opus.opus_decoder_destroy(pointer);
-            pointer = IntPtr.Zero;
+            Opus.opus_decoder_destroy(_pointer);
+            _pointer = IntPtr.Zero;
         }
     }
 }

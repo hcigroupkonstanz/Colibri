@@ -23,18 +23,18 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
     // No UnityEngine dependency, so plain NUnit EditMode tests can run it.
     internal sealed class VoiceDecoder
     {
-        private readonly VoiceFrameDecoderFactory createOpusDecoder;
-        private readonly Action<string> reportOpusFailure;
+        private readonly VoiceFrameDecoderFactory _createOpusDecoder;
+        private readonly Action<string> _reportOpusFailure;
 
         // Null until the first Opus packet, and for good if it could not be created.
-        private VoiceFrameDecoder opusDecoder;
-        private bool hasCreatedOpusDecoder;
-        private bool opusFailureReported;
+        private VoiceFrameDecoder _opusDecoder;
+        private bool _hasCreatedOpusDecoder;
+        private bool _opusFailureReported;
 
         internal VoiceDecoder(VoiceFrameDecoderFactory createOpusDecoder, Action<string> reportOpusFailure = null)
         {
-            this.createOpusDecoder = createOpusDecoder ?? throw new ArgumentNullException(nameof(createOpusDecoder));
-            this.reportOpusFailure = reportOpusFailure;
+            _createOpusDecoder = createOpusDecoder ?? throw new ArgumentNullException(nameof(createOpusDecoder));
+            _reportOpusFailure = reportOpusFailure;
         }
 
         /// <summary>
@@ -56,19 +56,19 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 
         private byte[] DecodeOpus(VoicePacket packet)
         {
-            if (!hasCreatedOpusDecoder)
+            if (!_hasCreatedOpusDecoder)
             {
-                hasCreatedOpusDecoder = true;
+                _hasCreatedOpusDecoder = true;
                 CreateOpusDecoder();
             }
-            if (opusDecoder == null)
+            if (_opusDecoder == null)
                 return null;
 
             byte[] pcm;
             string error;
             try
             {
-                pcm = opusDecoder(packet.Data, packet.FrameSize, out error);
+                pcm = _opusDecoder(packet.Data, packet.FrameSize, out error);
             }
             // A decoder that throws (e.g. missing native library) fails the packet like one that returns null.
             catch (Exception e)
@@ -87,25 +87,25 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
             string error;
             try
             {
-                if (!createOpusDecoder(out opusDecoder, out error))
-                    opusDecoder = null;
+                if (!_createOpusDecoder(out _opusDecoder, out error))
+                    _opusDecoder = null;
             }
             catch (Exception e)
             {
-                opusDecoder = null;
+                _opusDecoder = null;
                 error = e.GetType().Name + ": " + e.Message;
             }
 
-            if (opusDecoder == null)
+            if (_opusDecoder == null)
                 Report(error ?? "no reason given");
         }
 
         private void Report(string reason)
         {
-            if (opusFailureReported)
+            if (_opusFailureReported)
                 return;
-            opusFailureReported = true;
-            reportOpusFailure?.Invoke(reason);
+            _opusFailureReported = true;
+            _reportOpusFailure?.Invoke(reason);
         }
     }
 }
