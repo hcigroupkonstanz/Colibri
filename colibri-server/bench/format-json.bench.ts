@@ -1,5 +1,6 @@
 import { bench, describe } from 'vitest';
-import { formatJson, MAX_MODEL_JSON_LENGTH } from '../src/server/modules/admin/model-measures.js';
+import { formatJson } from '../src/server/modules/admin/format-json.js';
+import { MAX_MODEL_JSON_LENGTH } from '../src/server/modules/admin/model-measures.js';
 
 // The admin UI snapshots call formatJson with MAX_MODEL_JSON_LENGTH for every open model. The inputs
 // are built once; each bench only formats. The cases cover the writer's paths: plain fields, deep

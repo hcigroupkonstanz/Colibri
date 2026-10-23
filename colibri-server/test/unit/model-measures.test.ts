@@ -7,8 +7,8 @@ import {
     MAX_MODEL_JSON_LENGTH,
     MODEL_SIZE_REFRESH_MILLIS,
     ModelMeasures,
-    formatJson,
 } from '../../src/server/modules/admin/model-measures.js';
+import { formatJson } from '../../src/server/modules/admin/format-json.js';
 
 describe('formatJson', () => {
     const values: [string, unknown][] = [
