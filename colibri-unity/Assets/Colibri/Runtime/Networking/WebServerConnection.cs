@@ -428,108 +428,8 @@ namespace HCIKonstanz.Colibri.Networking
                 var handshakeApp = PayloadCodec.HandshakeAppName(app);
                 _diagnostics.ReportSanitizedApp(app, handshakeApp);
 
-                var mismatched = false;
-
-                try
-                {
-                    loop.DecodedAnyFrame = false;
-                    loop.ReachedHandshake = false;
-                    loop.EndedSilent = false;
-                    loop.DroppedByWatchdog = false;
-                    loop.EndedOnBadFrame = false;
-                    await RunSession(loop, config, handshakeApp).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception) when (token.IsCancellationRequested)
-                {
-                    // Ended by OnDisable, which closed the socket under the read or write. Not a failure, so nothing is
-                    // logged or retried.
-                    break;
-                }
-                catch (ProtocolMismatchException e)
-                {
-                    mismatched = true;
-                    Debug.LogError(
-                        $"Colibri: the server refused this client - {e.Message}. " +
-                        $"Update colibri-unity and colibri-server to matching versions. Not reconnecting.");
-                }
-                catch (FrameException e)
-                {
-                    loop.EndedOnBadFrame = true;
-                    // No delimiter to resynchronize on, so a desynchronized stream is dropped and the connection rebuilt.
-                    Debug.LogError($"Colibri: invalid frame from server, dropping connection: {e.Message}");
-                }
-                catch (TimeoutException e)
-                {
-                    // Nothing refused the connection and nothing answered: usually a wrong address, or a device on
-                    // another network than the server.
-                    Debug.Log($"Colibri: {e.Message}. Check the server address, and that this device is on the same network as the server. Retrying...");
-                }
-                catch (TlsHandshakeException e)
-                {
-                    _diagnostics.ReportTlsFailure(e);
-                }
-                catch (Exception e) when (loop.DroppedByWatchdog && (e is SocketException || e is IOException))
-                {
-                    // The watchdog closed the socket and has said why; the read that fails on it (OperationAborted) would
-                    // only repeat it.
-                }
-                catch (SocketException e)
-                {
-                    Debug.Log($"Colibri: connection to {address} failed ({e.SocketErrorCode}), retrying...");
-                }
-                catch (ObjectDisposedException)
-                {
-                    // Socket closed underneath us by the heartbeat watchdog.
-                }
-                catch (Exception e) when (e is IOException || e is AuthenticationException)
-                {
-                    // NetworkStream and SslStream wrap what the socket threw; unwrap it to tell the cases apart.
-                    if (ServerConnector.FindCause<ObjectDisposedException>(e) == null)
-                    {
-                        var socketError = ServerConnector.FindCause<SocketException>(e);
-                        Debug.Log(socketError != null
-                            ? $"Colibri: connection to {address} failed ({socketError.SocketErrorCode}), retrying..."
-                            : $"Colibri: connection to {address} failed ({e.Message}), retrying...");
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogException(e);
-                }
-                finally
-                {
-                    var beforeCleanup = BeforeSessionCleanup;
-                    if (beforeCleanup != null)
-                        await beforeCleanup().ConfigureAwait(false);
-
-                    // This loop's own, whatever the next loop is doing by now (see ConnectionLoop).
-                    loop.IsWatchdogArmed = false;
-                    ConnectRace.CloseSocket(loop.Socket);
-                    loop.Socket = null;
-
-                    // Whatever ended the session, except this component being disabled, which says nothing about the server.
-                    if (!token.IsCancellationRequested)
-                        _diagnostics.CountSessionWithoutAFrame(loop);
-
-                    // Shared with the next loop, so only while this one has not been ended: by then OnDisable has closed
-                    // the outbox and set the status itself, and they may belong to a session the next enable started.
-                    _outbox.CloseOutbox(token);
-
-                    // Before the status changes, so a reaction to ProtocolMismatch cannot queue a message that waits for
-                    // a connection that never comes.
-                    if (mismatched)
-                        _outbox.RefuseSends(token);
-
-                    _state.TrySetStatus(mismatched ? ConnectionStatus.ProtocolMismatch : ConnectionStatus.Disconnected, token);
-                }
-
-                // Terminal: retrying cannot make the versions agree, and would bury the one log line that says what
-                // is wrong.
-                if (mismatched)
+                var retry = await RunAttempt(loop, config, handshakeApp).ConfigureAwait(false);
+                if (!retry)
                     break;
 
                 if (token.IsCancellationRequested)
@@ -538,6 +438,120 @@ namespace HCIKonstanz.Colibri.Networking
                 if (!await Delay(_state.NextBackoffDelay(), token).ConfigureAwait(false))
                     break;
             }
+        }
+
+        private async Task<bool> RunAttempt(ConnectionLoop loop, ConnectionConfig config, string handshakeApp)
+        {
+            var token = loop.Token;
+            var address = config.ServerAddress;
+            var mismatched = false;
+
+            try
+            {
+                loop.DecodedAnyFrame = false;
+                loop.ReachedHandshake = false;
+                loop.EndedSilent = false;
+                loop.DroppedByWatchdog = false;
+                loop.EndedOnBadFrame = false;
+                await RunSession(loop, config, handshakeApp).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+            catch (Exception) when (token.IsCancellationRequested)
+            {
+                // Ended by OnDisable, which closed the socket under the read or write. Not a failure, so nothing is
+                // logged or retried.
+                return false;
+            }
+            catch (ProtocolMismatchException e)
+            {
+                mismatched = true;
+                Debug.LogError(
+                    $"Colibri: the server refused this client - {e.Message}. " +
+                    $"Update colibri-unity and colibri-server to matching versions. Not reconnecting.");
+            }
+            catch (FrameException e)
+            {
+                loop.EndedOnBadFrame = true;
+                // No delimiter to resynchronize on, so a desynchronized stream is dropped and the connection rebuilt.
+                Debug.LogError($"Colibri: invalid frame from server, dropping connection: {e.Message}");
+            }
+            catch (TimeoutException e)
+            {
+                // Nothing refused the connection and nothing answered: usually a wrong address, or a device on
+                // another network than the server.
+                Debug.Log($"Colibri: {e.Message}. Check the server address, and that this device is on the same network as the server. Retrying...");
+            }
+            catch (TlsHandshakeException e)
+            {
+                _diagnostics.ReportTlsFailure(e);
+            }
+            catch (Exception e) when (loop.DroppedByWatchdog && (e is SocketException || e is IOException))
+            {
+                // The watchdog closed the socket and has said why; the read that fails on it (OperationAborted) would
+                // only repeat it.
+            }
+            catch (SocketException e)
+            {
+                Debug.Log($"Colibri: connection to {address} failed ({e.SocketErrorCode}), retrying...");
+            }
+            catch (ObjectDisposedException)
+            {
+                // Socket closed underneath us by the heartbeat watchdog.
+            }
+            catch (Exception e) when (e is IOException || e is AuthenticationException)
+            {
+                // NetworkStream and SslStream wrap what the socket threw; unwrap it to tell the cases apart.
+                if (ServerConnector.FindCause<ObjectDisposedException>(e) == null)
+                {
+                    var socketError = ServerConnector.FindCause<SocketException>(e);
+                    Debug.Log(socketError != null
+                        ? $"Colibri: connection to {address} failed ({socketError.SocketErrorCode}), retrying..."
+                        : $"Colibri: connection to {address} failed ({e.Message}), retrying...");
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+            }
+            finally
+            {
+                await CleanUpAfterSession(loop, mismatched).ConfigureAwait(false);
+            }
+
+            // Terminal: retrying cannot make the versions agree, and would bury the one log line that says what
+            // is wrong.
+            return !mismatched;
+        }
+
+        private async Task CleanUpAfterSession(ConnectionLoop loop, bool mismatched)
+        {
+            var token = loop.Token;
+            var beforeCleanup = BeforeSessionCleanup;
+            if (beforeCleanup != null)
+                await beforeCleanup().ConfigureAwait(false);
+
+            // This loop's own, whatever the next loop is doing by now (see ConnectionLoop).
+            loop.IsWatchdogArmed = false;
+            ConnectRace.CloseSocket(loop.Socket);
+            loop.Socket = null;
+
+            // Whatever ended the session, except this component being disabled, which says nothing about the server.
+            if (!token.IsCancellationRequested)
+                _diagnostics.CountSessionWithoutAFrame(loop);
+
+            // Shared with the next loop, so only while this one has not been ended: by then OnDisable has closed
+            // the outbox and set the status itself, and they may belong to a session the next enable started.
+            _outbox.CloseOutbox(token);
+
+            // Before the status changes, so a reaction to ProtocolMismatch cannot queue a message that waits for
+            // a connection that never comes.
+            if (mismatched)
+                _outbox.RefuseSends(token);
+
+            _state.TrySetStatus(mismatched ? ConnectionStatus.ProtocolMismatch : ConnectionStatus.Disconnected, token);
         }
 
         // Tests only: sessions in a row counted towards the framing hint.
@@ -557,29 +571,7 @@ namespace HCIKonstanz.Colibri.Networking
                 ? new ServerCertificateCheck(host, config.AllowSelfSignedCertificate, config.ServerCertificateSha256)
                 : null;
 
-            ServerSession session;
-            try
-            {
-                // Every address tried gets a socket of its own. The loop holds the one being tried, so OnDisable and
-                // the cleanup after this session close it.
-                session = await ServerConnector.OpenSessionAsync(host, port, certificateCheck, CONNECT_TIMEOUT_MS, socket => loop.Socket = socket, token)
-                    .ConfigureAwait(false);
-            }
-            catch (TimeoutException e) when (!token.IsCancellationRequested)
-            {
-                _diagnostics.LastConnectFailure = e.Message;
-                throw;
-            }
-            catch (TlsHandshakeException e) when (!token.IsCancellationRequested)
-            {
-                _diagnostics.LastConnectFailure = e.Message;
-                throw;
-            }
-            catch (SocketException e) when (!token.IsCancellationRequested)
-            {
-                _diagnostics.LastConnectFailure = $"connecting to {host}:{port} failed ({e.SocketErrorCode})";
-                throw;
-            }
+            var session = await OpenSession(loop, host, port, certificateCheck).ConfigureAwait(false);
 
             // Closing the socket unblocks an in-flight read or write, TLS or not; neither has a token overload on
             // this API surface. Closes at once if the token is cancelled already.
@@ -610,6 +602,33 @@ namespace HCIKonstanz.Colibri.Networking
                 {
                     _frameWriter.ReleaseStream(session.Stream);
                 }
+            }
+        }
+
+        private async Task<ServerSession> OpenSession(ConnectionLoop loop, string host, int port, ServerCertificateCheck certificateCheck)
+        {
+            var token = loop.Token;
+            try
+            {
+                // Every address tried gets a socket of its own. The loop holds the one being tried, so OnDisable and
+                // the cleanup after this session close it.
+                return await ServerConnector.OpenSessionAsync(host, port, certificateCheck, CONNECT_TIMEOUT_MS, socket => loop.Socket = socket, token)
+                    .ConfigureAwait(false);
+            }
+            catch (TimeoutException e) when (!token.IsCancellationRequested)
+            {
+                _diagnostics.LastConnectFailure = e.Message;
+                throw;
+            }
+            catch (TlsHandshakeException e) when (!token.IsCancellationRequested)
+            {
+                _diagnostics.LastConnectFailure = e.Message;
+                throw;
+            }
+            catch (SocketException e) when (!token.IsCancellationRequested)
+            {
+                _diagnostics.LastConnectFailure = $"connecting to {host}:{port} failed ({e.SocketErrorCode})";
+                throw;
             }
         }
 
@@ -699,28 +718,33 @@ namespace HCIKonstanz.Colibri.Networking
                         BecomeConnected(session, host, port, app, token);
                     }
 
-                    switch (frame.Type)
-                    {
-                        case FrameType.Heartbeat:
-                            // Echoed back verbatim: the u64 is the server's own monotonic clock reading and is never interpreted
-                            // here. Since 2.0.0 this echo is the sole source of the server's TCP latency measurements. Not
-                            // awaited, see EchoHeartbeat.
-                            _frameWriter.EchoHeartbeat(session, frame.PingTimestamp);
-                            break;
-
-                        case FrameType.Message:
-                            _receiveQueue.EnqueueReceived(frame.Channel, frame.Command, PayloadCodec.ParsePayload(frame.Payload), token);
-                            break;
-
-                        case FrameType.Handshake:
-                            // Server -> client handshakes are not part of the protocol.
-                            Debug.LogWarning("Colibri: ignoring unexpected handshake frame from server");
-                            break;
-                    }
+                    HandleFrame(session, frame, token);
                 }
             }
 
             token.ThrowIfCancellationRequested();
+        }
+
+        private void HandleFrame(ServerSession session, DecodedFrame frame, CancellationToken token)
+        {
+            switch (frame.Type)
+            {
+                case FrameType.Heartbeat:
+                    // Echoed back verbatim: the u64 is the server's own monotonic clock reading and is never interpreted
+                    // here. Since 2.0.0 this echo is the sole source of the server's TCP latency measurements. Not
+                    // awaited, see EchoHeartbeat.
+                    _frameWriter.EchoHeartbeat(session, frame.PingTimestamp);
+                    break;
+
+                case FrameType.Message:
+                    _receiveQueue.EnqueueReceived(frame.Channel, frame.Command, PayloadCodec.ParsePayload(frame.Payload), token);
+                    break;
+
+                case FrameType.Handshake:
+                    // Server -> client handshakes are not part of the protocol.
+                    Debug.LogWarning("Colibri: ignoring unexpected handshake frame from server");
+                    break;
+            }
         }
 
         /// <summary>
