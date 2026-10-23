@@ -21,6 +21,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         // reads what they sent after everything in the round.
         private bool[] _sentInRound;
 
+        /// <summary>The id whose answer ends the round this object is in; null when it is in none. For the EditMode tests.</summary>
         internal string RoundEndMarker => _round == null || _round.IsOver ? null : _round.EndMarkerId;
 
         internal void Reset()

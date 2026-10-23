@@ -83,6 +83,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         internal string CertificateAcceptance => _certificateAcceptance;
 
+        // Tests only: sessions in a row counted towards the framing hint.
         internal int ConsecutiveEarlyFrameFailures => Volatile.Read(ref _consecutiveEarlyFrameFailures);
 
         internal void ResetTlsReports()

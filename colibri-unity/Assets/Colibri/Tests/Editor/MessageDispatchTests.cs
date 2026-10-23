@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using HCIKonstanz.Colibri.Core;
 using HCIKonstanz.Colibri.Networking;
 using HCIKonstanz.Colibri.Networking.Protocol;
@@ -208,9 +209,9 @@ namespace HCIKonstanz.Colibri.Tests
             connection.OnMessageReceived += (channel, command, payload) => throw new InvalidOperationException("handler bug");
             connection.OnMessageReceived += (channel, command, payload) => received.Add((string)payload);
 
-            connection.EnqueueReceived("a", "broadcast::string", new JValue("first"));
-            connection.EnqueueReceived("b", "broadcast::string", new JValue("second"));
-            connection.EnqueueReceived("c", "broadcast::string", new JValue("third"));
+            connection.ReceiveQueue.EnqueueReceived("a", "broadcast::string", new JValue("first"), CancellationToken.None);
+            connection.ReceiveQueue.EnqueueReceived("b", "broadcast::string", new JValue("second"), CancellationToken.None);
+            connection.ReceiveQueue.EnqueueReceived("c", "broadcast::string", new JValue("third"), CancellationToken.None);
 
             foreach (var channel in new[] { "a", "b", "c" })
             {

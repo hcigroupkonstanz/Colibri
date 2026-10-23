@@ -151,7 +151,7 @@ namespace HCIKonstanz.Colibri.E2E
             yield return E2EServer.WaitUntil(() => connection.Status == ConnectionStatus.Connected,
                 "The client never connected", 10f);
 
-            connection.SendLock.Wait();
+            connection.FrameWriter.SendLock.Wait();
             SingletonLifetime.IsQuitting = true;
             try
             {
@@ -165,7 +165,7 @@ namespace HCIKonstanz.Colibri.E2E
             finally
             {
                 SingletonLifetime.IsQuitting = false;
-                connection.SendLock.Release();
+                connection.FrameWriter.SendLock.Release();
             }
         }
 
@@ -219,14 +219,14 @@ namespace HCIKonstanz.Colibri.E2E
             var events = Record(connection);
             yield return E2EServer.WaitUntil(() => events.Count == 1, "The client never connected", 10f);
 
-            connection.SendLock.Wait();
+            connection.FrameWriter.SendLock.Wait();
             try
             {
                 yield return E2EServer.Settle(3f);
             }
             finally
             {
-                connection.SendLock.Release();
+                connection.FrameWriter.SendLock.Release();
             }
 
             // Echoing resumes once the socket is free.
@@ -630,7 +630,7 @@ namespace HCIKonstanz.Colibri.E2E
         /// </summary>
         private static void HoldTheSocket(WebServerConnection connection, int releaseAfterMs)
         {
-            var sendLock = connection.SendLock;
+            var sendLock = connection.FrameWriter.SendLock;
             sendLock.Wait();
             _ = Task.Run(async () =>
             {

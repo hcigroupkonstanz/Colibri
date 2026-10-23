@@ -154,7 +154,7 @@ namespace HCIKonstanz.Colibri.Tests
         /// </summary>
         private static void HeardFromTheServerAt(double time)
         {
-            WebServerConnection.Instance.StampLiveness();
+            WebServerConnection.Instance.Liveness.Stamp();
             Sync.LastHeardAt(time);
         }
 
@@ -186,13 +186,13 @@ namespace HCIKonstanz.Colibri.Tests
             Listen(NewChannel(), _ => { });
             HeardFromTheServerAt(200);
 
-            WebServerConnection.Instance.StampLiveness(millisAgo: 2_000);
+            WebServerConnection.Instance.Liveness.Stamp(millisAgo: 2_000);
             Assert.That(Sync.LastHeardAt(203), Is.EqualTo(201).Within(0.5));
 
-            WebServerConnection.Instance.StampLiveness(millisAgo: 600_000);
+            WebServerConnection.Instance.Liveness.Stamp(millisAgo: 600_000);
             Assert.That(Sync.LastHeardAt(204), Is.EqualTo(203), "The system clock was set forward ten minutes");
 
-            WebServerConnection.Instance.StampLiveness(millisAgo: -600_000);
+            WebServerConnection.Instance.Liveness.Stamp(millisAgo: -600_000);
             Assert.That(Sync.LastHeardAt(205), Is.EqualTo(205), "The system clock was set back ten minutes");
         }
 
@@ -211,7 +211,7 @@ namespace HCIKonstanz.Colibri.Tests
             LocallyDeletedModels.Remember(channel, "destroyed before the long frame", 200.01);
 
             // Heard from 30 ms into a frame that ran 3 s later, and the link died soon after.
-            WebServerConnection.Instance.StampLiveness(millisAgo: 2_970);
+            WebServerConnection.Instance.Liveness.Stamp(millisAgo: 2_970);
             Sync.OnDisconnected(now: 203);
 
             Assert.That(Deletes(channel), Is.EqualTo(new[] { "destroyed before the long frame" }));
@@ -250,7 +250,7 @@ namespace HCIKonstanz.Colibri.Tests
             LocallyDeletedModels.Remember(channel, "destroyed at the drop", 200.5);
             Sync.OnDisconnected(now: 203);
             Sync.RequestModelsAgain(disconnectedAt: 203);
-            Assert.That(Sync.ReconnectRoundEndMarker, Is.Not.Null, "Nothing marks the end of the answers, after which the server has read the deletes");
+            Assert.That(Sync.ReconnectRounds.CurrentEndMarker, Is.Not.Null, "Nothing marks the end of the answers, after which the server has read the deletes");
 
             HeardFromTheServerAt(205);
             Sync.OnDisconnected(now: 208);
@@ -379,7 +379,7 @@ namespace HCIKonstanz.Colibri.Tests
         /// </summary>
         private static void EndOfAnswers()
         {
-            var marker = Sync.ReconnectRoundEndMarker;
+            var marker = Sync.ReconnectRounds.CurrentEndMarker;
             Assert.That(marker, Is.Not.Null, "Precondition: the answers to a reconnect's requests are still coming in");
             Sync.OnServerMessage(Sync.ReconnectRoundChannel, "model::update", new JObject { { "id", marker } });
         }
@@ -426,8 +426,8 @@ namespace HCIKonstanz.Colibri.Tests
 
                 var session = new CancellationTokenSource();
                 _disposables.Add(session);
-                _cleanup.Add(connection.CloseOutbox);
-                connection.OpenOutbox(ServerSession.Plain(client), session.Token);
+                _cleanup.Add(connection.Outbox.CloseOutbox);
+                connection.Outbox.OpenOutbox(ServerSession.Plain(client), session.Token);
             }
             finally
             {

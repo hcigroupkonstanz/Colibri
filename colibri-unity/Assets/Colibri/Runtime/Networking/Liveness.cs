@@ -11,6 +11,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         internal long Stamps => Interlocked.Read(ref _stamps);
 
+        // millisAgo is for the tests, which stand in for having heard from the server that long ago.
         internal void Stamp(long millisAgo = 0)
         {
             Interlocked.Exchange(ref _lastHeartbeatTime, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - millisAgo);

@@ -96,8 +96,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         private readonly FrameWriter _frameWriter = new FrameWriter();
 
-        // The tests hold it to stand in for a slow write.
-        internal SemaphoreSlim SendLock => _frameWriter.SendLock;
+        internal FrameWriter FrameWriter => _frameWriter;
 
         private readonly Outbox _outbox;
 
@@ -158,7 +157,7 @@ namespace HCIKonstanz.Colibri.Networking
             private set { _state.Set(value); }
         }
 
-        internal bool TrySetStatus(ConnectionStatus value, CancellationToken token) => _state.TrySetStatus(value, token);
+        internal ConnectionState State => _state;
 
 
         public WebServerConnection()
@@ -322,8 +321,7 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        internal void EnqueueReceived(string channel, string command, JToken payload, CancellationToken token = default)
-            => _receiveQueue.EnqueueReceived(channel, command, payload, token);
+        internal ReceiveQueue ReceiveQueue => _receiveQueue;
 
         /// <summary>
         /// Delivers everything received since the last frame. Handlers run on the main thread, one at a time,
@@ -554,8 +552,7 @@ namespace HCIKonstanz.Colibri.Networking
             _state.TrySetStatus(mismatched ? ConnectionStatus.ProtocolMismatch : ConnectionStatus.Disconnected, token);
         }
 
-        // Tests only: sessions in a row counted towards the framing hint.
-        internal int ConsecutiveEarlyFrameFailures => _diagnostics.ConsecutiveEarlyFrameFailures;
+        internal ConnectionDiagnostics Diagnostics => _diagnostics;
 
         private async Task RunSession(ConnectionLoop loop, ConnectionConfig config, string app)
         {
@@ -587,7 +584,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                     // Accepted, but nothing is known about what accepted it yet. The watchdog gives
                     // it as long to say something as a connected server gets between heartbeats.
-                    StampLiveness();
+                    _liveness.Stamp();
                     loop.IsWatchdogArmed = true;
 
                     await _frameWriter.SendFrame(session, FrameCodec.EncodeHandshake(CLIENT_VERSION, app, _hostname), token)
@@ -645,7 +642,7 @@ namespace HCIKonstanz.Colibri.Networking
             // already be the next loop's.
             token.ThrowIfCancellationRequested();
 
-            StampLiveness();
+            _liveness.Stamp();
 
             _receiveQueue.ResetBacklogWarning();
 
@@ -693,7 +690,7 @@ namespace HCIKonstanz.Colibri.Networking
                 // and a large message can take longer than that to arrive. Before then only a decoded frame counts,
                 // or something trickling bytes that never form one would hold the session open.
                 if (isConnected)
-                    StampLiveness();
+                    _liveness.Stamp();
 
                 var frames = ReadFrames(reader, buffer, received);
                 if (frames.Count > 0 && !loop.DecodedAnyFrame)
@@ -796,8 +793,7 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        // millisAgo is for the tests, which stand in for having heard from the server that long ago.
-        internal void StampLiveness(long millisAgo = 0) => _liveness.Stamp(millisAgo);
+        internal Liveness Liveness => _liveness;
 
         /// <summary>
         /// How many times the server has been heard from: it changes whenever
@@ -872,11 +868,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// <summary>Why that certificate was accepted, in words, for the Status window; null before a TLS connection.</summary>
         internal string CertificateAcceptance => _diagnostics.CertificateAcceptance;
 
-        internal void OpenOutbox(ServerSession session, CancellationToken token) => _outbox.OpenOutbox(session, token);
-
-        internal void CloseOutbox() => _outbox.CloseOutbox();
-
-        internal void CloseOutbox(CancellationToken token) => _outbox.CloseOutbox(token);
+        internal Outbox Outbox => _outbox;
 
         /// <summary>
         /// Sends a message, queueing it while not connected.

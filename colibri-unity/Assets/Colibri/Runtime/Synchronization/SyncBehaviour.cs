@@ -220,8 +220,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         private protected bool KnowsServerState => _hasReceivedFirstUpdate || _hasMadeItsId;
 
-        /// <summary>The id whose answer ends the round this object is in; null when it is in none. For the EditMode tests.</summary>
-        internal string RoundEndMarker => _resync.RoundEndMarker;
+        internal MemberResync<T> Resync => _resync;
 
 
         /// <summary>

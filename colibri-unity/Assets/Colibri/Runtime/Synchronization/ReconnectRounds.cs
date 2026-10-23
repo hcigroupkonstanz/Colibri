@@ -12,6 +12,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         // until it is answered.
         private readonly Dictionary<string, ReconnectRound> _answerRounds = new Dictionary<string, ReconnectRound>();
 
+        /// <summary>The id whose answer ends the current round; null when none is open. For the EditMode tests.</summary>
         internal string CurrentEndMarker => _reconnectRound?.EndMarkerId;
 
         internal void AddAnswerRound(ReconnectRound round) => _answerRounds[round.EndMarkerId] = round;

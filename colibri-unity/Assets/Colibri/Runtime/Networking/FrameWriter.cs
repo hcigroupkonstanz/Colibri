@@ -22,6 +22,7 @@ namespace HCIKonstanz.Colibri.Networking
         // loop, taken by whoever holds _sendLock (see EchoHeartbeat).
         private PendingEcho _pendingEcho;
 
+        // The tests hold it to stand in for a slow write.
         internal SemaphoreSlim SendLock => _sendLock;
 
         private sealed class PendingEcho

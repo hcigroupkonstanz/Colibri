@@ -150,8 +150,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         /// </summary>
         internal const string ReconnectRoundChannel = "colibri::reconnect";
 
-        /// <summary>The id whose answer ends the current round; null when none is open. For the EditMode tests.</summary>
-        internal static string ReconnectRoundEndMarker => _reconnectRounds.CurrentEndMarker;
+        internal static ReconnectRounds ReconnectRounds => _reconnectRounds;
 
         /// <summary>
         /// For a SyncBehaviour that keeps changes of its own at its first answer: sends one more request now, ahead of
