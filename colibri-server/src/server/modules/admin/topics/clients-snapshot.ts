@@ -92,6 +92,38 @@ export const rateHistory = function (samples: ReadonlyArray<RateSample>, now: nu
 
 const NO_ACTIVITY: ClientActivity = { in: null, out: null, limit: null, held: 0 };
 
+const activityRow = function (activity: ClientActivity, history: boolean, now: number): Pick<ClientRow, 'in' | 'out' | 'limit' | 'held' | 'history'> {
+    return {
+        in: round1(activity.in),
+        out: round1(activity.out),
+        limit: activity.limit,
+        held: activity.held,
+        ...(history ? { history: rateHistory(activity.history ?? [], now) } : {}),
+    };
+};
+
+type TransportRow = Pick<ClientRow, 'transport' | 'tls' | 'tlsAtProxy' | 'address' | 'connectedAt'>;
+
+const tcpTransportRow = function (client: TcpNetworkClient): TransportRow {
+    return {
+        transport: 'tcp',
+        tls: client.tls,
+        tlsAtProxy: client.tlsAtProxy,
+        address: client.address,
+        connectedAt: client.connectedAt,
+    };
+};
+
+const webTransportRow = function (client: SocketIoClient): TransportRow {
+    return {
+        transport: 'web',
+        tls: client.socket.handshake.secure,
+        tlsAtProxy: client.tlsAtProxy,
+        address: client.name,
+        connectedAt: client.socket.handshake.issued,
+    };
+};
+
 // `history`: each row with its rate history, as far as the sources have it.
 export const clientsSnapshot = function (sources: ClientSources, history = false): ClientsSnapshot {
     const now = Date.now();
@@ -113,22 +145,11 @@ export const clientsSnapshot = function (sources: ClientSources, history = false
             ...truncatedFlag(client.app, client.name, client.version, row.address),
         });
     };
-    const activityRow = (activity: ClientActivity) => ({
-        in: round1(activity.in),
-        out: round1(activity.out),
-        limit: activity.limit,
-        held: activity.held,
-        ...(history ? { history: rateHistory(activity.history ?? [], now) } : {}),
-    });
 
     for (const client of sources.tcpClients) {
         add(client, {
-            transport: 'tcp',
-            tls: client.tls,
-            tlsAtProxy: client.tlsAtProxy,
-            address: client.address,
-            connectedAt: client.connectedAt,
-            ...activityRow(sources.tcpActivity.get(client.id) ?? NO_ACTIVITY),
+            ...tcpTransportRow(client),
+            ...activityRow(sources.tcpActivity.get(client.id) ?? NO_ACTIVITY, history, now),
         });
     }
     for (const client of sources.webClients) {
@@ -137,12 +158,8 @@ export const clientsSnapshot = function (sources: ClientSources, history = false
             continue;
         }
         add(client, {
-            transport: 'web',
-            tls: client.socket.handshake.secure,
-            tlsAtProxy: client.tlsAtProxy,
-            address: client.name,
-            connectedAt: client.socket.handshake.issued,
-            ...activityRow(sources.webActivity(client)),
+            ...webTransportRow(client),
+            ...activityRow(sources.webActivity(client), history, now),
         });
     }
 
