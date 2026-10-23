@@ -2,6 +2,7 @@ using System;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>Decides whether a SyncBehaviour may send now under its rate limit, keeping the interval steady across frames.</summary>
     internal sealed class SendRateLimiter
     {
         private double _nextSendTime = double.NegativeInfinity;

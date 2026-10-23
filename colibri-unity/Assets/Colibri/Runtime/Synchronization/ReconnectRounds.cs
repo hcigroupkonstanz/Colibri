@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>The open <see cref="ReconnectRound"/>, and the rounds objects opened at their first answer, ended by their end markers.</summary>
     internal sealed class ReconnectRounds
     {
         private ReconnectRound _reconnectRound;

@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>A <see cref="SyncBehaviour{T}"/>'s state for the answers after a reconnect: what its members sent, which keep their local value, and its round.</summary>
     internal sealed class MemberResync<T> where T : SyncBehaviour<T>
     {
         // Parallel to SyncMembers<T>.AttributeList, made lazily: when a member first sends or takes the server's value.

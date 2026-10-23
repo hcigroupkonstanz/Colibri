@@ -5,6 +5,7 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>The listeners per channel for one kind of message: registers and calls them, and drops those whose owner was destroyed.</summary>
     internal sealed class ListenerTable<T>
     {
         private readonly Dictionary<string, List<Listener<T>>> _listeners = new Dictionary<string, List<Listener<T>>>();

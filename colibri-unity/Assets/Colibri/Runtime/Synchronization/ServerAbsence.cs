@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>How long the client has been without a server, and when it stops waiting for one.</summary>
     internal sealed class ServerAbsence
     {
         // Since when this client has had no server, on SyncTicker's clock: from taking up the connection or

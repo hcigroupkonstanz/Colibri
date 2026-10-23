@@ -2,6 +2,7 @@ using System.Collections.Generic;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>The deletes the server may not have read around an outage, kept so they can go out again.</summary>
     internal sealed class UnreadDeletes
     {
         // Deletes the server may not have read, oldest first: those sent again at an outage and every one sent

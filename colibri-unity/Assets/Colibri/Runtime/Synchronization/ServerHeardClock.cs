@@ -2,6 +2,7 @@ using System;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>When the server was last heard from on SyncTicker's clock, derived from the connection's heartbeat age.</summary>
     internal sealed class ServerHeardClock
     {
         // When the server was last heard from (SyncTicker's clock), the connection's liveness stamp count then,

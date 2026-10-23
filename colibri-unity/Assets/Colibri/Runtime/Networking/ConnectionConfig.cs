@@ -2,6 +2,7 @@ using HCIKonstanz.Colibri.Setup;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>Immutable snapshot of the connection settings in ColibriConfig, which the connection thread cannot load itself.</summary>
     internal sealed class ConnectionConfig
     {
         internal static readonly ConnectionConfig Empty = new ConnectionConfig(null, null, 0, false, false, null);

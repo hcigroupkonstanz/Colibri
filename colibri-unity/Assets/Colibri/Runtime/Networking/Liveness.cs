@@ -3,6 +3,7 @@ using System.Threading;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>When the server was last heard from: stamped on the connection thread, read from the main thread.</summary>
     internal sealed class Liveness
     {
         private long _lastHeartbeatTime;
