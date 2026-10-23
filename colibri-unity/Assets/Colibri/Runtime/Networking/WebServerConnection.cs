@@ -3,7 +3,6 @@ using HCIKonstanz.Colibri.Networking.Protocol;
 using HCIKonstanz.Colibri.Setup;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
@@ -44,8 +43,6 @@ namespace HCIKonstanz.Colibri.Networking
         private const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
 
         private const int RECEIVE_BUFFER_SIZE = 64 * 1024;
-        private const int RECONNECT_DELAY_MIN_MS = 500;
-        private const int RECONNECT_DELAY_MAX_MS = 10 * 1000;
 
         // One connection attempt: name lookup, every address tried and, with TLS, the handshake (a server
         // without TLS may never answer it). The socket has no timeout of its own (about two minutes on
@@ -120,20 +117,10 @@ namespace HCIKonstanz.Colibri.Networking
         private MessageAction _deliveringTo;
         private Delegate[] _deliveringToList;
 
-        // Both touched by the connection loop and, via the Status setter, by Update: every access is under
-        // _statusLock.
-        private int _connectAttempts;
-        private int _connectedSessions;
+        private readonly ConnectionState _state = new ConnectionState();
 
         // How many times the connection has become Connected; 2 or more in an OnConnected handler means a reconnect.
-        internal int ConnectedSessions
-        {
-            get
-            {
-                lock (_statusLock)
-                    return _connectedSessions;
-            }
-        }
+        internal int ConnectedSessions => _state.ConnectedSessions;
 
         // Connection loop only.
         private bool _hasReportedMissingConfig;
@@ -156,25 +143,12 @@ namespace HCIKonstanz.Colibri.Networking
         private volatile string _presentedCertificateSha256;
         private volatile string _certificateAcceptance;
 
-        // Gate behind `await Connected`, awaited by user code only (sends queue in the outbox instead).
-        // A TaskCompletionSource because several callers may await it at once, which UniTaskCompletionSource
-        // rejects. volatile: re-armed on the connection loop's thread, read on any.
-        private volatile TaskCompletionSource<bool> _connectedGate = NewGate();
-        private volatile bool _isGateOpen;
-
         /// <summary>
         /// Completes when <see cref="Status"/> becomes <see cref="ConnectionStatus.Connected"/>, i.e. once the
         /// server has sent its first frame; while disconnected it is a fresh, pending task. Cancelled when this
         /// component is disabled and when the server refuses the protocol version, which is final.
         /// </summary>
-        public Task Connected => _connectedGate.Task;
-
-        private static TaskCompletionSource<bool> NewGate()
-            => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        // OnConnected (true) and OnDisconnected (false) still to be raised on the main thread, in the order
-        // the transitions happened. Queued by the Status setter under _statusLock.
-        private readonly ConcurrentQueue<bool> _connectionEvents = new ConcurrentQueue<bool>();
+        public Task Connected => _state.Connected;
 
         // Main thread only. A handler that disables or destroys this component re-enters from OnDisable, see
         // RaiseConnectionEvents.
@@ -197,8 +171,6 @@ namespace HCIKonstanz.Colibri.Networking
         internal int ReceiveThreadId => _receiveThreadId;
         private volatile int _receiveThreadId;
 
-        private volatile ConnectionStatus _status = ConnectionStatus.Disconnected;
-
         // Written by the receive loop off the main thread, read by the Editor status window and by user code
         // on the main thread.
         private volatile string _serverVersion;
@@ -209,76 +181,14 @@ namespace HCIKonstanz.Colibri.Networking
         private int _consecutiveUnansweredSessions;
         private volatile string _suspectedProtocolMismatch;
 
-        // Whether the current session uses TLS, read from the configuration when it started. Written by the
-        // connection loop under _statusLock, read by UsesTls on any thread.
-        private volatile bool _sessionUsesTls;
-
-        // Status's setter is a read-modify-write over several fields, and both the connection loop and the
-        // watchdog in Update reach it. Unguarded, a transition can be lost: a watchdog Disconnected landing
-        // between the loop's compare and assignment leaves the gate open on a closed socket. A loop sets it
-        // through TrySetStatus, which also checks under this lock that the loop has not been ended.
-        private readonly object _statusLock = new object();
-
         /// <summary>Current connection state.</summary>
         public ConnectionStatus Status
         {
-            get { return _status; }
-            private set
-            {
-                lock (_statusLock)
-                {
-                    if (_status == value)
-                        return;
-
-                    var wasConnected = _status == ConnectionStatus.Connected;
-                    _status = value;
-
-                    if (_status == ConnectionStatus.Connected)
-                    {
-                        _connectAttempts = 0;
-                        _connectedSessions++;
-                        _connectionEvents.Enqueue(true);
-                        _isGateOpen = true;
-
-                        // Continuations run asynchronously (see NewGate), so no awaiter resumes inline under the lock.
-                        _connectedGate.TrySetResult(true);
-                    }
-                    else if (_isGateOpen)
-                    {
-                        // Re-arm, so `await Connected` while disconnected waits for the next connection.
-                        _isGateOpen = false;
-                        _connectedGate = NewGate();
-                    }
-
-                    // Final: there is no next connection to wait for.
-                    if (_status == ConnectionStatus.ProtocolMismatch)
-                        _connectedGate.TrySetCanceled();
-
-                    // One OnDisconnected per OnConnected, whatever ended the connection, a refusal included.
-                    if (wasConnected)
-                        _connectionEvents.Enqueue(false);
-                }
-            }
+            get { return _state.Status; }
+            private set { _state.Set(value); }
         }
 
-        /// <summary>
-        /// Sets <see cref="Status"/> for the connection loop that <paramref name="token"/> belongs to, unless
-        /// OnDisable has ended that loop: the status is then OnDisable's and the next loop's. Checked under the
-        /// lock the setter takes, so OnDisable, which cancels the token before it sets Disconnected, has the
-        /// last word.
-        /// </summary>
-        /// <returns>False if the loop has been ended.</returns>
-        internal bool TrySetStatus(ConnectionStatus value, CancellationToken token)
-        {
-            lock (_statusLock)
-            {
-                if (token.IsCancellationRequested)
-                    return false;
-
-                Status = value;
-                return true;
-            }
-        }
+        internal bool TrySetStatus(ConnectionStatus value, CancellationToken token) => _state.TrySetStatus(value, token);
 
 
         public WebServerConnection()
@@ -294,8 +204,7 @@ namespace HCIKonstanz.Colibri.Networking
             _hostname = PayloadCodec.SanitizeHandshakeField(SystemInfo.deviceName);
             RefreshConfig();
 
-            _connectedGate = NewGate();
-            _isGateOpen = false;
+            _state.ResetGate();
 
             // Enabling the component again is a deliberate retry, refusal or not.
             _outbox.LiftRefusal();
@@ -344,7 +253,7 @@ namespace HCIKonstanz.Colibri.Networking
             // In this order: leaving Connected re-arms the gate, and an `await Connected` from now on would wait
             // on that fresh task forever, since OnEnable replaces the gate rather than completing it.
             Status = ConnectionStatus.Disconnected;
-            _connectedGate.TrySetCanceled();
+            _state.CancelGate();
 
             // A disabled or destroyed component gets no Update to raise these from, so the OnDisconnected of a
             // connection open until now is raised here. Not when quitting: teardown has no order, and a handler
@@ -407,7 +316,7 @@ namespace HCIKonstanz.Colibri.Networking
             _isRaisingConnectionEvents = true;
             try
             {
-                while (_connectionEvents.TryDequeue(out var connected))
+                while (_state.TryDequeueConnectionEvent(out var connected))
                 {
                     if (connected)
                         Raise(OnConnected, nameof(OnConnected));
@@ -543,7 +452,7 @@ namespace HCIKonstanz.Colibri.Networking
                         Debug.LogError(string.IsNullOrWhiteSpace(app) ? ColibriConfig.NOT_CONFIGURED_MESSAGE : ColibriConfig.NO_SERVER_ADDRESS_MESSAGE);
                     }
 
-                    if (!await Delay(RECONNECT_DELAY_MIN_MS, token).ConfigureAwait(false))
+                    if (!await Delay(ConnectionState.RECONNECT_DELAY_MIN_MS, token).ConfigureAwait(false))
                         break;
                     continue;
                 }
@@ -656,7 +565,7 @@ namespace HCIKonstanz.Colibri.Networking
                     if (mismatched)
                         _outbox.RefuseSends(token);
 
-                    TrySetStatus(mismatched ? ConnectionStatus.ProtocolMismatch : ConnectionStatus.Disconnected, token);
+                    _state.TrySetStatus(mismatched ? ConnectionStatus.ProtocolMismatch : ConnectionStatus.Disconnected, token);
                 }
 
                 // Terminal: retrying cannot make the versions agree, and would bury the one log line that says what
@@ -667,7 +576,7 @@ namespace HCIKonstanz.Colibri.Networking
                 if (token.IsCancellationRequested)
                     break;
 
-                if (!await Delay(NextBackoffDelay(), token).ConfigureAwait(false))
+                if (!await Delay(_state.NextBackoffDelay(), token).ConfigureAwait(false))
                     break;
             }
         }
@@ -698,7 +607,7 @@ namespace HCIKonstanz.Colibri.Networking
                 return;
 
             // Unanswered session, see above.
-            if (loop.EndedSilent || (_sessionUsesTls && !loop.EndedOnBadFrame))
+            if (loop.EndedSilent || (_state.UsesTls && !loop.EndedOnBadFrame))
             {
                 _consecutiveEarlyFrameFailures = 0;
                 _consecutiveUnansweredSessions++;
@@ -728,7 +637,7 @@ namespace HCIKonstanz.Colibri.Networking
 
             // A server with TLS turned on hangs up on a client that is not using it, before a
             // frame, exactly like this, and so does a proxy or port forwarding whose backend is down.
-            if (!_sessionUsesTls)
+            if (!_state.UsesTls)
             {
                 suspicion += " If the server has TLS turned on, tick 'Server supports SSL/TLS' in the Colibri configuration. " +
                     "If a proxy or port forwarding is in front of the server, check that the server behind it is running.";
@@ -761,15 +670,7 @@ namespace HCIKonstanz.Colibri.Networking
             var host = config.ServerAddress;
             var port = config.TcpPort;
             var useTls = config.UseTls;
-            lock (_statusLock)
-            {
-                // A loop that OnDisable has ended starts nothing: the status, and the connection
-                // UsesTls describes, may already be the next loop's.
-                token.ThrowIfCancellationRequested();
-
-                _sessionUsesTls = useTls;
-                Status = _connectAttempts == 0 ? ConnectionStatus.Connecting : ConnectionStatus.Reconnecting;
-            }
+            _state.BeginAttempt(useTls, token);
 
             Debug.Log($"Colibri: connecting to {host}:{port}{(useTls ? " (TLS)" : "")}");
 
@@ -921,7 +822,7 @@ namespace HCIKonstanz.Colibri.Networking
             // Starts sending whatever queued up during the outage, in order. Opened before Status
             // says Connected, so anything sent by code that reacts to Connected lines up behind it.
             _outbox.OpenOutbox(session, token);
-            if (!TrySetStatus(ConnectionStatus.Connected, token))
+            if (!_state.TrySetStatus(ConnectionStatus.Connected, token))
                 token.ThrowIfCancellationRequested();
         }
 
@@ -1035,17 +936,6 @@ namespace HCIKonstanz.Colibri.Networking
         private static IReadOnlyList<DecodedFrame> ReadFrames(FrameReader reader, byte[] buffer, int count)
             => reader.Append(new ReadOnlySpan<byte>(buffer, 0, count));
 
-        private int NextBackoffDelay()
-        {
-            // Same lock as the Status setter, which resets the counter on a successful connect.
-            lock (_statusLock)
-            {
-                var shift = Math.Min(_connectAttempts, 5);
-                _connectAttempts++;
-                return Math.Min(RECONNECT_DELAY_MAX_MS, RECONNECT_DELAY_MIN_MS << shift);
-            }
-        }
-
         /// <returns>False if the wait was cancelled, so the caller should stop looping.</returns>
         private static async Task<bool> Delay(int delayMs, CancellationToken token)
         {
@@ -1126,7 +1016,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// Whether the connection uses TLS: <see cref="ColibriConfig.IsSSL"/> as it was when the
         /// current connection, or the attempt in progress, started.
         /// </summary>
-        public bool UsesTls => _sessionUsesTls;
+        public bool UsesTls => _state.UsesTls;
 
         /// <summary>
         /// The SHA-256 fingerprint of the certificate the server presented on the last TLS
