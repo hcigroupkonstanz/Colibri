@@ -25,8 +25,8 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
-import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../src/server/modules/web/voice-packet.js';
+} from '../src/server/modules/protocol/protocol.js';
+import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../src/server/modules/voice/voice-packet.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');

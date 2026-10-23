@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Subject } from 'rxjs';
-import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
-import type { NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/networking/network.js';
-import { MeasureLatency } from '../../src/server/modules/command-hooks/measure-latency.js';
-import type { SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
-import { Payload } from '../../src/server/modules/core/payload.js';
+import { ConnectionPool } from '../../src/server/modules/hooks/connection-pool.js';
+import type { NetworkClient, NetworkMessage, NetworkServer } from '../../src/server/modules/protocol/network.js';
+import { MeasureLatency } from '../../src/server/modules/hooks/measure-latency.js';
+import type { SocketIOServer } from '../../src/server/modules/socket-io/socket-io-server.js';
+import { Payload } from '../../src/server/modules/protocol/payload.js';
 import type { RingBuffer } from '../../src/server/modules/core/ring-buffer.js';
 import { Service } from '../../src/server/modules/core/service.js';
 import type { LogMessage } from '../../src/server/modules/core/log-message.js';

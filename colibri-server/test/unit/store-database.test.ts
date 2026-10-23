@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { PassThrough } from 'stream';
-import { StoreDatabase, WAL_BACKSTOP_PAGES, WAL_SIZE_LIMIT_BYTES, writeStoreJson } from '../../src/server/modules/web/store-database.js';
+import { StoreDatabase, WAL_BACKSTOP_PAGES, WAL_SIZE_LIMIT_BYTES, writeStoreJson } from '../../src/server/modules/store/store-database.js';
 import { statSync } from 'fs';
 
 describe('StoreDatabase', () => {

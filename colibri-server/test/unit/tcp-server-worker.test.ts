@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import type * as net from 'net';
 import type * as workerThreads from 'worker_threads';
-import type { TcpServerOptions, WireNetworkMessage } from '../../src/server/modules/networking/tcp-server-worker.js';
-import { HEARTBEAT_EVERY_BYTES, MAX_REPLY_BACKLOG_BYTES, TCPServerWorker } from '../../src/server/modules/networking/tcp-server-worker.js';
-import { MAX_HELD_OBJECTS } from '../../src/server/modules/networking/inbound-limits.js';
-import { FrameReader, FrameType, MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeHandshakeFrame, encodeHeartbeatFrame, encodeMessageFrame } from '../../src/server/modules/networking/protocol.js';
+import type { TcpServerOptions, WireNetworkMessage } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
+import { HEARTBEAT_EVERY_BYTES, MAX_REPLY_BACKLOG_BYTES, TCPServerWorker } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
+import { MAX_HELD_OBJECTS } from '../../src/server/modules/limits/inbound-limits.js';
+import { FrameReader, FrameType, MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeHandshakeFrame, encodeHeartbeatFrame, encodeMessageFrame } from '../../src/server/modules/protocol/protocol.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
 
 // Vitest runs suites inside worker threads, so the real `parentPort` here is the test

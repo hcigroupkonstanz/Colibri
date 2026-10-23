@@ -16,7 +16,7 @@ import {
     protocolRejection,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../../src/server/modules/networking/protocol.js';
+} from '../../src/server/modules/protocol/protocol.js';
 import type { TestCertificate } from '../tls-test-certificate.js';
 import { createTestCertificate } from '../tls-test-certificate.js';
 

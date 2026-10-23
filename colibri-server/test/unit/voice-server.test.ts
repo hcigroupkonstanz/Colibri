@@ -9,14 +9,14 @@ import * as path from 'path';
 import type { Subscription } from 'rxjs';
 import { Subject } from 'rxjs';
 import wavefile from 'wavefile';
-import { VoiceServer, ipv6SocketsTakeIPv4, voiceSocketOptions, wavHeader } from '../../src/server/modules/web/voice-server.js';
-import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../../src/server/modules/web/voice-packet.js';
-import type { UnityClient, UnityClientSource } from '../../src/server/modules/web/unity-client-addresses.js';
+import { VoiceServer, ipv6SocketsTakeIPv4, voiceSocketOptions, wavHeader } from '../../src/server/modules/voice/voice-server.js';
+import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../../src/server/modules/voice/voice-packet.js';
+import type { UnityClient, UnityClientSource } from '../../src/server/modules/voice/unity-client-addresses.js';
 import { ConsoleLog } from '../../src/server/modules/core/console-log.js';
 import type { LogMessage } from '../../src/server/modules/core/log-message.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import { compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
+import { compileTrustedProxies } from '../../src/server/modules/net/trusted-proxies.js';
 
 const { WaveFile } = wavefile;
 

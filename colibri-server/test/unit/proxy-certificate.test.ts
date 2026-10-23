@@ -11,12 +11,12 @@ import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
 import type {
     ProxyTlsAddress,
-} from '../../src/server/modules/core/proxy-certificate.js';
+} from '../../src/server/modules/tls/proxy-certificate.js';
 import {
     ProxyCertificateCheck,
     formatProxyTlsAddress,
     parseProxyTlsAddresses,
-} from '../../src/server/modules/core/proxy-certificate.js';
+} from '../../src/server/modules/tls/proxy-certificate.js';
 import type { TestCertificate } from '../tls-test-certificate.js';
 import { createTestCertificate } from '../tls-test-certificate.js';
 

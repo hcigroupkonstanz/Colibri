@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { encodeMessageFrame } from '../src/server/modules/networking/protocol.js';
+import { encodeMessageFrame } from '../src/server/modules/protocol/protocol.js';
 
 // v3 fixed-header framing: a single pre-sized Buffer write, no flatbuffers.Builder, no
 // TextEncoder, no merged Uint8Array (the v1 flatbuffer encoder is what the Phase 0 numbers

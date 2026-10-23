@@ -41,7 +41,7 @@ export class SocketIOService {
     public readonly reconnected$ = this.reconnectSource.asObservable();
 
     constructor() {
-        // Keep in step with PROTOCOL_VERSION (src/server/modules/networking/protocol.ts). The
+        // Keep in step with PROTOCOL_VERSION (src/server/modules/protocol/protocol.ts). The
         // server only warns on a mismatch from the admin UI, but it does so on every connect.
         this.socket = io.connect('', { query: { app: 'colibri', version: '2' } });
 

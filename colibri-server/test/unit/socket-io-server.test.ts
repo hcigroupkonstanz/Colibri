@@ -7,18 +7,18 @@ import { config as rxjsConfig, filter, firstValueFrom, tap } from 'rxjs';
 import { networkInterfaces } from 'os';
 import type { Socket as ClientSocket } from 'socket.io-client';
 import { io as connectClient } from 'socket.io-client';
-import type { SocketIoClient } from '../../src/server/modules/networking/socket-io-server.js';
-import { SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
-import { MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeMessageFrame } from '../../src/server/modules/networking/protocol.js';
-import { MAX_HELD_OBJECTS } from '../../src/server/modules/networking/inbound-limits.js';
+import type { SocketIoClient } from '../../src/server/modules/socket-io/socket-io-server.js';
+import { SocketIOServer } from '../../src/server/modules/socket-io/socket-io-server.js';
+import { MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeMessageFrame } from '../../src/server/modules/protocol/protocol.js';
+import { MAX_HELD_OBJECTS } from '../../src/server/modules/limits/inbound-limits.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/core/payload.js';
+import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/protocol/payload.js';
 import type { LogMessage } from '../../src/server/modules/core/log-message.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
-import { ConnectionPool } from '../../src/server/modules/command-hooks/connection-pool.js';
-import type { NetworkClient, NetworkMessage } from '../../src/server/modules/networking/network.js';
-import type { TrustProxy } from '../../src/server/modules/networking/trusted-proxies.js';
-import { compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
+import { ConnectionPool } from '../../src/server/modules/hooks/connection-pool.js';
+import type { NetworkClient, NetworkMessage } from '../../src/server/modules/protocol/network.js';
+import type { TrustProxy } from '../../src/server/modules/net/trusted-proxies.js';
+import { compileTrustedProxies } from '../../src/server/modules/net/trusted-proxies.js';
 
 interface ColibriEvent {
     command: string;

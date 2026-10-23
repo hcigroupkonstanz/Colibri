@@ -7,7 +7,7 @@
 // imported at the server's next start: that is how a store is restored from a backup.
 import * as path from 'path';
 import { Config } from './configuration.js';
-import { STORE_DATABASE_FILENAME, StoreDatabase, writeStoreJson } from './modules/web/store-database.js';
+import { STORE_DATABASE_FILENAME, StoreDatabase, writeStoreJson } from './modules/store/store-database.js';
 
 const exportStore = async function (file: string, out: NodeJS.WritableStream): Promise<void> {
     const store = StoreDatabase.openReadOnly(file);

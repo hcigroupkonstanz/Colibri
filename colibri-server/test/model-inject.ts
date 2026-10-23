@@ -12,7 +12,7 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 
 const [app, channel, ...payloads] = process.argv.slice(2);
 const onError = (err?: Error) => err && console.error(err);

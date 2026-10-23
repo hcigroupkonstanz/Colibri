@@ -7,7 +7,7 @@ import {
     VoiceCodec,
     encodeVoicePacket,
     voiceAppId,
-} from '../../src/server/modules/web/voice-packet.js';
+} from '../../src/server/modules/voice/voice-packet.js';
 
 describe('voice packet format', () => {
     describe('voiceAppId', () => {

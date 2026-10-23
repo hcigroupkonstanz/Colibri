@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type {
     EpisodeSummary,
-} from '../../src/server/modules/networking/inbound-limits.js';
+} from '../../src/server/modules/limits/inbound-limits.js';
 import {
     EPISODE_QUIET_MILLIS,
     EPISODE_WARNING_MILLIS,
@@ -18,8 +18,8 @@ import {
     rateLimitEndWarning,
     rateLimitStartWarning,
     warnsAtEnd,
-} from '../../src/server/modules/networking/inbound-limits.js';
-import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/core/payload.js';
+} from '../../src/server/modules/limits/inbound-limits.js';
+import { MAX_PAYLOAD_DEPTH } from '../../src/server/modules/protocol/payload.js';
 
 describe('inbound limits', () => {
     // The policy shared by the TCP backlog limit and the per-client rate limit: only the bulk of a

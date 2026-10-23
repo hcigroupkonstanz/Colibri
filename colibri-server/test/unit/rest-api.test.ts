@@ -8,11 +8,11 @@ import type { Subscription } from 'rxjs';
 import type { LogMessage } from '../../src/server/modules/core/log-message.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import type { RestStoreOptions } from '../../src/server/modules/web/rest-api.js';
-import { RestAPI } from '../../src/server/modules/web/rest-api.js';
-import { StoreDatabase } from '../../src/server/modules/web/store-database.js';
-import { REST_MEDIA_TYPE } from '../../src/server/modules/networking/protocol.js';
-import type { WebServer } from '../../src/server/modules/web/web-server.js';
+import type { RestStoreOptions } from '../../src/server/modules/store/rest-api.js';
+import { RestAPI } from '../../src/server/modules/store/rest-api.js';
+import { StoreDatabase } from '../../src/server/modules/store/store-database.js';
+import { REST_MEDIA_TYPE } from '../../src/server/modules/protocol/protocol.js';
+import type { WebServer } from '../../src/server/modules/http/web-server.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 

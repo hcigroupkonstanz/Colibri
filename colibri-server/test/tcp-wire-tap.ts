@@ -4,7 +4,7 @@
 //
 //   npx tsx test/tcp-wire-tap.ts [listenPort=9222] [serverPort=9212]
 import * as net from 'net';
-import { FrameReader, FrameType } from '../src/server/modules/networking/protocol.js';
+import { FrameReader, FrameType } from '../src/server/modules/protocol/protocol.js';
 
 const listenPort = Number(process.argv[2] ?? 9222);
 const serverPort = Number(process.argv[3] ?? 9212);

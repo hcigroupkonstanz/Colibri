@@ -6,17 +6,17 @@ import { tmpdir } from 'os';
 import * as path from 'path';
 import * as tls from 'tls';
 import type * as workerThreads from 'worker_threads';
-import type { TcpServerOptions } from '../../src/server/modules/networking/tcp-server-worker.js';
-import { TCPServerWorker } from '../../src/server/modules/networking/tcp-server-worker.js';
+import type { TcpServerOptions } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
+import { TCPServerWorker } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
 import type {
     DecodedFrame,
-} from '../../src/server/modules/networking/protocol.js';
+} from '../../src/server/modules/protocol/protocol.js';
 import {
     FrameReader,
     FrameType,
     PROTOCOL_VERSION,
     encodeHandshakeFrame,
-} from '../../src/server/modules/networking/protocol.js';
+} from '../../src/server/modules/protocol/protocol.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import type { TestCertificate } from '../tls-test-certificate.js';
 import { createTestCertificate } from '../tls-test-certificate.js';

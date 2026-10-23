@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fileURLToPath } from 'url';
-import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
+import { DataStore } from '../../src/server/modules/models/data-store.js';
 import { RingBuffer } from '../../src/server/modules/core/ring-buffer.js';
 import { UNKNOWN_BUILD } from '../../src/server/modules/core/build-info.js';
-import type { CertificateInfo } from '../../src/server/modules/core/tls-files.js';
+import type { CertificateInfo } from '../../src/server/modules/tls/tls-files.js';
 import { readServerVersion } from '../../src/server/modules/core/server-version.js';
-import type { ClientActivity } from '../../src/server/modules/networking/client-activity.js';
-import { PROTOCOL_VERSION } from '../../src/server/modules/networking/protocol.js';
-import type { SocketIoClient } from '../../src/server/modules/networking/socket-io-server.js';
-import type { TcpNetworkClient } from '../../src/server/modules/networking/tcp-server-proxy.js';
+import type { ClientActivity } from '../../src/server/modules/limits/client-activity.js';
+import { PROTOCOL_VERSION } from '../../src/server/modules/protocol/protocol.js';
+import type { SocketIoClient } from '../../src/server/modules/socket-io/socket-io-server.js';
+import type { TcpNetworkClient } from '../../src/server/modules/tcp/tcp-server-proxy.js';
 import type {
     ServerSources,
-} from '../../src/server/modules/web/admin-topics.js';
+} from '../../src/server/modules/admin/admin-topics.js';
 import {
     DEFAULT_MODELS_LIMIT,
     LATENCY_HISTORY_MILLIS,
@@ -33,8 +33,8 @@ import {
     rateHistory,
     recentLatency,
     serverSnapshot,
-} from '../../src/server/modules/web/admin-topics.js';
-import { MODEL_SIZE_REFRESH_MILLIS, ModelMeasures } from '../../src/server/modules/web/model-measures.js';
+} from '../../src/server/modules/admin/admin-topics.js';
+import { MODEL_SIZE_REFRESH_MILLIS, ModelMeasures } from '../../src/server/modules/admin/model-measures.js';
 
 const query = (fields: Record<string, unknown> = {}) => parseModelsQuery(fields);
 

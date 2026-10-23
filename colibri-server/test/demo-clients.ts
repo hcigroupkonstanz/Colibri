@@ -35,7 +35,7 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 import type { ProbeOptions } from './tcp-probe-connection.js';
 import { PLAIN_PROBE_CLOSED_HINT, parseProbeArgs, probeErrorHint } from './tcp-probe-connection.js';
 

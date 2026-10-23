@@ -4,8 +4,8 @@ import {
     MAX_PROXY_V2_DATA_LENGTH,
     ProxyHeaderError,
     readProxyHeader,
-} from '../../src/server/modules/networking/proxy-protocol.js';
-import { PROTOCOL_VERSION, encodeHandshakeFrame } from '../../src/server/modules/networking/protocol.js';
+} from '../../src/server/modules/tcp/worker/proxy-protocol.js';
+import { PROTOCOL_VERSION, encodeHandshakeFrame } from '../../src/server/modules/protocol/protocol.js';
 
 const V2_SIGNATURE = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x0d, 0x0a, 0x51, 0x55, 0x49, 0x54, 0x0a]);
 const LOCAL = 0x20;

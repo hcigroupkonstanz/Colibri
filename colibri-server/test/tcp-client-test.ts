@@ -16,7 +16,7 @@
 import { Config } from '../src/server/configuration.js';
 import type {
     ProtocolRejection,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 import {
     COLIBRI_CHANNEL,
     FrameReader,
@@ -26,7 +26,7 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 import { PLAIN_PROBE_CLOSED_HINT, connectProbe, parseProbeArgs, probeErrorHint } from './tcp-probe-connection.js';
 
 const EXIT_REFUSED = 2;

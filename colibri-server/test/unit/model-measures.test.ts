@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
+import { DataStore } from '../../src/server/modules/models/data-store.js';
 import {
     FORMATTED_MODELS_KEPT,
     LARGE_MODEL_BYTES,
@@ -8,7 +8,7 @@ import {
     MODEL_SIZE_REFRESH_MILLIS,
     ModelMeasures,
     formatJson,
-} from '../../src/server/modules/web/model-measures.js';
+} from '../../src/server/modules/admin/model-measures.js';
 
 describe('formatJson', () => {
     const values: [string, unknown][] = [

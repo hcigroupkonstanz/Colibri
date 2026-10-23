@@ -1,9 +1,9 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { readTlsFiles } from './modules/core/tls-files.js';
-import { parseProxyTlsAddresses } from './modules/core/proxy-certificate.js';
-import { parseTrustedProxies } from './modules/networking/trusted-proxies.js';
+import { readTlsFiles } from './modules/tls/tls-files.js';
+import { parseProxyTlsAddresses } from './modules/tls/proxy-certificate.js';
+import { parseTrustedProxies } from './modules/net/trusted-proxies.js';
 
 // automatically load .env file. Quietly: dotenv 17 otherwise prints an "injected env"
 // line with a rotating advertising tip on every start, docker logs included.

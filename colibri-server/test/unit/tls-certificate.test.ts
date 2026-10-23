@@ -7,8 +7,8 @@ import { firstValueFrom } from 'rxjs';
 import type { LogMessage } from '../../src/server/modules/core/log-message.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import { TlsCertificate } from '../../src/server/modules/core/tls-certificate.js';
-import type { TlsCredentials } from '../../src/server/modules/core/tls-files.js';
+import { TlsCertificate } from '../../src/server/modules/tls/tls-certificate.js';
+import type { TlsCredentials } from '../../src/server/modules/tls/tls-files.js';
 import type { TestCertificate } from '../tls-test-certificate.js';
 import { createTestCertificate } from '../tls-test-certificate.js';
 

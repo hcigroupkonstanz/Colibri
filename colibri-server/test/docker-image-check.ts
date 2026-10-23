@@ -26,7 +26,7 @@ import * as path from 'node:path';
 import * as tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import { io } from 'socket.io-client';
-import { PROTOCOL_VERSION, REST_MEDIA_TYPE, encodeHandshakeFrame } from '../src/server/modules/networking/protocol.js';
+import { PROTOCOL_VERSION, REST_MEDIA_TYPE, encodeHandshakeFrame } from '../src/server/modules/protocol/protocol.js';
 import type { TestCertificate } from './tls-test-certificate.js';
 import { createTestCertificate } from './tls-test-certificate.js';
 

@@ -46,7 +46,7 @@ this is the server's full detail.
 ### Protocol version checking
 
 - **Both transports check the protocol version.** `PROTOCOL_VERSION` in
-  [`protocol.ts`](../../src/server/modules/networking/protocol.ts) is the single source of truth
+  [`protocol.ts`](../../src/server/modules/protocol/protocol.ts) is the single source of truth
   for the TCP handshake and the Socket.IO query. Until now the version was parsed, stored and
   logged, but compared against nothing, so a client built against the wrong protocol reconnected
   forever against a server that said nothing unusual.
@@ -280,7 +280,7 @@ this is the server's full detail.
 
 ### Hot-path performance
 
-- **`Payload` abstraction** (`modules/core/payload.ts`): holds whichever representation (string or
+- **`Payload` abstraction** (`modules/protocol/payload.ts`): holds whichever representation (string or
   parsed value) arrived and memoizes the other on first access, replacing the double
   `JSON.stringify`/`JSON.parse` round trip on every cross-transport message. Both `FIXME: terrible
   workaround` blocks in `socket-io-server.ts` are gone; web→web and TCP→TCP relaying now does zero

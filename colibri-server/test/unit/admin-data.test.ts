@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Subject } from 'rxjs';
-import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
-import type { NetworkClient, NetworkMessage } from '../../src/server/modules/networking/network.js';
-import { Payload } from '../../src/server/modules/core/payload.js';
+import { DataStore } from '../../src/server/modules/models/data-store.js';
+import type { NetworkClient, NetworkMessage } from '../../src/server/modules/protocol/network.js';
+import { Payload } from '../../src/server/modules/protocol/payload.js';
 import { RingBuffer } from '../../src/server/modules/core/ring-buffer.js';
-import type { ClientActivity } from '../../src/server/modules/networking/client-activity.js';
-import type { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
-import type { TCPServerProxy, TcpNetworkClient } from '../../src/server/modules/networking/tcp-server-proxy.js';
-import { ADMIN_CHANNEL, ADMIN_REFRESH_MILLIS, ADMIN_REQUEST_LIMIT, AdminData } from '../../src/server/modules/web/admin-data.js';
+import type { ClientActivity } from '../../src/server/modules/limits/client-activity.js';
+import type { SocketIoClient, SocketIOServer } from '../../src/server/modules/socket-io/socket-io-server.js';
+import type { TCPServerProxy, TcpNetworkClient } from '../../src/server/modules/tcp/tcp-server-proxy.js';
+import { ADMIN_CHANNEL, ADMIN_REFRESH_MILLIS, ADMIN_REQUEST_LIMIT, AdminData } from '../../src/server/modules/admin/admin-data.js';
 
 class FakeSocketIOServer {
     public readonly messagesSource = new Subject<NetworkMessage>();

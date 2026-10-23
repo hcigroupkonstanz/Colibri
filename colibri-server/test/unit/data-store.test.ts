@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DataStore, DEFAULT_TOMBSTONE_MILLIS, MAX_TOMBSTONES_PER_APP } from '../../src/server/modules/command-hooks/data-store.js';
+import { DataStore, DEFAULT_TOMBSTONE_MILLIS, MAX_TOMBSTONES_PER_APP } from '../../src/server/modules/models/data-store.js';
 
 describe('DataStore', () => {
     it('updateModel/getModel/getAll round-trip within a group+channel', () => {
