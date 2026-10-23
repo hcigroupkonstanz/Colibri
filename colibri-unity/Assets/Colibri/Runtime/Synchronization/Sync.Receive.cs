@@ -78,7 +78,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             Action<ReconnectRound> requestedAgain)
         {
             AddListener(channel, _modelUpdateListeners, listener, track: false, fetchId: fetchInitialStateId, requestedAgain: requestedAgain);
-            ForgetUnreadDelete(channel, fetchInitialStateId);
+            _unreadDeletes.Forget(channel, fetchInitialStateId);
             SendCommand(channel, "model::request", new JObject { { "id", fetchInitialStateId } });
         }
 

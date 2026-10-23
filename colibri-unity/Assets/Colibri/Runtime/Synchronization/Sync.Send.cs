@@ -30,7 +30,7 @@ namespace HCIKonstanz.Colibri.Synchronization
         public static void SendModelUpdate(string channel, JObject data) => SendCommand(channel, "model::update", data);
         public static void SendModelDelete(string channel, string id)
         {
-            NoteUnreadDelete(channel, id);
+            _unreadDeletes.Note(channel, id);
             SendCommand(channel, "model::delete", new JObject { { "id", id } });
         }
     }

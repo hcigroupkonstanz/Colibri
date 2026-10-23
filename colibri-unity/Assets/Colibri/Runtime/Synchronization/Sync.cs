@@ -33,6 +33,9 @@ namespace HCIKonstanz.Colibri.Synchronization
         private static readonly ListenerTable<JObject> _modelUpdateListeners = new ListenerTable<JObject>();
         private static readonly ListenerTable<JObject> _modelDeleteListeners = new ListenerTable<JObject>();
 
+        private static readonly UnreadDeletes _unreadDeletes = new UnreadDeletes();
+        private static readonly ServerHeardClock _heardClock = new ServerHeardClock();
+
         // Null while the application is quitting.
         private static WebServerConnection Connection()
         {
@@ -54,12 +57,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                     _reconnectRound = null;
                 }
                 EndAnswerRounds();
-                ForgetUnreadDeletes();
+                _unreadDeletes.ForgetAll();
 
                 // The heard-from state belongs to the replaced connection.
-                _heardStamps = 0;
-                _heardAt = double.NegativeInfinity;
-                _heardAtHeld = false;
+                _heardClock.ForgetConnection();
 
                 // Connected already if something else created the connection first (the [RemoteLogger], say):
                 // its OnConnected fired before this class subscribed.
@@ -132,64 +133,26 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             var madeAtTheDrop = LocallyDeletedModels.Since(LastHeardAt(now) - 1, now);
 
-            // Held until the requests go out again (see _heardAtHeld).
-            _heardAtHeld = true;
+            // Held until the requests go out again (see ServerHeardClock).
+            _heardClock.Hold();
 
             // From here until the answers are in, every delete sent counts as unread.
-            _unreadDeletes ??= new List<(string Channel, string Id)>();
+            _unreadDeletes.StartTracking();
             if (madeAtTheDrop != null)
             {
                 foreach (var (channel, id) in madeAtTheDrop)
-                    NoteUnreadDelete(channel, id);
+                    _unreadDeletes.Note(channel, id);
             }
 
             foreach (var (channel, id) in _unreadDeletes)
                 SendCommand(channel, "model::delete", new JObject { { "id", id } });
         }
 
-        // Deletes the server may not have read, oldest first: those sent again at an outage and every one sent
-        // since, until the answers to the requests made after the reconnect are in (see ReconnectRound). Null while
-        // none is in question. If the link drops again meanwhile they all go out again, however old: the
-        // LocallyDeletedModels window is a minute and an outage can last longer.
-        private static List<(string Channel, string Id)> _unreadDeletes;
-        private static readonly HashSet<(string Channel, string Id)> _unreadDeleteKeys = new HashSet<(string Channel, string Id)>();
-
-        private static void NoteUnreadDelete(string channel, string id)
-        {
-            if (_unreadDeletes != null && _unreadDeleteKeys.Add((channel, id)))
-                _unreadDeletes.Add((channel, id));
-        }
-
-        // The id is in use again (asked for afresh): sending its delete once more would remove the new object
-        // here and on every other client.
-        private static void ForgetUnreadDelete(string channel, string id)
-        {
-            if (_unreadDeletes != null && _unreadDeleteKeys.Remove((channel, id)))
-                _unreadDeletes.Remove((channel, id));
-        }
-
-        private static void ForgetUnreadDeletes()
-        {
-            _unreadDeletes = null;
-            _unreadDeleteKeys.Clear();
-        }
-
-        // When the server was last heard from (SyncTicker's clock), the connection's liveness stamp count then,
-        // and when LastHeardAt was last asked.
-        private static double _heardAt = double.NegativeInfinity;
-        private static long _heardStamps;
-        private static double _heardAskedAt = double.NegativeInfinity;
-
-        // Freezes LastHeardAt from an outage until the requests go out again. The next connection hears from the
-        // server a frame before those requests, and a value sent in that frame would count as sent after the server
-        // was last heard from, pushing out the values SentValues keeps for the answers.
-        private static bool _heardAtHeld;
-
         /// <summary>
         /// When the server was last heard from, on SyncTicker's clock, as of <paramref name="now"/>. Any received
         /// bytes count and the server heartbeats every 100 ms. Values sent after it may have gone into a dead link
         /// (see SentValues). <paramref name="now"/> without a connection, negative infinity before anything was
-        /// heard, held during an outage (see <see cref="_heardAtHeld"/>).
+        /// heard, held during an outage (see <see cref="ServerHeardClock"/>).
         /// </summary>
         internal static double LastHeardAt(double now)
         {
@@ -197,19 +160,10 @@ namespace HCIKonstanz.Colibri.Synchronization
             if (connection == null)
                 return now;
 
-            // Asked once a frame (SyncTicker). The age of the last heartbeat is taken off now, but not past the previous
-            // ask: the connection times heartbeats on the system clock, which is set now and then and runs on while a
-            // headset sleeps, so it need not follow Unity's clock. now alone is too late after a long frame, such as a
-            // synchronous scene load.
             var stamps = connection.LivenessStamps;
-            if (stamps != _heardStamps && !_heardAtHeld)
-            {
-                _heardStamps = stamps;
-                var heardAt = now - connection.MillisSinceLastHeartbeat() / 1000.0;
-                _heardAt = Math.Min(now, Math.Max(_heardAskedAt, heardAt));
-            }
-            _heardAskedAt = now;
-            return _heardAt;
+            if (_heardClock.TakesStamps(stamps))
+                _heardClock.Hear(now, stamps, connection.MillisSinceLastHeartbeat());
+            return _heardClock.LastHeardAt(now);
         }
 
         /// <summary>
@@ -348,7 +302,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             // Values sent from here on go out after the requests, so the answers cannot hold them: hearing from the
             // server counts again.
-            _heardAtHeld = false;
+            _heardClock.Release();
 
             if (toTell == null)
                 return;
@@ -381,7 +335,7 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             // The server has read everything queued ahead of the request, the resent deletes included. Later deletes are
             // resent only if made around when the server was last heard from (see OnDisconnected).
-            ForgetUnreadDeletes();
+            _unreadDeletes.ForgetAll();
         }
 
         // A payload that cannot be read as its command's type is reported and dropped rather than thrown, and a
@@ -605,13 +559,10 @@ namespace HCIKonstanz.Colibri.Synchronization
             // Outage and heard-from state of the previous session: its clock has run on since, and no object of this
             // session is in its rounds.
             _disconnectedAt = double.NegativeInfinity;
-            ForgetUnreadDeletes();
+            _unreadDeletes.ForgetAll();
             _reconnectRound = null;
             EndAnswerRounds();
-            _heardStamps = 0;
-            _heardAt = double.NegativeInfinity;
-            _heardAskedAt = double.NegativeInfinity;
-            _heardAtHeld = false;
+            _heardClock.Reset();
 
             _withoutServerSince = double.NaN;
             _hasWarnedAboutNoServer = false;
