@@ -173,7 +173,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             var id = data["id"].Value<string>();
             if (IsKnownOrSuppressed(id, out var anchorId))
                 return;
-            if (TryWakeDormant(id, data))
+            if (HandledAsDormant(id, data))
                 return;
             if (!CanBuild(id, anchorId))
                 return;
@@ -202,7 +202,7 @@ namespace HCIKonstanz.Colibri.Synchronization
             return anchorId != null && (SyncedIds.IsLive(anchorId) || _dormantObjects.ContainsKey(anchorId));
         }
 
-        private bool TryWakeDormant(string id, JObject data)
+        private bool HandledAsDormant(string id, JObject data)
         {
             // A placed object that is inactive here. A remote update with active: true (SyncTransform) switches it
             // on, if its parent is active, and applies. Any other update is dropped: it requests its state on waking.

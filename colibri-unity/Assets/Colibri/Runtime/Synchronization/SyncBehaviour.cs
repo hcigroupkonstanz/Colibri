@@ -141,9 +141,23 @@ namespace HCIKonstanz.Colibri.Synchronization
                 return;
             }
 
+            var madeHere = _hasMadeItsId;
+            LeaveRegisteredModel(madeHere);
+            ResetForNewId(madeHere);
+
+            _registeredId = Id;
+            _registeredModelId = ModelId;
+            SyncedIds.Register(Id);
+            LocallyDeletedModels.Forget(Channel, Id);
+            Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, _resync.OnRequestedAgain);
+            Sync.AddModelDeleteListener(Channel, OnModelDelete);
+            ModelCreated?.Invoke(this);
+        }
+
+        private void LeaveRegisteredModel(bool madeHere)
+        {
             var oldId = _registeredId;
             var oldChannel = ChannelOf(_registeredModelId);
-            var madeHere = _hasMadeItsId;
 
             Sync.RemoveModelUpdateListener(oldChannel, OnModelUpdate);
             Sync.RemoveModelDeleteListener(oldChannel, OnModelDelete);
@@ -155,7 +169,10 @@ namespace HCIKonstanz.Colibri.Synchronization
                 LocallyDeletedModels.Remember(oldChannel, oldId);
                 Sync.SendModelDelete(oldChannel, oldId);
             }
+        }
 
+        private void ResetForNewId(bool madeHere)
+        {
             // Starts afresh under the new Id: nothing sent or received under the old one applies, and the
             // values latched below are what the first answer is compared with.
             _nextUpdate = null;
@@ -170,14 +187,6 @@ namespace HCIKonstanz.Colibri.Synchronization
             var self = this as T;
             for (var i = 0; i < _trackers.Length; i++)
                 _trackers[i].Latch(self);
-
-            _registeredId = Id;
-            _registeredModelId = ModelId;
-            SyncedIds.Register(Id);
-            LocallyDeletedModels.Forget(Channel, Id);
-            Sync.AddModelUpdateListener(Channel, OnModelUpdate, Id, _resync.OnRequestedAgain);
-            Sync.AddModelDeleteListener(Channel, OnModelDelete);
-            ModelCreated?.Invoke(this);
         }
 
         /// <summary>
@@ -268,6 +277,11 @@ namespace HCIKonstanz.Colibri.Synchronization
 
             ModelCreated?.Invoke(this);
 
+            WarnWithoutManager();
+        }
+
+        private void WarnWithoutManager()
+        {
             // check if the scene contains a matching manager
             var hasManager = UnityCompat.FindAll<SyncBehaviourManager<T>>()
                 .Where(m => m.Template?.ModelId == ModelId || (String.IsNullOrEmpty(m.Template?.ModelId) && String.IsNullOrEmpty(ModelId)))
