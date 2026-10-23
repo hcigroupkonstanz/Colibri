@@ -1,8 +1,8 @@
-import { RingBuffer } from '../../core/ring-buffer.js';
 import type { ClientActivity, LoadLimit, RateSample } from '../../limits/client-activity.js';
 import type { NetworkClient } from '../../protocol/network.js';
 import type { SocketIoClient } from '../../socket-io/socket-io-server.js';
 import type { TcpNetworkClient } from '../../tcp/tcp-server-proxy.js';
+import { latencySamples } from './latency-samples.js';
 import { median } from './median.js';
 import { clip, truncatedFlag } from './name-length.js';
 import { ADMIN_APP } from './server-snapshot.js';
@@ -72,15 +72,7 @@ export interface ClientSources {
 
 // The median of the client's latency samples (see MeasureLatency) from the last second.
 export const recentLatency = function (client: NetworkClient, now: number): number | null {
-    const samples = client.metadata['latency'];
-    if (!(samples instanceof RingBuffer)) return null;
-
-    const recent: number[] = [];
-    for (let i = samples.length - 1; i >= 0; i--) {
-        const sample = samples.at(i) as [number, number] | undefined;
-        if (!sample || sample[0] < now - LATENCY_WINDOW_MILLIS) break;
-        recent.push(sample[1]);
-    }
+    const recent = latencySamples(client, now - LATENCY_WINDOW_MILLIS, Infinity).map(sample => sample[1]);
     return recent.length === 0 ? null : median(recent);
 };
 
