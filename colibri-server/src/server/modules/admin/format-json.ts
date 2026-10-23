@@ -26,72 +26,83 @@ const prepare = function (value: unknown, key: string | number): unknown {
     return prepared;
 };
 
+// Each write method returns true once maxLength is passed; callers then stop.
+class JsonWriter {
+    public readonly parts: string[] = [];
+    private length = 0;
+    private readonly newlines: string[] = [];
+
+    public constructor(private readonly maxLength: number) {}
+
+    private newline(depth: number): string {
+        return (this.newlines[depth] ??= '\n' + '  '.repeat(depth));
+    }
+
+    private write(text: string): boolean {
+        this.parts.push(text);
+        this.length += text.length;
+        return this.length > this.maxLength;
+    }
+
+    // Escape only the part that can fit: the escaped prefix of a string is a prefix of the escaped string.
+    private writeString(text: string): boolean {
+        const left = this.maxLength - this.length;
+        return this.write(JSON.stringify(text.length > left ? text.slice(0, left + 1) : text));
+    }
+
+    public writeValue(item: unknown, depth: number): boolean {
+        if (typeof item === 'string') return this.writeString(item);
+        // Same output as JSON.stringify, without the call.
+        if (typeof item === 'number') return this.write(Number.isFinite(item) ? String(item) : 'null');
+        if (item === null || typeof item !== 'object') return this.write(JSON.stringify(item) ?? 'null');
+        return Array.isArray(item) ? this.writeArray(item, depth) : this.writeObject(item, depth);
+    }
+
+    private writeArray(item: unknown[], depth: number): boolean {
+        if (item.length === 0) return this.write('[]');
+        if (this.write('[')) return true;
+        const separator = ',' + this.newline(depth + 1);
+        for (let i = 0; i < item.length;) {
+            const before = i > 0 ? separator : this.newline(depth + 1);
+            // A run of scalars goes through one JSON.stringify call, which is faster than element
+            // by element, one per line. Their text holds no comma, so replacing commas is safe.
+            let end = i;
+            while (end < item.length && end - i < SCALAR_RUN && isScalar(item[end])) end++;
+            if (end > i) {
+                if (this.write(before + JSON.stringify(item.slice(i, end)).slice(1, -1).replace(/,/g, separator))) return true;
+                i = end;
+                continue;
+            }
+            const element = prepare(item[i], i);
+            if (this.write(before) || (isSkipped(element) ? this.write('null') : this.writeValue(element, depth + 1))) return true;
+            i += 1;
+        }
+        return this.write(this.newline(depth) + ']');
+    }
+
+    private writeObject(item: object, depth: number): boolean {
+        if (this.write('{')) return true;
+        let empty = true;
+        for (const key of Object.keys(item)) {
+            const field = prepare((item as Record<string, unknown>)[key], key);
+            if (isSkipped(field)) continue;
+            if (this.write((empty ? '' : ',') + this.newline(depth + 1)) || this.writeString(key) || this.write(': ') || this.writeValue(field, depth + 1)) return true;
+            empty = false;
+        }
+        return this.write(empty ? '}' : this.newline(depth) + '}');
+    }
+}
+
 /**
  * JSON.stringify(value, null, 2) cut to maxLength characters. Stops writing once past maxLength, so
  * the cost depends on maxLength, not on the value. A value that contains itself is cut instead of
  * throwing.
  */
 export const formatJson = function (value: unknown, maxLength: number): FormattedJson {
-    const parts: string[] = [];
-    let length = 0;
-    const newlines: string[] = [];
-    const newline = (depth: number): string => (newlines[depth] ??= '\n' + '  '.repeat(depth));
-
-    // Each writer returns true once maxLength is passed; callers then stop.
-    const write = (text: string): boolean => {
-        parts.push(text);
-        length += text.length;
-        return length > maxLength;
-    };
-
-    // Escape only the part that can fit: the escaped prefix of a string is a prefix of the escaped string.
-    const writeString = (text: string): boolean => {
-        const left = maxLength - length;
-        return write(JSON.stringify(text.length > left ? text.slice(0, left + 1) : text));
-    };
-
-    const writeValue = (item: unknown, depth: number): boolean => {
-        if (typeof item === 'string') return writeString(item);
-        // Same output as JSON.stringify, without the call.
-        if (typeof item === 'number') return write(Number.isFinite(item) ? String(item) : 'null');
-        if (item === null || typeof item !== 'object') return write(JSON.stringify(item) ?? 'null');
-
-        if (Array.isArray(item)) {
-            if (item.length === 0) return write('[]');
-            if (write('[')) return true;
-            const separator = ',' + newline(depth + 1);
-            for (let i = 0; i < item.length;) {
-                const before = i > 0 ? separator : newline(depth + 1);
-                // A run of scalars goes through one JSON.stringify call, which is faster than element
-                // by element, one per line. Their text holds no comma, so replacing commas is safe.
-                let end = i;
-                while (end < item.length && end - i < SCALAR_RUN && isScalar(item[end])) end++;
-                if (end > i) {
-                    if (write(before + JSON.stringify(item.slice(i, end)).slice(1, -1).replace(/,/g, separator))) return true;
-                    i = end;
-                    continue;
-                }
-                const element = prepare(item[i], i);
-                if (write(before) || (isSkipped(element) ? write('null') : writeValue(element, depth + 1))) return true;
-                i += 1;
-            }
-            return write(newline(depth) + ']');
-        }
-
-        if (write('{')) return true;
-        let empty = true;
-        for (const key of Object.keys(item)) {
-            const field = prepare((item as Record<string, unknown>)[key], key);
-            if (isSkipped(field)) continue;
-            if (write((empty ? '' : ',') + newline(depth + 1)) || writeString(key) || write(': ') || writeValue(field, depth + 1)) return true;
-            empty = false;
-        }
-        return write(empty ? '}' : newline(depth) + '}');
-    };
-
+    const writer = new JsonWriter(maxLength);
     const root = prepare(value, '');
-    if (!isSkipped(root)) writeValue(root, 0);
+    if (!isSkipped(root)) writer.writeValue(root, 0);
 
-    const json = parts.join('');
+    const json = writer.parts.join('');
     return json.length > maxLength ? { json: json.slice(0, maxLength), truncated: true } : { json, truncated: false };
 };
