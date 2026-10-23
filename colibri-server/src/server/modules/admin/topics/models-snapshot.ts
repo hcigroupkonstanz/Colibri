@@ -86,26 +86,19 @@ export interface ModelsSnapshot {
     tombstoneSeconds: number;
 }
 
-export const modelsSnapshot = function (store: DataStore, query: ModelsQuery, measures = new ModelMeasures()): ModelsSnapshot {
-    const now = Date.now();
-    const performanceNow = performance.now();
-    const filter = query.filter.toLowerCase();
-    const matchesName = (name: string) => filter === '' || name.toLowerCase().includes(filter);
-    const inScope = (app: string, channel: string) =>
-        (query.app === '' || app === query.app) && (query.channel === '' || channel === query.channel);
+// What both passes of modelsSnapshot share.
+interface SnapshotScope {
+    store: DataStore;
+    query: ModelsQuery;
+    matchesName(name: string): boolean;
+    inScope(app: string, channel: string): boolean;
+    // The overview's entry for an app and channel, created on first use: the order of creation is the
+    // order of `channels` in the snapshot.
+    summaryOf(app: string, channel: string): ChannelSummary;
+}
 
-    // The overview: model counts, then tombstone counts, per app and channel.
-    const summaries = new Map<string, ChannelSummary>();
-    const summaryOf = (app: string, channel: string): ChannelSummary => {
-        const key = `${app}\u0000${channel}`;
-        let summary = summaries.get(key);
-        if (!summary) {
-            summary = { app: clip(app), channel: clip(channel), models: 0, deleted: 0, ...truncatedFlag(app, channel) };
-            summaries.set(key, summary);
-        }
-        return summary;
-    };
-
+const modelPass = function (scope: SnapshotScope, measures: ModelMeasures, performanceNow: number): { models: ModelRow[]; total: number } {
+    const { store, query, matchesName, inScope, summaryOf } = scope;
     const models: ModelRow[] = [];
     let total = 0;
     for (const { app, channel, models: entries } of store.channels()) {
@@ -129,7 +122,11 @@ export const modelsSnapshot = function (store: DataStore, query: ModelsQuery, me
             });
         }
     }
+    return { models, total };
+};
 
+const tombstonePass = function (scope: SnapshotScope, now: number, performanceNow: number): { deleted: DeletedRow[]; deletedTotal: number } {
+    const { store, matchesName, inScope, summaryOf } = scope;
     // Each app's come oldest first: its newest MAX_DELETED are candidates for the newest overall.
     const candidates: [string, Readonly<Tombstone>][] = [];
     let deletedTotal = 0;
@@ -157,6 +154,34 @@ export const modelsSnapshot = function (store: DataStore, query: ModelsQuery, me
             deletedAt: wallClock(tombstone.deletedAt, now, performanceNow),
             ...truncatedFlag(app, tombstone.channel, tombstone.id),
         }));
+    return { deleted, deletedTotal };
+};
+
+export const modelsSnapshot = function (store: DataStore, query: ModelsQuery, measures = new ModelMeasures()): ModelsSnapshot {
+    const now = Date.now();
+    const performanceNow = performance.now();
+    const filter = query.filter.toLowerCase();
+
+    // The overview: model counts, then tombstone counts, per app and channel.
+    const summaries = new Map<string, ChannelSummary>();
+    const scope: SnapshotScope = {
+        store,
+        query,
+        matchesName: name => filter === '' || name.toLowerCase().includes(filter),
+        inScope: (app, channel) => (query.app === '' || app === query.app) && (query.channel === '' || channel === query.channel),
+        summaryOf: (app, channel) => {
+            const key = `${app}\u0000${channel}`;
+            let summary = summaries.get(key);
+            if (!summary) {
+                summary = { app: clip(app), channel: clip(channel), models: 0, deleted: 0, ...truncatedFlag(app, channel) };
+                summaries.set(key, summary);
+            }
+            return summary;
+        },
+    };
+
+    const { models, total } = modelPass(scope, measures, performanceNow);
+    const { deleted, deletedTotal } = tombstonePass(scope, now, performanceNow);
 
     const channels = Array.from(summaries.values()).filter(summary => summary.models > 0 || summary.deleted > 0);
     return {
