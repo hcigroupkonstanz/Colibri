@@ -424,41 +424,11 @@ namespace HCIKonstanz.Colibri.Networking
 
             var canDrop = ModelCommands.IsDroppable(command);
             if (!canDrop)
-                StopFolding(channel, payload);
+                ModelCommands.EndFolds(_queuedModelUpdates, channel, payload);
 
             _outbox.AddLast(new Outgoing { Frame = frame, Sent = sent, CanDrop = canDrop });
             if (canDrop)
                 _droppableCount++;
-        }
-
-        // Under _outboxLock, for a model command that is not folded (an awaited update, a request, a
-        // delete). A folded update goes to the back, so the update queued for an object may absorb later
-        // ones only while nothing else about it is queued behind: otherwise its older values would
-        // overtake a newer update, arrive after a delete and revive the object, or miss a request the
-        // server then answers without them.
-        private void StopFolding(string channel, JToken payload)
-        {
-            if (ModelCommands.TryGetModelId(payload, out _, out var id))
-            {
-                _queuedModelUpdates.Remove((channel, id));
-                return;
-            }
-
-            // No id: a request for the whole channel, which is about every object on it. (A
-            // malformed update or delete ends up here too; ending more folds than needed only
-            // costs queue space.)
-            List<(string Channel, string Id)> onChannel = null;
-            foreach (var key in _queuedModelUpdates.Keys)
-            {
-                if (key.Channel == channel)
-                    (onChannel ??= new List<(string Channel, string Id)>()).Add(key);
-            }
-
-            if (onChannel != null)
-            {
-                foreach (var key in onChannel)
-                    _queuedModelUpdates.Remove(key);
-            }
         }
 
         /// <summary>

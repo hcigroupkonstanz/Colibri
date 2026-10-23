@@ -89,9 +89,9 @@ namespace HCIKonstanz.Colibri.Networking
                 else
                 {
                     // A delete, or a bare { id } that answers a request, ends the fold for its object: an older update
-                    // folded past it would arrive after it. StopFolding is the outbox's counterpart.
+                    // folded past it would arrive after it. The outbox ends folds the same way.
                     if (_isReceivedBacklog && !canDrop)
-                        StopFoldingReceived(channel, payload);
+                        ModelCommands.EndFolds(_queuedReceivedUpdates, channel, payload);
 
                     _queuedCommands.AddLast(new InPacket { Channel = channel, Command = command, Payload = payload, CanDrop = canDrop });
                     if (canDrop)
@@ -100,30 +100,6 @@ namespace HCIKonstanz.Colibri.Networking
 
                 while (_queuedCommands.Count > MAX_RECEIVED_MESSAGES)
                     DropOldestReceived();
-            }
-        }
-
-        // Under _queuedCommandsLock.
-        private void StopFoldingReceived(string channel, JToken payload)
-        {
-            if (ModelCommands.TryGetModelId(payload, out _, out var id))
-            {
-                _queuedReceivedUpdates.Remove((channel, id));
-                return;
-            }
-
-            // No id: about every object on the channel, as far as anyone can tell.
-            List<(string Channel, string Id)> onChannel = null;
-            foreach (var key in _queuedReceivedUpdates.Keys)
-            {
-                if (key.Channel == channel)
-                    (onChannel ??= new List<(string Channel, string Id)>()).Add(key);
-            }
-
-            if (onChannel != null)
-            {
-                foreach (var key in onChannel)
-                    _queuedReceivedUpdates.Remove(key);
             }
         }
 
