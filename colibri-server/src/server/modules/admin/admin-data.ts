@@ -14,23 +14,15 @@ import type { SocketIoClient, SocketIOServer } from '../socket-io/socket-io-serv
 import type { TCPServerProxy } from '../tcp/tcp-server-proxy.js';
 import { CLIENT_ACTIVITY_TIMEOUT_MILLIS } from '../tcp/tcp-server-proxy.js';
 import type { ClientActivity } from '../limits/client-activity.js';
-import type {
-    ModelQuery,
-    ModelsQuery,
-    ServerSettings,
-    VoiceStatus,
-} from './admin-topics.js';
-import {
-    ADMIN_APP,
-    clientsSnapshot,
-    latencySnapshot,
-    modelSnapshot,
-    modelsSnapshot,
-    parseModelQuery,
-    parseModelsQuery,
-    serverSnapshot,
-} from './admin-topics.js';
 import { ModelMeasures } from './model-measures.js';
+import { clientsSnapshot } from './topics/clients-snapshot.js';
+import { latencySnapshot } from './topics/latency-snapshot.js';
+import type { ModelQuery } from './topics/model-snapshot.js';
+import { modelSnapshot, parseModelQuery } from './topics/model-snapshot.js';
+import type { ModelsQuery } from './topics/models-snapshot.js';
+import { modelsSnapshot, parseModelsQuery } from './topics/models-snapshot.js';
+import type { ServerSettings, VoiceStatus } from './topics/server-snapshot.js';
+import { ADMIN_APP, serverSnapshot } from './topics/server-snapshot.js';
 
 // The channel the admin UI's pages ask for read-only server data on, and get it on. See
 // docs/dev/protocol.md, Admin UI channel.
@@ -123,6 +115,9 @@ const isBackedUp = function (page: AdminPage): boolean {
  * disconnects; the latency history only once); a subscribed topic is sent again every
  * ADMIN_REFRESH_MILLIS. Nothing is computed, and nothing asked of the TCP worker, while no page has
  * subscribed. Only clients of the app 'colibri' are answered.
+ *
+ * Every snapshot is bounded in size, however much the store holds: a page of models, not the store;
+ * a model's JSON up to a limit; names cut to a length.
  *
  * Read only by design: Colibri has no authentication, so whatever a page can do through this
  * channel, anyone who can reach the server can do.
