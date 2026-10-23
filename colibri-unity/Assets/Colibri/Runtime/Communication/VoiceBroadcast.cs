@@ -154,6 +154,30 @@ namespace HCIKonstanz.Colibri.Communication
             return null;
         }
 
+        private void LogRecordingDevices(string[] recordingDevices)
+        {
+            if (Debugging)
+            {
+                for (int i = 0; i < recordingDevices.Length; i++)
+                {
+                    Debug.Log(DEBUG_HEADER + "Recording device found: " + recordingDevices[i] + " ID: " + i);
+                }
+                Debug.Log(DEBUG_HEADER + "Using recording device: " + (microphoneDevice ?? "the default one"));
+            }
+        }
+
+        private void ApplyFrameSize()
+        {
+            // Frames are cut after resampling, so they count samples at the server's rate, not the microphone's.
+            frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, FrameSizeMilliseconds);
+            if (frameSize < 1 || frameSize > VoiceFramer.MaxFrameSamples)
+            {
+                Debug.LogError(DEBUG_HEADER + "Frame Size Milliseconds " + FrameSizeMilliseconds + " makes frames of " + frameSize + " samples at " + serverSamplingRate + " Hz, which a voice packet cannot carry. Using 20 ms.");
+                frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, 20);
+            }
+            if (Debugging) Debug.Log(DEBUG_HEADER + "Frame size: " + FrameSizeMilliseconds + " ms, " + frameSize + " samples");
+        }
+
         private void InitBroadcast()
         {
 #if UNITY_ANDROID
@@ -174,14 +198,7 @@ namespace HCIKonstanz.Colibri.Communication
                 return;
             }
             microphoneDevice = ChooseMicrophone(recordingDevices);
-            if (Debugging)
-            {
-                for (int i = 0; i < recordingDevices.Length; i++)
-                {
-                    Debug.Log(DEBUG_HEADER + "Recording device found: " + recordingDevices[i] + " ID: " + i);
-                }
-                Debug.Log(DEBUG_HEADER + "Using recording device: " + (microphoneDevice ?? "the default one"));
-            }
+            LogRecordingDevices(recordingDevices);
 
             // Get supported sampling rates of the selected recording device
             int minSupportedSamplingRate;
@@ -194,14 +211,7 @@ namespace HCIKonstanz.Colibri.Communication
             if (Debugging) Debug.Log(DEBUG_HEADER + "Use sampling rate: " + microphoneSamplingRate);
 
             // Calculate package size based on requested frame size (milliseconds)
-            // Frames are cut after resampling, so they count samples at the server's rate, not the microphone's.
-            frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, FrameSizeMilliseconds);
-            if (frameSize < 1 || frameSize > VoiceFramer.MaxFrameSamples)
-            {
-                Debug.LogError(DEBUG_HEADER + "Frame Size Milliseconds " + FrameSizeMilliseconds + " makes frames of " + frameSize + " samples at " + serverSamplingRate + " Hz, which a voice packet cannot carry. Using 20 ms.");
-                frameSize = VoiceFramer.FrameSampleCount(serverSamplingRate, 20);
-            }
-            if (Debugging) Debug.Log(DEBUG_HEADER + "Frame size: " + FrameSizeMilliseconds + " ms, " + frameSize + " samples");
+            ApplyFrameSize();
 
             // Init server connection
             voiceServerConnection = VoiceServerConnection.Instance;
