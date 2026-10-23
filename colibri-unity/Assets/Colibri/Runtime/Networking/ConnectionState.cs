@@ -5,6 +5,10 @@ using System.Threading.Tasks;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// The connection status with the <c>await Connected</c> gate and the connect and disconnect events that follow
+    /// it. The connection loop and the watchdog in Update both change it, so transitions run under <c>_statusLock</c>.
+    /// </summary>
     internal sealed class ConnectionState
     {
         internal const int RECONNECT_DELAY_MIN_MS = 500;

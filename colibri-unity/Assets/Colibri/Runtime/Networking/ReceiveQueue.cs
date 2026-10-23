@@ -5,6 +5,10 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// Carries received messages from the receive loop to the main thread, where Update takes them.
+    /// <c>_queuedCommandsLock</c> guards the queue and its backlog counters.
+    /// </summary>
     internal sealed class ReceiveQueue
     {
         // Received messages waiting for Update past which model updates are folded per object, newer fields

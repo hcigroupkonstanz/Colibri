@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>A received message waiting in the <see cref="ReceiveQueue"/> for delivery on the main thread.</summary>
     internal struct InPacket
     {
         public string Channel;

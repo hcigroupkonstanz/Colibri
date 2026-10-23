@@ -7,6 +7,10 @@ using HCIKonstanz.Colibri.Networking.Protocol;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// Writes frames to a session's socket one at a time under <c>_sendLock</c>: the handshake and the outbox
+    /// drainer's messages, and the receive loop's heartbeat echoes, which never wait for the lock.
+    /// </summary>
     internal sealed class FrameWriter
     {
         // Serializes every socket write, outbox messages and heartbeat echoes alike: concurrent writes would

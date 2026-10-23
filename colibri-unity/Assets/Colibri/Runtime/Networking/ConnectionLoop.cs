@@ -4,6 +4,10 @@ using System.Threading.Tasks;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// State of one run of the connection loop: its lifetime token, socket and session flags, set on the loop's
+    /// thread and read by the watchdog in Update and by OnDisable.
+    /// </summary>
     // One run of the connection loop, from the OnEnable that starts it to the OnDisable that ends it.
     // A disable and enable in one frame start the next run while the last still unwinds on a worker
     // thread, so a run keeps its own socket and watchdog here. The state the component shares (Status,

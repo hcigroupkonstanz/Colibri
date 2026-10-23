@@ -5,6 +5,11 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// What the connection reports about itself: log hints for a missing config, a protocol mismatch and TLS
+    /// failures, and the values the Status window shows. Mostly connection loop only; what the main thread reads
+    /// is volatile, so there is no lock.
+    /// </summary>
     internal sealed class ConnectionDiagnostics
     {
         // A server on another framing cannot decode our frames and cannot send the explicit refusal, so the

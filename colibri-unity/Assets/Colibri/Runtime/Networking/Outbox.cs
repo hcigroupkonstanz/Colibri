@@ -8,6 +8,10 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// Queues every outgoing message and writes it to the current session in send order. Senders on any thread,
+    /// the drainer on the thread pool and the connection loop share it under <c>_outboxLock</c>.
+    /// </summary>
     internal sealed class Outbox
     {
         // Cap on broadcasts and other messages that are not model state waiting for the connection. The oldest
