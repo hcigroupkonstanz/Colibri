@@ -106,16 +106,7 @@ namespace HCIKonstanz.Colibri.Setup
             }
 
             var status = connection.Status;
-            var previous = GUI.contentColor;
-            GUI.contentColor = StatusColor(status);
-            Row("Status", status.ToString());
-            GUI.contentColor = previous;
-
-            Row("Server", $"{connection.ServerAddress}:{connection.TcpPort}{(connection.UsesTls ? "  TLS" : "")}");
-            Row("App Name", string.IsNullOrEmpty(connection.AppName) ? "(not set)" : connection.AppName);
-            Row("Protocol", status == ConnectionStatus.ProtocolMismatch
-                ? $"v{WebServerConnection.ClientVersion} (binary TCP), server speaks v{connection.ServerVersion ?? "unknown"}"
-                : $"v{WebServerConnection.ClientVersion} (binary TCP)");
+            DrawConnectionRows(connection, status);
 
             if (status == ConnectionStatus.ProtocolMismatch)
             {
@@ -129,19 +120,42 @@ namespace HCIKonstanz.Colibri.Setup
             }
 
             if (status == ConnectionStatus.Connected)
-            {
-                // Not latency: the heartbeat carries the server's clock, so no round trip can be
-                // derived from it. It does show whether the server is still talking to us.
-                var gap = TrackHeartbeatGap(connection.MillisSinceLastHeartbeat());
-                Row("Heartbeat",
-                    gap < HeartbeatConcernMillis
-                        ? "OK"
-                        : $"missing for {gap / 1000f:0.0} s, about to drop the connection");
+                DrawConnected(connection);
+            else
+                DrawNotConnected(connection);
+        }
 
-                DrawCertificate(connection);
-                DrawDeliveryRate(connection);
-            }
-            else if (!string.IsNullOrEmpty(connection.SuspectedProtocolMismatch))
+        private static void DrawConnectionRows(WebServerConnection connection, ConnectionStatus status)
+        {
+            var previous = GUI.contentColor;
+            GUI.contentColor = StatusColor(status);
+            Row("Status", status.ToString());
+            GUI.contentColor = previous;
+
+            Row("Server", $"{connection.ServerAddress}:{connection.TcpPort}{(connection.UsesTls ? "  TLS" : "")}");
+            Row("App Name", string.IsNullOrEmpty(connection.AppName) ? "(not set)" : connection.AppName);
+            Row("Protocol", status == ConnectionStatus.ProtocolMismatch
+                ? $"v{WebServerConnection.ClientVersion} (binary TCP), server speaks v{connection.ServerVersion ?? "unknown"}"
+                : $"v{WebServerConnection.ClientVersion} (binary TCP)");
+        }
+
+        private void DrawConnected(WebServerConnection connection)
+        {
+            // Not latency: the heartbeat carries the server's clock, so no round trip can be
+            // derived from it. It does show whether the server is still talking to us.
+            var gap = TrackHeartbeatGap(connection.MillisSinceLastHeartbeat());
+            Row("Heartbeat",
+                gap < HeartbeatConcernMillis
+                    ? "OK"
+                    : $"missing for {gap / 1000f:0.0} s, about to drop the connection");
+
+            DrawCertificate(connection);
+            DrawDeliveryRate(connection);
+        }
+
+        private static void DrawNotConnected(WebServerConnection connection)
+        {
+            if (!string.IsNullOrEmpty(connection.SuspectedProtocolMismatch))
             {
                 // Something answers on that port but does not speak this protocol, so "check that
                 // colibri-server is running" is the wrong advice.
