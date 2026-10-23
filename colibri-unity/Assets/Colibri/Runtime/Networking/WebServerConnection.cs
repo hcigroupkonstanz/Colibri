@@ -219,8 +219,8 @@ namespace HCIKonstanz.Colibri.Networking
             // Whatever is still queued stays queued: re-enabling the component sends it.
             _outbox.CloseOutbox();
 
-            // In this order: leaving Connected re-arms the gate, and an `await Connected` from now on would wait
-            // on that fresh task forever, since OnEnable replaces the gate rather than completing it.
+            // In this order: leaving Connected re-arms ConnectionState's gate, and an `await Connected` from now on would
+            // wait on that fresh task forever, since OnEnable replaces the gate rather than completing it.
             Status = ConnectionStatus.Disconnected;
             _state.CancelGate();
 
@@ -262,7 +262,7 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 else
                 {
-                    // Before the session loop sees the socket closed: see CountSessionWithoutAFrame.
+                    // Before the session loop sees the socket closed: see ConnectionDiagnostics.CountSessionWithoutAFrame.
                     loop.EndedSilent = true;
                     var config = _config;
                     Debug.Log($"Colibri: {config.ServerAddress}:{config.TcpPort} accepted the connection but has not sent anything in "
@@ -729,7 +729,7 @@ namespace HCIKonstanz.Colibri.Networking
                 case FrameType.Heartbeat:
                     // Echoed back verbatim: the u64 is the server's own monotonic clock reading and is never interpreted
                     // here. Since 2.0.0 this echo is the sole source of the server's TCP latency measurements. Not
-                    // awaited, see EchoHeartbeat.
+                    // awaited, see FrameWriter.EchoHeartbeat.
                     _frameWriter.EchoHeartbeat(session, frame.PingTimestamp);
                     break;
 

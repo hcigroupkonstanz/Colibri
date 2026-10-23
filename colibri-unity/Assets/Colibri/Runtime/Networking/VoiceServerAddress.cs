@@ -6,6 +6,10 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// Chooses the address voice is sent to and opens the UDP socket for it. Main thread only, except
+    /// <see cref="AnyAddress"/>, which the receive thread also calls.
+    /// </summary>
     internal static class VoiceServerAddress
     {
         /// <summary>

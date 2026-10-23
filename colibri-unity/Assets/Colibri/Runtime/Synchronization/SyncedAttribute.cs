@@ -2,7 +2,10 @@ using System;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
-    // Attribute metadata, built once per type. Typed throughout, so the change comparison never boxes.
+    /// <summary>
+    /// Metadata of one [Sync] member of a model type, built once per type by <see cref="SyncMembers{T}"/>.
+    /// Typed throughout, so the change comparison never boxes.
+    /// </summary>
     internal abstract class SyncedAttribute<T>
         where T : SyncBehaviour<T>
     {

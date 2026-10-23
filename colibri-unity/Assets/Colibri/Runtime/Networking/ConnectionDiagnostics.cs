@@ -27,7 +27,7 @@ namespace HCIKonstanz.Colibri.Networking
         private string _reportedSanitizedApp;
 
         // Connection loop only: the TLS failure last logged as an error, so a server that keeps failing the
-        // same way says so once. Cleared by a connection and by OnEnable.
+        // same way says so once. Cleared by a connection and by WebServerConnection.OnEnable.
         private string _reportedTlsFailure;
 
         // Cleared by OnEnable: the warning about a certificate accepted only because self-signed ones are

@@ -5,15 +5,15 @@ using System.Threading.Tasks;
 namespace HCIKonstanz.Colibri.Networking
 {
     /// <summary>
-    /// State of one run of the connection loop: its lifetime token, socket and session flags, set on the loop's
-    /// thread and read by the watchdog in Update and by OnDisable.
+    /// One run of the connection loop of a <see cref="WebServerConnection"/>, from the OnEnable that starts it to
+    /// the OnDisable that ends it. A disable and enable in one frame start the next run while the last still
+    /// unwinds on a worker thread, so a run keeps its own socket and watchdog here.
     /// </summary>
-    // One run of the connection loop, from the OnEnable that starts it to the OnDisable that ends it.
-    // A disable and enable in one frame start the next run while the last still unwinds on a worker
-    // thread, so a run keeps its own socket and watchdog here. The state the component shares (Status,
-    // the outbox, what is reported about the connection) a run changes only while its token is not
-    // cancelled, checked under the lock that guards it; OnDisable cancels the token before it sets all
-    // of that itself.
+    /// <remarks>
+    /// The state the component shares (<see cref="WebServerConnection.Status"/>, the outbox, what is reported about
+    /// the connection) a run changes only while its token is not cancelled, checked under the lock that guards it;
+    /// OnDisable cancels the token before it sets all of that itself.
+    /// </remarks>
     internal sealed class ConnectionLoop
     {
         public readonly CancellationTokenSource Lifetime = new CancellationTokenSource();
@@ -23,7 +23,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         // Socket of the attempt or session in progress, null between two. Closing it ends a session, TLS or
         // not. Set and cleared by the run, read by the watchdog in Update and by OnDisable; the send path
-        // uses _outboxSession.
+        // uses Outbox._outboxSession.
         public volatile Socket Socket;
 
         // Set when the TCP connection is accepted, cleared when the session ends or the watchdog fires.
@@ -40,7 +40,7 @@ namespace HCIKonstanz.Colibri.Networking
         public volatile bool DecodedAnyFrame;
 
         // Session-scoped: the watchdog dropped the session before the server sent a frame. Counts towards the
-        // unanswered-session hint, not the framing hint (see CountSessionWithoutAFrame).
+        // unanswered-session hint, not the framing hint (see ConnectionDiagnostics.CountSessionWithoutAFrame).
         public volatile bool EndedSilent;
 
         // Session-scoped: the watchdog closed the socket, connected or not, and has said why, so the read or

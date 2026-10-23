@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace HCIKonstanz.Colibri.Networking
 {
+    /// <summary>
+    /// Holds the received voice packets per sender between the receive thread, which enqueues them, and the
+    /// main thread, which takes them all each frame.
+    /// </summary>
     internal sealed class VoicePacketQueue
     {
         /// <summary>

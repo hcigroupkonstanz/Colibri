@@ -8,6 +8,10 @@ using Object = UnityEngine.Object;
 
 namespace HCIKonstanz.Colibri.Setup
 {
+    /// <summary>
+    /// The checks that Save makes on a <see cref="ColibriConfig"/>, and the copying of the settings that pass
+    /// them from the setup window to the configuration in use.
+    /// </summary>
     internal static class ConfigValidation
     {
         /// <summary>Every public serialized field of ColibriConfig, so one added later is copied too.</summary>

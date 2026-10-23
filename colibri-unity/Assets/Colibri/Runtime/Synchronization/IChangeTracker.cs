@@ -1,5 +1,9 @@
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>
+    /// Remembers the last value of one [Sync] member of one model instance and tells whether it has changed since.
+    /// Used from the main thread, by the poll of <see cref="SyncBehaviour{T}"/>.
+    /// </summary>
     internal interface IChangeTracker<T>
         where T : SyncBehaviour<T>
     {

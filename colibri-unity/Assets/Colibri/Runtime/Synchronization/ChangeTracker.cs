@@ -2,6 +2,10 @@ using System;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>
+    /// The <see cref="IChangeTracker{T}"/> of a member of type <typeparamref name="TValue"/>. Latches a copy of an
+    /// array or JObject value, which the application may change in place, and compares as on the wire.
+    /// </summary>
     internal sealed class ChangeTracker<T, TValue> : IChangeTracker<T>
         where T : SyncBehaviour<T>
     {

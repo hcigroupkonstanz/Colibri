@@ -95,7 +95,7 @@ namespace HCIKonstanz.Colibri.Networking
         {
             public byte[] Frame;
 
-            // Null for SendCommand, which nobody awaits.
+            // Null for WebServerConnection.SendCommand, which nobody awaits.
             public TaskCompletionSource<bool> Sent;
 
             // Whether the outage bound counts it, and the cap on the whole outbox drops it before any
@@ -111,7 +111,7 @@ namespace HCIKonstanz.Colibri.Networking
 
         /// <summary>
         /// Lets the outbox drain into this session. Called once it is Connected, with the token of the loop the
-        /// session belongs to: once OnDisable has ended that loop this does nothing.
+        /// session belongs to: once WebServerConnection.OnDisable has ended that loop this does nothing.
         /// </summary>
         internal void OpenOutbox(ServerSession session, CancellationToken token)
         {

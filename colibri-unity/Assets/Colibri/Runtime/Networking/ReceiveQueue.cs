@@ -6,7 +6,7 @@ using UnityEngine;
 namespace HCIKonstanz.Colibri.Networking
 {
     /// <summary>
-    /// Carries received messages from the receive loop to the main thread, where Update takes them.
+    /// Carries received messages from the receive loop to the main thread, where WebServerConnection.Update takes them.
     /// <c>_queuedCommandsLock</c> guards the queue and its backlog counters.
     /// </summary>
     internal sealed class ReceiveQueue
@@ -18,7 +18,7 @@ namespace HCIKonstanz.Colibri.Networking
         private const int RECEIVED_FOLDING_THRESHOLD = 1000;
 
         // Cap on all received messages waiting for Update, the backstop for RECEIVED_FOLDING_THRESHOLD as
-        // MAX_OUTBOX_MESSAGES is for the outbox. The oldest broadcasts and other non-model messages are
+        // Outbox.MAX_OUTBOX_MESSAGES is for the outbox. The oldest broadcasts and other non-model messages are
         // dropped first, then the oldest model messages.
         private const int MAX_RECEIVED_MESSAGES = 10000;
 
@@ -45,8 +45,9 @@ namespace HCIKonstanz.Colibri.Networking
         /// the outbox for the stretches Update does not run: past <see cref="RECEIVED_FOLDING_THRESHOLD"/>
         /// waiting messages a model::update is folded into the one queued for the same object, and past
         /// <see cref="MAX_RECEIVED_MESSAGES"/> the oldest messages are dropped, broadcasts first.
-        /// Does nothing once OnDisable has ended the connection loop that <paramref name="token"/> belongs
-        /// to: the next loop's messages may be queued by then, and this one would land behind them.
+        /// Does nothing once WebServerConnection.OnDisable has ended the connection loop that
+        /// <paramref name="token"/> belongs to: the next loop's messages may be queued by then, and this one would
+        /// land behind them.
         /// </summary>
         /// <remarks>
         /// Called from the receive loop. The queue owns <paramref name="payload"/> from here on: a fold writes

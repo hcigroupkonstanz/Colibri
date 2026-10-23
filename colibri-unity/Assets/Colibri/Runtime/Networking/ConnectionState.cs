@@ -7,7 +7,8 @@ namespace HCIKonstanz.Colibri.Networking
 {
     /// <summary>
     /// The connection status with the <c>await Connected</c> gate and the connect and disconnect events that follow
-    /// it. The connection loop and the watchdog in Update both change it, so transitions run under <c>_statusLock</c>.
+    /// it. The connection loop and the watchdog in WebServerConnection.Update both change it, so transitions run
+    /// under <c>_statusLock</c>.
     /// </summary>
     internal sealed class ConnectionState
     {
@@ -25,8 +26,8 @@ namespace HCIKonstanz.Colibri.Networking
         private volatile TaskCompletionSource<bool> _connectedGate = NewGate();
         private volatile bool _isGateOpen;
 
-        // OnConnected (true) and OnDisconnected (false) still to be raised on the main thread, in the order
-        // the transitions happened. Queued by Set under _statusLock.
+        // WebServerConnection.OnConnected (true) and OnDisconnected (false) still to be raised on the main thread, in
+        // the order the transitions happened. Queued by Set under _statusLock.
         private readonly ConcurrentQueue<bool> _connectionEvents = new ConcurrentQueue<bool>();
 
         private volatile ConnectionStatus _status = ConnectionStatus.Disconnected;
@@ -108,8 +109,8 @@ namespace HCIKonstanz.Colibri.Networking
 
         /// <summary>
         /// Sets <see cref="Status"/> for the connection loop that <paramref name="token"/> belongs to, unless
-        /// OnDisable has ended that loop: the status is then OnDisable's and the next loop's. Checked under the
-        /// lock Set takes, so OnDisable, which cancels the token before it sets Disconnected, has the
+        /// WebServerConnection.OnDisable has ended that loop: the status is then OnDisable's and the next loop's.
+        /// Checked under the lock Set takes, so OnDisable, which cancels the token before it sets Disconnected, has the
         /// last word.
         /// </summary>
         /// <returns>False if the loop has been ended.</returns>

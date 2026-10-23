@@ -2,6 +2,10 @@ using System;
 
 namespace HCIKonstanz.Colibri.Synchronization
 {
+    /// <summary>
+    /// A [Sync] member of type <typeparamref name="TValue"/>, with typed accessors, and the factory of its
+    /// <see cref="ChangeTracker{T,TValue}"/>.
+    /// </summary>
     internal sealed class SyncedAttribute<T, TValue> : SyncedAttribute<T>
         where T : SyncBehaviour<T>
     {
