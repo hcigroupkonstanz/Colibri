@@ -52,6 +52,7 @@ import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress
 import { RATE_WINDOW_MILLIS, TrafficMeter } from '../../limits/client-activity.js';
 import { toBuffer } from '../../protocol/to-buffer.js';
 import { readProxyHeader } from './proxy-protocol.js';
+import type { ProxyHeader } from './proxy-protocol.js';
 import { PEER_GONE_ERRORS, WRITE_CANCELLED_ERRORS, describeTlsFailure, errorCode, tcpSocketOf } from './socket-errors.js';
 import type { TrustProxy } from '../../net/trusted-proxies.js';
 import { compileTrustedProxies, trustNoProxy } from '../../net/trusted-proxies.js';
@@ -179,6 +180,45 @@ const NOTHING_READ = Buffer.alloc(0);
 // What a connection that was read from before it got to handleConnection or handleTlsPortConnection
 // gets there with: whatever followed its PROXY protocol header in the same read.
 type ConnectionHandler = (socket: net.Socket, alreadyRead: Buffer) => void;
+
+const NO_PROXY_HEADER_FIX =
+    'Turn on the PROXY protocol for this port in the proxy (nginx: proxy_protocol on; in its stream server). A ' +
+    'client that connects directly from an address in TRUSTED_PROXIES is refused like this too.';
+
+// What a connection with TCP_PROXY_PROTOCOL set comes to after its latest bytes: it waits for more,
+// is refused, or goes on to its ConnectionHandler with the header it starts with, if any.
+type ProxyHeaderDecision =
+    | { action: 'wait' }
+    | { action: 'refuse'; reason: string; fix?: string }
+    | { action: 'handle'; header: ProxyHeader | 'none' };
+
+const UNTRUSTED_PROXY_HEADER: ProxyHeaderDecision = {
+    action: 'refuse',
+    reason: 'it starts with a PROXY protocol header, but its address is not in TRUSTED_PROXIES',
+    fix: 'If it is the proxy in front of this server, add its address to TRUSTED_PROXIES.',
+};
+
+// A trusted proxy has to start with a valid header. Anyone else must not start with one, valid or
+// not, since only a proxy sends one.
+const decideOnProxyHeader = function (received: Buffer, trusted: boolean): ProxyHeaderDecision {
+    let header: ReturnType<typeof readProxyHeader>;
+    try {
+        header = readProxyHeader(received);
+    } catch (err) {
+        if (!trusted) return UNTRUSTED_PROXY_HEADER;
+        return { action: 'refuse', reason: `its PROXY protocol header is invalid: ${errorMessage(err)}` };
+    }
+    if (header === 'incomplete') return { action: 'wait' };
+    if (header === 'none' && trusted) {
+        return {
+            action: 'refuse',
+            reason: 'it is in TRUSTED_PROXIES and TCP_PROXY_PROTOCOL is true, but the connection does not start with a PROXY protocol header',
+            fix: NO_PROXY_HEADER_FIX,
+        };
+    }
+    if (header !== 'none' && !trusted) return UNTRUSTED_PROXY_HEADER;
+    return { action: 'handle', header };
+};
 
 type FrameOf<T extends FrameType> = Extract<DecodedFrame, { type: T }>;
 
@@ -476,9 +516,6 @@ export class TCPServerWorker extends WorkerService {
         const peer = normalizeAddress(socket.remoteAddress || 'UNDEFINED');
         const trusted = this.trustProxy(peer, 0);
         const seconds = this.proxyHeaderTimeoutMillis / 1000;
-        const noHeaderFix =
-            'Turn on the PROXY protocol for this port in the proxy (nginx: proxy_protocol on; in its stream server). A ' +
-            'client that connects directly from an address in TRUSTED_PROXIES is refused like this too.';
         this.proxyHeaderSockets.add(socket);
 
         let received: Buffer = NOTHING_READ;
@@ -493,61 +530,25 @@ export class TCPServerWorker extends WorkerService {
         };
         const onData = (chunk: Buffer) => {
             received = received.length === 0 ? chunk : Buffer.concat([received, chunk]);
-
-            let header: ReturnType<typeof readProxyHeader>;
-            try {
-                header = readProxyHeader(received);
-            } catch (err) {
-                stopReading();
-                const problem = errorMessage(err);
-                if (trusted) {
-                    this.refuseProxyConnection(socket, peer, `its PROXY protocol header is invalid: ${problem}`);
-                } else {
-                    this.refuseUntrustedProxyHeader(socket, peer);
-                }
-                return;
-            }
-            if (header === 'incomplete') return;
+            const decision = decideOnProxyHeader(received, trusted);
+            if (decision.action === 'wait') return;
 
             stopReading();
-            if (header === 'none' && trusted) {
-                this.refuseProxyConnection(
-                    socket,
-                    peer,
-                    'it is in TRUSTED_PROXIES and TCP_PROXY_PROTOCOL is true, but the connection does not start with a PROXY protocol header',
-                    noHeaderFix
-                );
+            if (decision.action === 'refuse') {
+                this.refuseProxyConnection(socket, peer, decision.reason, decision.fix);
                 return;
             }
-            if (header !== 'none' && !trusted) {
-                this.refuseUntrustedProxyHeader(socket, peer);
-                return;
-            }
-
             // In the same tick as `handle` adds its own listeners, so that nothing is missed in between.
             socket.off('error', onError);
-            if (header === 'none') {
-                handle(socket, received);
-                return;
+            if (decision.header !== 'none') {
+                this.throughProxy.add(socket);
+                if (decision.header.sourceAddress) this.proxiedAddresses.set(socket, decision.header.sourceAddress);
             }
-            this.throughProxy.add(socket);
-            if (header.sourceAddress) this.proxiedAddresses.set(socket, header.sourceAddress);
-            handle(socket, received.subarray(header.length));
+            handle(socket, decision.header === 'none' ? received : received.subarray(decision.header.length));
         };
         const timeout = setTimeout(() => {
             stopReading();
-            if (trusted) {
-                this.refuseProxyConnection(
-                    socket,
-                    peer,
-                    `it is in TRUSTED_PROXIES and TCP_PROXY_PROTOCOL is true, but it sent no complete PROXY protocol header within ${seconds} s`,
-                    noHeaderFix
-                );
-            } else {
-                const sent = received.length === 0 ? 'nothing' : `only ${received.length} byte(s)`;
-                this.logDebug(`Disconnecting ${peer}: it sent ${sent} within ${seconds} s of connecting`);
-                socket.destroy();
-            }
+            this.endProxyHeaderWait(socket, peer, trusted, seconds, received);
         }, this.proxyHeaderTimeoutMillis);
         timeout.unref();
 
@@ -556,13 +557,21 @@ export class TCPServerWorker extends WorkerService {
         socket.on('close', stopReading);
     }
 
-    private refuseUntrustedProxyHeader(socket: net.Socket, peer: string): void {
-        this.refuseProxyConnection(
-            socket,
-            peer,
-            'it starts with a PROXY protocol header, but its address is not in TRUSTED_PROXIES',
-            'If it is the proxy in front of this server, add its address to TRUSTED_PROXIES.'
-        );
+    // A connection that sent no complete PROXY protocol header in time, or, from a peer that is not a
+    // trusted proxy, too few of its first bytes to show that it sends none.
+    private endProxyHeaderWait(socket: net.Socket, peer: string, trusted: boolean, seconds: number, received: Buffer): void {
+        if (trusted) {
+            this.refuseProxyConnection(
+                socket,
+                peer,
+                `it is in TRUSTED_PROXIES and TCP_PROXY_PROTOCOL is true, but it sent no complete PROXY protocol header within ${seconds} s`,
+                NO_PROXY_HEADER_FIX
+            );
+        } else {
+            const sent = received.length === 0 ? 'nothing' : `only ${received.length} byte(s)`;
+            this.logDebug(`Disconnecting ${peer}: it sent ${sent} within ${seconds} s of connecting`);
+            socket.destroy();
+        }
     }
 
     // Logged like the other refusals: a warning at most once a minute per address, the rest at debug
