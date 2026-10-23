@@ -33,14 +33,9 @@ namespace HCIKonstanz.Colibri.Networking
         private const string COLIBRI_CHANNEL = "colibri";
         private const string PROTOCOL_REJECTED_COMMAND = "protocol::rejected";
 
-        // A server on another framing cannot decode our frames and cannot send the explicit refusal, so the
-        // only symptom is sessions failing before a frame is read. This many in a row log a hint instead of
-        // reconnecting silently; unanswered sessions count the same (see CountSessionWithoutAFrame).
-        private const int EARLY_FRAME_FAILURES_BEFORE_HINT = 3;
-
         // The server heartbeats every 100 ms, so this much silence means the connection is gone even if
         // the socket has not noticed.
-        private const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
+        internal const long HEARTBEAT_TIMEOUT_THRESHOLD_MS = 2000;
 
         private const int RECEIVE_BUFFER_SIZE = 64 * 1024;
 
@@ -122,26 +117,11 @@ namespace HCIKonstanz.Colibri.Networking
         // How many times the connection has become Connected; 2 or more in an OnConnected handler means a reconnect.
         internal int ConnectedSessions => _state.ConnectedSessions;
 
-        // Connection loop only.
-        private bool _hasReportedMissingConfig;
-        private string _reportedSanitizedApp;
-
-        // Connection loop only: the TLS failure last logged as an error, so a server that keeps failing the
-        // same way says so once. Cleared by a connection and by OnEnable.
-        private string _reportedTlsFailure;
-
-        // Cleared by OnEnable: the warning about a certificate accepted only because self-signed ones are
-        // allowed is logged once, not at every reconnect.
-        private volatile bool _hasWarnedAboutUntrustedCertificate;
+        private readonly ConnectionDiagnostics _diagnostics;
 
         // ColibriConfig.Load() goes through Resources.Load, which is main-thread only, so the connection loop
         // reads this snapshot (refreshed in OnEnable and Update).
         private volatile ConnectionConfig _config = ConnectionConfig.Empty;
-
-        // Set by each TLS handshake, for the Status window: the certificate the server presented and how it
-        // was accepted. Null until a TLS connection has been made.
-        private volatile string _presentedCertificateSha256;
-        private volatile string _certificateAcceptance;
 
         /// <summary>
         /// Completes when <see cref="Status"/> becomes <see cref="ConnectionStatus.Connected"/>, i.e. once the
@@ -171,16 +151,6 @@ namespace HCIKonstanz.Colibri.Networking
         internal int ReceiveThreadId => _receiveThreadId;
         private volatile int _receiveThreadId;
 
-        // Written by the receive loop off the main thread, read by the Editor status window and by user code
-        // on the main thread.
-        private volatile string _serverVersion;
-        private volatile string _protocolMismatchReason;
-
-        // Connection loop only (the receive loop is part of it), except for the test accessor.
-        private int _consecutiveEarlyFrameFailures;
-        private int _consecutiveUnansweredSessions;
-        private volatile string _suspectedProtocolMismatch;
-
         /// <summary>Current connection state.</summary>
         public ConnectionStatus Status
         {
@@ -194,6 +164,7 @@ namespace HCIKonstanz.Colibri.Networking
         public WebServerConnection()
         {
             _outbox = new Outbox(_frameWriter);
+            _diagnostics = new ConnectionDiagnostics(_state, () => _config);
         }
 
         private void OnEnable()
@@ -209,8 +180,7 @@ namespace HCIKonstanz.Colibri.Networking
             // Enabling the component again is a deliberate retry, refusal or not.
             _outbox.LiftRefusal();
 
-            _hasWarnedAboutUntrustedCertificate = false;
-            _reportedTlsFailure = null;
+            _diagnostics.ResetTlsReports();
 
             _loop = new ConnectionLoop();
             _loop.Run = RunConnectionLoop(_loop);
@@ -446,28 +416,17 @@ namespace HCIKonstanz.Colibri.Networking
                 {
                     // Poll rather than give up, so setting the App Name at runtime still connects. Logged once, not at
                     // every poll.
-                    if (!_hasReportedMissingConfig)
-                    {
-                        _hasReportedMissingConfig = true;
-                        Debug.LogError(string.IsNullOrWhiteSpace(app) ? ColibriConfig.NOT_CONFIGURED_MESSAGE : ColibriConfig.NO_SERVER_ADDRESS_MESSAGE);
-                    }
+                    _diagnostics.ReportMissingConfig(app);
 
                     if (!await Delay(ConnectionState.RECONNECT_DELAY_MIN_MS, token).ConfigureAwait(false))
                         break;
                     continue;
                 }
 
-                _hasReportedMissingConfig = false;
+                _diagnostics.ClearMissingConfigReport();
 
                 var handshakeApp = PayloadCodec.HandshakeAppName(app);
-                if (handshakeApp != app && handshakeApp != _reportedSanitizedApp)
-                {
-                    // Logged, since a client configured with the original name will not see this one.
-                    _reportedSanitizedApp = handshakeApp;
-                    Debug.LogWarning(
-                        $"Colibri: the App Name '{app}' cannot be sent as it is - it may not contain '::' or start or end with ':'. " +
-                        $"Connecting as '{handshakeApp}' instead; change the App Name if other clients use the original.");
-                }
+                _diagnostics.ReportSanitizedApp(app, handshakeApp);
 
                 var mismatched = false;
 
@@ -511,7 +470,7 @@ namespace HCIKonstanz.Colibri.Networking
                 }
                 catch (TlsHandshakeException e)
                 {
-                    ReportTlsFailure(e);
+                    _diagnostics.ReportTlsFailure(e);
                 }
                 catch (Exception e) when (loop.DroppedByWatchdog && (e is SocketException || e is IOException))
                 {
@@ -554,7 +513,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                     // Whatever ended the session, except this component being disabled, which says nothing about the server.
                     if (!token.IsCancellationRequested)
-                        CountSessionWithoutAFrame(loop);
+                        _diagnostics.CountSessionWithoutAFrame(loop);
 
                     // Shared with the next loop, so only while this one has not been ended: by then OnDisable has closed
                     // the outbox and set the status itself, and they may belong to a session the next enable started.
@@ -581,88 +540,8 @@ namespace HCIKonstanz.Colibri.Networking
             }
         }
 
-        /// <summary>
-        /// Called once for every session that ends, whatever ended it. A session that got past the handshake
-        /// and ended without a decoded frame counts towards one of two hints, logged after
-        /// <see cref="EARLY_FRAME_FAILURES_BEFORE_HINT"/> in a row. Each kind resets the other's count, and the
-        /// first decoded frame resets both (<see cref="OnFrameDecoded"/>).
-        /// </summary>
-        /// <remarks>
-        /// Framing hint: a server on another framing cannot decode our frames, so it cannot send the explicit
-        /// refusal either. A suspicion only (it looks the same as a port that is not Colibri), so
-        /// <see cref="Status"/> is left alone; only a refusal this client decoded is terminal.
-        /// Unanswered hint: the watchdog ended the session, or with TLS it was closed or reset without a
-        /// frame. A 1.x server heartbeats at once, behind a TLS-terminating proxy too, and that fails to
-        /// decode; a 2.x server with TLS sends a frame after the handshake. What is left is a proxy whose
-        /// backend is down, or a server that does not answer. Without TLS a close cannot be told apart from a
-        /// TLS server hanging up on this client, so it counts as framing, whose hint names such a proxy too.
-        /// </remarks>
-        private void CountSessionWithoutAFrame(ConnectionLoop loop)
-        {
-            // Server down, wrong address or closed port: says nothing about protocol versions.
-            if (!loop.ReachedHandshake)
-                return;
-
-            if (loop.DecodedAnyFrame)
-                return;
-
-            // Unanswered session, see above.
-            if (loop.EndedSilent || (_state.UsesTls && !loop.EndedOnBadFrame))
-            {
-                _consecutiveEarlyFrameFailures = 0;
-                _consecutiveUnansweredSessions++;
-                if (_consecutiveUnansweredSessions == EARLY_FRAME_FAILURES_BEFORE_HINT)
-                {
-                    var config = _config;
-                    Debug.LogWarning(
-                        $"Colibri: {_consecutiveUnansweredSessions} connections in a row to {config.ServerAddress}:{config.TcpPort} were accepted, " +
-                        "but nothing was received on any of them: each was closed by the other end or dropped after " +
-                        $"{HEARTBEAT_TIMEOUT_THRESHOLD_MS / 1000f:0.#} s of silence. " +
-                        "Something accepts connections there and then closes them or forwards nothing (a proxy or port forwarding " +
-                        "whose backend is down, a captive portal, a firewall), or the server there does not answer or is not a " +
-                        "colibri-server. Check that colibri-server is running and reachable at this address and port. Retrying...");
-                }
-                return;
-            }
-
-            _consecutiveUnansweredSessions = 0;
-            _consecutiveEarlyFrameFailures++;
-            if (_consecutiveEarlyFrameFailures != EARLY_FRAME_FAILURES_BEFORE_HINT)
-                return;
-
-            var suspicion =
-                $"{_consecutiveEarlyFrameFailures} connections in a row were accepted but ended before a single frame could be read. " +
-                $"This usually means a protocol mismatch: this client speaks v{CLIENT_VERSION} and needs colibri-server >= 2.0.0. " +
-                "Check the server's version.";
-
-            // A server with TLS turned on hangs up on a client that is not using it, before a
-            // frame, exactly like this, and so does a proxy or port forwarding whose backend is down.
-            if (!_state.UsesTls)
-            {
-                suspicion += " If the server has TLS turned on, tick 'Server supports SSL/TLS' in the Colibri configuration. " +
-                    "If a proxy or port forwarding is in front of the server, check that the server behind it is running.";
-            }
-
-            // Logged before it is published: this runs on the session loop's thread, and the main thread polls
-            // SuspectedProtocolMismatch (Status window, tests) and could act on the value before the line exists.
-            Debug.LogError($"Colibri: {suspicion}");
-            _suspectedProtocolMismatch = suspicion;
-        }
-
-        /// <summary>
-        /// The first frame of a session, a refusal included, shows that the server speaks our framing, so the
-        /// counts and the suspicion are cleared at once rather than when the session ends.
-        /// </summary>
-        private void OnFrameDecoded(ConnectionLoop loop)
-        {
-            loop.DecodedAnyFrame = true;
-            _consecutiveEarlyFrameFailures = 0;
-            _consecutiveUnansweredSessions = 0;
-            _suspectedProtocolMismatch = null;
-        }
-
         // Tests only: sessions in a row counted towards the framing hint.
-        internal int ConsecutiveEarlyFrameFailures => Volatile.Read(ref _consecutiveEarlyFrameFailures);
+        internal int ConsecutiveEarlyFrameFailures => _diagnostics.ConsecutiveEarlyFrameFailures;
 
         private async Task RunSession(ConnectionLoop loop, ConnectionConfig config, string app)
         {
@@ -688,17 +567,17 @@ namespace HCIKonstanz.Colibri.Networking
             }
             catch (TimeoutException e) when (!token.IsCancellationRequested)
             {
-                _lastConnectFailure = e.Message;
+                _diagnostics.LastConnectFailure = e.Message;
                 throw;
             }
             catch (TlsHandshakeException e) when (!token.IsCancellationRequested)
             {
-                _lastConnectFailure = e.Message;
+                _diagnostics.LastConnectFailure = e.Message;
                 throw;
             }
             catch (SocketException e) when (!token.IsCancellationRequested)
             {
-                _lastConnectFailure = $"connecting to {host}:{port} failed ({e.SocketErrorCode})";
+                _diagnostics.LastConnectFailure = $"connecting to {host}:{port} failed ({e.SocketErrorCode})";
                 throw;
             }
 
@@ -709,10 +588,10 @@ namespace HCIKonstanz.Colibri.Networking
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    _lastConnectFailure = null;
+                    _diagnostics.LastConnectFailure = null;
 
                     if (certificateCheck != null)
-                        NoteCertificate(certificateCheck, host, port);
+                        _diagnostics.NoteCertificate(certificateCheck, host, port);
 
                     // Accepted, but nothing is known about what accepted it yet. The watchdog gives
                     // it as long to say something as a connected server gets between heartbeats.
@@ -735,63 +614,6 @@ namespace HCIKonstanz.Colibri.Networking
         }
 
         /// <summary>
-        /// Keeps the handshake's verdict on the server's certificate for the Status window, and warns once
-        /// when it was accepted only because self-signed certificates are allowed: the connection is
-        /// encrypted, but nothing checks whose server it is.
-        /// </summary>
-        private void NoteCertificate(ServerCertificateCheck check, string host, int port)
-        {
-            _presentedCertificateSha256 = check.Fingerprint;
-            _certificateAcceptance = DescribeAcceptance(check.Verdict);
-
-            if (check.Verdict != ServerCertificatePolicy.Verdict.AcceptedUntrusted || _hasWarnedAboutUntrustedCertificate)
-                return;
-
-            _hasWarnedAboutUntrustedCertificate = true;
-            Debug.LogWarning($"Colibri: accepted the certificate of {host}:{port} although {check.Problems}, because "
-                + "'Allow self-signed certificate' is on. The connection is encrypted, but nothing checks that it goes to your server. "
-                + $"To accept only this certificate, enter its fingerprint as 'Server certificate SHA-256': {check.Fingerprint}. "
-                + "Said once per session.");
-        }
-
-        private static string DescribeAcceptance(ServerCertificatePolicy.Verdict verdict)
-        {
-            switch (verdict)
-            {
-                case ServerCertificatePolicy.Verdict.Trusted: return "trusted by this device";
-                case ServerCertificatePolicy.Verdict.Pinned: return "matches 'Server certificate SHA-256'";
-                case ServerCertificatePolicy.Verdict.AcceptedUntrusted: return "not trusted, accepted because 'Allow self-signed certificate' is on";
-                default: return null;
-            }
-        }
-
-        /// <summary>
-        /// Logs a failed TLS handshake as an error the first time it fails that way, since it will not go away
-        /// until a setting changes, and after that as a note, like a refused connection. The connection keeps
-        /// being retried, so a server switched to TLS or given another certificate is picked up without a restart.
-        /// </summary>
-        private void ReportTlsFailure(TlsHandshakeException e)
-        {
-            var advice = e.Kind == TlsHandshakeException.Failure.NoTlsAnswer
-                ? " 'Server supports SSL/TLS' is ticked in the Colibri configuration, so this client uses TLS on the TCP port too: "
-                    + "turn TLS on at the server (TLS_CERT and TLS_KEY), or untick the setting."
-                : "";
-
-            // Keyed on the kind for a server that does not speak TLS, whose wording varies with how
-            // it failed, and on the reason for a rejected certificate, which says what to change.
-            var key = e.Kind == TlsHandshakeException.Failure.NoTlsAnswer ? e.Kind.ToString() : e.Message;
-            if (key != _reportedTlsFailure)
-            {
-                _reportedTlsFailure = key;
-                Debug.LogError($"Colibri: {e.Message}.{advice} Retrying...");
-            }
-            else
-            {
-                Debug.Log($"Colibri: {e.Message}, retrying...");
-            }
-        }
-
-        /// <summary>
         /// The session is <see cref="ConnectionStatus.Connected"/> from the first frame the server sends, not
         /// from the TCP connection: anything can accept one, a 1.x server (which then speaks a framing this
         /// client cannot read) or a port that is not Colibri. Counting those would reset the backoff on every
@@ -809,7 +631,7 @@ namespace HCIKonstanz.Colibri.Networking
             _receiveQueue.ResetBacklogWarning();
 
             // A TLS failure after this one is news again.
-            _reportedTlsFailure = null;
+            _diagnostics.ClearReportedTlsFailure();
 
             // The address too when the server address is a name, which may have several: an IPv6
             // and an IPv4 one can lead to different places, a proxy that listens on only one, say.
@@ -856,7 +678,7 @@ namespace HCIKonstanz.Colibri.Networking
 
                 var frames = ReadFrames(reader, buffer, received);
                 if (frames.Count > 0 && !loop.DecodedAnyFrame)
-                    OnFrameDecoded(loop);
+                    _diagnostics.OnFrameDecoded(loop);
 
                 for (var i = 0; i < frames.Count; i++)
                 {
@@ -925,8 +747,8 @@ namespace HCIKonstanz.Colibri.Networking
 
             reason ??= $"the server speaks protocol v{serverVersion}, this client speaks v{CLIENT_VERSION}";
 
-            _serverVersion = serverVersion;
-            _protocolMismatchReason = reason;
+            _diagnostics.ServerVersion = serverVersion;
+            _diagnostics.ProtocolMismatchReason = reason;
 
             return new ProtocolMismatchException(reason, serverVersion, CLIENT_VERSION);
         }
@@ -985,13 +807,13 @@ namespace HCIKonstanz.Colibri.Networking
         /// been received. Only set alongside <see cref="ConnectionStatus.ProtocolMismatch"/>: a server that
         /// accepts the connection never sends its version.
         /// </summary>
-        public string ServerVersion => _serverVersion;
+        public string ServerVersion => _diagnostics.ServerVersion;
 
         /// <summary>
         /// Why the server refused this client, or null if it has not. Companion to
         /// <see cref="ConnectionStatus.ProtocolMismatch"/> for showing the reason.
         /// </summary>
-        public string ProtocolMismatchReason => _protocolMismatchReason;
+        public string ProtocolMismatchReason => _diagnostics.ProtocolMismatchReason;
 
         /// <summary>
         /// Why a protocol mismatch is suspected, or null if it is not. Set when several connections in a row
@@ -1002,15 +824,14 @@ namespace HCIKonstanz.Colibri.Networking
         /// is out of date or the address points at something that is not Colibri at all. The connection keeps
         /// being retried and <see cref="Status"/> is unaffected. Cleared as soon as any frame decodes.
         /// </summary>
-        public string SuspectedProtocolMismatch => _suspectedProtocolMismatch;
+        public string SuspectedProtocolMismatch => _diagnostics.SuspectedProtocolMismatch;
 
         /// <summary>
         /// Why the last attempt to open the TCP connection failed ("192.168.0.10:9212 did not answer within
         /// 5 s", a refusal, or with TLS a failed handshake or a rejected certificate), or null once one has
         /// opened. For showing why the client is not connected; each failure is logged as well.
         /// </summary>
-        public string LastConnectFailure => _lastConnectFailure;
-        private volatile string _lastConnectFailure;
+        public string LastConnectFailure => _diagnostics.LastConnectFailure;
 
         /// <summary>
         /// Whether the connection uses TLS: <see cref="ColibriConfig.IsSSL"/> as it was when the
@@ -1022,10 +843,10 @@ namespace HCIKonstanz.Colibri.Networking
         /// The SHA-256 fingerprint of the certificate the server presented on the last TLS
         /// connection, as colibri-server logs it, or null before one has been made.
         /// </summary>
-        internal string ServerCertificateSha256 => _presentedCertificateSha256;
+        internal string ServerCertificateSha256 => _diagnostics.PresentedCertificateSha256;
 
         /// <summary>Why that certificate was accepted, in words, for the Status window; null before a TLS connection.</summary>
-        internal string CertificateAcceptance => _certificateAcceptance;
+        internal string CertificateAcceptance => _diagnostics.CertificateAcceptance;
 
         internal void OpenOutbox(ServerSession session, CancellationToken token) => _outbox.OpenOutbox(session, token);
 
