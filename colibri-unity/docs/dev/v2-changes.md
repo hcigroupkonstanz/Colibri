@@ -5,6 +5,11 @@ Developer notes on every change in colibri-unity 2.0.0, with the reasons behind 
 
 **2.0.0, unreleased.**
 
+**Note:** paths and member names in this document are those of 2.0. In 2.1 the package moved to `Runtime/` and
+`Editor/` and several classes were split. The layout is described in
+[conventions.md](conventions.md#package-layout), the move in the [CHANGELOG](../../CHANGELOG.md) and in
+[MIGRATION.md](../../../MIGRATION.md#unity-package-20-to-21).
+
 Summary of everything that changed in the `1.3.1` → `2.0.0` modernization, closing out the v2
 release across all three packages. `colibri-server` 2.0.0 replaced the v1 TCP framing with a fixed
 binary v3 protocol (see its [change log](../../../colibri-server/docs/dev/v2-changes.md)); this release is
