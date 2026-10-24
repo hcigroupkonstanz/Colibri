@@ -116,6 +116,14 @@ export class Colibri {
         if (Colibri.instance) throw new ColibriError('A Colibri instance already exists!');
         else Colibri.instance = this;
 
+        this.warnIfAdminApp(app);
+        this.socket = this.openSocket();
+        this.relayLatency();
+        this.attachPendingRegistrations();
+        colibriCreated(this);
+    }
+
+    private warnIfAdminApp(app: string) {
         // The server tells the admin UI from an application by this name alone. Only warned about,
         // so an app already named 'colibri' keeps working.
         if (app === ADMIN_APP) {
@@ -126,29 +134,35 @@ export class Colibri {
                     `skips the protocol version check. Give your app a name of its own.`
             );
         }
+    }
 
-        this.socket = connect(this.uri, {
-            query: { app, version: PROTOCOL_VERSION },
+    private openSocket() {
+        const socket = connect(this.uri, {
+            query: { app: this.app, version: PROTOCOL_VERSION },
             transports: ['websocket']
         });
-        this.socket.on('connect', this.onSocketConnect.bind(this));
-        this.socket.on('disconnect', this.onSocketDisconnect.bind(this));
-        this.socket.on('connect_error', this.onSocketConnectError.bind(this));
-        this.socket.onAny(this.onSocketAny.bind(this));
+        socket.on('connect', this.onSocketConnect.bind(this));
+        socket.on('disconnect', this.onSocketDisconnect.bind(this));
+        socket.on('connect_error', this.onSocketConnectError.bind(this));
+        socket.onAny(this.onSocketAny.bind(this));
+        return socket;
+    }
 
+    private relayLatency() {
         // latency statistics
         this.registerChannel(COLIBRI_CHANNEL, msg => {
             if (msg.command === LATENCY_COMMAND) {
                 SendMessage(COLIBRI_CHANNEL, LATENCY_COMMAND, msg.payload);
             }
         });
+    }
 
+    private attachPendingRegistrations() {
         // Everything registered before this instance existed, in registration order.
         for (const { channel, handler, once } of pendingRegistrations.splice(0)) {
             if (once) this.registerOnce(channel, handler);
             else this.registerChannel(channel, handler);
         }
-        colibriCreated(this);
     }
 
     private onSocketConnect() {
