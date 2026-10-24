@@ -25,7 +25,7 @@ export interface UnityClientLeft {
 
 /**
  * The addresses the Unity clients of each app are connected from, by voice app id. Voice is relayed
- * only from these (see VoiceServer.admit): a UDP source address is all a voice packet can be checked
+ * only from these (see VoiceAdmission.admit): a UDP source address is all a voice packet can be checked
  * by, and anyone can compute an app's id from its name.
  */
 export class UnityClientAddresses {

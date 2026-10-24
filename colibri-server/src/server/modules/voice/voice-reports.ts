@@ -15,7 +15,7 @@ const REPORT_MAX_KEYS = 100;
 
 // A Unity client opens its voice socket and its TCP connection at about the same time, and its
 // voice often starts a moment (0.1 to 0.2 s) before the TCP handshake has registered it. Its first
-// packets are dropped then (see VoiceServer.admit), as are those of a second client at the same
+// packets are dropped then (see VoiceAdmission.admit), as are those of a second client at the same
 // address until its own handshake is in, and those of a voice socket opened again on a new port
 // until the old one has been quiet for VOICE_CLIENT_GONE_MILLIS. Each of those used to be a
 // warning, the first at every client start. Now the first packet dropped from a source is logged at
