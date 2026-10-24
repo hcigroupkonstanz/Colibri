@@ -117,15 +117,15 @@ export default tseslint.config(
             ]
         }
     },
-    // Size guides from docs/dev/conventions.md. Warnings until the refactor brings the code under them.
+    // Size guides from docs/dev/conventions.md.
     {
         files: ['src/**/*.ts'],
         rules: {
-            'max-lines': ['warn', { max: 400, skipBlankLines: true, skipComments: true }],
-            'max-lines-per-function': ['warn', { max: 40, skipBlankLines: true, skipComments: true }],
-            complexity: ['warn', 15],
-            'max-depth': ['warn', 4],
-            'max-params': ['warn', 5]
+            'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
+            'max-lines-per-function': ['error', { max: 40, skipBlankLines: true, skipComments: true }],
+            complexity: ['error', 15],
+            'max-depth': ['error', 4],
+            'max-params': ['error', 5]
         }
     },
     // must stay last: turns off every formatting rule Prettier now owns
