@@ -246,17 +246,11 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         const clients = this.clients();
         const plotHeight = Math.max(0, this.height - margin.top - margin.bottom);
         const { band } = this.layout();
-        const boxWidth = Math.max(4, band - boxplotPadding);
 
         // Coloured by the client's slot, as in the Clients table.
         const lines: Line[] = clients
             .map(client => ({ client, color: clientColor(client.slot) }))
             .filter(line => line.client.latency.length > 0);
-
-        const xScale = d3.scalePoint()
-            .domain(clients.map(client => client.id))
-            .range([0, clients.length * band])
-            .padding(0.5);
 
         const maxLatency = d3.max(clients.flatMap(c => (c.latency || []).map(l => l[1]))) || 1;
         const yScale = d3.scaleLinear()
@@ -264,9 +258,23 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
             .range([0, plotHeight])
             .nice();
 
+        this.drawBoxplots(clients, lines, band, yScale);
+        this.drawLines(lines, yScale);
+
+        if (this.axisLeft) {
+            this.axisLeft.call(d3.axisLeft(yScale).ticks(Math.max(2, Math.floor(plotHeight / 40))));
+        }
+    }
+
+    private drawBoxplots(clients: ReadonlyArray<ColibriClient>, lines: Line[], band: number, yScale: d3.ScaleLinear<number, number>): void {
         if (this.boxplotSvg && band === 0) {
             this.boxplotSvg.selectAll('g.plot').remove();
         } else if (this.boxplotSvg) {
+            const boxWidth = Math.max(4, band - boxplotPadding);
+            const xScale = d3.scalePoint()
+                .domain(clients.map(client => client.id))
+                .range([0, clients.length * band])
+                .padding(0.5);
             const boxplotData = lines.map(line => ({
                 ...boxplotStats(line.client.latency.map(l => l[1])),
                 id: line.client.id,
@@ -288,7 +296,9 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                     d3.select(this).call(draw);
                 });
         }
+    }
 
+    private drawLines(lines: Line[], yScale: d3.ScaleLinear<number, number>): void {
         if (this.lineChartSvg) {
             const line = d3.line<[number, number]>()
                 .x(d => this.lineX(d[0]))
@@ -303,10 +313,6 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                 .attr('stroke', d => d.color)
                 .attr('stroke-width', 1.5)
                 .attr('d', d => line(perSecond(d.client.latency)));
-        }
-
-        if (this.axisLeft) {
-            this.axisLeft.call(d3.axisLeft(yScale).ticks(Math.max(2, Math.floor(plotHeight / 40))));
         }
     }
 }
