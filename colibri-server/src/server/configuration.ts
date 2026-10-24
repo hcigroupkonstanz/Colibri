@@ -166,7 +166,7 @@ export const Config = {
     // empty: none, and every client is logged at the address it comes from.
     TRUSTED_PROXIES: trustedProxies,
     // Whether a connection to the TCP port from one of them has to start with a PROXY protocol
-    // header, which names the Unity client (see TCPServerWorker.handleProxyProtocolConnection).
+    // header, which names the Unity client (see ProxyProtocolGate.handleProxyProtocolConnection).
     TCP_PROXY_PROTOCOL: tcpProxyProtocol,
     // Whether a Unity client whose connection starts with such a header reached the proxy over TLS,
     // as the admin UI shows it. The header does not say.

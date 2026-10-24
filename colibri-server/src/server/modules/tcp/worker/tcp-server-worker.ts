@@ -45,19 +45,17 @@ import {
     warnsAtEnd,
 } from '../../limits/inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
-import { CLOSE_GRACE_MILLIS, endRefused } from './end-refused.js';
+import { CLOSE_GRACE_MILLIS } from './end-refused.js';
 import { KEEPALIVE_INITIAL_DELAY_MILLIS } from './keepalive.js';
-import { TLS_HANDSHAKE_TIMEOUT_MILLIS, TlsPort } from './tls-port.js';
+import { TlsPort } from './tls-port.js';
 import { createTcpClient } from './tcp-client.js';
 import type { Refusal, TcpClient } from './tcp-client.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from '../../net/addresses.js';
 import { RATE_WINDOW_MILLIS } from '../../limits/client-activity.js';
 import { toBuffer } from '../../protocol/to-buffer.js';
-import { readProxyHeader } from './proxy-protocol.js';
-import type { ProxyHeader } from './proxy-protocol.js';
+import { NOTHING_READ, ProxyProtocolGate } from './proxy-protocol-gate.js';
+import type { ConnectionHandler } from './proxy-protocol-gate.js';
 import { PEER_GONE_ERRORS, WRITE_CANCELLED_ERRORS, errorCode, tcpSocketOf } from './socket-errors.js';
-import type { TrustProxy } from '../../net/trusted-proxies.js';
-import { compileTrustedProxies, trustNoProxy } from '../../net/trusted-proxies.js';
 import type {
     TcpClientActivityReport,
     TcpClientConnected,
@@ -148,60 +146,10 @@ export const HEARTBEAT_EVERY_BYTES = 64 * 1024;
 // during the stall has been read.
 const TICK_STALL_MILLIS = 2000;
 
-// With TCP_PROXY_PROTOCOL set: how long a connection has to send its PROXY protocol header, or, from
-// a peer that is not a trusted proxy, enough of its first bytes to show that it sends none. The same
-// as for a TLS handshake.
-export const PROXY_HEADER_TIMEOUT_MILLIS = TLS_HANDSHAKE_TIMEOUT_MILLIS;
-
 // A message size for the log: in MiB from 1 MiB, in KiB below.
 const describeSize = function (bytes: number): string {
     const mebibyte = 1024 * 1024;
     return bytes >= mebibyte ? `${(bytes / mebibyte).toFixed(1)} MiB` : `${Math.round(bytes / 1024)} KiB`;
-};
-
-const NOTHING_READ = Buffer.alloc(0);
-
-// What a connection that was read from before it got to handleConnection or handleTlsPortConnection
-// gets there with: whatever followed its PROXY protocol header in the same read.
-type ConnectionHandler = (socket: net.Socket, alreadyRead: Buffer) => void;
-
-const NO_PROXY_HEADER_FIX =
-    'Turn on the PROXY protocol for this port in the proxy (nginx: proxy_protocol on; in its stream server). A ' +
-    'client that connects directly from an address in TRUSTED_PROXIES is refused like this too.';
-
-// What a connection with TCP_PROXY_PROTOCOL set comes to after its latest bytes: it waits for more,
-// is refused, or goes on to its ConnectionHandler with the header it starts with, if any.
-type ProxyHeaderDecision =
-    | { action: 'wait' }
-    | { action: 'refuse'; reason: string; fix?: string }
-    | { action: 'handle'; header: ProxyHeader | 'none' };
-
-const UNTRUSTED_PROXY_HEADER: ProxyHeaderDecision = {
-    action: 'refuse',
-    reason: 'it starts with a PROXY protocol header, but its address is not in TRUSTED_PROXIES',
-    fix: 'If it is the proxy in front of this server, add its address to TRUSTED_PROXIES.',
-};
-
-// A trusted proxy has to start with a valid header. Anyone else must not start with one, valid or
-// not, since only a proxy sends one.
-const decideOnProxyHeader = function (received: Buffer, trusted: boolean): ProxyHeaderDecision {
-    let header: ReturnType<typeof readProxyHeader>;
-    try {
-        header = readProxyHeader(received);
-    } catch (err) {
-        if (!trusted) return UNTRUSTED_PROXY_HEADER;
-        return { action: 'refuse', reason: `its PROXY protocol header is invalid: ${errorMessage(err)}` };
-    }
-    if (header === 'incomplete') return { action: 'wait' };
-    if (header === 'none' && trusted) {
-        return {
-            action: 'refuse',
-            reason: 'it is in TRUSTED_PROXIES and TCP_PROXY_PROTOCOL is true, but the connection does not start with a PROXY protocol header',
-            fix: NO_PROXY_HEADER_FIX,
-        };
-    }
-    if (header !== 'none' && !trusted) return UNTRUSTED_PROXY_HEADER;
-    return { action: 'handle', header };
 };
 
 type FrameOf<T extends FrameType> = Extract<DecodedFrame, { type: T }>;
@@ -209,7 +157,7 @@ type FrameOf<T extends FrameType> = Extract<DecodedFrame, { type: T }>;
 export class TCPServerWorker extends WorkerService {
     private server: net.Server | undefined;
     private readonly tlsPort = new TlsPort({
-        clientAddress: (socket, unknown) => this.clientAddress(socket, unknown),
+        clientAddress: (socket, unknown) => this.proxyProtocolGate.clientAddress(socket, unknown),
         handleConnection: (socket) => this.handleConnection(socket),
         logDebug: (msg) => this.logDebug(msg),
         logInfo: (msg) => this.logInfo(msg),
@@ -217,18 +165,12 @@ export class TCPServerWorker extends WorkerService {
         logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
     });
 
-    private proxyProtocol = false;
-    private tlsAtProxy = false;
-    private trustedProxies: string[] = [];
-    private trustProxy: TrustProxy = trustNoProxy;
-    private proxyHeaderTimeoutMillis = PROXY_HEADER_TIMEOUT_MILLIS;
-    // The client addresses PROXY protocol headers named, by the TCP socket each came in on.
-    private readonly proxiedAddresses = new WeakMap<net.Socket, string>();
-    // The TCP sockets that started with a PROXY protocol header from a trusted proxy, whatever
-    // address it named.
-    private readonly throughProxy = new WeakSet<net.Socket>();
-    // Connections yet to show whether they start with a PROXY protocol header, for stop().
-    private readonly proxyHeaderSockets = new Set<net.Socket>();
+    // One for the worker's lifetime: configure() only updates its settings, so the sockets it has
+    // seen keep what their PROXY protocol headers named.
+    private readonly proxyProtocolGate = new ProxyProtocolGate({
+        logDebug: (msg) => this.logDebug(msg),
+        logWarning: (msg) => this.logWarning(msg),
+    });
 
     // waiting for client to specify app name
     private readonly waitingClients = new Map<string, TcpClient>();
@@ -262,9 +204,6 @@ export class TCPServerWorker extends WorkerService {
     private readonly v1WarnedAt = new AddressThrottle();
     // The same for a TLS client on an unencrypted port.
     private readonly tlsWithoutTlsPortWarnedAt = new AddressThrottle();
-    // The same for a connection refused for its PROXY protocol header, by the address of the peer
-    // that sent it (or did not).
-    private readonly proxyHeaderWarnedAt = new AddressThrottle();
     // The same for a connection closed for a message before its handshake.
     private readonly noHandshakeWarnedAt = new AddressThrottle();
 
@@ -339,10 +278,7 @@ export class TCPServerWorker extends WorkerService {
         this.rateLimiter = this.createRateLimiter(options.rateLimit ?? DEFAULT_RATE_LIMIT);
         this.idleTimeoutMillis = options.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MILLIS;
         this.tlsPort.configure(options.tls);
-        this.proxyProtocol = options.proxyProtocol ?? false;
-        this.tlsAtProxy = options.tlsAtProxy ?? false;
-        this.trustedProxies = options.trustedProxies ?? [];
-        this.trustProxy = compileTrustedProxies(this.trustedProxies);
+        this.proxyProtocolGate.configure(options);
     }
 
     // Switches the TLS port to a renewed certificate; TlsPort.useTlsCredentials has the details.
@@ -370,113 +306,16 @@ export class TCPServerWorker extends WorkerService {
         } else {
             handle = (socket, alreadyRead) => this.handleConnection(socket, alreadyRead);
         }
-        this.server = net.createServer((socket) => {
-            if (this.proxyProtocol) this.handleProxyProtocolConnection(socket, handle);
-            else handle(socket, NOTHING_READ);
-        });
+        this.server = net.createServer((socket) => this.proxyProtocolGate.accept(socket, handle));
         const server = this.server;
         server.once('listening', () => {
             if (fellBackToIPv4(host, server.address())) this.logWarning(ipv4OnlyWarning('TCP_HOST', 'Unity port'));
         });
         server.listen(port, listenHost(host));
 
-        const proxyProtocol = this.proxyProtocol
-            ? `, PROXY protocol header required from TRUSTED_PROXIES (${this.trustedProxies.join(', ')})` +
-                (this.tlsAtProxy ? ', TLS terminated by proxy (TCP_TLS_AT_PROXY)' : '')
-            : '';
+        const proxyProtocol = this.proxyProtocolGate.describeSetup();
         this.logInfo(`Starting Colibri TCP server on ${hostPort(host, port)}${tlsOnly ? ', TLS only' : ''}${proxyProtocol}`);
         this.heartbeatInterval = setInterval(() => this.tick(), 100);
-    }
-
-    // With TCP_PROXY_PROTOCOL set, every connection starts here. One from a trusted proxy has to start
-    // with a PROXY protocol header, and the client that names is the connection's client from then on:
-    // in the log, and for every per-address limit. One from anywhere else is refused if it starts with
-    // a header, since only a proxy sends one, and otherwise goes on as it would without
-    // TCP_PROXY_PROTOCOL. Whatever follows the header goes on to `handle`, a TLS handshake included.
-    private handleProxyProtocolConnection(socket: net.Socket, handle: ConnectionHandler): void {
-        // Read now, which caches it for clientAddress.
-        const peer = normalizeAddress(socket.remoteAddress || 'UNDEFINED');
-        const trusted = this.trustProxy(peer, 0);
-        const seconds = this.proxyHeaderTimeoutMillis / 1000;
-        this.proxyHeaderSockets.add(socket);
-
-        let received: Buffer = NOTHING_READ;
-        const stopReading = () => {
-            clearTimeout(timeout);
-            socket.off('data', onData);
-            socket.off('close', stopReading);
-            this.proxyHeaderSockets.delete(socket);
-        };
-        const onError = (error: Error) => {
-            this.logDebug(`Lost the connection to ${peer} during the PROXY protocol check: ${error.message}`);
-        };
-        const onData = (chunk: Buffer) => {
-            received = received.length === 0 ? chunk : Buffer.concat([received, chunk]);
-            const decision = decideOnProxyHeader(received, trusted);
-            if (decision.action === 'wait') return;
-
-            stopReading();
-            if (decision.action === 'refuse') {
-                this.refuseProxyConnection(socket, peer, decision.reason, decision.fix);
-                return;
-            }
-            // In the same tick as `handle` adds its own listeners, so that nothing is missed in between.
-            socket.off('error', onError);
-            if (decision.header !== 'none') {
-                this.throughProxy.add(socket);
-                if (decision.header.sourceAddress) this.proxiedAddresses.set(socket, decision.header.sourceAddress);
-            }
-            handle(socket, decision.header === 'none' ? received : received.subarray(decision.header.length));
-        };
-        const timeout = setTimeout(() => {
-            stopReading();
-            this.endProxyHeaderWait(socket, peer, trusted, seconds, received);
-        }, this.proxyHeaderTimeoutMillis);
-        timeout.unref();
-
-        socket.on('data', onData);
-        socket.on('error', onError);
-        socket.on('close', stopReading);
-    }
-
-    // A connection that sent no complete PROXY protocol header in time, or, from a peer that is not a
-    // trusted proxy, too few of its first bytes to show that it sends none.
-    private endProxyHeaderWait(socket: net.Socket, peer: string, trusted: boolean, seconds: number, received: Buffer): void {
-        if (trusted) {
-            this.refuseProxyConnection(
-                socket,
-                peer,
-                `it is in TRUSTED_PROXIES and TCP_PROXY_PROTOCOL is true, but it sent no complete PROXY protocol header within ${seconds} s`,
-                NO_PROXY_HEADER_FIX
-            );
-        } else {
-            const sent = received.length === 0 ? 'nothing' : `only ${received.length} byte(s)`;
-            this.logDebug(`Disconnecting ${peer}: it sent ${sent} within ${seconds} s of connecting`);
-            socket.destroy();
-        }
-    }
-
-    // Logged like the other refusals: a warning at most once a minute per address, the rest at debug
-    // level. Nothing is sent to the peer.
-    private refuseProxyConnection(socket: net.Socket, peer: string, reason: string, fix?: string): void {
-        if (!this.proxyHeaderWarnedAt.shouldWarn(peer, performance.now())) {
-            this.logDebug(`Refusing a connection from ${peer}: ${reason} (warned about this address already)`);
-        } else {
-            this.logWarning(
-                `Refusing a connection from ${peer}: ${reason}. ${fix ? `${fix} ` : ''}This is logged at most once a minute per address.`
-            );
-        }
-        endRefused(socket);
-    }
-
-    // The client's address: the one its connection's PROXY protocol header named, if it had one, else
-    // the address the connection comes from. The TLS socket of a failed handshake has usually been
-    // destroyed already, and then no longer knows its peer's address, but the TCP socket underneath it
-    // still does: the address was read when the connection was accepted, which cached it. An IPv4
-    // client is named by its IPv4 address, also on a dual-stack TCP_HOST and from a PROXY v2 header.
-    private clientAddress(socket: net.Socket, unknown = 'UNDEFINED'): string {
-        const tcpSocket = tcpSocketOf(socket);
-        return normalizeAddress(this.proxiedAddresses.get(tcpSocket) || socket.remoteAddress || tcpSocket.remoteAddress || unknown);
     }
 
     private tick(): void {
@@ -598,13 +437,10 @@ export class TCPServerWorker extends WorkerService {
         }
         // And those still in their TLS handshake, or yet to start it, or to send a PROXY protocol header.
         this.tlsPort.destroySockets();
-        for (const socket of [...this.proxyHeaderSockets]) {
-            socket.destroy();
-        }
+        this.proxyProtocolGate.destroySockets();
         this.clients.clear();
         this.waitingClients.clear();
         this.clientsByApp.clear();
-        this.proxyHeaderSockets.clear();
     }
 
     // `reply`: the server's answer to the recipients' own request; see MAX_REPLY_BACKLOG_BYTES.
@@ -760,9 +596,9 @@ export class TCPServerWorker extends WorkerService {
 
     private handleConnection(socket: net.Socket, alreadyRead: Buffer = NOTHING_READ): void {
         const id = randomUUID();
-        const address = this.clientAddress(socket);
+        const address = this.proxyProtocolGate.clientAddress(socket);
         const tcpSocket = tcpSocketOf(socket);
-        const through = this.proxiedAddresses.has(tcpSocket) ? ` through ${normalizeAddress(tcpSocket.remoteAddress || 'UNDEFINED')}` : '';
+        const through = this.proxyProtocolGate.hasProxiedAddress(tcpSocket) ? ` through ${normalizeAddress(tcpSocket.remoteAddress || 'UNDEFINED')}` : '';
         this.logDebug(
             `New client (${id}) connected from ${address}${through}, waiting for app name`,
             CONNECTION_LINE
@@ -960,7 +796,7 @@ export class TCPServerWorker extends WorkerService {
             version,
             address: client.address,
             tls: (client.socket as tls.TLSSocket).encrypted === true,
-            tlsAtProxy: this.tlsAtProxy && this.throughProxy.has(tcpSocketOf(client.socket)),
+            tlsAtProxy: this.proxyProtocolGate.tlsAtProxyFor(client.socket),
             connectedAt: client.connectedAt,
         };
         this.postMessage('clientConnected$', connected as unknown as { [key: string]: unknown });

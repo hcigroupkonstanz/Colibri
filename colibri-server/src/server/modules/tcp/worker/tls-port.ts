@@ -26,7 +26,7 @@ const secureContextOptions = function (credentials: TcpTlsCredentials): { cert: 
 
 // What TlsPort needs from the TCP worker that owns it.
 interface TlsPortCallbacks {
-    // The client's address; see TCPServerWorker.clientAddress.
+    // The client's address; see ProxyProtocolGate.clientAddress.
     clientAddress(socket: net.Socket, unknown?: string): string;
     // A connection whose TLS handshake is done.
     handleConnection(socket: tls.TLSSocket): void;
