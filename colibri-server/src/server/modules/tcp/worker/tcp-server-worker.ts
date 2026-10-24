@@ -46,6 +46,7 @@ import {
     warnsAtEnd,
 } from '../../limits/inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
+import { CLOSE_GRACE_MILLIS, endRefused } from './end-refused.js';
 import { createTcpClient, maxBufferSize } from './tcp-client.js';
 import type { Refusal, TcpClient } from './tcp-client.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from '../../net/addresses.js';
@@ -84,12 +85,6 @@ const highWaterMark = 1024 * 1024;
 // many full stores and many maximum-size frames; it only stops a client that keeps asking without
 // ever reading from taking up memory without limit.
 export const MAX_REPLY_BACKLOG_BYTES = 64 * 1024 * 1024;
-
-// How long a socket this server has ended (a refusal, or a framing error) may stay half-open
-// waiting for the peer's FIN before it is destroyed. Ending first rather than destroying is what
-// lets the refusal frame reach the client; this bounds what a peer that never closes its side
-// can hold on to.
-const CLOSE_GRACE_MILLIS = 5000;
 
 // A channel or command may be up to 64 KiB; a log line names only this much of one.
 const abbreviateName = (name: string): string => (name.length > 200 ? `${name.slice(0, 200)}...` : name);
@@ -496,7 +491,7 @@ export class TCPServerWorker extends WorkerService {
                 `Refusing a connection from ${peer}: ${reason}. ${fix ? `${fix} ` : ''}This is logged at most once a minute per address.`
             );
         }
-        this.endRefused(socket);
+        endRefused(socket);
     }
 
     // The client's address: the one its connection's PROXY protocol header named, if it had one, else
@@ -605,17 +600,7 @@ export class TCPServerWorker extends WorkerService {
             );
         }
 
-        this.endRefused(socket);
-    }
-
-    // Ended rather than destroyed, so the client sees the connection closed, not reset. Whatever else it
-    // sends is read and dropped, so that its own close is seen.
-    private endRefused(socket: net.Socket): void {
-        socket.resume();
-        socket.end();
-        const grace = setTimeout(() => socket.destroy(), CLOSE_GRACE_MILLIS);
-        grace.unref();
-        socket.once('close', () => clearTimeout(grace));
+        endRefused(socket);
     }
 
     // At info, not as an error: a client that does not accept the certificate, or gives up on a slow
