@@ -6,7 +6,7 @@ import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './li
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
-import { Confirmations } from './modelSync/Confirmations';
+import { compareWithShown, Confirmations, judgeConfirmation } from './modelSync/Confirmations';
 import { DeletedHere } from './modelSync/DeletedHere';
 import { GuardWindow } from './modelSync/GuardWindow';
 import { KnownValues } from './modelSync/KnownValues';
@@ -341,20 +341,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const sent = fieldsOnTop(model, id, held, lost);
         sendUpdate(asker, model, sent as Partial<T>);
 
-        // An undefined field is not sent, so no update shows it.
-        const differs = new Map<string, string>();
-        for (const [key, value] of Object.entries(sent)) {
-            const json = JSON.stringify(value) as string | undefined;
-            if (key === 'id' || json === undefined) continue;
-            if (!(key in shown) || JSON.stringify(shown[key as keyof T]) !== json) differs.set(key, json);
-        }
-        if (differs.size === 0) return false;
-        const replaced = new Map<string, string | undefined>();
-        for (const key of differs.keys()) {
-            replaced.set(key, key in shown ? JSON.stringify(shown[key as keyof T]) : undefined);
-        }
+        const compared = compareWithShown(sent, shown);
+        if (!compared) return false;
         askFor(asker, model);
-        confirmations.start(id, { sent: differs, replaced, props: held, shown: new Map(), end: askForEnd(asker) });
+        confirmations.start(id, { ...compared, props: held, shown: new Map(), end: askForEnd(asker) });
         return true;
     };
 
@@ -374,16 +364,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
         awaitingAnswer.delete(id);
         const held = heldChanges.take(model);
-        const theirs: Record<string, unknown> = { id };
-        const again: string[] = [];
-        for (const [key, json] of confirmation.sent) {
-            const shown = confirmation.shown.has(key)
-                ? (JSON.stringify(confirmation.shown.get(key)) as string | undefined)
-                : undefined;
-            if (shown === json) continue;
-            if (shown === undefined || shown === confirmation.replaced.get(key)) again.push(key);
-            else theirs[key] = confirmation.shown.get(key);
-        }
+        const { theirs, again } = judgeConfirmation(id, confirmation);
         applyUpdate(model, withoutChanges(theirs as Partial<T>, model, held));
 
         const update = fieldsOnTop(model, id, held, again);

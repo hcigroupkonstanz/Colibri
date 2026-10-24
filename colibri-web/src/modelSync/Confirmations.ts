@@ -33,3 +33,39 @@ export class Confirmations {
         return [...this.confirming.keys()];
     }
 }
+
+export const compareWithShown = (
+    sent: Record<string, unknown>,
+    shown: Record<string, unknown>
+): Pick<Confirmation, 'sent' | 'replaced'> | undefined => {
+    // An undefined field is not sent, so no update shows it.
+    const differs = new Map<string, string>();
+    for (const [key, value] of Object.entries(sent)) {
+        const json = JSON.stringify(value) as string | undefined;
+        if (key === 'id' || json === undefined) continue;
+        if (!(key in shown) || JSON.stringify(shown[key]) !== json) differs.set(key, json);
+    }
+    if (differs.size === 0) return undefined;
+    const replaced = new Map<string, string | undefined>();
+    for (const key of differs.keys()) {
+        replaced.set(key, key in shown ? JSON.stringify(shown[key]) : undefined);
+    }
+    return { sent: differs, replaced };
+};
+
+export const judgeConfirmation = (
+    id: string,
+    confirmation: Confirmation
+): { theirs: Record<string, unknown>; again: string[] } => {
+    const theirs: Record<string, unknown> = { id };
+    const again: string[] = [];
+    for (const [key, json] of confirmation.sent) {
+        const shown = confirmation.shown.has(key)
+            ? (JSON.stringify(confirmation.shown.get(key)) as string | undefined)
+            : undefined;
+        if (shown === json) continue;
+        if (shown === undefined || shown === confirmation.replaced.get(key)) again.push(key);
+        else theirs[key] = confirmation.shown.get(key);
+    }
+    return { theirs, again };
+};
