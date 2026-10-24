@@ -4,6 +4,7 @@ import type { Message } from './Colibri';
 import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './lifecycle';
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
+import { AwaitedAnswers } from './modelSync/AwaitedAnswers';
 import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
 import { compareWithShown, Confirmations, judgeConfirmation } from './modelSync/Confirmations';
@@ -42,18 +43,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // asked for by id and sent in full.
     const ownModels = new WeakSet<T>();
 
-    // Own models asked for by id (registerModel, reconnect) and not answered yet, with the instance that asked.
-    const awaitingAnswer = new Map<string, Colibri>();
-
-    // Own models the server has answered for, on this or an earlier connection (see askFor).
-    const answered = new WeakSet<T>();
-
-    // Instance to send the request for every model through, until it is sent (see catchUpOnceAnswered).
-    let catchingUpThrough: Colibri | undefined;
-
-    // Ids deleted while their answer was, or may still have been, on its way (see forget). A bare-id
-    // answer, e.g. from a server with MODEL_TOMBSTONE_SECONDS=0, must not become a model.
-    const deletedWhileAwaited = new Set<string>();
+    const awaitedAnswers = new AwaitedAnswers<T>();
 
     // Property names of changes to own models that are held back instead of sent: made while
     // disconnected or before the server's answer for the model (see registerModel).
@@ -85,11 +75,11 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // server lifts that delete and answers a bare id. After MODEL_TOMBSTONE_SECONDS the server has
     // forgotten the delete, and this client sends the model again.
     const askFor = (colibri: Colibri, model: T) => {
-        awaitingAnswer.set(model.id, colibri);
+        awaitedAnswers.ask(model.id, colibri);
         colibri.sendMessage(
             name,
             'model::request',
-            answered.has(model) ? { id: model.id, again: true } : { id: model.id }
+            awaitedAnswers.wasAnswered(model) ? { id: model.id, again: true } : { id: model.id }
         );
     };
 
@@ -100,7 +90,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const sendAfresh = (colibri: Colibri, model: T) => {
         colibri.sendMessage(name, 'model::request', { id: model.id });
         deletedHere.markAfresh(model.id);
-        answered.add(model);
+        awaitedAnswers.markAnswered(model);
         heldChanges.take(model);
         sendUpdate(colibri, model, toJsonOf(model));
     };
@@ -108,9 +98,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // Requests every model once all own models have their answer, so that answer includes what was
     // sent in between (see guardFrom for what is sent after). Returns whether it asked.
     const catchUpOnceAnswered = () => {
-        if (!catchingUpThrough || awaitingAnswer.size > 0) return false;
-        const colibri = catchingUpThrough;
-        catchingUpThrough = undefined;
+        const colibri = awaitedAnswers.takeCatchUp();
+        if (!colibri) return false;
         colibri.sendMessage(name, 'model::request');
         guardFrom(colibri);
         return true;
@@ -133,7 +122,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // asked for by id first (see askFor), and everything else once all are answered. Also on the first
     // fetch: the answer for every model carries an own model's id too and would be taken for its answer.
     withColibri(colibri => {
-        catchingUpThrough = colibri;
+        awaitedAnswers.catchUpThrough(colibri);
         // Deferred so that models registered in the same block of code, or before `new Colibri()`, are asked for first.
         setTimeout(catchUpOnceAnswered, 0);
         onColibriDisconnected(colibri, () => {
@@ -154,8 +143,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             disconnected = false;
             // Requests from the previous connection will not be answered. Changes sent for models still
             // being confirmed may not have arrived, so they are held again and go out with the answer.
-            awaitingAnswer.clear();
-            deletedWhileAwaited.clear();
+            awaitedAnswers.clear();
             reconnectRound.clear();
             deletedHere.clearAfresh();
             for (const id of confirmations.ids()) {
@@ -163,10 +151,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
                 const model = models.value.find(m => m.id === id);
                 if (confirmation && model && ownModels.has(model)) heldChanges.add(model, confirmation.props);
             }
-            catchingUpThrough = colibri;
+            awaitedAnswers.catchUpThrough(colibri);
             for (const model of models.value) {
                 if (!ownModels.has(model)) continue;
-                if (answered.has(model)) reconnectRound.add(model.id);
+                if (awaitedAnswers.wasAnswered(model)) reconnectRound.add(model.id);
                 askFor(colibri, model);
             }
             reconnectRound.start(() => askForEnd(colibri));
@@ -202,8 +190,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const model = models.value.find(m => m.id === modelData.id);
         const id = modelData.id;
         if (deletedHere.dropsAfreshUpdate(id, isBare(modelData))) return;
-        if (id !== undefined && deletedWhileAwaited.delete(id) && !model && isBare(modelData)) return;
-        const asker = id === undefined ? undefined : awaitingAnswer.get(id);
+        if (id !== undefined && awaitedAnswers.takeDeleted(id) && !model && isBare(modelData)) return;
+        const asker = id === undefined ? undefined : awaitedAnswers.askerOf(id);
         if (id !== undefined && asker) {
             takeAnswer(id, asker, model, modelData);
             return;
@@ -231,13 +219,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // (see lostChanges), and is again indistinguishable from a remote update. One more request follows
     // (see roundEnd), updates before its answer are checked, then the model is settled (see endRound).
     const takeAnswer = (id: string, asker: Colibri, model: T | undefined, modelData: Partial<T>) => {
-        if (model) answered.add(model);
+        if (model) awaitedAnswers.markAnswered(model);
 
         // detach() was called since the request: it takes updates like a non-own model and sends
         // nothing.
         if (model && !ownModels.has(model)) {
             reconnectRound.delete(id);
-            awaitingAnswer.delete(id);
+            awaitedAnswers.settle(id);
             confirmations.end(id);
             if (!isBare(modelData)) applyUpdate(model, modelData);
             catchUpOnceAnswered();
@@ -246,7 +234,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
         if (!model || isBare(modelData)) {
             reconnectRound.delete(id);
-            awaitingAnswer.delete(id);
+            awaitedAnswers.settle(id);
             confirmations.end(id);
             if (model) {
                 heldChanges.drop(model);
@@ -278,7 +266,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             return;
         }
 
-        awaitingAnswer.delete(id);
+        awaitedAnswers.settle(id);
         const held = heldChanges.take(model);
         applyUpdate(model, withoutChanges(modelData, model, held));
         // Deleted by a subscriber while the list emitted: nothing more to send.
@@ -296,12 +284,12 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // the values the updates showed.
     const endRound = () => {
         for (const [id, { shown, lost }] of reconnectRound.finish()) {
-            const asker = awaitingAnswer.get(id);
+            const asker = awaitedAnswers.askerOf(id);
             const model = models.value.find(m => m.id === id);
             // Settled already, by the bare id or model::delete.
             if (!asker || !model) continue;
 
-            awaitingAnswer.delete(id);
+            awaitedAnswers.settle(id);
             // detach() was called since: it sends nothing.
             if (!ownModels.has(model)) continue;
             const held = heldChanges.take(model);
@@ -342,12 +330,12 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // The changes made meanwhile then go out without asking again: nothing stale can come any more.
     const endWait = (id: string) => {
         const confirmation = confirmations.end(id);
-        const asker = awaitingAnswer.get(id);
+        const asker = awaitedAnswers.askerOf(id);
         const model = models.value.find(m => m.id === id);
         // Settled already, by the bare id or model::delete.
         if (!confirmation || !asker || !model) return;
 
-        awaitingAnswer.delete(id);
+        awaitedAnswers.settle(id);
         const held = heldChanges.take(model);
         const { theirs, again } = judgeConfirmation(id, confirmation);
         applyUpdate(model, withoutChanges(theirs as Partial<T>, model, held));
@@ -426,12 +414,12 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         // outage). That settles the model like an update, so catching up must not keep waiting for it.
         confirmations.end(id);
         const answerMayFollow = guardWindow.takeAnswerMayFollow(id);
-        if (awaitingAnswer.delete(id)) {
-            deletedWhileAwaited.add(id);
+        if (awaitedAnswers.settle(id)) {
+            awaitedAnswers.markDeleted(id);
             catchUpOnceAnswered();
         } else if (answerMayFollow) {
             // Settled by an update that need not have been the answer, which may still come.
-            deletedWhileAwaited.add(id);
+            awaitedAnswers.markDeleted(id);
         }
     };
 
@@ -458,7 +446,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         // before `new Colibri()`, or after a reconnect but before the answer, would otherwise be undone by it.
         // Also changes made while disconnected: Socket.IO sends them on reconnect ahead of the model's
         // request, and to a server that forgot the model they would become all of it.
-        const mustHold = () => !Colibri.getInstance(false) || disconnected || awaitingAnswer.has(model.id);
+        const mustHold = () => !Colibri.getInstance(false) || disconnected || awaitedAnswers.isAwaited(model.id);
         model.modelChanges.subscribe(change => {
             if (mustHold()) heldChanges.add(model, [change]);
             else changesToSend.add(model, [change]);
