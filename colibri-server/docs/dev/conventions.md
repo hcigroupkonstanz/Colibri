@@ -13,7 +13,8 @@ For developers working on colibri-server itself. Running the tests: [development
     `tcp/`, `tcp/worker/`, `socket-io/`, `hooks/`, `models/` (the synchronized models, `DataStore`), `store/` (the
     REST store, `store.db`), `http/`, `admin/` and `voice/`.
   - Admin UI: `src/ui/app/<feature>/` with `log/`, `clients/`, `models/`, `server/`, `charts/`, `shell/` and
-    `connection/`.
+    `connection/`. Modules several features use (`format.ts`, `download.ts`) sit in `src/ui/app/` itself. Helpers
+    only specs use sit in `src/ui/testing/`.
 - No barrel files (an `index.ts` that re-exports). Import from the defining file. Barrels bring import cycles and
   load every module they re-export. They suit only a library's single entry point, and the server is not a library.
 - `import type` for imports used only as types.
@@ -23,21 +24,28 @@ For developers working on colibri-server itself. Running the tests: [development
 
 ## Size guides
 
-Checked by ESLint, configured in `eslint.config.mjs`. Tests are exempt.
-Exceeding a guide needs a reason in review.
+Configured in `eslint.config.mjs` as errors, so lint and CI fail when code exceeds one. They apply to `src/`.
+Specs (`*.spec.ts`), `src/ui/testing/` and everything outside `src/` are exempt.
+Exceeding a guide needs an `eslint-disable-next-line <rule> -- <reason>` comment that review accepts.
 
-| Metric | Guide |
+| Metric | Limit |
 |---|---|
-| Code lines per file (`max-lines`) | up to ~400 |
-| Lines per function (`max-lines-per-function`) | up to ~40 |
-| Cyclomatic complexity per function (`complexity`) | at most 15 |
-| Nesting depth (`max-depth`) | at most 4 |
-| Parameters (`max-params`) | at most 5, an options object beyond that |
+| Code lines per file (`max-lines`) | 400 |
+| Lines per function (`max-lines-per-function`) | 40 |
+| Cyclomatic complexity per function (`complexity`) | 15 |
+| Nesting depth (`max-depth`) | 4 |
+| Parameters (`max-params`) | 5, an options object beyond that |
+
+`src/` is linted with type information (typescript-eslint's `recommendedTypeChecked`), which catches floating
+promises and `any` leaking through. The server uses the project service, the admin UI `src/ui/tsconfig.app.json` and
+`src/ui/tsconfig.spec.json`. `test/` and `bench/` are linted without type information.
+`npm run lint` must report 0 problems.
 
 ## Design
 
-- Functional core, imperative shell: `Service` and `WorkerService` subclasses hold sockets, timers, files and
-  thread messages.
+- Functional core, imperative shell: `Service` and `WorkerService` subclasses hold the sockets, files and thread
+  messages and own the lifecycle. A helper class that owns a timer or a thread (`StoreExpiry`,
+  `StoreCheckpointer`, `ProxyProtocolGate`) is started and stopped by its `Service`.
 - Decisions and formatting go into plain functions and classes. Pass the time (`now`) and callbacks in, so unit
   tests reach them without sockets. The `admin/` topic snapshots are the example.
 - Classes split out of a `Service` do not extend `Service` themselves: a `Service` registers itself in
