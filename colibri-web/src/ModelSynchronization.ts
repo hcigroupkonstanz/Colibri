@@ -169,40 +169,56 @@ class ModelSyncChannel<T extends SyncModel<T>> {
         // Deferred so that models registered in the same block of code, or before `new Colibri()`, are asked for first.
         setTimeout(() => this.catchUpOnceAnswered(), 0);
         onColibriDisconnected(colibri, () => {
-            this.disconnected = true;
-            // Answers to the requests on this connection will not come. Ended here, not on reconnect:
-            // by then another registration on the channel may have sent the next one (see guardFrom).
-            this.guardWindow.endGuard();
-            // Not updated while the last reconnect's answers are pending: changes lost in the earlier
-            // outage are still in question, so they are judged from then.
-            if (this.reconnectRound.isEmpty()) this.reconnectRound.setLastHeard(lastHeardFrom(colibri) ?? Date.now());
-            // A delete sent after the last message from the server may have gone into a connection that was
-            // already dead (Socket.IO loses what it sends until its ping timeout). Sent again, as colibri-unity
-            // does; Socket.IO holds it until the reconnect. A delete that did arrive arrives twice, harmlessly.
-            const since = (lastHeardFrom(colibri) ?? Date.now()) - 1000;
-            for (const id of this.deletedHere.idsSince(since)) colibri.sendMessage(this.name, 'model::delete', { id });
+            this.onDisconnected(colibri);
         });
         onColibriReconnected(colibri, () => {
-            this.disconnected = false;
-            // Requests from the previous connection will not be answered. Changes sent for models still
-            // being confirmed may not have arrived, so they are held again and go out with the answer.
-            this.awaitedAnswers.clear();
-            this.reconnectRound.clear();
-            this.deletedHere.clearAfresh();
-            for (const id of this.confirmations.ids()) {
-                const confirmation = this.confirmations.end(id);
-                const model = this.models.value.find(m => m.id === id);
-                if (confirmation && model && this.ownModels.has(model)) this.heldChanges.add(model, confirmation.props);
-            }
-            this.awaitedAnswers.catchUpThrough(colibri);
-            for (const model of this.models.value) {
-                if (!this.ownModels.has(model)) continue;
-                if (this.awaitedAnswers.wasAnswered(model)) this.reconnectRound.add(model.id);
-                this.askFor(colibri, model);
-            }
-            this.reconnectRound.start(() => askForEnd(colibri));
-            this.catchUpOnceAnswered();
+            this.onReconnected(colibri);
         });
+    }
+
+    private onDisconnected(colibri: Colibri): void {
+        this.disconnected = true;
+        // Answers to the requests on this connection will not come. Ended here, not on reconnect:
+        // by then another registration on the channel may have sent the next one (see guardFrom).
+        this.guardWindow.endGuard();
+        // Not updated while the last reconnect's answers are pending: changes lost in the earlier
+        // outage are still in question, so they are judged from then.
+        if (this.reconnectRound.isEmpty()) this.reconnectRound.setLastHeard(lastHeardFrom(colibri) ?? Date.now());
+        // A delete sent after the last message from the server may have gone into a connection that was
+        // already dead (Socket.IO loses what it sends until its ping timeout). Sent again, as colibri-unity
+        // does; Socket.IO holds it until the reconnect. A delete that did arrive arrives twice, harmlessly.
+        const since = (lastHeardFrom(colibri) ?? Date.now()) - 1000;
+        for (const id of this.deletedHere.idsSince(since)) colibri.sendMessage(this.name, 'model::delete', { id });
+    }
+
+    private onReconnected(colibri: Colibri): void {
+        this.disconnected = false;
+        // Requests from the previous connection will not be answered. Changes sent for models still
+        // being confirmed may not have arrived, so they are held again and go out with the answer.
+        this.awaitedAnswers.clear();
+        this.reconnectRound.clear();
+        this.deletedHere.clearAfresh();
+        this.holdUnconfirmed();
+        this.awaitedAnswers.catchUpThrough(colibri);
+        this.askAgainForOwnModels(colibri);
+        this.reconnectRound.start(() => askForEnd(colibri));
+        this.catchUpOnceAnswered();
+    }
+
+    private holdUnconfirmed(): void {
+        for (const id of this.confirmations.ids()) {
+            const confirmation = this.confirmations.end(id);
+            const model = this.models.value.find(m => m.id === id);
+            if (confirmation && model && this.ownModels.has(model)) this.heldChanges.add(model, confirmation.props);
+        }
+    }
+
+    private askAgainForOwnModels(colibri: Colibri): void {
+        for (const model of this.models.value) {
+            if (!this.ownModels.has(model)) continue;
+            if (this.awaitedAnswers.wasAnswered(model)) this.reconnectRound.add(model.id);
+            this.askFor(colibri, model);
+        }
     }
 
     // Handle updates
