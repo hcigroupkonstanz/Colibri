@@ -120,7 +120,7 @@ export class SocketIOServer extends Service implements NetworkServer {
         clearInterval(this.rateLimitSweep);
         if (!this.ioServer) return;
 
-        this.ioServer.close();
+        void this.ioServer.close();
         this.logInfo('Stopped SocketIO server');
     }
 
