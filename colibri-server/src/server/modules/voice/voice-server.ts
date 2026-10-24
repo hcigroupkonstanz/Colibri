@@ -249,19 +249,19 @@ export class VoiceServer extends Service {
         // it is dropped as soon as the Unity clients it was let in for leave
         // (VoiceAdmission.onUnityClientsLeft).
         if (voiceClient && voiceClient.appId === appId) return voiceClient;
-        const admission = this.admission.admit(remote.address, appId, clientKey, nowMillis);
-        if (!admission) return undefined;
+        const admittedAs = this.admission.admit(remote.address, appId, clientKey, nowMillis);
+        if (!admittedAs) return undefined;
         this.reports.forgetRejection(clientKey);
 
         // Add to clients if new client
         if (!voiceClient) {
             voiceClient = newVoiceClient(remote, header, this.samplingRate, now, nowMillis);
             this.clients.set(clientKey, voiceClient);
-            if (admission === 'unity') this.admission.joinGroup(voiceClient, remote.address);
+            if (admittedAs === 'unity') this.admission.joinGroup(voiceClient, remote.address);
             this.voiceClients.invalidateAppClients();
             this.logDebug(
                 `New voice client connected from ${clientKey} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
-                    + (admission === 'proxy' ? ' (through a trusted proxy, unchecked)' : ''),
+                    + (admittedAs === 'proxy' ? ' (through a trusted proxy, unchecked)' : ''),
                 CONNECTION_LINE
             );
             if (this.recordingVoiceData) {
@@ -273,7 +273,7 @@ export class VoiceServer extends Service {
             this.logDebug(`Voice client ${clientKey} ID: ${voiceClient.userId} moved from app ${formatAppId(voiceClient.appId)} to app ${formatAppId(appId)}`);
             this.admission.leaveGroup(voiceClient);
             voiceClient.appId = appId;
-            if (admission === 'unity') this.admission.joinGroup(voiceClient, remote.address);
+            if (admittedAs === 'unity') this.admission.joinGroup(voiceClient, remote.address);
             this.voiceClients.invalidateAppClients();
         }
         return voiceClient;
