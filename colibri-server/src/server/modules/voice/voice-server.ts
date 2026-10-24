@@ -13,6 +13,7 @@ import {
     VoiceCodec,
     readVoiceHeader,
 } from './voice-packet.js';
+import type { VoiceHeader } from './voice-packet.js';
 import type { TrustProxy } from '../net/trusted-proxies.js';
 import { trustNoProxy } from '../net/trusted-proxies.js';
 import { hostPort, ipv4OnlyWarning, normalizeAddress } from '../net/addresses.js';
@@ -86,6 +87,25 @@ const stalestOf = function (group: VoiceClientGroup): VoiceClient | undefined {
         if (!stalest || client.lastHeartbeat < stalest.lastHeartbeat) stalest = client;
     }
     return stalest;
+};
+
+// A new voice client, from the header of its first packet and where that came from.
+const newVoiceClient = function (remote: dgram.RemoteInfo, header: VoiceHeader, samplingRate: number, now: Date, nowMillis: number): VoiceClient {
+    const { userId, sequence, frameSize, codec, appId } = header;
+    return {
+        ip: remote.address,
+        port: remote.port,
+        userId: userId,
+        appId,
+        lastSequence: sequence,
+        lastHeartbeat: nowMillis,
+        frameSize,
+        frameSizeMillis: frameSize / samplingRate * 1000,
+        codec,
+        recordingStartDate: now,
+        recordingData: new GrowableInt16Buffer(),
+        group: undefined,
+    };
 };
 
 // What getAppClients hands back for an app with no voice clients.
@@ -223,112 +243,7 @@ export class VoiceServer extends Service {
             this.logInfo(`Voice server Sampling Rate: ${this.samplingRate} Hz`);
             if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');
         });
-        this.udpSocket.on('message', (message, remote) => {
-            const now = new Date();
-            const nowMillis = now.getTime();
-            const clientKey = voiceClientKey(remote.address, remote.port);
-
-            const reading = readVoiceHeader(message);
-            if (reading.kind === 'v1') {
-                this.reportV1Packet(clientKey, nowMillis);
-                return;
-            }
-            if (reading.kind === 'malformed') {
-                this.reportMalformedPacket(clientKey, reading.reason, nowMillis);
-                return;
-            }
-
-            // Source port 0 means the sender named no port to reply to (RFC 768), and nothing
-            // can be sent back to it: udpSocket.send() rejects port 0 synchronously with
-            // ERR_SOCKET_BAD_PORT.
-            // Such a sender used to register like any other, and the next packet from anyone
-            // else threw out of this listener while relaying to it and shut the server down.
-            // Only a raw socket can send one, but that is one packet from any machine on the LAN.
-            if (remote.port === 0) {
-                this.reportMalformedPacket(clientKey, 'its source port is 0, so nothing can be relayed back to it', nowMillis);
-                return;
-            }
-
-            const { userId, sequence, frameSize, codec, appId } = reading.header;
-
-            // Current voice client
-            let voiceClient = this.clients.get(clientKey);
-
-            // Checked for a sender that is new or changes app. One already let in needs no check:
-            // it is dropped as soon as the Unity clients it was let in for leave (onUnityClientsLeft).
-            let admission: Admission | undefined;
-            if (!voiceClient || voiceClient.appId !== appId) {
-                admission = this.admit(remote.address, appId, clientKey, nowMillis);
-                if (!admission) return;
-                this.rejections.delete(clientKey);
-            }
-
-            // Add to clients if new client
-            if (!voiceClient) {
-                voiceClient = {
-                    ip: remote.address,
-                    port: remote.port,
-                    userId: userId,
-                    appId,
-                    lastSequence: sequence,
-                    lastHeartbeat: nowMillis,
-                    frameSize,
-                    frameSizeMillis: frameSize / this.samplingRate * 1000,
-                    codec,
-                    recordingStartDate: now,
-                    recordingData: new GrowableInt16Buffer(),
-                    group: undefined,
-                };
-                this.clients.set(clientKey, voiceClient);
-                if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
-                this.appClients = undefined;
-                this.logDebug(
-                    `New voice client connected from ${clientKey} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
-                        + (admission === 'proxy' ? ' (through a trusted proxy, unchecked)' : ''),
-                    CONNECTION_LINE
-                );
-                if (this.recordingVoiceData) {
-                    this.logWarning('Warning: Voice recording is enabled');
-                    if (codec !== VoiceCodec.PCM) this.logWarning('Voice recording is only supported for PCM data');
-                }
-            } else if (voiceClient.appId !== appId) {
-                // Its app name changed: from now on it hears, and is heard by, the new app.
-                this.logDebug(`Voice client ${clientKey} ID: ${voiceClient.userId} moved from app ${formatAppId(voiceClient.appId)} to app ${formatAppId(appId)}`);
-                this.leaveGroup(voiceClient);
-                voiceClient.appId = appId;
-                if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
-                this.appClients = undefined;
-            }
-
-            // Update last heartbeat
-            voiceClient.lastSequence = sequence;
-            voiceClient.lastHeartbeat = nowMillis;
-
-            // Send message to all other clients of its app
-            for (const peer of this.getAppClients(appId)) {
-                if (peer === voiceClient) continue;
-
-                // send() checks its arguments synchronously and throws, and anything thrown
-                // out of this listener is an uncaught exception that shuts the server down.
-                // Nothing that registers should fail those checks (see the port 0 check
-                // above), so this is a backstop. It also keeps one peer that can't be sent
-                // to from stopping the relay to every peer after it.
-                try {
-                    this.udpSocket.send(message, 0, message.length, peer.port, peer.ip, (err) => {
-                        if (err) this.reportRelayFailure(peer, err, Date.now());
-                    });
-                } catch (err) {
-                    this.reportRelayFailure(peer, err, nowMillis);
-                }
-            }
-
-            if (codec === VoiceCodec.PCM && this.recordingVoiceData) {
-                // i + 2 <= length: an odd trailing byte is dropped rather than over-read.
-                for (let i = VOICE_HEADER_LENGTH; i <= message.length - 2; i += 2) {
-                    voiceClient.recordingData.push(message.readInt16LE(i));
-                }
-            }
-        });
+        this.udpSocket.on('message', (message, remote) => this.handlePacket(message, remote));
         // A failed bind (the voice port taken, a VOICE_HOST that does not resolve or is not
         // this machine's) is only ever reported here, and the rest of the server runs on
         // without voice. This used to be a bare console.error of the message - on stderr
@@ -354,6 +269,112 @@ export class VoiceServer extends Service {
                 + ` (further ones are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
         });
         this.udpSocket.bind(voicePort, hostname);
+    }
+
+    private handlePacket(message: Buffer, remote: dgram.RemoteInfo): void {
+        const now = new Date();
+        const nowMillis = now.getTime();
+        const clientKey = voiceClientKey(remote.address, remote.port);
+
+        const reading = readVoiceHeader(message);
+        if (reading.kind === 'v1') {
+            this.reportV1Packet(clientKey, nowMillis);
+            return;
+        }
+        if (reading.kind === 'malformed') {
+            this.reportMalformedPacket(clientKey, reading.reason, nowMillis);
+            return;
+        }
+
+        // Source port 0 means the sender named no port to reply to (RFC 768), and nothing
+        // can be sent back to it: udpSocket.send() rejects port 0 synchronously with
+        // ERR_SOCKET_BAD_PORT.
+        // Such a sender used to register like any other, and the next packet from anyone
+        // else threw out of this listener while relaying to it and shut the server down.
+        // Only a raw socket can send one, but that is one packet from any machine on the LAN.
+        if (remote.port === 0) {
+            this.reportMalformedPacket(clientKey, 'its source port is 0, so nothing can be relayed back to it', nowMillis);
+            return;
+        }
+
+        const { sequence, codec, appId } = reading.header;
+        const voiceClient = this.admitSender(remote, clientKey, reading.header, now, nowMillis);
+        if (!voiceClient) return;
+
+        // Update last heartbeat
+        voiceClient.lastSequence = sequence;
+        voiceClient.lastHeartbeat = nowMillis;
+
+        this.relay(message, voiceClient, appId, nowMillis);
+        if (codec === VoiceCodec.PCM && this.recordingVoiceData) this.record(message, voiceClient);
+    }
+
+    // The voice client `remote` sends as, added or moved to the app of `header` first if it is new or
+    // changes app. Undefined if admit drops the packet.
+    private admitSender(remote: dgram.RemoteInfo, clientKey: string, header: VoiceHeader, now: Date, nowMillis: number): VoiceClient | undefined {
+        const { userId, codec, appId } = header;
+
+        // Current voice client
+        let voiceClient = this.clients.get(clientKey);
+
+        // Checked for a sender that is new or changes app. One already let in needs no check:
+        // it is dropped as soon as the Unity clients it was let in for leave (onUnityClientsLeft).
+        if (voiceClient && voiceClient.appId === appId) return voiceClient;
+        const admission = this.admit(remote.address, appId, clientKey, nowMillis);
+        if (!admission) return undefined;
+        this.rejections.delete(clientKey);
+
+        // Add to clients if new client
+        if (!voiceClient) {
+            voiceClient = newVoiceClient(remote, header, this.samplingRate, now, nowMillis);
+            this.clients.set(clientKey, voiceClient);
+            if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
+            this.appClients = undefined;
+            this.logDebug(
+                `New voice client connected from ${clientKey} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
+                    + (admission === 'proxy' ? ' (through a trusted proxy, unchecked)' : ''),
+                CONNECTION_LINE
+            );
+            if (this.recordingVoiceData) {
+                this.logWarning('Warning: Voice recording is enabled');
+                if (codec !== VoiceCodec.PCM) this.logWarning('Voice recording is only supported for PCM data');
+            }
+        } else {
+            // Its app name changed: from now on it hears, and is heard by, the new app.
+            this.logDebug(`Voice client ${clientKey} ID: ${voiceClient.userId} moved from app ${formatAppId(voiceClient.appId)} to app ${formatAppId(appId)}`);
+            this.leaveGroup(voiceClient);
+            voiceClient.appId = appId;
+            if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
+            this.appClients = undefined;
+        }
+        return voiceClient;
+    }
+
+    // Sends `message` to all other clients of the app `appId`.
+    private relay(message: Buffer, sender: VoiceClient, appId: number, nowMillis: number): void {
+        for (const peer of this.getAppClients(appId)) {
+            if (peer === sender) continue;
+
+            // send() checks its arguments synchronously and throws, and anything thrown
+            // out of the 'message' listener is an uncaught exception that shuts the server down.
+            // Nothing that registers should fail those checks (see the port 0 check in
+            // handlePacket), so this is a backstop. It also keeps one peer that can't be sent
+            // to from stopping the relay to every peer after it.
+            try {
+                this.udpSocket.send(message, 0, message.length, peer.port, peer.ip, (err) => {
+                    if (err) this.reportRelayFailure(peer, err, Date.now());
+                });
+            } catch (err) {
+                this.reportRelayFailure(peer, err, nowMillis);
+            }
+        }
+    }
+
+    private record(message: Buffer, client: VoiceClient): void {
+        // i + 2 <= length: an odd trailing byte is dropped rather than over-read.
+        for (let i = VOICE_HEADER_LENGTH; i <= message.length - 2; i += 2) {
+            client.recordingData.push(message.readInt16LE(i));
+        }
     }
 
     private closeSocket(): void {
