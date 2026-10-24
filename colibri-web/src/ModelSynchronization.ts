@@ -97,26 +97,34 @@ class ModelSyncChannel<T extends SyncModel<T>> {
 
         // Register for updates
         RegisterChannel(this.name, (payload: Message) => {
-            if (payload.command === 'model::update') {
-                this.onUpdate((payload as ModelSyncMsg<T>).payload);
-            } else if (payload.command === 'model::delete') {
-                this.onDelete((payload as ModelSyncMsg<T>).payload.id);
-            } else {
-                console.error(`Unknown model command: ${payload.command}`);
-            }
+            this.onMessage(payload);
         });
 
-        // Answers to askForEnd requests (see roundEnd, guardEnds, endWait). Every registration receives
-        // each one sent on this connection and acts only on the ids it waits for.
         RegisterChannel(END_CHANNEL, (message: Message) => {
-            if (message.command !== 'model::update') return;
-            const id = (message.payload as { id?: unknown } | undefined)?.id;
-            if (typeof id !== 'string') return;
-            if (this.reconnectRound.isEnd(id)) this.endRound();
-            if (this.guardWindow.includes(id)) this.guardWindow.endGuard(id);
-            const confirmed = this.confirmations.idEndedBy(id);
-            if (confirmed !== undefined) this.endWait(confirmed);
+            this.onEndMarker(message);
         });
+    }
+
+    private onMessage(payload: Message): void {
+        if (payload.command === 'model::update') {
+            this.onUpdate((payload as ModelSyncMsg<T>).payload);
+        } else if (payload.command === 'model::delete') {
+            this.onDelete((payload as ModelSyncMsg<T>).payload.id);
+        } else {
+            console.error(`Unknown model command: ${payload.command}`);
+        }
+    }
+
+    // Answers to askForEnd requests (see roundEnd, guardEnds, endWait). Every registration receives
+    // each one sent on this connection and acts only on the ids it waits for.
+    private onEndMarker(message: Message): void {
+        if (message.command !== 'model::update') return;
+        const id = (message.payload as { id?: unknown } | undefined)?.id;
+        if (typeof id !== 'string') return;
+        if (this.reconnectRound.isEnd(id)) this.endRound();
+        if (this.guardWindow.includes(id)) this.guardWindow.endGuard(id);
+        const confirmed = this.confirmations.idEndedBy(id);
+        if (confirmed !== undefined) this.endWait(confirmed);
     }
 
     // Asks the server for an own model by id; the answer arrives through onUpdate or onDelete.
