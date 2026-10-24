@@ -20,14 +20,16 @@ export const withoutChanges = <T extends SyncModel<T>>(
     return Object.fromEntries(Object.entries(modelData).filter(([key]) => !changed.has(key))) as Partial<T>;
 };
 
+// The id plus the fields of the `held` properties and the `keys`, all at their current values, sent on
+// top of an answer.
 export const fieldsOnTop = <T extends SyncModel<T>>(
     model: T,
     id: string,
     held: string[],
     keys: string[]
 ): Record<string, unknown> => {
-    // toJson() with no properties named is all of them.
     const current = toJsonOf(model) as Record<string, unknown>;
+    // toJson() with no properties named returns all of them, not none.
     const fields: Record<string, unknown> = held.length > 0 ? toJsonOf(model, held) : { id };
     for (const key of keys) fields[key] = current[key];
     return fields;

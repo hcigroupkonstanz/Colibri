@@ -79,6 +79,8 @@ export default tseslint.config(
     {
         files: ['src/**/*.ts'],
         rules: {
+            // PascalCase is for the public functions (SendMessage, Synced); names that come from elsewhere,
+            // such as the HTTP header keys in RestStore, are exempt.
             '@typescript-eslint/naming-convention': [
                 'error',
                 { selector: 'default', format: ['camelCase'], leadingUnderscore: 'allow' },
@@ -91,6 +93,7 @@ export default tseslint.config(
                 },
                 { selector: 'typeLike', format: ['PascalCase'] },
                 { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
+                // allowDouble for SyncModel.__syncedProperties
                 {
                     selector: 'classProperty',
                     modifiers: ['private'],
@@ -128,6 +131,6 @@ export default tseslint.config(
             'max-params': ['error', 5]
         }
     },
-    // must stay last: turns off every formatting rule Prettier now owns
+    // must stay last: turns off the rules that conflict with Prettier
     eslintConfigPrettier
 );
