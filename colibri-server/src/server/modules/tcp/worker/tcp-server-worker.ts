@@ -1303,7 +1303,7 @@ export class TCPServerWorker extends WorkerService {
 
         // ownBytes: a Buffer.from() this small is a view into the 64 KiB Buffer pool, and
         // postMessage would clone all of it - ten times a second per client.
-        this.postClientMessage(client, 'colibri', 'latency', ownBytes(Buffer.from(pingTimestamp.toString(), 'utf8')));
+        this.postClientMessage(client, COLIBRI_CHANNEL, 'latency', ownBytes(Buffer.from(pingTimestamp.toString(), 'utf8')));
     }
 
     // Every message for the main thread's hooks goes through here, so each one is counted in the

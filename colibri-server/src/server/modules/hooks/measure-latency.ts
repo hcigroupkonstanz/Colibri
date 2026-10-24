@@ -1,4 +1,5 @@
 import { Payload } from '../protocol/payload.js';
+import { COLIBRI_CHANNEL } from '../protocol/protocol.js';
 import { RingBuffer } from '../core/ring-buffer.js';
 import { Service } from '../core/service.js';
 import type { ConnectionPool } from './connection-pool.js';
@@ -33,14 +34,14 @@ export class MeasureLatency extends Service {
     private sendPing(frontendConnection: NetworkServer): void {
         const now = hrtime.bigint();
         frontendConnection.broadcast({
-            channel: 'colibri',
+            channel: COLIBRI_CHANNEL,
             command: 'latency',
             payload: Payload.fromString(now.toString()),
         }, frontendConnection.currentClients);
     }
 
     private receiveLatency(m: NetworkMessage): void {
-        if (m.channel !== 'colibri') return;
+        if (m.channel !== COLIBRI_CHANNEL) return;
 
         try {
             const ping = m.payload?.asValue<number | string>();
