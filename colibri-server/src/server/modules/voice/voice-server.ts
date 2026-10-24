@@ -19,6 +19,7 @@ import { trustNoProxy } from '../net/trusted-proxies.js';
 import { hostPort, ipv4OnlyWarning, normalizeAddress } from '../net/addresses.js';
 import type { UnityClientSource } from './unity-client-addresses.js';
 import { UnityClientAddresses } from './unity-client-addresses.js';
+import { formatAppId } from './format-app-id.js';
 import { GrowableInt16Buffer, littleEndianBytes, wavHeader } from './wav.js';
 
 interface VoiceClient {
@@ -133,8 +134,6 @@ export const ipv6SocketsTakeIPv4 = function (read: (file: string) => string = fi
         return true;
     }
 };
-
-const formatAppId = (appId: number): string => `0x${appId.toString(16).padStart(8, '0')}`;
 
 // A source sending malformed packets, or a peer that can't be relayed to, fails at packet rate
 // (up to ~50/s per voice client), so each is reported at most once per this interval rather
