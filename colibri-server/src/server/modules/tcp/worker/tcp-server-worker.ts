@@ -392,7 +392,7 @@ export class TCPServerWorker extends WorkerService {
             return;
         }
 
-        if (client.bytesSinceHeartbeat >= HEARTBEAT_EVERY_BYTES) {
+        if (client.outbox.bytesSinceHeartbeat >= HEARTBEAT_EVERY_BYTES) {
             this.writeHeartbeat(client, encodeHeartbeatFrame(process.hrtime.bigint()));
         }
         // After the heartbeat just written ahead of it, which comes before it on the wire, so an
@@ -401,7 +401,7 @@ export class TCPServerWorker extends WorkerService {
             client.reading.unreadLargeBytes = Math.max(client.reading.unreadLargeBytes, packet.length);
             client.reading.lastLargeWrittenAt = process.hrtime.bigint();
         }
-        client.bytesSinceHeartbeat += packet.length;
+        client.outbox.bytesSinceHeartbeat += packet.length;
         client.traffic.sent += 1;
         this.write(client, packet, reply ? 'reply' : 'relayed');
     }
@@ -417,18 +417,18 @@ export class TCPServerWorker extends WorkerService {
             return;
         }
 
-        client.bytesSinceHeartbeat = 0;
+        client.outbox.bytesSinceHeartbeat = 0;
         this.write(client, packet, 'heartbeat');
     }
 
     private write(client: TcpClient, packet: Buffer, kind: 'relayed' | 'reply' | 'heartbeat'): void {
-        if (kind === 'reply') client.replyBytesQueued += packet.length;
-        else if (kind === 'heartbeat') client.heartbeatsQueued += 1;
+        if (kind === 'reply') client.outbox.replyBytesQueued += packet.length;
+        else if (kind === 'heartbeat') client.outbox.heartbeatsQueued += 1;
         client.socket.write(packet, (err) => {
             // Called once the kernel has taken the packet, or the write failed: either way it is
             // no longer waiting.
-            if (kind === 'reply') client.replyBytesQueued -= packet.length;
-            else if (kind === 'heartbeat') client.heartbeatsQueued -= 1;
+            if (kind === 'reply') client.outbox.replyBytesQueued -= packet.length;
+            else if (kind === 'heartbeat') client.outbox.heartbeatsQueued -= 1;
             if (!err) return;
 
             // A peer that is gone fails every write still queued for it, each with a callback of
@@ -448,11 +448,11 @@ export class TCPServerWorker extends WorkerService {
     // of it is waiting. Replies waiting ahead of it do not count, so a client
     // still reading the answer to its model::request gets the updates made meanwhile too.
     private admitRelayed(client: TcpClient): boolean {
-        const relayedBytes = client.socket.writableLength - client.replyBytesQueued;
+        const relayedBytes = client.socket.writableLength - client.outbox.replyBytesQueued;
         if (relayedBytes > highWaterMark) {
-            client.droppedSinceWarning += 1;
-            if (!client.dropping) {
-                client.dropping = true;
+            client.outbox.droppedSinceWarning += 1;
+            if (!client.outbox.dropping) {
+                client.outbox.dropping = true;
                 this.logWarning(
                     `Dropping messages to client ${client.id}: writable buffer exceeds high-water mark (${relayedBytes} bytes)`
                 );
@@ -460,12 +460,12 @@ export class TCPServerWorker extends WorkerService {
             return false;
         }
 
-        if (client.dropping) {
-            client.dropping = false;
+        if (client.outbox.dropping) {
+            client.outbox.dropping = false;
             this.logWarning(
-                `Client ${client.id} caught up; dropped ${client.droppedSinceWarning} message(s) while backed up`
+                `Client ${client.id} caught up; dropped ${client.outbox.droppedSinceWarning} message(s) while backed up`
             );
-            client.droppedSinceWarning = 0;
+            client.outbox.droppedSinceWarning = 0;
         }
         return true;
     }
@@ -473,10 +473,10 @@ export class TCPServerWorker extends WorkerService {
     // Whether one more reply may be queued for the client: always, unless MAX_REPLY_BACKLOG_BYTES of
     // replies are waiting already.
     private admitReply(client: TcpClient): boolean {
-        if (client.replyBytesQueued > MAX_REPLY_BACKLOG_BYTES) {
-            client.droppedRepliesSinceWarning += 1;
-            if (!client.droppingReplies) {
-                client.droppingReplies = true;
+        if (client.outbox.replyBytesQueued > MAX_REPLY_BACKLOG_BYTES) {
+            client.outbox.droppedRepliesSinceWarning += 1;
+            if (!client.outbox.droppingReplies) {
+                client.outbox.droppingReplies = true;
                 this.logWarning(
                     `Dropping answers to Unity client '${client.name}' (${client.id}, app '${client.app}', ${client.address}): ` +
                         `more than ${MAX_REPLY_BACKLOG_BYTES / (1024 * 1024)} MiB of answers to its own requests (model::request) ` +
@@ -487,13 +487,13 @@ export class TCPServerWorker extends WorkerService {
             return false;
         }
 
-        if (client.droppingReplies) {
-            client.droppingReplies = false;
+        if (client.outbox.droppingReplies) {
+            client.outbox.droppingReplies = false;
             this.logWarning(
-                `Unity client '${client.name}' (${client.id}) is taking answers again; dropped ${client.droppedRepliesSinceWarning} ` +
+                `Unity client '${client.name}' (${client.id}) is taking answers again; dropped ${client.outbox.droppedRepliesSinceWarning} ` +
                     'answer(s) to its requests while too many were waiting'
             );
-            client.droppedRepliesSinceWarning = 0;
+            client.outbox.droppedRepliesSinceWarning = 0;
         }
         return true;
     }
@@ -1029,7 +1029,7 @@ export class TCPServerWorker extends WorkerService {
     private handleHeartbeat(): void {
         const packet = encodeHeartbeatFrame(process.hrtime.bigint());
         for (const client of this.clients.values()) {
-            if (client.heartbeatsQueued > 0) continue;
+            if (client.outbox.heartbeatsQueued > 0) continue;
             this.writeHeartbeat(client, packet);
         }
     }

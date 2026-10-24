@@ -22,23 +22,26 @@ export interface TcpClient {
     // Destroys a socket closeClient ended if the peer never closes its side; see
     // CLOSE_GRACE_MILLIS.
     closeTimer: NodeJS.Timeout | undefined;
-    // Set while writes to this client are being dropped for backpressure. Only the
-    // transitions in and out of that state are logged: a stalled client in a busy app drops
-    // many messages a second, and each dropped-packet warning is postMessage'd to the main
-    // thread and re-broadcast to every admin UI, which WebLog can't dedupe because the
-    // byte count is interpolated into the message.
-    dropping: boolean;
-    droppedSinceWarning: number;
-    // Bytes of messages written to this client since its last heartbeat; see HEARTBEAT_EVERY_BYTES.
-    bytesSinceHeartbeat: number;
-    // Heartbeats handed to the socket that it has not flushed to the kernel yet; see handleHeartbeat.
-    heartbeatsQueued: number;
-    // Bytes of replies handed to the socket that it has not flushed to the kernel yet; see
-    // MAX_REPLY_BACKLOG_BYTES. Taken off writableLength before it is compared with highWaterMark.
-    replyBytesQueued: number;
-    // The same as dropping and droppedSinceWarning, for replies past MAX_REPLY_BACKLOG_BYTES.
-    droppingReplies: boolean;
-    droppedRepliesSinceWarning: number;
+    // What the write path keeps for this client.
+    outbox: {
+        // Set while writes to this client are being dropped for backpressure. Only the
+        // transitions in and out of that state are logged: a stalled client in a busy app drops
+        // many messages a second, and each dropped-packet warning is postMessage'd to the main
+        // thread and re-broadcast to every admin UI, which WebLog can't dedupe because the
+        // byte count is interpolated into the message.
+        dropping: boolean;
+        droppedSinceWarning: number;
+        // Bytes of messages written to this client since its last heartbeat; see HEARTBEAT_EVERY_BYTES.
+        bytesSinceHeartbeat: number;
+        // Heartbeats handed to the socket that it has not flushed to the kernel yet; see handleHeartbeat.
+        heartbeatsQueued: number;
+        // Bytes of replies handed to the socket that it has not flushed to the kernel yet; see
+        // MAX_REPLY_BACKLOG_BYTES. Taken off writableLength before it is compared with highWaterMark.
+        replyBytesQueued: number;
+        // The same as dropping and droppedSinceWarning, for replies past MAX_REPLY_BACKLOG_BYTES.
+        droppingReplies: boolean;
+        droppedRepliesSinceWarning: number;
+    };
     // What the idle watch reads; see IdleWatch.endIdleClients.
     reading: {
         // performance.now() of the last bytes received, or of the connection if none have been yet.
@@ -73,13 +76,15 @@ export const createTcpClient = function (id: string, socket: net.Socket, address
         version: '0',
         disconnected: false,
         closeTimer: undefined,
-        dropping: false,
-        droppedSinceWarning: 0,
-        bytesSinceHeartbeat: 0,
-        heartbeatsQueued: 0,
-        replyBytesQueued: 0,
-        droppingReplies: false,
-        droppedRepliesSinceWarning: 0,
+        outbox: {
+            dropping: false,
+            droppedSinceWarning: 0,
+            bytesSinceHeartbeat: 0,
+            heartbeatsQueued: 0,
+            replyBytesQueued: 0,
+            droppingReplies: false,
+            droppedRepliesSinceWarning: 0,
+        },
         reading: {
             lastInboundAt: performance.now(),
             unreadLargeBytes: 0,
