@@ -117,7 +117,91 @@ const certificateFacts = function (cert: TlsInfo, at: number, format: (time: num
     ];
 };
 
-export const serverSections = function (s: ServerSnapshot, format: (time: number) => string): Section[] {
+const serverSection = function (s: ServerSnapshot, format: (time: number) => string): Section {
+    return {
+        id: 'server', title: 'Server', facts: [
+            { label: 'Version', value: s.version, mono: true },
+            commit(s.build, format),
+            { label: 'Protocol version', value: s.protocolVersion, mono: true },
+            { label: 'Node.js', value: s.node, mono: true },
+            { label: 'Started', value: format(s.startedAt) },
+            { label: 'Uptime', value: duration(s.uptime) }
+        ]
+    };
+};
+
+const countsSection = function (s: ServerSnapshot): Section {
+    const set = s.settings;
+    return {
+        id: 'counts', title: 'Clients and data', facts: [
+            { label: 'Unity clients', value: count(s.counts.tcpClients), note: 'TCP', link: '/clients' },
+            { label: 'Web clients', value: count(s.counts.webClients), note: 'Socket.IO', link: '/clients' },
+            { label: 'Apps', value: count(s.counts.apps), note: 'with clients connected' },
+            { label: 'Admin pages', value: count(s.counts.adminPages), note: 'open, this one included' },
+            {
+                label: 'Synced models', value: count(s.counts.models), link: '/models',
+                note: `in ${plural(s.counts.modelChannels, 'channel', 'channels')} of ${plural(s.counts.modelApps, 'app', 'apps')}`
+            },
+            {
+                label: 'Recently deleted models', value: count(s.counts.deletedModels),
+                note: `kept for ${text(set['MODEL_TOMBSTONE_SECONDS'])} s`, link: '/models'
+            },
+            { label: 'REST store', value: plural(s.counts.storeKeys, 'value', 'values'), note: `in ${plural(s.counts.storeApps, 'app', 'apps')}, ${bytes(s.counts.storeBytes)}` }
+        ]
+    };
+};
+
+const webFact = function (s: ServerSnapshot, webTlsAtProxy: boolean): Fact {
+    const set = s.settings;
+    const scheme = s.tls ? 'HTTPS and WSS' : webTlsAtProxy ? 'HTTP and WS, TLS terminated by proxy' : 'HTTP and WS';
+    return {
+        label: 'Web', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', value: hostPort(set['WEBSERVER_HOST'], set['WEBSERVER_PORT']), mono: true,
+        note: scheme, title: webTlsAtProxy ? WEB_TLS_AT_PROXY : undefined
+    };
+};
+
+const tcpFact = function (s: ServerSnapshot, tcpTlsAtProxy: boolean, proxies: string[]): Fact {
+    const set = s.settings;
+    const tls = s.tls;
+    // Unity clients through a trusted proxy without TCP_TLS_AT_PROXY: "unencrypted" alone would read
+    // as "no TLS", which the server cannot know.
+    const tcpUndeclared = tls === null && !tcpTlsAtProxy && set['TCP_PROXY_PROTOCOL'] === true && proxies.length > 0;
+    const tcpNote = tls ? 'TLS'
+        : tcpTlsAtProxy ? 'TLS terminated by proxy'
+        : tcpUndeclared ? 'unencrypted, proxy TLS undeclared'
+        : 'unencrypted';
+    const tcpTitle = tcpTlsAtProxy ? TCP_TLS_AT_PROXY : tcpUndeclared ? TCP_TLS_UNDECLARED : undefined;
+    return {
+        label: 'TCP', variable: 'TCP_HOST, TCP_PORT', value: hostPort(set['TCP_HOST'], set['TCP_PORT']), mono: true,
+        note: tcpNote, title: tcpTitle
+    };
+};
+
+const tlsFact = function (s: ServerSnapshot, webTlsAtProxy: boolean, tcpTlsAtProxy: boolean): Fact {
+    const terminatedBy = [
+        ...(webTlsAtProxy ? [ { port: 'HTTPS', why: WEB_TLS_AT_PROXY } ] : []),
+        ...(tcpTlsAtProxy ? [ { port: 'TCP', why: TCP_TLS_AT_PROXY } ] : [])
+    ];
+    return terminatedBy.length > 0
+        ? {
+            ...onOff('TLS', false, 'TLS_CERT, TLS_KEY', `terminated by proxy (${terminatedBy.map(end => end.port).join(', ')})`),
+            title: terminatedBy.map(end => end.why).join('\n')
+        }
+        : onOff('TLS', s.tls !== null, 'TLS_CERT, TLS_KEY');
+};
+
+// Unset is "Not declared", not a bare Off, which would read as "the proxy's TCP port has no TLS".
+// Set without TCP_PROXY_PROTOCOL, it has no effect, as the server warns at startup.
+const tcpTerminationFact = function (s: ServerSnapshot): Fact {
+    const termination = { label: 'TCP TLS termination', variable: 'TCP_TLS_AT_PROXY' };
+    return s.settings['TCP_TLS_AT_PROXY'] !== true
+        ? { ...termination, value: 'Not declared', tone: 'off' }
+        : s.tlsAtProxy.tcp
+            ? { ...termination, value: 'Proxy', tone: 'ok' }
+            : { ...termination, value: 'Proxy', tone: 'warn', note: 'needs TCP_PROXY_PROTOCOL', title: TCP_TLS_NO_EFFECT };
+};
+
+const networkSection = function (s: ServerSnapshot): Section {
     const set = s.settings;
     const tls = s.tls;
     const proxies = Array.isArray(set['TRUSTED_PROXIES']) ? set['TRUSTED_PROXIES'] : [];
@@ -131,106 +215,59 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
     // and the rows say so instead.
     const webTlsAtProxy = tls === null && s.tlsAtProxy.web;
     const tcpTlsAtProxy = tls === null && s.tlsAtProxy.tcp;
-    const scheme = tls ? 'HTTPS and WSS' : webTlsAtProxy ? 'HTTP and WS, TLS terminated by proxy' : 'HTTP and WS';
-    // Unity clients through a trusted proxy without TCP_TLS_AT_PROXY: "unencrypted" alone would read
-    // as "no TLS", which the server cannot know.
-    const tcpUndeclared = tls === null && !tcpTlsAtProxy && set['TCP_PROXY_PROTOCOL'] === true && proxies.length > 0;
-    const tcpNote = tls ? 'TLS'
-        : tcpTlsAtProxy ? 'TLS terminated by proxy'
-        : tcpUndeclared ? 'unencrypted, proxy TLS undeclared'
-        : 'unencrypted';
-    const tcpTitle = tcpTlsAtProxy ? TCP_TLS_AT_PROXY : tcpUndeclared ? TCP_TLS_UNDECLARED : undefined;
-    const terminatedBy = [
-        ...(webTlsAtProxy ? [ { port: 'HTTPS', why: WEB_TLS_AT_PROXY } ] : []),
-        ...(tcpTlsAtProxy ? [ { port: 'TCP', why: TCP_TLS_AT_PROXY } ] : [])
-    ];
-    const tlsFact: Fact = terminatedBy.length > 0
-        ? {
-            ...onOff('TLS', false, 'TLS_CERT, TLS_KEY', `terminated by proxy (${terminatedBy.map(end => end.port).join(', ')})`),
-            title: terminatedBy.map(end => end.why).join('\n')
-        }
-        : onOff('TLS', tls !== null, 'TLS_CERT, TLS_KEY');
-    // Unset is "Not declared", not a bare Off, which would read as "the proxy's TCP port has no TLS".
-    // Set without TCP_PROXY_PROTOCOL, it has no effect, as the server warns at startup.
-    const termination = { label: 'TCP TLS termination', variable: 'TCP_TLS_AT_PROXY' };
-    const tcpTerminationFact: Fact = set['TCP_TLS_AT_PROXY'] !== true
-        ? { ...termination, value: 'Not declared', tone: 'off' }
-        : s.tlsAtProxy.tcp
-            ? { ...termination, value: 'Proxy', tone: 'ok' }
-            : { ...termination, value: 'Proxy', tone: 'warn', note: 'needs TCP_PROXY_PROTOCOL', title: TCP_TLS_NO_EFFECT };
+    return {
+        id: 'network', title: 'Network', facts: [
+            webFact(s, webTlsAtProxy),
+            tcpFact(s, tcpTlsAtProxy, proxies),
+            { label: 'Voice', variable: 'VOICE_HOST, VOICE_PORT', value: hostPort(set['VOICE_HOST'], set['VOICE_PORT']), mono: true, note: 'UDP' },
+            { label: 'Base URL', variable: 'BASE_URL', value: text(set['BASE_URL']) || '/', mono: true },
+            tlsFact(s, webTlsAtProxy, tcpTlsAtProxy),
+            {
+                label: 'Trusted proxies', variable: 'TRUSTED_PROXIES', value: proxies.length > 0 ? proxies.join(', ') : 'None',
+                mono: proxies.length > 0, tone: proxies.length > 0 ? undefined : 'off'
+            },
+            onOff('PROXY protocol on TCP', set['TCP_PROXY_PROTOCOL'] === true, 'TCP_PROXY_PROTOCOL'),
+            tcpTerminationFact(s),
+            {
+                label: 'Proxy TLS addresses', variable: 'PROXY_TLS_ADDRESSES', value: proxyAddresses.length > 0 ? proxyAddresses.join(', ') : 'None',
+                mono: proxyAddresses.length > 0, tone: proxyAddresses.length > 0 ? undefined : 'off'
+            }
+        ]
+    };
+};
 
-    const sections: Section[] = [
-        {
-            id: 'server', title: 'Server', facts: [
-                { label: 'Version', value: s.version, mono: true },
-                commit(s.build, format),
-                { label: 'Protocol version', value: s.protocolVersion, mono: true },
-                { label: 'Node.js', value: s.node, mono: true },
-                { label: 'Started', value: format(s.startedAt) },
-                { label: 'Uptime', value: duration(s.uptime) }
-            ]
-        },
-        {
-            id: 'counts', title: 'Clients and data', facts: [
-                { label: 'Unity clients', value: count(s.counts.tcpClients), note: 'TCP', link: '/clients' },
-                { label: 'Web clients', value: count(s.counts.webClients), note: 'Socket.IO', link: '/clients' },
-                { label: 'Apps', value: count(s.counts.apps), note: 'with clients connected' },
-                { label: 'Admin pages', value: count(s.counts.adminPages), note: 'open, this one included' },
-                {
-                    label: 'Synced models', value: count(s.counts.models), link: '/models',
-                    note: `in ${plural(s.counts.modelChannels, 'channel', 'channels')} of ${plural(s.counts.modelApps, 'app', 'apps')}`
-                },
-                {
-                    label: 'Recently deleted models', value: count(s.counts.deletedModels),
-                    note: `kept for ${text(set['MODEL_TOMBSTONE_SECONDS'])} s`, link: '/models'
-                },
-                { label: 'REST store', value: plural(s.counts.storeKeys, 'value', 'values'), note: `in ${plural(s.counts.storeApps, 'app', 'apps')}, ${bytes(s.counts.storeBytes)}` }
-            ]
-        },
-        {
-            id: 'network', title: 'Network', facts: [
-                {
-                    label: 'Web', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', value: hostPort(set['WEBSERVER_HOST'], set['WEBSERVER_PORT']), mono: true,
-                    note: scheme, title: webTlsAtProxy ? WEB_TLS_AT_PROXY : undefined
-                },
-                {
-                    label: 'TCP', variable: 'TCP_HOST, TCP_PORT', value: hostPort(set['TCP_HOST'], set['TCP_PORT']), mono: true,
-                    note: tcpNote, title: tcpTitle
-                },
-                { label: 'Voice', variable: 'VOICE_HOST, VOICE_PORT', value: hostPort(set['VOICE_HOST'], set['VOICE_PORT']), mono: true, note: 'UDP' },
-                { label: 'Base URL', variable: 'BASE_URL', value: text(set['BASE_URL']) || '/', mono: true },
-                tlsFact,
-                {
-                    label: 'Trusted proxies', variable: 'TRUSTED_PROXIES', value: proxies.length > 0 ? proxies.join(', ') : 'None',
-                    mono: proxies.length > 0, tone: proxies.length > 0 ? undefined : 'off'
-                },
-                onOff('PROXY protocol on TCP', set['TCP_PROXY_PROTOCOL'] === true, 'TCP_PROXY_PROTOCOL'),
-                tcpTerminationFact,
-                {
-                    label: 'Proxy TLS addresses', variable: 'PROXY_TLS_ADDRESSES', value: proxyAddresses.length > 0 ? proxyAddresses.join(', ') : 'None',
-                    mono: proxyAddresses.length > 0, tone: proxyAddresses.length > 0 ? undefined : 'off'
-                }
-            ]
-        }
-    ];
-
-    // The server's own certificate, and the proxy's: both when the proxy starts TLS of its own to
-    // the server, and clients only ever see the proxy's.
+// The server's own certificate, and the proxy's: both when the proxy starts TLS of its own to
+// the server, and clients only ever see the proxy's.
+const certificateSection = function (s: ServerSnapshot, format: (time: number) => string): Section | undefined {
+    const tls = s.tls;
     const proxyTls = s.proxyTls;
     if (tls) {
-        sections.push({
+        return {
             id: 'certificate', title: proxyTls ? 'TLS certificate (this server)' : 'TLS certificate',
             facts: certificateFacts(tls, s.at, format)
-        });
+        };
     }
+    return undefined;
+};
+
+const proxyCheckingSection = function (s: ServerSnapshot): Section | undefined {
+    const set = s.settings;
+    const proxyTls = s.proxyTls;
+    const proxyAddresses = Array.isArray(set['PROXY_TLS_ADDRESSES']) ? set['PROXY_TLS_ADDRESSES'] : [];
     if (proxyTls && proxyTls.length === 0) {
-        sections.push({
+        return {
             id: 'proxy-certificate-0', title: 'Proxy TLS certificate', facts: [
                 { label: 'Addresses', variable: 'PROXY_TLS_ADDRESSES', value: proxyAddresses.join(', '), mono: true },
                 { label: 'Status', value: 'Checking', tone: 'off' }
             ]
-        });
+        };
     }
+    return undefined;
+};
+
+const proxyCertificateSections = function (s: ServerSnapshot, format: (time: number) => string): Section[] {
+    const proxyTls = s.proxyTls;
+    const sections: Section[] = [];
     for (const [ i, entry ] of (proxyTls ?? []).entries()) {
         const cert = entry.certificate;
         const facts: Fact[] = [ { label: 'Addresses', variable: 'PROXY_TLS_ADDRESSES', value: entry.addresses.join(', '), mono: true } ];
@@ -247,9 +284,13 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
         facts.push({ label: 'Checked', value: format(entry.checkedAt) });
         sections.push({ id: `proxy-certificate-${i}`, title: 'Proxy TLS certificate', facts });
     }
+    return sections;
+};
 
+const limitsSection = function (s: ServerSnapshot): Section {
+    const set = s.settings;
     const rate = number(set['CLIENT_MESSAGE_RATE_LIMIT']);
-    sections.push({
+    return {
         id: 'limits', title: 'Load limits', facts: [
             limit('Messages per client', 'CLIENT_MESSAGE_RATE_LIMIT', set['CLIENT_MESSAGE_RATE_LIMIT'], n => `${count(n)} a second`),
             rate === 0
@@ -262,24 +303,44 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
             limit('REST store values kept', 'STORE_EXPIRY_DAYS', set['STORE_EXPIRY_DAYS'], n => `${plural(n, 'day', 'days')} after their last write`),
             limit('REST store size', 'STORE_MAX_MB', set['STORE_MAX_MB'], n => `${count(n)} MiB`)
         ]
-    });
+    };
+};
 
+const voiceSection = function (s: ServerSnapshot): Section {
+    const set = s.settings;
     const voice = s.voice;
-    sections.push({
+    return {
         id: 'voice', title: 'Voice', facts: [
             onOff('Voice server', voice?.listening === true, undefined, voice?.listening ? undefined : 'not listening'),
             onOff('Recording', voice ? voice.recording : set['VOICE_RECORDING'] === true, 'VOICE_RECORDING'),
             { label: 'Sampling rate', variable: 'VOICE_SAMPLING_RATE', value: `${count(voice?.samplingRate ?? number(set['VOICE_SAMPLING_RATE']) ?? 0)} Hz` },
             { label: 'Voice clients', value: count(voice?.clients ?? 0) }
         ]
-    });
+    };
+};
 
+const otherSection = function (s: ServerSnapshot): Section | undefined {
+    const set = s.settings;
     const other = Object.keys(set).filter(name => !SHOWN.has(name)).sort();
     if (other.length > 0) {
-        sections.push({
+        return {
             id: 'other', title: 'Other settings',
             facts: other.map(name => ({ label: name, value: text(set[name]), mono: true }))
-        });
+        };
     }
-    return sections;
+    return undefined;
+};
+
+export const serverSections = function (s: ServerSnapshot, format: (time: number) => string): Section[] {
+    return [
+        serverSection(s, format),
+        countsSection(s),
+        networkSection(s),
+        certificateSection(s, format),
+        proxyCheckingSection(s),
+        ...proxyCertificateSections(s, format),
+        limitsSection(s),
+        voiceSection(s),
+        otherSection(s)
+    ].filter(section => section !== undefined);
 };
