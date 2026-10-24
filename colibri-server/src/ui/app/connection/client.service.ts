@@ -1,8 +1,8 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { filter } from 'rxjs';
-import type { LatencySnapshot } from '../connection/admin.service';
-import { ADMIN_CHANNEL } from '../connection/admin.service';
-import { SocketIOService } from '../connection/socketio.service';
+import type { LatencySnapshot } from './admin.service';
+import { ADMIN_CHANNEL } from './admin.service';
+import { SocketIOService } from './socketio.service';
 
 export interface ColibriClient {
     id: string;

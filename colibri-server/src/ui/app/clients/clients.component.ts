@@ -6,7 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { SelectModule } from 'primeng/select';
 import type { ClientRow, ClientsSnapshot } from '../connection/admin.service';
 import { AdminService } from '../connection/admin.service';
-import { ClientService } from './client.service';
+import { ClientService } from '../connection/client.service';
 import { LatencyChartComponent, clientColor } from '../charts/latency-chart.component';
 import type { Direction } from '../charts/throughput-chart.component';
 import { ThroughputChartComponent } from '../charts/throughput-chart.component';

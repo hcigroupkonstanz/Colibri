@@ -6,7 +6,7 @@ import type { MenuItem } from 'primeng/api';
 import { MenuModule } from 'primeng/menu';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { ClientService } from '../clients/client.service';
+import { ClientService } from '../connection/client.service';
 import { LOG_LEVELS, LogService } from './log.service';
 import { LEVEL_TAGS } from './log-format';
 
