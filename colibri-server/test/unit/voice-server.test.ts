@@ -83,10 +83,12 @@ const pcmPacket = function (userId: number, sequence: number, samples: number[],
 interface VoiceServerInternals {
     udpSocket: dgram.Socket;
     clients: Map<string, unknown>;
-    reportedAt: Map<string, number>;
-    rejections: Map<string, unknown>;
+    reports: {
+        reportedAt: Map<string, number>;
+        rejections: Map<string, unknown>;
+        pruneReports(nowMillis: number): void;
+    };
     savingRecordings: Promise<void> | undefined;
-    pruneReports(nowMillis: number): void;
     checkClientsDisconnected(): Promise<void>;
 }
 
@@ -225,8 +227,8 @@ describe('VoiceServer', () => {
         expect(malformedReports()).toHaveLength(2);
 
         // Once the interval has passed, the same source is reported again.
-        internals.pruneReports(Date.now() + 10000);
-        expect(internals.reportedAt.size).toBe(0);
+        internals.reports.pruneReports(Date.now() + 10000);
+        expect(internals.reports.reportedAt.size).toBe(0);
         await send(a, [ 1, 2 ]);
         await roundTrip(a, b, 1);
         expect(malformedReports()).toHaveLength(3);
@@ -315,7 +317,7 @@ describe('VoiceServer', () => {
             internals.udpSocket.emit('message', Buffer.from([ 1, 2 ]), { address: '10.0.0.1', port: 1024 + i, family: 'IPv4', size: 2 });
         }
 
-        expect(internals.reportedAt.size).toBeLessThanOrEqual(100);
+        expect(internals.reports.reportedAt.size).toBeLessThanOrEqual(100);
         expect(malformedReports().length).toBeLessThanOrEqual(100);
         expect(internals.clients.size).toBe(0);
     });
@@ -473,7 +475,7 @@ describe('VoiceServer', () => {
             expect(message).toContain('not reported for 10s');
 
             // Once the interval has passed, it is reported again.
-            internals.pruneReports(Date.now() + 10000);
+            internals.reports.pruneReports(Date.now() + 10000);
             await send(a, v1Packet(1, VoiceCodec.PCM, [ 1, 2 ]));
             await roundTrip(a, b, 1);
             expect(v1Reports()).toHaveLength(2);
@@ -735,7 +737,7 @@ describe('VoiceServer', () => {
                     + `clients already${debugTail}`, { connection: true } ],
             ]);
             // Each forgot its first dropped packet once it was let in.
-            expect(internals.rejections.size).toBe(0);
+            expect(internals.reports.rejections.size).toBe(0);
 
             // Dropped again once its Unity clients have left, it gets the 3 s anew.
             unity.disconnectApp('lab');
@@ -789,29 +791,29 @@ describe('VoiceServer', () => {
                     for (let i = 0; i < 5000; i++) deliver(internals.udpSocket, '198.51.100.7', 1024 + i, voicePacket(9, sequence, [], LAB));
                 };
                 flood(0);
-                expect(internals.rejections.size).toBe(100);
+                expect(internals.reports.rejections.size).toBe(100);
                 expect(firstDrops()).toHaveLength(100);
                 at(3000);
                 flood(1);
-                expect(internals.rejections.size).toBe(100);
+                expect(internals.reports.rejections.size).toBe(100);
                 expect(ignoredReports()).toHaveLength(100);
                 expect(ignoredReports()[0]!.message).toContain(`from ${source(0)} `);
 
                 // One goes on, the others stop. Theirs are forgotten 10 s after their last.
                 at(12999);
                 deliver(internals.udpSocket, '198.51.100.7', 1024, voicePacket(9, 2, [], LAB));
-                internals.pruneReports(Date.now());
-                expect(internals.rejections.size).toBe(100);
+                internals.reports.pruneReports(Date.now());
+                expect(internals.reports.rejections.size).toBe(100);
                 at(13000);
-                internals.pruneReports(Date.now());
-                expect([ ...internals.rejections.keys() ]).toEqual([ source(0) ]);
+                internals.reports.pruneReports(Date.now());
+                expect([ ...internals.reports.rejections.keys() ]).toEqual([ source(0) ]);
 
                 // The one that went on keeps its time, and is reported again 10 s after the last time.
                 deliver(internals.udpSocket, '198.51.100.7', 1024, voicePacket(9, 3, [], LAB));
                 expect(ignoredReports()).toHaveLength(101);
                 // A new one gets a slot again, and its 3 s.
                 deliver(internals.udpSocket, '198.51.100.7', 1024 + 4999, voicePacket(9, 3, [], LAB));
-                expect([ ...internals.rejections.keys() ]).toEqual([ source(0), source(4999) ]);
+                expect([ ...internals.reports.rejections.keys() ]).toEqual([ source(0), source(4999) ]);
                 expect(ignoredReports()).toHaveLength(101);
             });
         });

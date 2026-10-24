@@ -9,7 +9,6 @@ import { mkdir, writeFile } from 'fs/promises';
 import * as path from 'path';
 import {
     VOICE_HEADER_LENGTH,
-    VOICE_HEADER_VERSION,
     VoiceCodec,
     readVoiceHeader,
 } from './voice-packet.js';
@@ -19,6 +18,7 @@ import { trustNoProxy } from '../net/trusted-proxies.js';
 import { hostPort, ipv4OnlyWarning, normalizeAddress } from '../net/addresses.js';
 import type { UnityClientSource } from './unity-client-addresses.js';
 import { UnityClientAddresses } from './unity-client-addresses.js';
+import { REPORT_INTERVAL_MILLIS, VoiceReports } from './voice-reports.js';
 import { formatAppId } from './format-app-id.js';
 import { GrowableInt16Buffer, littleEndianBytes, wavHeader } from './wav.js';
 
@@ -56,14 +56,6 @@ interface VoiceClientGroup {
 // Why a voice packet may be relayed: there is room for its sender among the voice clients of its
 // app at its address, or its address is a trusted proxy's.
 type Admission = 'unity' | 'proxy';
-
-// A source whose packets admit drops, while it does (see JOIN_GRACE_MILLIS).
-interface Rejection {
-    // When its first dropped packet came in.
-    readonly since: number;
-    // When its latest one did.
-    last: number;
-}
 
 // A voice source as the log names it, and its key in `clients`. An IPv4 sender is named by its IPv4
 // address, also on a dual-stack VOICE_HOST, where the socket reports it as ::ffff:<IPv4 address>.
@@ -135,25 +127,6 @@ export const ipv6SocketsTakeIPv4 = function (read: (file: string) => string = fi
     }
 };
 
-// A source sending malformed packets, or a peer that can't be relayed to, fails at packet rate
-// (up to ~50/s per voice client), so each is reported at most once per this interval rather
-// than once per packet...
-const REPORT_INTERVAL_MILLIS = 10000;
-// ...and only this many distinct sources and peers are remembered at a time, so a burst from
-// many addresses can't grow the map without bound. Once full, new ones go unreported until
-// the next prune frees a slot.
-const REPORT_MAX_KEYS = 100;
-
-// A Unity client opens its voice socket and its TCP connection at about the same time, and its
-// voice often starts a moment (0.1 to 0.2 s) before the TCP handshake has registered it. Its first
-// packets are dropped then (see admit), as are those of a second client at the same address until
-// its own handshake is in, and those of a voice socket opened again on a new port until the old one
-// has been quiet for VOICE_CLIENT_GONE_MILLIS. Each of those used to be a warning, the first at
-// every client start. Now the first packet dropped from a source is logged at debug level only, and
-// the source is reported as a warning once its packets have been dropped for this long. One let in
-// before that is never reported, and its next drop starts over.
-const JOIN_GRACE_MILLIS = 3000;
-
 export class VoiceServer extends Service {
 
     public get serviceName(): string { return 'VoiceServer'; }
@@ -174,23 +147,20 @@ export class VoiceServer extends Service {
     // stop() wait for it.
     private savingRecordings: Promise<void> | undefined;
 
-    // Report key (see reportMalformedPacket and reportRelayFailure) -> when it was last
-    // reported. See REPORT_INTERVAL_MILLIS; pruned every disconnect-check tick.
-    private readonly reportedAt = new Map<string, number>();
-    // The sources whose packets admit drops, by voiceClientKey (see JOIN_GRACE_MILLIS). One is
-    // forgotten once it is let in, or by pruneReports once none of its packets has been dropped for
-    // REPORT_INTERVAL_MILLIS. Bounded by REPORT_MAX_KEYS, as reportedAt: once full, a new source is
-    // neither timed nor reported until the next prune frees a slot.
-    private readonly rejections = new Map<string, Rejection>();
+    // Throttles the reports of dropped and unrelayable packets and of socket errors; pruned every
+    // disconnect-check tick. Logs through this service, so under its name.
+    private readonly reports = new VoiceReports({
+        logDebug: (msg, metadata) => this.logDebug(msg, metadata),
+        logInfo: (msg) => this.logInfo(msg),
+        logWarning: (msg) => this.logWarning(msg),
+        logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
+    });
 
     // Whether the UDP socket is listening: false before start(), and for good if it could not bind.
     private listening = false;
 
     // Where the Unity clients of each app are connected from: voice is relayed only from there.
     private readonly unityClients: UnityClientAddresses;
-    // The trusted proxies whose voice has been said to be relayed unchecked, so it is said once for
-    // each. Bounded by REPORT_MAX_KEYS, as TRUSTED_PROXIES may name whole ranges.
-    private readonly uncheckedProxies = new Set<string>();
     // The voice clients let in for the Unity clients of each app at each address, by groupKey.
     private readonly groups = new Map<string, VoiceClientGroup>();
     // The recordings of voice clients dropped (see dropVoiceClient), for the next disconnect check,
@@ -228,7 +198,7 @@ export class VoiceServer extends Service {
 
         // Check if clients disconnected every second
         this.disconnectCheckInterval = setInterval(() => {
-            this.pruneReports(Date.now());
+            this.reports.pruneReports(Date.now());
             void this.checkClientsDisconnected();
         }, 1000);
     }
@@ -263,7 +233,7 @@ export class VoiceServer extends Service {
                 return;
             }
             // Once it listens, this is a failed receive, which a peer could cause at packet rate.
-            if (!this.claimReport('socket error', Date.now())) return;
+            if (!this.reports.claimReport('socket error', Date.now())) return;
             this.logError(`Voice server socket error on UDP ${hostPort(hostname, voicePort)}: ${err.message}`
                 + ` (further ones are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
         });
@@ -277,11 +247,11 @@ export class VoiceServer extends Service {
 
         const reading = readVoiceHeader(message);
         if (reading.kind === 'v1') {
-            this.reportV1Packet(clientKey, nowMillis);
+            this.reports.reportV1Packet(clientKey, nowMillis);
             return;
         }
         if (reading.kind === 'malformed') {
-            this.reportMalformedPacket(clientKey, reading.reason, nowMillis);
+            this.reports.reportMalformedPacket(clientKey, reading.reason, nowMillis);
             return;
         }
 
@@ -292,7 +262,7 @@ export class VoiceServer extends Service {
         // else threw out of this listener while relaying to it and shut the server down.
         // Only a raw socket can send one, but that is one packet from any machine on the LAN.
         if (remote.port === 0) {
-            this.reportMalformedPacket(clientKey, 'its source port is 0, so nothing can be relayed back to it', nowMillis);
+            this.reports.reportMalformedPacket(clientKey, 'its source port is 0, so nothing can be relayed back to it', nowMillis);
             return;
         }
 
@@ -321,7 +291,7 @@ export class VoiceServer extends Service {
         if (voiceClient && voiceClient.appId === appId) return voiceClient;
         const admission = this.admit(remote.address, appId, clientKey, nowMillis);
         if (!admission) return undefined;
-        this.rejections.delete(clientKey);
+        this.reports.forgetRejection(clientKey);
 
         // Add to clients if new client
         if (!voiceClient) {
@@ -361,10 +331,10 @@ export class VoiceServer extends Service {
             // to from stopping the relay to every peer after it.
             try {
                 this.udpSocket.send(message, 0, message.length, peer.port, peer.ip, (err) => {
-                    if (err) this.reportRelayFailure(peer, err, Date.now());
+                    if (err) this.reports.reportRelayFailure(voiceClientKey(peer.ip, peer.port), err, Date.now());
                 });
             } catch (err) {
-                this.reportRelayFailure(peer, err, nowMillis);
+                this.reports.reportRelayFailure(voiceClientKey(peer.ip, peer.port), err, nowMillis);
             }
         }
     }
@@ -427,19 +397,19 @@ export class VoiceServer extends Service {
         // taken for its own, and dropped when it leaves.
         const normalized = normalizeAddress(address);
         if (this.trustProxy(address, 0)) {
-            this.reportUncheckedProxy(normalized);
+            this.reports.reportUncheckedProxy(normalized);
             return 'proxy';
         }
 
         const unityClients = this.unityClients.count(normalized, appId);
         if (unityClients === 0) {
-            this.reportNoUnityClient(source, normalized, appId, nowMillis);
+            this.reports.reportNoUnityClient(source, normalized, appId, nowMillis);
             return undefined;
         }
 
         const group = this.groups.get(groupKey(normalized, appId));
         if (group && group.clients.size >= unityClients && !this.dropGoneVoiceClient(group, source, nowMillis)) {
-            this.reportNoRoom(source, normalized, appId, unityClients, nowMillis);
+            this.reports.reportNoRoom(source, normalized, appId, unityClients, nowMillis);
             return undefined;
         }
         return 'unity';
@@ -523,101 +493,6 @@ export class VoiceServer extends Service {
         client.group = undefined;
         group.clients.delete(client);
         if (group.clients.size === 0) this.groups.delete(group.key);
-    }
-
-    private reportNoUnityClient(source: string, address: string, appId: number, nowMillis: number): void {
-        const level = this.rejectionReport(source, nowMillis);
-        if (level) this.logRejection(level, source, appId, `no Unity client of that app is connected from ${address}`);
-    }
-
-    private reportNoRoom(source: string, address: string, appId: number, unityClients: number, nowMillis: number): void {
-        const level = this.rejectionReport(source, nowMillis);
-        if (level) this.logRejection(level, source, appId, `${address} has ${unityClients} Unity client(s) of that app, and as many voice clients already`);
-    }
-
-    // How a packet admit has dropped from `source` is to be logged, if at all (see JOIN_GRACE_MILLIS):
-    // the first one of the source at debug level, then nothing until they have been dropped for
-    // JOIN_GRACE_MILLIS, then as a warning at most once per REPORT_INTERVAL_MILLIS (claimReport).
-    // Called at packet rate, so the message is built only when there is one to log.
-    private rejectionReport(source: string, nowMillis: number): 'debug' | 'warning' | undefined {
-        const rejection = this.rejections.get(source);
-        if (!rejection) {
-            if (this.rejections.size >= REPORT_MAX_KEYS) return undefined;
-            this.rejections.set(source, { since: nowMillis, last: nowMillis });
-            return 'debug';
-        }
-        rejection.last = nowMillis;
-        if (nowMillis - rejection.since < JOIN_GRACE_MILLIS) return undefined;
-        return this.claimReport(source, nowMillis) ? 'warning' : undefined;
-    }
-
-    private logRejection(level: 'debug' | 'warning', source: string, appId: number, reason: string): void {
-        const message = `Ignoring voice packet from ${source} for app ${formatAppId(appId)}: ${reason}`;
-        if (level === 'warning') {
-            this.logWarning(`${message} (further ones from this source are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`);
-            return;
-        }
-        // Routine while a Unity client connects, hence a connection line.
-        this.logDebug(`${message} (reported as a warning if this goes on for ${JOIN_GRACE_MILLIS / 1000}s: `
-            + 'a Unity client\'s voice can start before its TCP handshake is in)', CONNECTION_LINE);
-    }
-
-    private reportUncheckedProxy(address: string): void {
-        if (this.uncheckedProxies.has(address) || this.uncheckedProxies.size >= REPORT_MAX_KEYS) return;
-        this.uncheckedProxies.add(address);
-
-        this.logInfo(`Relaying voice from ${address} unchecked: it is in TRUSTED_PROXIES, and voice through a proxy cannot be matched `
-            + 'to a Unity client\'s address. Logged once per address.');
-    }
-
-    private reportMalformedPacket(source: string, reason: string, nowMillis: number): void {
-        if (!this.claimReport(source, nowMillis)) return;
-
-        this.logError(`Ignoring malformed voice packet from ${source}: ${reason}`
-            + ` (further ones from this source are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
-    }
-
-    private reportV1Packet(source: string, nowMillis: number): void {
-        if (!this.claimReport(source, nowMillis)) return;
-
-        this.logWarning(`Ignoring voice packet from ${source}: it looks like a Colibri 1.x client (its voice header has no app), `
-            + `but this server speaks voice header v${VOICE_HEADER_VERSION}. Upgrade the Colibri Unity package (de.uni.kn.colibri) in that app to 2.x`
-            + ` (further ones from this source are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`);
-    }
-
-    private reportRelayFailure(peer: VoiceClient, err: unknown, nowMillis: number): void {
-        const target = voiceClientKey(peer.ip, peer.port);
-        // Keyed apart from the peer's own malformed packets, so neither report hides the other.
-        if (!this.claimReport(`relay to ${target}`, nowMillis)) return;
-
-        this.logError(`Failed to relay voice packet to ${target}: ${errorMessage(err)}`
-            + ` (further failures for this peer are not reported for ${REPORT_INTERVAL_MILLIS / 1000}s)`, false);
-    }
-
-    // True, and remembers the time, if `key` may be reported now: at most once per
-    // REPORT_INTERVAL_MILLIS, and only while fewer than REPORT_MAX_KEYS keys are remembered.
-    private claimReport(key: string, nowMillis: number): boolean {
-        const reportedAt = this.reportedAt.get(key);
-        if (reportedAt !== undefined && nowMillis - reportedAt < REPORT_INTERVAL_MILLIS) return false;
-        if (reportedAt === undefined && this.reportedAt.size >= REPORT_MAX_KEYS) return false;
-
-        this.reportedAt.set(key, nowMillis);
-        return true;
-    }
-
-    private pruneReports(nowMillis: number): void {
-        for (const [key, reportedAt] of this.reportedAt) {
-            if (nowMillis - reportedAt >= REPORT_INTERVAL_MILLIS) {
-                this.reportedAt.delete(key);
-            }
-        }
-        // By the latest dropped packet, not the first: a source dropped for good would otherwise
-        // start over every REPORT_INTERVAL_MILLIS, and its warning come JOIN_GRACE_MILLIS late each time.
-        for (const [source, rejection] of this.rejections) {
-            if (nowMillis - rejection.last >= REPORT_INTERVAL_MILLIS) {
-                this.rejections.delete(source);
-            }
-        }
     }
 
     private getAppClients(appId: number): readonly VoiceClient[] {
