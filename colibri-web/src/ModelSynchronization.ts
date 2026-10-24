@@ -340,7 +340,7 @@ class ModelSyncChannel<T extends SyncModel<T>> {
             this.catchUpOnceAnswered();
             return;
         }
-        if (this.sendOnTop(id, asker, model, modelData, held, [])) return;
+        if (this.sendOnTop(asker, model, modelData, held, [])) return;
         if (!this.catchUpOnceAnswered()) this.guardFrom(asker);
         // Whichever of the two calls ran sent a request whose answer comes after this model's.
         this.guardWindow.markAnswerMayFollow(id);
@@ -373,7 +373,7 @@ class ModelSyncChannel<T extends SyncModel<T>> {
                     model,
                     Object.fromEntries([...lost].map(key => [key, shown.get(key)])) as Partial<T>
                 );
-            this.sendOnTop(id, asker, model, Object.fromEntries(shown) as Partial<T>, held, [...lost]);
+            this.sendOnTop(asker, model, Object.fromEntries(shown) as Partial<T>, held, [...lost]);
         }
         this.catchUpOnceAnswered();
     }
@@ -381,22 +381,15 @@ class ModelSyncChannel<T extends SyncModel<T>> {
     // Sends the held changes (property names) and the lost fields (see lostChanges) with their current
     // values, on top of what the server showed (`shown`). True if that replaces server values, in which
     // case the model is asked for again (see takeAnswer).
-    private sendOnTop(
-        id: string,
-        asker: Colibri,
-        model: T,
-        shown: Partial<T>,
-        held: string[],
-        lost: string[]
-    ): boolean {
+    private sendOnTop(asker: Colibri, model: T, shown: Partial<T>, held: string[], lost: string[]): boolean {
         if (held.length === 0 && lost.length === 0) return false;
-        const sent = fieldsOnTop(model, id, held, lost);
+        const sent = fieldsOnTop(model, model.id, held, lost);
         this.sendUpdate(asker, model, sent as Partial<T>);
 
         const compared = compareWithShown(sent, shown);
         if (!compared) return false;
         this.askFor(asker, model);
-        this.confirmations.start(id, { ...compared, props: held, shown: new Map(), end: askForEnd(asker) });
+        this.confirmations.start(model.id, { ...compared, props: held, shown: new Map(), end: askForEnd(asker) });
         return true;
     }
 
