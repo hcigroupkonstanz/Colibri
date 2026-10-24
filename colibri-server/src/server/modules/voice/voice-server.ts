@@ -20,6 +20,7 @@ import type { UnityClientSource } from './unity-client-addresses.js';
 import { UnityClientAddresses } from './unity-client-addresses.js';
 import { REPORT_INTERVAL_MILLIS, VoiceReports } from './voice-reports.js';
 import { formatAppId } from './format-app-id.js';
+import { voiceClientKey } from './voice-client-key.js';
 import { GrowableInt16Buffer, littleEndianBytes, wavHeader } from './wav.js';
 
 interface VoiceClient {
@@ -57,10 +58,6 @@ interface VoiceClientGroup {
 // app at its address, or its address is a trusted proxy's.
 type Admission = 'unity' | 'proxy';
 
-// A voice source as the log names it, and its key in `clients`. An IPv4 sender is named by its IPv4
-// address, also on a dual-stack VOICE_HOST, where the socket reports it as ::ffff:<IPv4 address>.
-// The packets to it still go to the address the socket reported (VoiceClient.ip).
-const voiceClientKey = (address: string, port: number): string => hostPort(normalizeAddress(address), port);
 const groupKey = (address: string, appId: number): string => `${address} ${appId}`;
 
 // A voice client sends a packet every 20 ms while it broadcasts (VoiceBroadcast's default frame).
