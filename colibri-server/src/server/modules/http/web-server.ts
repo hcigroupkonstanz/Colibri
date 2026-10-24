@@ -54,12 +54,12 @@ export class WebServer extends Service {
         return 'web';
     }
 
-    private hostname: string;
-    private webPort: number;
-    private webRoot: string;
-    private baseUrl: string;
+    private readonly hostname: string;
+    private readonly webPort: number;
+    private readonly webRoot: string;
+    private readonly baseUrl: string;
     private readonly tls?: TlsCredentialSource;
-    private app: express.Application;
+    private readonly app: express.Application;
     private server!: http.Server | https.Server;
     private isRunning = false;
     private tlsChanges: Subscription | undefined;
