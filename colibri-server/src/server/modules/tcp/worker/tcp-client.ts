@@ -14,21 +14,18 @@ export interface TcpClient {
     app: string;
     version: string;
     name: string;
-    // Guards handleSocketDisconnect against running twice for the same client - a socket
-    // error is always followed by its own 'close' event, so without this both paths would
-    // post a duplicate clientDisconnected$. Also set the moment this server ends a client
-    // (closeClient), which is what stops it reading anything further from that socket.
+    // Set by the first handleSocketDisconnect, so later calls return at once: closeClient and
+    // IdleWatch call it before the socket's 'close' does. InboundHandler reads nothing more once set.
     disconnected: boolean;
     // Destroys a socket closeClient ended if the peer never closes its side; see
     // CLOSE_GRACE_MILLIS.
     closeTimer: NodeJS.Timeout | undefined;
     // What the write path keeps for this client.
     outbox: {
-        // Set while writes to this client are being dropped for backpressure. Only the
-        // transitions in and out of that state are logged: a stalled client in a busy app drops
-        // many messages a second, and each dropped-packet warning is postMessage'd to the main
-        // thread and re-broadcast to every admin UI, which WebLog can't dedupe because the
-        // byte count is interpolated into the message.
+        // Set while writes to this client are dropped for backpressure. Only entering and leaving
+        // it is logged: a stalled client drops many messages a second, and each warning is posted
+        // to the main thread and re-broadcast to every admin UI, where WebLog cannot merge them
+        // because the byte count differs.
         dropping: boolean;
         droppedSinceWarning: number;
         // Bytes of messages written to this client since its last heartbeat; see HEARTBEAT_EVERY_BYTES.
@@ -47,9 +44,9 @@ export interface TcpClient {
         // performance.now() of the last bytes received, or of the connection if none have been yet.
         lastInboundAt: number;
         // The size of the largest message over HEARTBEAT_EVERY_BYTES written to this client since it
-        // last showed it had read all such messages, 0 if there is none; and when the latest such
-        // message was written, on the clock heartbeats carry. It has read them all once it echoes a
-        // heartbeat from after that. See DEFAULT_IDLE_TIMEOUT_MILLIS.
+        // last showed it had read all such messages (0 if none), and when the latest was written, on
+        // the clock heartbeats carry. It has read them all once it echoes a heartbeat from after that.
+        // See IdleWatch.idleAllowanceMillis.
         unreadLargeBytes: number;
         lastLargeWrittenAt: bigint;
     };

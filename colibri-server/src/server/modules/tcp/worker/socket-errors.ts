@@ -23,8 +23,8 @@ export const PEER_GONE_ERRORS: ReadonlySet<string> = new Set([
     'ENETUNREACH',
 ]);
 
-// What a write still queued for a socket fails with once the socket is destroyed - one callback
-// per queued write, and a client whose connection stalled can have thousands queued.
+// What a write still queued for a socket fails with once the socket is destroyed: one callback per
+// queued write, and a client whose connection stalled can have thousands queued.
 export const WRITE_CANCELLED_ERRORS: ReadonlySet<string> = new Set(['ECANCELED', 'ERR_STREAM_DESTROYED']);
 
 export const errorCode = function (error: Error): string | undefined {

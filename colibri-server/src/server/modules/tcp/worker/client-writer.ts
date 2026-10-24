@@ -3,25 +3,19 @@ import { HEARTBEAT_EVERY_BYTES } from './heartbeat-every-bytes.js';
 import { PEER_GONE_ERRORS, WRITE_CANCELLED_ERRORS, errorCode } from './socket-errors.js';
 import type { TcpClient } from './tcp-client.js';
 
-// For a last-write-wins synchronization server, a client whose socket write buffer is
-// already this full is not keeping up - queuing yet another update behind it only grows
-// process memory without bound (the old `socket.write()`'s return value was ignored
-// entirely). Dropping a stale update for a slow client is the correct behaviour here.
-// Replies (see MAX_REPLY_BACKLOG_BYTES) neither count towards it nor are dropped by it.
+// Relayed traffic is dropped for a client whose write buffer holds this much: sync is last-write-wins,
+// so a stale update is no loss, and queuing more would only grow memory. Replies
+// (MAX_REPLY_BACKLOG_BYTES) neither count towards it nor are dropped by it.
 const highWaterMark = 1024 * 1024;
 
-// How many bytes of replies, the server's answers to a client's own requests, may wait to be sent
-// to one client before further replies to it are dropped too.
-//
-// A reply is not dropped at highWaterMark like relayed traffic: nothing would ever send it again.
-// The answer to a model::request for a whole channel is one frame per model, all written at once,
-// so on any link slower than loopback a store larger than highWaterMark used to reach a late joiner
-// only in part, and the models cut off stayed missing on it until they next changed. This bound is
-// many full stores and many maximum-size frames; it only stops a client that keeps asking without
-// ever reading from taking up memory without limit.
+// Bytes of replies (the server's answers to a client's own requests) that may wait for one client
+// before further replies to it are dropped.
+// Replies are not dropped at highWaterMark like relayed traffic, since nothing would send them again:
+// a model::request for a channel is one frame per model, all written at once, so on a slow link a
+// store larger than highWaterMark would reach a late joiner only in part. This bound only stops a
+// client that keeps asking without reading from taking up unbounded memory.
 export const MAX_REPLY_BACKLOG_BYTES = 64 * 1024 * 1024;
 
-// What ClientWriter needs from the TCP worker that owns it.
 interface ClientWriterCallbacks {
     logWarning(msg: string): void;
 }
@@ -32,9 +26,9 @@ export class ClientWriter {
     public constructor(private readonly callbacks: ClientWriterCallbacks) {}
 
     public writeToClient(client: TcpClient, packet: Buffer, reply = false): void {
-        // Writing after end() is an error that destroys the socket - logged twice, and able to
-        // cut off a refusal frame that was still being flushed. A socket gets here ended
-        // between the peer's FIN (which ends our side too) and its 'close' event.
+        // A write after end() errors and destroys the socket, which can cut off a refusal frame still
+        // being flushed. A socket can get here ended, between the peer's FIN (which ends our side too)
+        // and its 'close'.
         if (client.socket.writableEnded || client.socket.destroyed) {
             return;
         }
@@ -46,8 +40,8 @@ export class ClientWriter {
         if (client.outbox.bytesSinceHeartbeat >= HEARTBEAT_EVERY_BYTES) {
             this.writeHeartbeat(client, encodeHeartbeatFrame(process.hrtime.bigint()));
         }
-        // After the heartbeat just written ahead of it, which comes before it on the wire, so an
-        // echo of that one does not count as the client having read it.
+        // Stamped after the heartbeat just written ahead of the packet, so an echo of that one does
+        // not count as the client having read the packet.
         if (packet.length > HEARTBEAT_EVERY_BYTES) {
             client.reading.unreadLargeBytes = Math.max(client.reading.unreadLargeBytes, packet.length);
             client.reading.lastLargeWrittenAt = process.hrtime.bigint();
@@ -57,25 +51,19 @@ export class ClientWriter {
         this.write(client, packet, reply ? 'reply' : 'relayed');
     }
 
-    // The tick's heartbeat for one client.
-    //
-    // A client with an earlier heartbeat still waiting in its socket is skipped. A client that keeps
-    // sending but never reads (a send-only script, or one whose receive loop has died) is kept
-    // connected by what it sends, and used to be queued every tick's heartbeat on top: ten writes a
-    // second, a few hundred bytes of memory each, for as long as it stayed. A client that is reading
-    // loses nothing by the skip: it finds the heartbeat already waiting, and is sent the next one on
-    // the first tick after that has gone to the kernel.
+    // The tick's heartbeat. Skipped while an earlier one is still queued: a client that keeps sending
+    // but never reads (a send-only script, a dead receive loop) stays connected by what it sends and
+    // would otherwise queue ten heartbeats a second. A reading client loses nothing: it finds the
+    // queued one and gets the next on the first tick after that has gone to the kernel.
     public writeTickHeartbeat(client: TcpClient, packet: Buffer): void {
         if (client.outbox.heartbeatsQueued > 0) return;
         this.writeHeartbeat(client, packet);
     }
 
-    // A heartbeat is never dropped for a client that is behind, as relayed traffic is past
-    // highWaterMark: a client that sends nothing of its own is kept connected only by echoing
-    // heartbeats (see IdleWatch.endIdleClients), so one dropped from what a live client is still
-    // reading made it look gone. What bounds them instead: the ones between messages come one per
-    // HEARTBEAT_EVERY_BYTES of messages admitted, and the tick's own are not queued behind one
-    // still waiting (writeTickHeartbeat).
+    // Never dropped for a client that is behind, unlike relayed traffic: a client with nothing of its
+    // own to send stays connected only by echoing heartbeats (IdleWatch.endIdleClients). Bounded
+    // instead: one per HEARTBEAT_EVERY_BYTES of admitted messages, and the tick's are not queued
+    // behind one still waiting (writeTickHeartbeat).
     private writeHeartbeat(client: TcpClient, packet: Buffer): void {
         if (client.socket.writableEnded || client.socket.destroyed) {
             return;
@@ -95,10 +83,10 @@ export class ClientWriter {
             else if (kind === 'heartbeat') client.outbox.heartbeatsQueued -= 1;
             if (!err) return;
 
-            // A peer that is gone fails every write still queued for it, each with a callback of
-            // its own: one warning per queued message, thousands for a client whose Wi-Fi dropped
-            // with model updates backed up. The socket's own 'error' event, or this server's
-            // closing it, already reports the connection once (TCPServerWorker.handleSocketError).
+            // A gone peer fails every write queued for it, each with its own callback: thousands of
+            // warnings for a client that dropped off Wi-Fi with updates backed up. The connection is
+            // already reported once, by the socket's 'error' (TCPServerWorker.handleSocketError) or by
+            // this server closing it.
             const code = errorCode(err);
             if (code && (PEER_GONE_ERRORS.has(code) || WRITE_CANCELLED_ERRORS.has(code))) return;
 
@@ -108,9 +96,9 @@ export class ClientWriter {
         });
     }
 
-    // Whether relayed traffic may still be queued for the client: not once more than highWaterMark
-    // of it is waiting. Replies waiting ahead of it do not count, so a client
-    // still reading the answer to its model::request gets the updates made meanwhile too.
+    // Whether relayed traffic may still be queued for the client: not once more than highWaterMark of
+    // it is waiting. Replies waiting ahead of it do not count, so a client still reading the answer
+    // to its model::request gets the updates made meanwhile too.
     private admitRelayed(client: TcpClient): boolean {
         const relayedBytes = client.socket.writableLength - client.outbox.replyBytesQueued;
         if (relayedBytes > highWaterMark) {

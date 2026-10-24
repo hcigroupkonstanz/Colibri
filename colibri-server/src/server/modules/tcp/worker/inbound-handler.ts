@@ -28,7 +28,7 @@ const abbreviateName = (name: string): string => (name.length > 200 ? `${name.sl
 
 type FrameOf<T extends FrameType> = Extract<DecodedFrame, { type: T }>;
 
-// The TCP worker's client indexes and gates: the instances it keeps for its lifetime.
+// The TCP worker's own client indexes and gates, shared by reference.
 interface InboundHandlerParts {
     waitingClients: Map<string, TcpClient>;
     clients: Map<string, TcpClient>;
@@ -37,9 +37,8 @@ interface InboundHandlerParts {
     inboundGate: InboundGate;
 }
 
-// What InboundHandler needs from the TCP worker that owns it.
 interface InboundHandlerCallbacks {
-    // Ends the connection from this side; see TCPServerWorker.closeClient.
+    // Ends the connection from this side, with `finalPacket` ahead of the FIN (TCPServerWorker.closeClient).
     closeClient(client: TcpClient, finalPacket?: Buffer): void;
     postMessage(channel: string, content: { [key: string]: unknown }): void;
     logDebug(msg: string, metadata?: Metadata): void;
@@ -72,8 +71,7 @@ export class InboundHandler {
     }
 
     public handleSocketData(client: TcpClient, data: Buffer): void {
-        // A client this server has already refused or cut off: the peer can keep sending
-        // until it notices our FIN, and none of it is meant to be acted on.
+        // Already refused or cut off: the peer keeps sending until it notices our FIN.
         if (client.disconnected) return;
 
         const now = performance.now();
@@ -107,10 +105,9 @@ export class InboundHandler {
     private acceptChunk(client: TcpClient, data: Buffer, now: number): boolean {
         client.reading.lastInboundAt = now;
 
-        // A TLS client on an unencrypted port. Its handshake would otherwise go into the frame
-        // reader, which reads a length field of 790 bytes or more from it and waits, silently, for
-        // the rest of a frame that never comes, until the idle timeout; or rejects it as an invalid
-        // frame, which names neither the client's setting nor the server's.
+        // A TLS client on an unencrypted port, caught on its first bytes. The FrameReader would read a
+        // length of 790 bytes or more from its handshake and wait silently for the rest of a frame, or
+        // reject it as invalid without naming the TLS mismatch.
         if (!client.receivedAny) {
             client.receivedAny = true;
             if (!(client.socket as tls.TLSSocket).encrypted && looksLikeTlsHandshake(data)) {
@@ -159,18 +156,15 @@ export class InboundHandler {
     }
 
     private onHeartbeatFrame(client: TcpClient, frame: FrameOf<FrameType.Heartbeat>): void {
-        // One written after the client's large messages: it has read them all.
+        // An echo of a heartbeat written after the client's large messages shows it has read them all.
         if (frame.pingTimestamp > client.reading.lastLargeWrittenAt) client.reading.unreadLargeBytes = 0;
         this.handlePong(client, frame.pingTimestamp);
     }
 
     // False if it closed the client: the rest of the chunk is not read.
     private onMessageFrame(client: TcpClient, frame: FrameOf<FrameType.Message>, now: number): boolean {
-        // A Colibri client handshakes before it sends anything else, so this is no
-        // Colibri client, or not one this server can serve. Each such message used to
-        // log an ERROR line, and a peer that kept sending was never closed: what it
-        // sent kept it from looking idle. A loop of them stalled the main thread with
-        // log lines.
+        // A Colibri client handshakes first, so this is some other peer. It is closed because a peer that
+        // keeps sending never looks idle; the warning is throttled per address.
         if (!client.app) {
             if (this.noHandshakeWarnedAt.shouldWarn(client.address, now)) {
                 this.callbacks.logWarning(
@@ -185,9 +179,8 @@ export class InboundHandler {
 
         client.traffic.received += 1;
         if (!isLimitable(frame.channel, frame.command)) {
-            // Nothing may overtake what the client sent before it, so whatever of its
-            // updates is held back goes first - a model::delete must not arrive ahead
-            // of an update to the same object and have that update bring it back.
+            // Nothing may overtake what the client sent before, so its held updates go first: a
+            // model::delete must not arrive ahead of an update to the same object, which would bring it back.
             this.inboundGate.releaseHeld(client);
             this.inboundGate.postClientMessage(client, frame.channel, frame.command, frame.payload);
         } else {
@@ -197,18 +190,15 @@ export class InboundHandler {
     }
 
     private assignApp(client: TcpClient, app: string, name: string, version: string): void {
-        // Refuse before the client is indexed, so a mismatched client never reaches an app's
-        // broadcast set, never posts clientConnected$, and never shows up in the admin UI as
-        // a half-connected ghost.
+        // Refused before the client is indexed: it never reaches an app's broadcast set or
+        // clientConnected$, nor the admin UI.
         if (version !== PROTOCOL_VERSION) {
             this.rejectProtocolVersion(client, name, version);
             return;
         }
 
-        // A second handshake frame with a different app would otherwise leave the client in
-        // its previous app's Set forever - TCPServerWorker.removeFromAppIndex only ever looks at the
-        // client's *current* app - so a disconnected socket would keep receiving
-        // writeToClient calls for the app it first announced.
+        // A re-handshake may name another app, and TCPServerWorker.removeFromAppIndex only looks at the
+        // current one, so the old entry has to go here.
         if (client.app) {
             this.clientsByApp.remove(client.app, client);
         }
@@ -241,15 +231,11 @@ export class InboundHandler {
         this.callbacks.postMessage('clientConnected$', connected as unknown as { [key: string]: unknown });
     }
 
-    // Tells the client why it was refused and closes the connection. Only a client that speaks
-    // this server's *framing* gets here - one whose handshake frame decoded, but announced another
-    // protocol version - so it can read the refusal. A Colibri 1.x client never reaches this
-    // method: its handshake is not a valid frame in the current framing, so FrameReader throws a
-    // V1FramingError on its first bytes and reportV1Client names it instead (it could not decode
-    // a refusal anyway). Either way the log line is the diagnostic an integrator will look at.
-    //
-    // end(packet) rather than write-then-end: it queues the rejection and the FIN together,
-    // so the frame cannot be lost to a close that races the write callback.
+    // Only a client whose handshake frame decoded gets here, so it can read the refusal. A 1.x client
+    // fails in FrameReader on its first bytes instead (V1FramingError, reportV1Client) and could not
+    // decode a refusal anyway.
+    // closeClient ends the socket with the packet, which queues the rejection and the FIN together,
+    // so a close racing a separate write cannot lose the frame.
     private rejectProtocolVersion(client: TcpClient, name: string, version: string): void {
         const rejection = protocolRejection(version);
         this.callbacks.logError(
@@ -265,16 +251,13 @@ export class InboundHandler {
                 payload: Buffer.from(JSON.stringify(rejection), 'utf8'),
             }, MAX_FRAME_LENGTH);
         } catch {
-            // Nothing useful to say if even the refusal cannot be encoded - the socket is
-            // going away either way.
+            // Nothing to send if even the refusal cannot be encoded; the socket is closed either way.
         }
         this.callbacks.closeClient(client, packet);
     }
 
-    // A 1.x client cannot be sent a refusal it would understand - the framing itself differs -
-    // so this warning is the whole diagnostic. Before it, all the log said was an anonymous
-    // "Invalid frame length: 1744830464" once a second, which names neither the client nor
-    // the fix.
+    // The framing differs, so a 1.x client cannot be sent a refusal it would understand; this
+    // warning is the whole diagnostic.
     private reportV1Client(client: TcpClient): void {
         if (!this.v1WarnedAt.shouldWarn(client.address, performance.now())) {
             this.callbacks.logDebug(`Refusing Colibri 1.x client ${client.id} from ${client.address} (warned about this address already)`);
@@ -301,18 +284,14 @@ export class InboundHandler {
         );
     }
 
-    // A client echoes a server-sent heartbeat frame's timestamp back verbatim; relay it
-    // into the normal clientMessage$ pipeline as a 'colibri'/'latency' message so
-    // MeasureLatency's existing round-trip math (unchanged) handles it exactly as it
-    // would a message-level ping reply. hrtime is a system-wide monotonic clock, so a
-    // timestamp this worker generated remains valid to diff against once it reaches the
-    // main thread. The difference from before is purely in what it cost to get here: one
-    // fixed 13-byte frame each way instead of a full channel/command/payload message.
+    // The client echoes a heartbeat's timestamp verbatim. It is relayed as a 'colibri'/'latency' message,
+    // so MeasureLatency handles it like a message-level ping reply. hrtime is a system-wide monotonic
+    // clock, so a timestamp from this worker can be diffed on the main thread.
     private handlePong(client: TcpClient, pingTimestamp: bigint): void {
         if (!client.app) return;
 
         // ownBytes: a Buffer.from() this small is a view into the 64 KiB Buffer pool, and
-        // postMessage would clone all of it - ten times a second per client.
+        // postMessage would clone all of it, ten times a second per client.
         this.inboundGate.postClientMessage(client, COLIBRI_CHANNEL, 'latency', ownBytes(Buffer.from(pingTimestamp.toString(), 'utf8')));
     }
 }

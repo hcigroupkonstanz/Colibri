@@ -29,7 +29,6 @@ import type { Refusal, TcpClient } from './tcp-client.js';
 // normal burst, and short enough that what does get through is not seconds old.
 const DEFAULT_INBOUND_BACKLOG_LIMIT = 2000;
 
-// What InboundGate needs from the TCP worker that owns it.
 interface InboundGateCallbacks {
     postMessage(channel: string, content: { [key: string]: unknown }): void;
     logDebug(msg: string): void;
@@ -41,16 +40,15 @@ interface InboundGateCallbacks {
 // wait in it.
 export class InboundGate {
     private inboundBacklog = new InboundBacklog(undefined, DEFAULT_INBOUND_BACKLOG_LIMIT);
-    // Logged once when the backlog has been overflowing for EPISODE_WARNING_MILLIS and once when it
-    // has drained, however much is held back or dropped in between - not per message, which under
-    // overload would itself be thousands of posts a second to the thread that is already behind. A
-    // shorter episode is summed up in a single debug line.
+    // At most two log lines per episode (its start once it has lasted EPISODE_WARNING_MILLIS, and its
+    // end), not one per message: under overload that is thousands of posts a second to the thread that
+    // is already behind. A shorter episode only gets a summary at its end.
     private readonly backlogEpisode = new LimitEpisode();
     // Clients with updates held back, for the tick to pass on as room frees up.
     private readonly clientsHolding = new Set<TcpClient>();
 
-    // The backstop for one runaway client, which on its own can push the main thread into the
-    // backlog limit above and so slow every other client's updates down too.
+    // The backstop for one runaway client, which alone can push the main thread into the backlog limit
+    // and so slow every other client's updates down too.
     private rateLimiter = this.createRateLimiter(DEFAULT_RATE_LIMIT);
 
     public constructor(private readonly callbacks: InboundGateCallbacks) {}
@@ -75,7 +73,7 @@ export class InboundGate {
         });
     }
 
-    // Runs on the worker's every tick, at `now` (its performance.now() reading).
+    // Called from the worker's tick; `now` is performance.now().
     public tick(now: number): void {
         this.drainAllHeld(now);
         this.rateLimiter.sweep(now);
@@ -108,7 +106,7 @@ export class InboundGate {
         return null;
     }
 
-    // How many of the client's updates are held back.
+    // Objects with updates held back.
     public heldSize(client: TcpClient): number {
         return client.held.size;
     }
@@ -131,15 +129,12 @@ export class InboundGate {
         });
     }
 
-    // A model::update or broadcast::* (see isLimitable). It passes straight on if neither limit is
-    // in the way and none of this client's updates are being held back - that is every message,
-    // as long as the server keeps up. Otherwise an update is held back and merged with the
-    // client's other updates to the same object, and a broadcast is dropped.
-    //
-    // Past the backlog limit the main thread is further behind than it can make up while clients
-    // keep sending at this rate, and every further message would only sit in the queue - in
-    // memory, getting older. Holding updates back here, where each object's pile up into one,
-    // is what keeps both bounded without losing any field's latest value.
+    // A model::update or broadcast::* (see isLimitable). It passes on if neither limit is in the way
+    // and none of this client's updates are held back, which is every message while the server keeps
+    // up. Otherwise an update is held and merged with the client's other updates to the same object,
+    // and a broadcast is dropped.
+    // Past the backlog limit further messages would only age in the queue; merging per object bounds
+    // memory and age without losing any field's latest value.
     public acceptLimitable(client: TcpClient, channel: string, command: string, payload: Buffer, now: number): void {
         // Held updates go first, so this message cannot overtake them; if they cannot all go,
         // neither can it.
@@ -154,10 +149,8 @@ export class InboundGate {
         this.recordLimited(client, refusedBy, limited, now);
     }
 
-    // Which limit, if any, keeps a client from passing on one more limitable message now. The
-    // backlog first, so a token is only spent on a message that then goes on: a token taken for
-    // one held back by the backlog, and another when it finally goes, would have had a client at a
-    // legitimate 720 updates a second over its own limit of 1000 whenever the server is behind.
+    // Which limit, if any, keeps a client from passing on one more limitable message now. The backlog
+    // is checked first so a token is only spent on a message that goes on, not twice for one held back.
     private admit(client: TcpClient, now: number): Refusal | undefined {
         if (this.inboundBacklog.full) return 'backlog';
         if (!this.rateLimiter.take(client, now)) return 'rate';
@@ -206,15 +199,14 @@ export class InboundGate {
         this.clientsHolding.delete(client);
     }
 
-    // A client that left: its held updates go on, and the rate limit forgets it.
+    // Posts the held updates of a client that left and drops its rate limit state.
     public clientLeft(client: TcpClient): void {
         this.releaseHeld(client);
         this.rateLimiter.forget(client);
     }
 
-    // The tick's share-out of whatever room there is: one update per holding client per round,
-    // so under a sustained overload every client's objects keep moving, instead of the first
-    // clients in line taking all of it.
+    // The tick's share of whatever room there is: one update per holding client per round, so under
+    // a sustained overload every client's objects keep moving instead of the first in line taking all.
     private drainAllHeld(now: number): void {
         let progressed = true;
         while (progressed && this.clientsHolding.size > 0) {
@@ -259,8 +251,8 @@ export class InboundGate {
         }
 
         if (this.backlogEpisode.record(now, limited)) {
-            // The limit rather than a fresh read of the counter, which the main thread may have
-            // counted down a little since `full` read it - "1998 behind, limit 2000" just confuses.
+            // The limit, not a fresh read of the counter: the main thread may have counted down since
+            // `full` read it, and "1998 behind, limit 2000" confuses.
             this.callbacks.logWarning(
                 `The main thread has kept falling ${this.inboundBacklog.limit} TCP messages behind (TCP_INBOUND_BACKLOG_LIMIT) for a ` +
                     'second now: the server is taking in more than it can process. Until it catches up, for every Unity client ' +

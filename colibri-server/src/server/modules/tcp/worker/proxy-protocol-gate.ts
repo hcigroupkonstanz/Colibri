@@ -18,8 +18,7 @@ const PROXY_HEADER_TIMEOUT_MILLIS = TLS_HANDSHAKE_TIMEOUT_MILLIS;
 
 export const NOTHING_READ = Buffer.alloc(0);
 
-// What a connection that was read from before it got to handleConnection or handleTlsPortConnection
-// gets there with: whatever followed its PROXY protocol header in the same read.
+// `alreadyRead`: what the PROXY protocol check read past the header, or all it read if there was none.
 export type ConnectionHandler = (socket: net.Socket, alreadyRead: Buffer) => void;
 
 const NO_PROXY_HEADER_FIX =
@@ -61,7 +60,6 @@ const decideOnProxyHeader = function (received: Buffer, trusted: boolean): Proxy
     return { action: 'handle', header };
 };
 
-// What ProxyProtocolGate needs from the TCP worker that owns it.
 interface ProxyProtocolGateCallbacks {
     logDebug(msg: string): void;
     logWarning(msg: string): void;
@@ -130,21 +128,19 @@ export class ProxyProtocolGate {
         return this.tlsAtProxy && this.throughProxy.has(tcpSocketOf(socket));
     }
 
-    // The client's address: the one its connection's PROXY protocol header named, if it had one, else
-    // the address the connection comes from. The TLS socket of a failed handshake has usually been
-    // destroyed already, and then no longer knows its peer's address, but the TCP socket underneath it
-    // still does: the address was read when the connection was accepted, which cached it. An IPv4
-    // client is named by its IPv4 address, also on a dual-stack TCP_HOST and from a PROXY v2 header.
+    // The address the connection's PROXY protocol header named, else the one it comes from. The TLS
+    // socket of a failed handshake is usually destroyed and no longer knows its peer, but the TCP
+    // socket underneath still does: the address was read, and so cached, on accept. An IPv4 client is
+    // named by its IPv4 address, also on a dual-stack TCP_HOST and from a PROXY v2 header.
     public clientAddress(socket: net.Socket, unknown = 'UNDEFINED'): string {
         const tcpSocket = tcpSocketOf(socket);
         return normalizeAddress(this.proxiedAddresses.get(tcpSocket) || socket.remoteAddress || tcpSocket.remoteAddress || unknown);
     }
 
-    // With TCP_PROXY_PROTOCOL set, every connection starts here. One from a trusted proxy has to start
-    // with a PROXY protocol header, and the client that names is the connection's client from then on:
-    // in the log, and for every per-address limit. One from anywhere else is refused if it starts with
-    // a header, since only a proxy sends one, and otherwise goes on as it would without
-    // TCP_PROXY_PROTOCOL. Whatever follows the header goes on to `handle`, a TLS handshake included.
+    // A trusted proxy has to start with a PROXY protocol header, and the client it names is the
+    // connection's client from then on, in the log and for every per-address limit. Anyone else is
+    // refused if it starts with a header, and otherwise goes on as without TCP_PROXY_PROTOCOL.
+    // Whatever follows the header goes on to `handle`, a TLS handshake included.
     private handleProxyProtocolConnection(socket: net.Socket, handle: ConnectionHandler): void {
         // Read now, which caches it for clientAddress.
         const peer = normalizeAddress(socket.remoteAddress || 'UNDEFINED');
@@ -172,7 +168,7 @@ export class ProxyProtocolGate {
                 this.refuseProxyConnection(socket, peer, decision.reason, decision.fix);
                 return;
             }
-            // In the same tick as `handle` adds its own listeners, so that nothing is missed in between.
+            // Removed in the same tick as `handle` adds its own listeners, so no error is missed.
             socket.off('error', onError);
             if (decision.header !== 'none') {
                 this.throughProxy.add(socket);

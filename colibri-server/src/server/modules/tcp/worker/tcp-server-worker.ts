@@ -48,8 +48,6 @@ export class TCPServerWorker extends WorkerService {
         logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
     });
 
-    // One for the worker's lifetime: configure() only updates its settings, so the sockets it has
-    // seen keep what their PROXY protocol headers named.
     private readonly proxyProtocolGate = new ProxyProtocolGate({
         logDebug: (msg) => this.logDebug(msg),
         logWarning: (msg) => this.logWarning(msg),
@@ -59,36 +57,32 @@ export class TCPServerWorker extends WorkerService {
     private readonly waitingClients = new Map<string, TcpClient>();
     // properly connected clients
     private readonly clients = new Map<string, TcpClient>();
-    // clients grouped by app, so broadcast() can resolve recipients without scanning
+    // clients grouped by app, so 'm:broadcastToApp' resolves its recipients without scanning
     // every connected client
     private readonly clientsByApp = new AppIndex<TcpClient>();
 
     private heartbeatInterval: NodeJS.Timeout | undefined;
 
-    // Every client message for the main thread's hooks is posted through it; configure() sets its
-    // limits.
     private readonly inboundGate = new InboundGate({
         postMessage: (channel, content) => this.postMessage(channel, content),
         logDebug: (msg) => this.logDebug(msg),
         logWarning: (msg) => this.logWarning(msg),
     });
 
-    // Ends the clients that have gone quiet; configure() sets its timeout.
     private readonly idleWatch = new IdleWatch({
         handleSocketDisconnect: (client) => this.handleSocketDisconnect(client),
         logDebug: (msg) => this.logDebug(msg),
         logWarning: (msg) => this.logWarning(msg),
     });
 
-    // Relayed messages, replies and heartbeats go through it; closeClient ends the socket with its refusal directly.
+    // Not used by closeClient, which ends the socket with its refusal frame itself.
     private readonly clientWriter = new ClientWriter({
         logWarning: (msg) => this.logWarning(msg),
     });
 
-    // When the clients' message rates were last sampled; see TrafficMeter.
+    // performance.now() of the last TrafficMeter sample of the clients.
     private trafficSampledAt = 0;
 
-    // Reads what every client sends; handleConnection passes it each socket's data.
     private readonly inboundHandler = new InboundHandler(
         {
             waitingClients: this.waitingClients,
@@ -109,10 +103,8 @@ export class TCPServerWorker extends WorkerService {
     public constructor() {
         super(true);
 
-        // Anything thrown out of this subscriber escapes into the worker's own
-        // uncaughtException path and takes the whole thread - and with it the entire TCP
-        // transport - down, while HTTP and Socket.IO keep serving as if nothing happened.
-        // One bad message must never cost more than that message.
+        // An exception escaping this subscriber would take the worker thread, and with it the whole
+        // TCP transport, down while HTTP and Socket.IO keep serving. One bad message costs only itself.
         this.parentMessages$.subscribe((msg) => {
             try {
                 this.handleParentMessage(msg);
@@ -176,7 +168,6 @@ export class TCPServerWorker extends WorkerService {
         this.proxyProtocolGate.configure(options);
     }
 
-    // Switches the TLS port to a renewed certificate; TlsPort.useTlsCredentials has the details.
     public useTlsCredentials(credentials: TcpTlsCredentials): void {
         this.tlsPort.useTlsCredentials(credentials);
     }
@@ -215,9 +206,8 @@ export class TCPServerWorker extends WorkerService {
         }
     }
 
-    // Answers TCPServerProxy.clientActivity(): one compact report on every handshaked client. Never
-    // posted unasked, so a server without an admin UI page open pays nothing for it beyond the
-    // counting itself.
+    // Answers TCPServerProxy.clientActivity() with a report on every handshaked client. Posted only on
+    // request, so with no admin UI page open the counting is the only cost.
     private postClientActivity(request: number, history: boolean): void {
         const now = performance.now();
         const wallNow = Date.now();
@@ -236,10 +226,8 @@ export class TCPServerWorker extends WorkerService {
         this.postMessage('clientActivity$', report as unknown as { [key: string]: unknown });
     }
 
-    // Tolerates being called before start() (an 'm:stop' racing startup) and destroys live
-    // sockets rather than leaving them to the terminate() that usually follows - so a stop
-    // without a terminate, or a restart in the same thread, doesn't leak connections or
-    // leave stale entries in the client indexes.
+    // Callable before start() (an 'm:stop' racing startup). Destroys the sockets itself rather than
+    // relying on the terminate() that usually follows, so a stop without one leaks no connections.
     public stop(): void {
         clearInterval(this.heartbeatInterval);
         this.server?.close();
@@ -248,7 +236,7 @@ export class TCPServerWorker extends WorkerService {
         for (const client of [...this.clients.values(), ...this.waitingClients.values()]) {
             client.socket.destroy();
         }
-        // And those still in their TLS handshake, or yet to start it, or to send a PROXY protocol header.
+        // Also those still in their TLS handshake, yet to start one, or yet to send a PROXY protocol header.
         this.tlsPort.destroySockets();
         this.proxyProtocolGate.destroySockets();
         this.clients.clear();
@@ -274,9 +262,8 @@ export class TCPServerWorker extends WorkerService {
                 payload: toBuffer(msg.payload),
             }, MAX_FRAME_LENGTH);
         } catch (err) {
-            // An unrepresentable frame (channel/command over 64 KiB, or a body over
-            // MAX_FRAME_LENGTH) is dropped as a single bad message. Emitting it anyway would
-            // produce a frame this server's own FrameReader would reject.
+            // An unrepresentable frame (channel or command over 64 KiB, or a body over MAX_FRAME_LENGTH)
+            // is dropped alone: sent anyway, this server's own FrameReader would reject it.
             this.logError(
                 `Dropping unencodable message (${msg.channel} / ${msg.command}): ${errorMessage(err)}`,
                 false
@@ -299,9 +286,9 @@ export class TCPServerWorker extends WorkerService {
             CONNECTION_LINE
         );
         socket.setNoDelay(true);
-        // The kernel's own dead-peer detection, for a socket with nothing in flight - one waiting
-        // for its handshake, say. A handshaked client is written to every 100 ms, which keeps
-        // keepalive from ever probing it; the idle timeout in IdleWatch.endIdleClients covers that case.
+        // Kernel dead-peer detection for a socket with nothing in flight, such as one waiting for its
+        // handshake. A handshaked client gets a heartbeat every 100 ms, so keepalive never probes it;
+        // IdleWatch.endIdleClients covers that case.
         socket.setKeepAlive(true, KEEPALIVE_INITIAL_DELAY_MILLIS);
 
         const tcpClient = createTcpClient(id, socket, address);
@@ -315,10 +302,8 @@ export class TCPServerWorker extends WorkerService {
             this.handleSocketError(tcpClient, error);
         });
 
-        // 'close' always fires exactly once, whether the socket ended gracefully, errored,
-        // or was destroyed outright - unlike 'end', which never fires on an abrupt
-        // disconnect (e.g. a client that vanishes without sending FIN), which used to leak
-        // that client in `clients`/`clientsByApp` forever.
+        // 'close' fires exactly once however the socket ends, unlike 'end', which never fires when
+        // a client vanishes without sending FIN.
         socket.on('close', () => {
             clearTimeout(tcpClient.closeTimer);
             this.handleSocketDisconnect(tcpClient);
@@ -327,14 +312,9 @@ export class TCPServerWorker extends WorkerService {
         if (alreadyRead.length > 0) this.inboundHandler.handleSocketData(tcpClient, alreadyRead);
     }
 
-    // Ends a connection from this side: drops the client from every index *now*, rather than
-    // when its 'close' event eventually arrives. Until then it used to stay listed, so the next
-    // 100ms heartbeat wrote to the ended socket - "write after end", logged twice, and a destroy
-    // that could truncate the refusal frame still being flushed.
-    //
-    // end(finalPacket) queues that frame ahead of the FIN, so it is still delivered. The timer
-    // only matters for a peer that never closes its side; a well-behaved one closes first and
-    // the socket's 'close' handler clears it.
+    // Ends a connection from this side. The client leaves every index now, not when 'close' arrives,
+    // up to CLOSE_GRACE_MILLIS later. end(finalPacket) queues that frame ahead of the FIN; the timer
+    // destroys the socket of a peer that never closes its side, else 'close' clears it.
     private closeClient(client: TcpClient, finalPacket?: Buffer): void {
         if (client.disconnected) return;
 
@@ -354,16 +334,14 @@ export class TCPServerWorker extends WorkerService {
         const who = `client ${client.id} (${client.address}${client.name ? `, '${client.name}'` : ''})`;
         const code = errorCode(error);
 
-        // A peer that closed abruptly - an EPIPE as much as an ECONNRESET - is not this server's
-        // error. Matched by code: it used to be the message, which let EPIPE through at ERROR.
+        // A peer that closed abruptly (EPIPE as much as ECONNRESET) is not an error of this server.
         if (code && PEER_GONE_ERRORS.has(code)) {
             this.logDebug(`Lost the connection to ${who}: ${error.message}`, CONNECTION_LINE);
         } else {
             this.logError(`Socket error on ${who}: ${error.message}`, false);
         }
 
-        // No need to call handleSocketDisconnect here - a socket's 'close' event always
-        // fires directly after 'error', and that already handles cleanup.
+        // No handleSocketDisconnect here: 'close' always follows 'error' and does the cleanup.
     }
 
     private handleSocketDisconnect(client: TcpClient): void {
@@ -379,8 +357,8 @@ export class TCPServerWorker extends WorkerService {
         this.clients.delete(client.id);
         this.waitingClients.delete(client.id);
         this.removeFromAppIndex(client);
-        // Ahead of clientDisconnected$, so the main thread still knows whose they are: the last
-        // state a client sent is applied even if it was held back when it left.
+        // Ahead of clientDisconnected$, so the main thread still knows the client: the last state it
+        // sent is applied even if it was held back when it left.
         this.inboundGate.clientLeft(client);
         this.postMessage('clientDisconnected$', { id: client.id });
     }
@@ -389,29 +367,14 @@ export class TCPServerWorker extends WorkerService {
         this.clientsByApp.remove(client.app, client);
     }
 
-    // Only clients whose handshake was accepted. colibri-unity counts a session as connected from
-    // the first frame it decodes, so heartbeating a client still waiting for its handshake to be
-    // checked made one this server was about to refuse fire OnConnected first, and
-    // ProtocolMismatch a moment later. Nothing else needed the early ones: a waiting client's echo
-    // was discarded (InboundHandler.handlePong) anyway.
-    //
-    // So nothing at all is written to a client before its handshake is accepted: it is neither
-    // heartbeated nor in any app's recipients. A client refused for its protocol version is sent
-    // protocol::rejected and nothing else; one cut off for a malformed frame, nothing at all. An
-    // accepted one is sent, first, whichever of these comes first - any of them means "connected",
-    // which is all colibri-unity needs:
-    // - its own colibri::clients / client::connected, which ClientBroadcast sends the whole app,
-    //   the joiner included, once the main thread has the clientConnected$ posted from
-    //   InboundHandler.assignApp - usually first, a few milliseconds after acceptance;
-    // - another client's broadcast::* or model message relayed to the app: assignApp adds the
-    //   client to the app's recipients here at once, before the main thread knows about it, so
-    //   with other TCP clients in the app this can arrive ahead of client::connected;
-    // - the next heartbeat, within 100 ms.
-    // Answers to its own model::request or client::request come after client::connected, since the
+    // Only handshaked clients. colibri-unity counts a session as connected from the first frame it
+    // decodes, so nothing is written to a client before its handshake is accepted (one refused for its
+    // protocol version gets only protocol::rejected), or it would fire OnConnected and then ProtocolMismatch.
+    // An accepted client's first frame is whichever comes first of its client::connected, a message
+    // relayed to its app, and the next heartbeat.
+    // Answers to its own model::request or client::request come after its client::connected: the
     // main thread handles its clientConnected$ before anything it sends.
-    //
-    // A client with an earlier heartbeat still waiting in its socket is skipped; see
-    // ClientWriter.writeTickHeartbeat.
+    // A client whose earlier heartbeat is still queued is skipped; see ClientWriter.writeTickHeartbeat.
     private handleHeartbeat(): void {
         const packet = encodeHeartbeatFrame(process.hrtime.bigint());
         for (const client of this.clients.values()) {

@@ -2,56 +2,38 @@ import type { TcpServerOptions } from '../worker-messages.js';
 import { HEARTBEAT_EVERY_BYTES } from './heartbeat-every-bytes.js';
 import type { TcpClient } from './tcp-client.js';
 
-// How long a client may send nothing at all before it is taken for gone. A Quest that drops off
-// the Wi-Fi sends no FIN, so without this its connection stayed open - a connected client, keeping
-// its app's synchronized models alive - until the kernel gave up retransmitting to it, which takes
-// many minutes. A live client is never anywhere near this quiet: colibri-unity echoes the 100 ms
-// heartbeat from its receive thread, so even a main thread busy loading a scene keeps it talking.
+// How long a client may send nothing at all before it is taken for gone. A headset that drops off
+// the Wi-Fi sends no FIN, and the kernel takes many minutes to give up retransmitting to it. A live
+// client is never this quiet: colibri-unity echoes the 100 ms heartbeat from its receive thread,
+// even while its main thread loads a scene, as long as it finds heartbeats in what it reads, also
+// in a backlog (see HEARTBEAT_EVERY_BYTES and ClientWriter.writeToClient).
 //
-// That holds only as long as the client finds heartbeats in what it reads, also while it is still
-// reading a backlog: see HEARTBEAT_EVERY_BYTES and ClientWriter.writeHeartbeat.
-//
-// A message larger than HEARTBEAT_EVERY_BYTES has no heartbeat inside it, though, so a client
-// reading one can echo nothing until it is through: a 4 MiB broadcast takes about 21 s over a link
-// of 200 KB/s. Nor can this server watch it being read. A write is done for Node.js once the kernel
-// has taken it, and the kernel's buffers, and those of a proxy in between such as Docker's port
-// forwarding, take megabytes at once: on loopback, all of that broadcast within 0.2 s. Such a client
-// was disconnected 10 s in while reading all along, and once it had reconnected it never got the
-// message. So until a client echoes a heartbeat sent after the latest such message written to it,
-// it may stay quiet one more idle timeout for every HEARTBEAT_EVERY_BYTES of the largest one sent
-// to it since it last did, the rate the heartbeats between messages already assume (6.4 KiB/s at
-// the default), up to MAX_IDLE_ALLOWANCE_TIMEOUTS more (idleAllowanceMillis). The extra time ends
-// once it echoes a heartbeat sent after the latest one; a client that never echoes heartbeats
-// keeps it from its first such message on. The price is that a client that is gone by the time
-// such a message is sent to it, or goes while it is being read, is noticed that much later.
+// A message larger than HEARTBEAT_EVERY_BYTES has no heartbeat inside it, so a client reading one
+// echoes nothing until it is through, and this server cannot watch the read: a write is done for
+// Node.js once the kernel has taken it, and the kernel's buffers and a proxy's in between (Docker's
+// port forwarding) take megabytes at once. Until the client echoes a heartbeat sent after the
+// latest such message, it may therefore stay quiet longer: see idleAllowanceMillis.
 const DEFAULT_IDLE_TIMEOUT_MILLIS = 10_000;
 
 // The most idle timeouts a client reading a large message may stay quiet on top of its own; see
-// DEFAULT_IDLE_TIMEOUT_MILLIS. Each one keeps a client that has gone connected, and its app's models
-// alive, that much longer, and behind Docker Desktop's port forwarding or another proxy nothing else
-// notices it at all: the server's connection is to the proxy, so the kernel never gives up on it
-// either. Without a limit that was up to 81 idle timeouts in all, 13.5 minutes, for a message of
-// MAX_FRAME_LENGTH. With 6, 60 s at the default, a 4 MiB message still gets through at about
-// 60 KB/s or faster (the link it was reproduced on did 200 KB/s), and a client that has gone is
-// noticed within 7 idle timeouts at worst.
+// DEFAULT_IDLE_TIMEOUT_MILLIS. Behind a proxy such as Docker's port forwarding nothing else
+// notices a gone client (the kernel's connection is to the proxy), so each one keeps it, and its
+// app's models, alive that much longer. With 6 (70 s in all at the default) a 4 MiB message still
+// gets through at about 60 KB/s, and a gone client is noticed within 7 idle timeouts at worst.
 const MAX_IDLE_ALLOWANCE_TIMEOUTS = 6;
 
-// If the worker's own 100 ms tick comes this late, the thread itself was stalled (a long GC, a
-// starved CPU) and could not have read anything in the meantime. Every client would look idle for
-// that long, so the idle check is skipped for that one tick: by the next, whatever the clients sent
-// during the stall has been read.
+// If the worker's 100 ms tick comes this late, the thread was stalled (a long GC, a starved CPU) and
+// read nothing meanwhile, so every client would look idle. The check is skipped for that tick; by the
+// next, what the clients sent during the stall has been read.
 const TICK_STALL_MILLIS = 2000;
 
-// A message size for the log: in MiB from 1 MiB, in KiB below.
 const describeSize = function (bytes: number): string {
     const mebibyte = 1024 * 1024;
     return bytes >= mebibyte ? `${(bytes / mebibyte).toFixed(1)} MiB` : `${Math.round(bytes / 1024)} KiB`;
 };
 
-// What IdleWatch needs from the TCP worker that owns it.
 interface IdleWatchCallbacks {
-    // Drops the client from every index and posts clientDisconnected$; see
-    // TCPServerWorker.handleSocketDisconnect.
+    // Drops the client from every index and posts clientDisconnected$ (TCPServerWorker.handleSocketDisconnect).
     handleSocketDisconnect(client: TcpClient): void;
     logDebug(msg: string): void;
     logWarning(msg: string): void;
@@ -68,21 +50,19 @@ export class IdleWatch {
         this.idleTimeoutMillis = options.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MILLIS;
     }
 
-    // Runs on the worker's every tick, at `now` (its performance.now() reading).
+    // Called from the worker's tick; `now` is performance.now().
     public tick(now: number, clients: ReadonlyMap<string, TcpClient>, waitingClients: ReadonlyMap<string, TcpClient>): void {
         const stalled = this.lastTickAt !== undefined && now - this.lastTickAt > TICK_STALL_MILLIS;
         this.lastTickAt = now;
         if (!stalled) this.endIdleClients(now, clients, waitingClients);
     }
 
-    // Ends every client that has sent nothing for idleTimeoutMillis, plus its idleAllowanceMillis,
-    // exactly as if it had disconnected: out of every index, clientDisconnected$ posted, and so its
-    // app's models dropped once it was the app's last client. Destroyed rather than ended - a peer
-    // that is gone will neither read what is still queued for it nor answer a FIN.
+    // Ends every client that has sent nothing for idleTimeoutMillis plus its idleAllowanceMillis, as if
+    // it had disconnected (so its app's models are dropped if it was the last client). Destroyed, not
+    // ended: a gone peer neither reads what is queued for it nor answers a FIN.
     //
-    // A client still waiting for its handshake is held to the same limit, counted from when it
-    // connected: a real client handshakes at once, and since nothing is sent to a waiting client
-    // any more, nothing else would ever notice one that never does.
+    // A client still waiting for its handshake is held to the same limit, counted from its connect:
+    // nothing is written to it, so nothing else would notice one that never handshakes.
     private endIdleClients(now: number, clients: ReadonlyMap<string, TcpClient>, waitingClients: ReadonlyMap<string, TcpClient>): void {
         if (this.idleTimeoutMillis <= 0) return;
 
@@ -110,10 +90,11 @@ export class IdleWatch {
         }
     }
 
-    // How much longer than idleTimeoutMillis the client may stay quiet: one more idle timeout for
-    // every HEARTBEAT_EVERY_BYTES of the message unreadLargeBytes measures, the time it takes at the
-    // rate the heartbeats already assume, but no more than MAX_IDLE_ALLOWANCE_TIMEOUTS. See
-    // DEFAULT_IDLE_TIMEOUT_MILLIS.
+    // How much longer than idleTimeoutMillis the client may stay quiet while reading a large message:
+    // one more timeout per HEARTBEAT_EVERY_BYTES of unreadLargeBytes (the rate the heartbeats between
+    // messages already assume, 6.4 KiB/s at the default), at most MAX_IDLE_ALLOWANCE_TIMEOUTS. It ends
+    // once the client echoes a heartbeat sent after the message; one that never echoes keeps it. The
+    // price is that a client that goes while such a message is sent or read is noticed that much later.
     private idleAllowanceMillis(client: TcpClient): number {
         return this.idleTimeoutMillis * Math.min(client.reading.unreadLargeBytes / HEARTBEAT_EVERY_BYTES, MAX_IDLE_ALLOWANCE_TIMEOUTS);
     }

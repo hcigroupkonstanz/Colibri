@@ -24,7 +24,6 @@ const secureContextOptions = function (credentials: TcpTlsCredentials): { cert: 
     return { cert: toBuffer(credentials.cert), key: toBuffer(credentials.key) };
 };
 
-// What TlsPort needs from the TCP worker that owns it.
 interface TlsPortCallbacks {
     // The client's address; see ProxyProtocolGate.clientAddress.
     clientAddress(socket: net.Socket, unknown?: string): string;
@@ -39,8 +38,8 @@ interface TlsPortCallbacks {
 // The TCP port with TLS on: it refuses a connection that does not start a TLS handshake, and hands
 // one that completes it on to the worker.
 export class TlsPort {
-    // With TLS on: never listens itself, but is handed each connection to the port that starts a TLS
-    // handshake, and hands it on to handleConnection once the handshake is done.
+    // Never listens: handleTlsPortConnection hands it each connection that starts a TLS handshake, and
+    // it passes the connection to callbacks.handleConnection once the handshake is done.
     private tlsServer: tls.Server | undefined;
     private tlsCredentials: TcpTlsCredentials | undefined;
     private tlsHandshakeTimeoutMillis = TLS_HANDSHAKE_TIMEOUT_MILLIS;
@@ -111,14 +110,13 @@ export class TlsPort {
         return server;
     }
 
-    // A connection to the TLS port. Its first bytes say whether it starts a TLS handshake: if so, it
-    // is handed to tlsServer; if not, it is refused, and the warning can name it and the fix. Handed
-    // to tlsServer straight away, it would only fail its handshake with OpenSSL's "wrong version
-    // number", which names neither.
+    // A connection to the TLS port. Its first bytes decide: a TLS handshake goes to tlsServer, anything
+    // else is refused with a warning that names the client and the fix. Handed to tlsServer anyway, it
+    // would only fail with OpenSSL's "wrong version number".
     public handleTlsPortConnection(socket: net.Socket, alreadyRead: Buffer): void {
         // Read now, which caches it for clientAddress.
         const address = this.callbacks.clientAddress(socket);
-        // Set on the TCP socket: the TLS socket on top of it does not pass either one down.
+        // On the TCP socket, so NoDelay and keepalive cover the TLS handshake too.
         socket.setNoDelay(true);
         socket.setKeepAlive(true, KEEPALIVE_INITIAL_DELAY_MILLIS);
         this.tlsPortSockets.add(socket);

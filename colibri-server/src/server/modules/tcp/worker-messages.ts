@@ -1,11 +1,9 @@
 import type { ClientActivity } from '../limits/client-activity.js';
 import type { RateLimit } from '../limits/inbound-limits.js';
 
-// Passed as workerData by TCPServerProxy and checked by the bootstrap at the bottom of
-// tcp-server-worker.ts. `!threads.isMainThread` alone was not enough of a guard: any test runner that
-// executes its suites inside worker threads (vitest's default pool does) would construct a
-// second TCPServerWorker on import and have it subscribe to *that* thread's message
-// channel, which is the runner's own RPC.
+// Passed as workerData by TCPServerProxy; the bootstrap at the bottom of worker/tcp-server-worker.ts
+// starts the worker only with it. A test runner that runs suites in worker threads (vitest's threads
+// pool) would otherwise start a second worker on import, listening on the runner's own message channel.
 export const TCP_SERVER_WORKER_ROLE = 'colibri-tcp-server';
 
 // What the worker posts as 'clientConnected$' once a client's handshake is accepted.
@@ -14,7 +12,8 @@ export interface TcpClientConnected {
     app: string;
     name: string;
     version: string;
-    // Its address: the one its PROXY protocol header named, if it had one; see clientAddress.
+    // The address its PROXY protocol header named, else the one it connected from; see
+    // ProxyProtocolGate.clientAddress.
     address: string;
     // Whether its connection to this server is encrypted.
     tls: boolean;
@@ -25,10 +24,9 @@ export interface TcpClientConnected {
     connectedAt: number;
 }
 
-// What the worker posts as 'clientActivity$', answering an 'm:clientActivity' from TCPServerProxy:
-// the activity of every client whose handshake was accepted, with each one's rate history if the
-// request asks for it. Only ever posted when asked, which the proxy does only while an admin UI page
-// shows it, and asks for the history only for a page's first snapshot.
+// What the worker posts as 'clientActivity$' in answer to an 'm:clientActivity': the activity of every
+// handshaked client, with its rate history if requested. Posted only on request, which the admin UI
+// makes for its clients page, asking for the history with a page's first snapshot.
 export interface TcpClientActivityReport {
     request: number;
     clients: (ClientActivity & { id: string })[];
@@ -49,16 +47,15 @@ export interface TcpServerOptions {
     inboundBacklogLimit?: number;
     // Per client; see InboundRateLimiter.
     rateLimit?: RateLimit;
-    // See DEFAULT_IDLE_TIMEOUT_MILLIS. 0 never times a client out.
+    // See IdleWatch. 0 never times a client out.
     idleTimeoutMillis?: number;
     // Set, the port accepts only TLS connections, served with this certificate; see
     // TlsPort.handleTlsPortConnection. 'm:tlsCredentials' replaces it.
     tls?: TcpTlsCredentials;
     // The proxies whose PROXY protocol headers name the client, as TRUSTED_PROXIES lists them. The
-    // list rather than the main thread's TrustProxy, which cannot be posted to the worker thread:
-    // compiled in the worker from the same list, it trusts the same peers.
+    // list, not a TrustProxy, which cannot be posted to the worker: the worker compiles its own.
     trustedProxies?: string[];
-    // TCP_PROXY_PROTOCOL; see handleProxyProtocolConnection.
+    // TCP_PROXY_PROTOCOL; see ProxyProtocolGate.
     proxyProtocol?: boolean;
     // TCP_TLS_AT_PROXY: a client whose connection started with a PROXY protocol header from a trusted
     // proxy reached that proxy over TLS. The header does not say so itself. Only with proxyProtocol,
@@ -66,12 +63,9 @@ export interface TcpServerOptions {
     tlsAtProxy?: boolean;
 }
 
-// The worker thread only ever deals in raw payload bytes (straight off the wire, or
-// destined for it) - the Payload memoization abstraction lives at the ConnectionPool
-// layer on the main thread, on the other side of the postMessage boundary. Keeping the
-// payload as a Buffer here means a byte-verbatim TCP->TCP relay never pays a utf8
-// transcode; only a hook that actually inspects the payload (on the main thread) pays
-// for decoding it.
+// The worker only handles raw payload bytes. Payload, which caches the decoded forms, lives on the
+// main thread across the postMessage boundary, so a TCP to TCP relay never transcodes utf8 and only
+// a hook that inspects the payload pays for decoding it.
 export interface WireNetworkMessage {
     origin?: {
         id: string;
