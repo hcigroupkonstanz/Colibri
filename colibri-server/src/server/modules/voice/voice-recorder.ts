@@ -27,7 +27,7 @@ interface VoiceRecorderCallbacks {
 // The VoiceServer's recordings of PCM voice, saved as .wav files once their voice client is dropped
 // or the server stops. One for the server's lifetime.
 export class VoiceRecorder {
-    // The recordings of voice clients dropped (see VoiceServer.dropVoiceClient), for the next
+    // The recordings of voice clients dropped (see VoiceClients.dropVoiceClient), for the next
     // disconnect check, or stop(), to save.
     private droppedRecordings: RecordedVoiceClient[] = [];
 
@@ -63,7 +63,7 @@ export class VoiceRecorder {
     // Saves the recordings queued since the last call, one at a time.
     public async saveDropped(): Promise<void> {
         // Those just timed out or trimmed, and those dropped since the last check for another
-        // reason (see VoiceServer.dropVoiceClient's callers).
+        // reason (see VoiceClients.dropVoiceClient's callers).
         const pendingRecordings = this.droppedRecordings;
         this.droppedRecordings = [];
         if (pendingRecordings.length === 0) return;

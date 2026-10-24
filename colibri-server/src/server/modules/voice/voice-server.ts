@@ -16,6 +16,7 @@ import type { UnityClientSource } from './unity-client-addresses.js';
 import { UnityClientAddresses } from './unity-client-addresses.js';
 import { REPORT_INTERVAL_MILLIS, VoiceReports } from './voice-reports.js';
 import { VoiceRecorder } from './voice-recorder.js';
+import { VoiceClients } from './voice-clients.js';
 import { formatAppId } from './format-app-id.js';
 import { voiceClientKey } from './voice-client-key.js';
 import { GrowableInt16Buffer } from './wav.js';
@@ -95,9 +96,6 @@ const newVoiceClient = function (remote: dgram.RemoteInfo, header: VoiceHeader, 
     };
 };
 
-// What getAppClients hands back for an app with no voice clients.
-const NO_CLIENTS: readonly VoiceClient[] = [];
-
 /**
  * The UDP socket voice listens on, for VOICE_HOST. An IPv6 address, `::` included, gets an IPv6
  * socket that takes IPv4 as well (ipv6Only false), so that VOICE_HOST=:: serves Unity clients of
@@ -127,14 +125,17 @@ export class VoiceServer extends Service {
     public get groupName(): string { return 'web'; }
 
     private udpSocket!: dgram.Socket;
-    private clients: Map<string, VoiceClient> = new Map<string, VoiceClient>();
+    // Holds the voice clients and those of each app, and drops them. Logs through this service, so
+    // under its name.
+    private readonly voiceClients = new VoiceClients<VoiceClient>({
+        leaveGroup: (client) => this.leaveGroup(client),
+        logDebug: (msg, metadata) => this.logDebug(msg, metadata),
+        queueRecording: (client) => this.recorder.queueRecording(client),
+    });
+    // The Map voiceClients holds, by voiceClientKey.
+    private readonly clients: Map<string, VoiceClient> = this.voiceClients.clients;
     private disconnectTimeoutMillis = 2000;
     private disconnectCheckInterval!: NodeJS.Timeout;
-
-    // The voice clients of each app, by appId. Rebuilt only when a client joins, times out or
-    // changes app, instead of re-scanning/re-deriving `this.clients` on every incoming voice
-    // packet (received at up to ~50 packets/s/client).
-    private appClients: Map<number, VoiceClient[]> | undefined;
 
     // Holds the recordings and saves them. Logs through this service, so under its name.
     private readonly recorder: VoiceRecorder;
@@ -291,7 +292,7 @@ export class VoiceServer extends Service {
             voiceClient = newVoiceClient(remote, header, this.samplingRate, now, nowMillis);
             this.clients.set(clientKey, voiceClient);
             if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
-            this.appClients = undefined;
+            this.voiceClients.invalidateAppClients();
             this.logDebug(
                 `New voice client connected from ${clientKey} ID: ${userId} App: ${formatAppId(appId)} Codec: ${codec === VoiceCodec.OPUS ? 'Opus' : 'PCM'}`
                     + (admission === 'proxy' ? ' (through a trusted proxy, unchecked)' : ''),
@@ -307,14 +308,14 @@ export class VoiceServer extends Service {
             this.leaveGroup(voiceClient);
             voiceClient.appId = appId;
             if (admission === 'unity') this.joinGroup(voiceClient, remote.address);
-            this.appClients = undefined;
+            this.voiceClients.invalidateAppClients();
         }
         return voiceClient;
     }
 
     // Sends `message` to all other clients of the app `appId`.
     private relay(message: Buffer, sender: VoiceClient, appId: number, nowMillis: number): void {
-        for (const peer of this.getAppClients(appId)) {
+        for (const peer of this.voiceClients.getAppClients(appId)) {
             if (peer === sender) continue;
 
             // send() checks its arguments synchronously and throws, and anything thrown
@@ -359,7 +360,7 @@ export class VoiceServer extends Service {
         const pendingRecordings = this.recorder.takeRecordings(this.clients.values());
         this.clients.clear();
         this.groups.clear();
-        this.appClients = undefined;
+        this.voiceClients.invalidateAppClients();
         await this.recorder.saveBeforeStopping(pendingRecordings);
     }
 
@@ -401,7 +402,7 @@ export class VoiceServer extends Service {
         const stalest = stalestOf(group);
         if (!stalest || nowMillis - stalest.lastHeartbeat < VOICE_CLIENT_GONE_MILLIS) return false;
 
-        this.dropVoiceClient(stalest, `no packet for ${nowMillis - stalest.lastHeartbeat} ms, and ${source} takes its place`);
+        this.voiceClients.dropVoiceClient(stalest, `no packet for ${nowMillis - stalest.lastHeartbeat} ms, and ${source} takes its place`);
         return true;
     }
 
@@ -423,7 +424,7 @@ export class VoiceServer extends Service {
         }
         // dropVoiceClient takes each out of the set: deleting the entry being visited is safe.
         for (const client of group.clients) {
-            this.dropVoiceClient(client, `no Unity client of app ${formatAppId(appId)} is connected from ${address} any more`);
+            this.voiceClients.dropVoiceClient(client, `no Unity client of app ${formatAppId(appId)} is connected from ${address} any more`);
         }
     }
 
@@ -437,20 +438,10 @@ export class VoiceServer extends Service {
             group.shrunkAt = undefined;
             const unityClients = this.unityClients.count(group.address, group.appId);
             while (group.clients.size > unityClients) {
-                this.dropVoiceClient(stalestOf(group)!,
+                this.voiceClients.dropVoiceClient(stalestOf(group)!,
                     `${group.address} has only ${unityClients} Unity client(s) of app ${formatAppId(group.appId)} left`);
             }
         }
-    }
-
-    // Takes `client` out of the clients relayed to and from, and says why in a connection line. Its
-    // recording is saved by the next disconnect check, or stop().
-    private dropVoiceClient(client: VoiceClient, why?: string): void {
-        this.clients.delete(voiceClientKey(client.ip, client.port));
-        this.leaveGroup(client);
-        this.appClients = undefined;
-        this.logDebug(`Voice client ${voiceClientKey(client.ip, client.port)} disconnected ID: ${client.userId}` + (why ? `: ${why}` : ''), CONNECTION_LINE);
-        this.recorder.queueRecording(client);
     }
 
     // Counts `client` against the Unity clients of its app at `address` (see admit).
@@ -475,18 +466,6 @@ export class VoiceServer extends Service {
         if (group.clients.size === 0) this.groups.delete(group.key);
     }
 
-    private getAppClients(appId: number): readonly VoiceClient[] {
-        if (!this.appClients) {
-            this.appClients = new Map<number, VoiceClient[]>();
-            for (const client of this.clients.values()) {
-                const app = this.appClients.get(client.appId);
-                if (app) app.push(client);
-                else this.appClients.set(client.appId, [ client ]);
-            }
-        }
-        return this.appClients.get(appId) ?? NO_CLIENTS;
-    }
-
     // setInterval never awaits this, so the timed-out clients are collected and removed
     // before anything is awaited. Deleting only after `await VoiceRecorder.saveDropped()`
     // meant a save slower than the 1s tick let the next tick find the same client still
@@ -497,7 +476,7 @@ export class VoiceServer extends Service {
         const now = Date.now();
         for (const client of this.clients.values()) {
             // Remove inactive clients
-            if (now - client.lastHeartbeat > this.disconnectTimeoutMillis) this.dropVoiceClient(client);
+            if (now - client.lastHeartbeat > this.disconnectTimeoutMillis) this.voiceClients.dropVoiceClient(client);
         }
         this.trimGroups(now);
 
