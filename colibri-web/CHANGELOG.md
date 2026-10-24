@@ -2,6 +2,13 @@
 
 All notable changes to `@hcikn/colibri`. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
+## [2.1.0] - Unreleased
+
+### Changed
+
+- `package.json` declares `"sideEffects": false`, so bundlers can leave the package out when nothing from it is
+  imported.
+
 ## [2.0.0] - Unreleased
 
 Works only with colibri-server 2.0.0 or newer.

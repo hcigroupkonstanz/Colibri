@@ -7,6 +7,7 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
     scripts: Record<string, string>;
     repository?: { directory?: string };
     engines?: { node?: string };
+    sideEffects?: boolean | string[];
 };
 
 // Every script `npm publish` runs on its own, by name. See
@@ -48,5 +49,11 @@ describe('package.json engines', () => {
         const floor = /^>=\s*(\d+)/.exec(pkg.engines?.node ?? '>=0');
         expect(floor).not.toBeNull();
         expect(Number(floor?.[1])).toBeLessThanOrEqual(18);
+    });
+});
+
+describe('package.json sideEffects', () => {
+    it('declares the package free of side effects, so a bundler can drop it when nothing is imported', () => {
+        expect(pkg.sideEffects).toBe(false);
     });
 });
