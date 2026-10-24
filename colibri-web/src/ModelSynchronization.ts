@@ -11,6 +11,7 @@ import { DeletedHere } from './modelSync/DeletedHere';
 import { GuardWindow } from './modelSync/GuardWindow';
 import { KnownValues } from './modelSync/KnownValues';
 import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
+import { ReconnectRound } from './modelSync/ReconnectRound';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
 import { withColibri } from './modelSync/withColibri';
@@ -66,22 +67,9 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
     const knownValues = new KnownValues<T>(() => Date.now());
 
-    // Own models asked for again on a reconnect, until the answers are over (see roundEnd). Their
-    // updates are checked for changes lost in the dead connection (see lostChanges): per id, the
-    // values shown, and the fields found lost, which keep their value.
-    interface AfterOutage {
-        shown: Map<string, unknown>;
-        lost: Set<string>;
-    }
-    const askedAfterOutage = new Map<string, AfterOutage>();
-
-    // While reconnect requests are unanswered: the askForEnd id sent after them (see takeAnswer).
-    let roundEnd: string | undefined;
+    const reconnectRound = new ReconnectRound();
 
     const guardWindow = new GuardWindow<T>();
-
-    // When the server was last heard from before the last outage (see lastHeardFrom).
-    let lastHeardBeforeOutage = 0;
 
     let disconnected = false;
 
@@ -155,7 +143,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             guardWindow.endGuard();
             // Not updated while the last reconnect's answers are pending: changes lost in the earlier
             // outage are still in question, so they are judged from then.
-            if (askedAfterOutage.size === 0) lastHeardBeforeOutage = lastHeardFrom(colibri) ?? Date.now();
+            if (reconnectRound.isEmpty()) reconnectRound.setLastHeard(lastHeardFrom(colibri) ?? Date.now());
             // A delete sent after the last message from the server may have gone into a connection that was
             // already dead (Socket.IO loses what it sends until its ping timeout). Sent again, as colibri-unity
             // does; Socket.IO holds it until the reconnect. A delete that did arrive arrives twice, harmlessly.
@@ -168,7 +156,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             // being confirmed may not have arrived, so they are held again and go out with the answer.
             awaitingAnswer.clear();
             deletedWhileAwaited.clear();
-            askedAfterOutage.clear();
+            reconnectRound.clear();
             deletedHere.clearAfresh();
             for (const id of confirmations.ids()) {
                 const confirmation = confirmations.end(id);
@@ -178,10 +166,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             catchingUpThrough = colibri;
             for (const model of models.value) {
                 if (!ownModels.has(model)) continue;
-                if (answered.has(model)) askedAfterOutage.set(model.id, { shown: new Map(), lost: new Set() });
+                if (answered.has(model)) reconnectRound.add(model.id);
                 askFor(colibri, model);
             }
-            roundEnd = askedAfterOutage.size > 0 ? askForEnd(colibri) : undefined;
+            reconnectRound.start(() => askForEnd(colibri));
             catchUpOnceAnswered();
         });
     });
@@ -203,7 +191,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (message.command !== 'model::update') return;
         const id = (message.payload as { id?: unknown } | undefined)?.id;
         if (typeof id !== 'string') return;
-        if (id === roundEnd) endRound();
+        if (reconnectRound.isEnd(id)) endRound();
         if (guardWindow.includes(id)) guardWindow.endGuard(id);
         const confirmed = confirmations.idEndedBy(id);
         if (confirmed !== undefined) endWait(confirmed);
@@ -248,7 +236,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         // detach() was called since the request: it takes updates like a non-own model and sends
         // nothing.
         if (model && !ownModels.has(model)) {
-            askedAfterOutage.delete(id);
+            reconnectRound.delete(id);
             awaitingAnswer.delete(id);
             confirmations.end(id);
             if (!isBare(modelData)) applyUpdate(model, modelData);
@@ -257,7 +245,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         }
 
         if (!model || isBare(modelData)) {
-            askedAfterOutage.delete(id);
+            reconnectRound.delete(id);
             awaitingAnswer.delete(id);
             confirmations.end(id);
             if (model) {
@@ -270,10 +258,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             return;
         }
 
-        const afterOutage = askedAfterOutage.get(id);
+        const afterOutage = reconnectRound.get(id);
         if (afterOutage) {
             const held = heldChanges.peek(model);
-            for (const key of knownValues.lostChanges(model, modelData, held, lastHeardBeforeOutage))
+            for (const key of knownValues.lostChanges(model, modelData, held, reconnectRound.lastHeard()))
                 afterOutage.lost.add(key);
             for (const [key, value] of Object.entries(modelData)) afterOutage.shown.set(key, value);
             applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), afterOutage.lost));
@@ -307,10 +295,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // The answers to the reconnect requests are over (see takeAnswer): settles each own model with
     // the values the updates showed.
     const endRound = () => {
-        roundEnd = undefined;
-        const asked = [...askedAfterOutage];
-        askedAfterOutage.clear();
-        for (const [id, { shown, lost }] of asked) {
+        for (const [id, { shown, lost }] of reconnectRound.finish()) {
             const asker = awaitingAnswer.get(id);
             const model = models.value.find(m => m.id === id);
             // Settled already, by the bare id or model::delete.
@@ -434,7 +419,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // Takes a deleted model out of the list and out of everything that waits for it.
     const forget = (id: string, model: T | undefined) => {
         if (model) heldChanges.drop(model);
-        askedAfterOutage.delete(id);
+        reconnectRound.delete(id);
         models.next(models.value.filter(m => m.id !== id));
 
         // model::delete can answer a request for an own model (another client deleted it during an
@@ -508,7 +493,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         ownModels.add(model);
         if (listed) {
             confirmations.end(model.id);
-            askedAfterOutage.delete(model.id);
+            reconnectRound.delete(model.id);
             detachOf(listed);
             models.next(models.value.map(m => (m === listed ? model : m)));
         } else {
