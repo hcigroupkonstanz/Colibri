@@ -8,8 +8,8 @@ namespace HCIKonstanz.Colibri.Tests
 {
     /// <summary>
     /// Cross-implementation vectors: byte-for-byte expectations produced by the server's own
-    /// encoders (<c>colibri-server/src/server/modules/networking/protocol.ts</c> and, for voice,
-    /// <c>colibri-server/src/server/modules/web/voice-packet.ts</c>) and asserted against
+    /// encoders (<c>colibri-server/src/server/modules/protocol/protocol.ts</c> and, for voice,
+    /// <c>colibri-server/src/server/modules/voice/voice-packet.ts</c>) and asserted against
     /// <see cref="FrameCodec"/> and <see cref="VoicePacketCodec"/>.
     ///
     /// The round-trip tests elsewhere in this suite only prove the C# encoder and decoder

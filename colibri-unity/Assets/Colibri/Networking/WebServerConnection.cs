@@ -38,7 +38,7 @@ namespace HCIKonstanz.Colibri.Networking
     [DefaultExecutionOrder(-100)]
     public class WebServerConnection : SingletonBehaviour<WebServerConnection>
     {
-        // Must equal PROTOCOL_VERSION in colibri-server (src/server/modules/networking/protocol.ts) and in
+        // Must equal PROTOCOL_VERSION in colibri-server (src/server/modules/protocol/protocol.ts) and in
         // colibri-web (src/Colibri.ts); the server's `npm run test:vectors` checks all three.
         private const string CLIENT_VERSION = "2";
 
@@ -1503,7 +1503,7 @@ namespace HCIKonstanz.Colibri.Networking
         /// <remarks>
         /// IPv4 first because voice goes to an IPv4 address whenever the name has one
         /// (VoiceServerConnection.SelectServerAddress), and colibri-server relays voice only from the source
-        /// address of a TCP connection of the same app (voice-server.ts, admit). With TCP on IPv6 and voice on
+        /// address of a TCP connection of the same app (voice-admission.ts, admit). With TCP on IPv6 and voice on
         /// IPv4 the addresses differ and every voice packet is dropped, e.g. "localhost" on Windows against a
         /// server on TCP_HOST ::. A name with only IPv6 addresses still connects over IPv6, and voice follows.
         /// </remarks>

@@ -5,7 +5,7 @@ import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnect
 
 /**
  * The wire protocol version this client speaks, sent in the handshake query. Must match the
- * server's `PROTOCOL_VERSION` (`src/server/modules/networking/protocol.ts`); a server refuses a
+ * server's `PROTOCOL_VERSION` (`src/server/modules/protocol/protocol.ts`); a server refuses a
  * client that announces another version.
  */
 export const PROTOCOL_VERSION = '2';
