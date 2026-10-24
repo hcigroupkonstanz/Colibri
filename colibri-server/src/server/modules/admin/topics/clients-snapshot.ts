@@ -2,10 +2,10 @@ import type { ClientActivity, LoadLimit, RateSample } from '../../limits/client-
 import type { NetworkClient } from '../../protocol/network.js';
 import type { SocketIoClient } from '../../socket-io/socket-io-server.js';
 import type { TcpNetworkClient } from '../../tcp/tcp-server-proxy.js';
+import { ADMIN_APP } from '../admin-app.js';
 import { latencySamples } from './latency-samples.js';
 import { median } from './median.js';
 import { clip, truncatedFlag } from './name-length.js';
-import { ADMIN_APP } from './server-snapshot.js';
 
 // Clients the client list holds at most.
 export const MAX_CLIENT_ROWS = 1000;

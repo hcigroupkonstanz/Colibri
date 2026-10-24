@@ -1,5 +1,6 @@
 import type { Observable } from 'rxjs';
 import { merge } from 'rxjs';
+import { ADMIN_APP } from '../admin/admin-app.js';
 import { AppIndex } from '../core/app-index.js';
 import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../protocol/network.js';
@@ -10,10 +11,6 @@ export type MessageHandler = (message: NetworkMessage) => void;
 // separate projects that all kept the same default App Name. A typical app has a handful of devices
 // plus a browser or two.
 export const DEFAULT_APP_CLIENT_WARNING_THRESHOLD = 8;
-
-// The app the admin UI joins. Not an application's clients, so exempt from the size and
-// unhandled-command warnings.
-const ADMIN_APP = 'colibri';
 
 // Colibri's own channels: 'colibri' (latency pings and echoes, protocol messages) and 'colibri::*' (client
 // list, log requests that WebLog takes straight off the Socket.IO server). Never reported as unhandled.
@@ -181,7 +178,8 @@ export class ConnectionPool extends Service {
     // per app, channel and command: a client making this mistake usually makes it in a loop.
     private reportUnhandled(message: NetworkMessage): void {
         const app = message.origin?.app ?? '';
-        // Answered by whatever owns them, e.g. WebLog for 'colibri::log'.
+        // The admin UI's clients are not an application's. Colibri's own channels are answered by
+        // whatever owns them, e.g. WebLog for 'colibri::log'.
         if (app === ADMIN_APP || message.channel === COLIBRI_CHANNEL || message.channel.startsWith(COLIBRI_CHANNEL_PREFIX)) return;
 
         const channel = abbreviate(message.channel);
@@ -286,6 +284,7 @@ export class ConnectionPool extends Service {
     // transports.
     private checkAppSize(app: string, size: number): void {
         if (this.appClientWarningThreshold <= 0 || size <= this.appClientWarningThreshold) return;
+        // The admin UI's clients are not an application's.
         if (app === ADMIN_APP || this.appsOverThreshold.has(app)) return;
 
         this.appsOverThreshold.add(app);

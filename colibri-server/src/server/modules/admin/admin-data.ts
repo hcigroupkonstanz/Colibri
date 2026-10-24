@@ -14,6 +14,7 @@ import type { SocketIoClient, SocketIOServer } from '../socket-io/socket-io-serv
 import type { TCPServerProxy } from '../tcp/tcp-server-proxy.js';
 import { CLIENT_ACTIVITY_TIMEOUT_MILLIS } from '../tcp/tcp-server-proxy.js';
 import type { ClientActivity } from '../limits/client-activity.js';
+import { ADMIN_APP } from './admin-app.js';
 import type { AdminTopic, Query } from './admin-message.js';
 import { parseAdminMessage } from './admin-message.js';
 import { ModelMeasures } from './model-measures.js';
@@ -22,7 +23,7 @@ import { latencySnapshot } from './topics/latency-snapshot.js';
 import { modelSnapshot } from './topics/model-snapshot.js';
 import { modelsSnapshot } from './topics/models-snapshot.js';
 import type { ServerSettings, VoiceStatus } from './topics/server-snapshot.js';
-import { ADMIN_APP, serverSnapshot } from './topics/server-snapshot.js';
+import { serverSnapshot } from './topics/server-snapshot.js';
 
 // The channel the admin UI's pages ask for read-only server data on, and get it on. See
 // docs/dev/protocol.md, Admin UI channel.

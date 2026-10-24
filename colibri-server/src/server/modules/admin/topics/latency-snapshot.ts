@@ -1,9 +1,9 @@
 import type { NetworkClient } from '../../protocol/network.js';
 import type { SocketIoClient } from '../../socket-io/socket-io-server.js';
+import { ADMIN_APP } from '../admin-app.js';
 import { MAX_CLIENT_ROWS } from './clients-snapshot.js';
 import { latencySamples } from './latency-samples.js';
 import { median } from './median.js';
-import { ADMIN_APP } from './server-snapshot.js';
 
 // How far back the latency topic goes: the 120 s the admin UI's latency chart shows, and the 2 s it
 // slides. MeasureLatency keeps 125 s.

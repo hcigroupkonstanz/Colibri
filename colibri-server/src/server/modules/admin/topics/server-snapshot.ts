@@ -5,9 +5,7 @@ import { PROTOCOL_VERSION } from '../../protocol/protocol.js';
 import type { SocketIoClient } from '../../socket-io/socket-io-server.js';
 import type { CertificateInfo } from '../../tls/tls-files.js';
 import type { ProxyCertificateResult } from '../../tls/proxy-certificate.js';
-
-// The app the admin UI joins.
-export const ADMIN_APP = 'colibri';
+import { ADMIN_APP } from '../admin-app.js';
 
 // The settings in effect, by the names of the variables that set them. TLS_CERT and TLS_KEY are
 // left out: `tls` says what they hold, never where they are or what is in them.
