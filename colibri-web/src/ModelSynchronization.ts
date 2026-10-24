@@ -6,6 +6,7 @@ import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './li
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
+import { Confirmations } from './modelSync/Confirmations';
 import { DeletedHere } from './modelSync/DeletedHere';
 import { GuardWindow } from './modelSync/GuardWindow';
 import { KnownValues } from './modelSync/KnownValues';
@@ -61,22 +62,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // update does not overwrite them (see applyUpdate).
     const changesToSend = new ChangesByModel<T>();
 
-    // Own models asked for again after sending their held changes (see sendOnTop), until the answers
-    // to that are over (see endWait).
-    interface Confirmation {
-        sent: Map<string, string>; // JSON of the fields sent that differ from what the server showed
-        replaced: Map<string, string | undefined>; // the server's JSON for those fields, if it had one
-        props: string[]; // property names of the held changes
-        shown: Map<string, unknown>; // latest value an update has shown for each sent field
-        end: string; // askForEnd id
-    }
-    const confirming = new Map<string, Confirmation>();
-
-    const endConfirmation = (id: string) => {
-        const confirmation = confirming.get(id);
-        confirming.delete(id);
-        return confirmation;
-    };
+    const confirmations = new Confirmations();
 
     const knownValues = new KnownValues<T>(() => Date.now());
 
@@ -184,8 +170,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             deletedWhileAwaited.clear();
             askedAfterOutage.clear();
             deletedHere.clearAfresh();
-            for (const id of [...confirming.keys()]) {
-                const confirmation = endConfirmation(id);
+            for (const id of confirmations.ids()) {
+                const confirmation = confirmations.end(id);
                 const model = models.value.find(m => m.id === id);
                 if (confirmation && model && ownModels.has(model)) heldChanges.add(model, confirmation.props);
             }
@@ -219,8 +205,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (typeof id !== 'string') return;
         if (id === roundEnd) endRound();
         if (guardWindow.includes(id)) guardWindow.endGuard(id);
-        const confirmed = [...confirming].find(([, confirmation]) => confirmation.end === id);
-        if (confirmed) endWait(confirmed[0]);
+        const confirmed = confirmations.idEndedBy(id);
+        if (confirmed !== undefined) endWait(confirmed);
     });
 
     // Handle updates
@@ -264,7 +250,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (model && !ownModels.has(model)) {
             askedAfterOutage.delete(id);
             awaitingAnswer.delete(id);
-            endConfirmation(id);
+            confirmations.end(id);
             if (!isBare(modelData)) applyUpdate(model, modelData);
             catchUpOnceAnswered();
             return;
@@ -273,7 +259,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (!model || isBare(modelData)) {
             askedAfterOutage.delete(id);
             awaitingAnswer.delete(id);
-            endConfirmation(id);
+            confirmations.end(id);
             if (model) {
                 heldChanges.drop(model);
                 sendUpdate(asker, model, toJsonOf(model));
@@ -294,7 +280,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             return;
         }
 
-        const confirmation = confirming.get(id);
+        const confirmation = confirmations.get(id);
         if (confirmation) {
             for (const key of confirmation.sent.keys()) {
                 if (key in modelData) confirmation.shown.set(key, modelData[key as keyof T]);
@@ -368,7 +354,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             replaced.set(key, key in shown ? JSON.stringify(shown[key as keyof T]) : undefined);
         }
         askFor(asker, model);
-        confirming.set(id, { sent: differs, replaced, props: held, shown: new Map(), end: askForEnd(asker) });
+        confirmations.start(id, { sent: differs, replaced, props: held, shown: new Map(), end: askForEnd(asker) });
         return true;
     };
 
@@ -380,7 +366,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     //
     // The changes made meanwhile then go out without asking again: nothing stale can come any more.
     const endWait = (id: string) => {
-        const confirmation = endConfirmation(id);
+        const confirmation = confirmations.end(id);
         const asker = awaitingAnswer.get(id);
         const model = models.value.find(m => m.id === id);
         // Settled already, by the bare id or model::delete.
@@ -472,7 +458,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
         // model::delete can answer a request for an own model (another client deleted it during an
         // outage). That settles the model like an update, so catching up must not keep waiting for it.
-        endConfirmation(id);
+        confirmations.end(id);
         const answerMayFollow = guardWindow.takeAnswerMayFollow(id);
         if (awaitingAnswer.delete(id)) {
             deletedWhileAwaited.add(id);
@@ -540,7 +526,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         deletedHere.forget(model.id);
         ownModels.add(model);
         if (listed) {
-            endConfirmation(model.id);
+            confirmations.end(model.id);
             askedAfterOutage.delete(model.id);
             detachOf(listed);
             models.next(models.value.map(m => (m === listed ? model : m)));
