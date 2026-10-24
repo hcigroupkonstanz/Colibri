@@ -1,13 +1,7 @@
 // Helpers for the Colibri tests that drive Sync and RegisterModelSync through the real Colibri.
 import type { Observable } from 'rxjs';
 import { expect } from 'vitest';
-import { SyncModel } from '../../src/SyncModel';
-import { Synced } from '../../src/Synced';
 import type { FakeSocket } from './fakeSocket';
-
-export class Widget extends SyncModel<Widget> {
-    @Synced() accessor label = '';
-}
 
 // Mirrors socket.io: a message reaches every handler registered for its channel.
 export const deliver = (socket: FakeSocket, channel: string, msg: { command: string; payload?: unknown }) => {

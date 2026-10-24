@@ -11,7 +11,8 @@ import { RegisterModelSync } from '../src/ModelSynchronization';
 import { SyncModel } from '../src/SyncModel';
 import { Synced } from '../src/Synced';
 import { type FakeSocket, makeFakeSocket } from './support/fakeSocket';
-import { Widget, deliver, latest } from './support/modelSyncHelpers';
+import { deliver, latest } from './support/modelSyncWire';
+import { Widget } from './support/Widget';
 
 const connectMock = connect as unknown as Mock;
 
