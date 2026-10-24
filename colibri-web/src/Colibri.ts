@@ -3,7 +3,7 @@ import type { Socket } from 'socket.io-client';
 import { connect } from 'socket.io-client';
 import { ColibriError, ProtocolMismatchError } from './ColibriError';
 import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnected } from './lifecycle';
-import { coercePort, pageHostname, parseServerAddress, resolvePort } from './serverAddress';
+import { pageHostname, resolveServer } from './serverAddress';
 
 /**
  * The wire protocol version this client speaks, sent in the handshake query. Must match the
@@ -114,11 +114,10 @@ export class Colibri {
             );
         }
 
-        const address = parseServerAddress(server);
-        this.port = resolvePort(server, address.port, coercePort(port));
-        this.uri = `${address.socket}://${address.host}:${this.port}`;
-        // Encoded like the key in getRestUri; the server decodes it back to the handshake's app name.
-        this.uriRestApi = `${address.rest}://${address.host}:${this.port}/api/store/${encodeURIComponent(app)}/`;
+        const resolved = resolveServer(app, server, port);
+        this.port = resolved.port;
+        this.uri = resolved.uri;
+        this.uriRestApi = resolved.uriRestApi;
 
         // there is already an instance running
         if (Colibri.instance) throw new ColibriError('A Colibri instance already exists!');

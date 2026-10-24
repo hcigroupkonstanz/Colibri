@@ -18,7 +18,7 @@ const SCHEMES: Partial<Record<string, { socket: string; rest: string }>> = {
     https: { socket: 'wss', rest: 'https' }
 };
 
-export const parseServerAddress = (server: string) => {
+const parseServerAddress = (server: string) => {
     const address = server.trim();
     const match = /^([a-z][a-z0-9+.-]*):\/\/(.*)$/i.exec(address);
     const schemes = match ? SCHEMES[match[1].toLowerCase()] : SCHEMES.ws;
@@ -72,12 +72,12 @@ const checkPort = (port: number) => {
 // Plain JavaScript callers, query strings and environment variables give the port as a string.
 // 1.x accepted '9011', so a digit string still means that port; anything else is left for
 // checkPort to refuse.
-export const coercePort = (port: unknown): number | undefined =>
+const coercePort = (port: unknown): number | undefined =>
     typeof port === 'string' && /^\s*\d+\s*$/.test(port) ? Number(port) : (port as number | undefined);
 
 // The port may come from the address, from the argument, or from both if they agree. Two
 // different ports are a mistake, and picking either would hide it.
-export const resolvePort = (server: string, fromAddress: number | undefined, given: number | undefined): number => {
+const resolvePort = (server: string, fromAddress: number | undefined, given: number | undefined): number => {
     if (given !== undefined) checkPort(given);
     if (fromAddress === undefined) return given ?? DEFAULT_PORT;
 
@@ -88,4 +88,13 @@ export const resolvePort = (server: string, fromAddress: number | undefined, giv
         );
     }
     return fromAddress;
+};
+
+export const resolveServer = (app: string, server: string, port: number | undefined) => {
+    const address = parseServerAddress(server);
+    const resolvedPort = resolvePort(server, address.port, coercePort(port));
+    const uri = `${address.socket}://${address.host}:${resolvedPort}`;
+    // Encoded like the key in getRestUri; the server decodes it back to the handshake's app name.
+    const uriRestApi = `${address.rest}://${address.host}:${resolvedPort}/api/store/${encodeURIComponent(app)}/`;
+    return { port: resolvedPort, uri, uriRestApi };
 };
