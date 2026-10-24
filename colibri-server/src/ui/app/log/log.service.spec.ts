@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
+import type { Mock } from 'vitest';
 import type { LogMessage } from './log.service';
 import { FLUSH_INTERVAL, LogService, MAX_MESSAGES, readAddress, writeAddress } from './log.service';
 import type { Reconnect } from '../connection/socketio.service';
@@ -20,12 +21,12 @@ const message = (overrides: Partial<LogMessage>): LogMessage => ({
 
 describe('LogService', () => {
     let logChannel: Subject<{ command: string; payload: unknown }>;
-    let emit: ReturnType<typeof vi.fn>;
+    let emit: Mock<SocketIOService['emit']>;
     let reconnected: Subject<Reconnect>;
 
     const live = (overrides: Partial<LogMessage>) => logChannel.next({ command: 'message', payload: message(overrides) });
     const history = (request: number | null, messages: LogMessage[]) => logChannel.next({ command: 'history', payload: { request, messages } });
-    const lastRequest = (): number => emit.mock.lastCall![2].request;
+    const lastRequest = (): number => (emit.mock.lastCall![2] as { request: number }).request;
 
     const start = (): LogService => {
         const service = TestBed.inject(LogService);
@@ -37,7 +38,7 @@ describe('LogService', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         logChannel = new Subject();
-        emit = vi.fn();
+        emit = vi.fn<SocketIOService['emit']>();
         reconnected = new Subject();
 
         TestBed.configureTestingModule({

@@ -3,6 +3,7 @@ import { Component, input, signal } from '@angular/core';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Subject } from 'rxjs';
+import type { Mock } from 'vitest';
 import type { ClientRow } from '../connection/admin.service';
 import type { ColibriClient } from '../connection/client.service';
 import type { ConnectionState, Reconnect } from '../connection/socketio.service';
@@ -46,11 +47,11 @@ class ThroughputChartStub {
 
 describe('ClientsComponent', () => {
     let channel: Subject<{ command: string; payload: unknown }>;
-    let emit: ReturnType<typeof vi.fn>;
+    let emit: Mock<SocketIOService['emit']>;
     let clients: ReturnType<typeof signal<ReadonlyArray<ColibriClient>>>;
 
     const snapshot = (rows: ClientRow[], extra: object = {}) => {
-        const request = emit.mock.calls.filter(call => call[1] === 'subscribe').at(-1)![2].request;
+        const request = (emit.mock.calls.filter(call => call[1] === 'subscribe').at(-1)![2] as { request: number }).request;
         channel.next({ command: 'clients', payload: { request, at: 125_000, clients: rows, total: rows.length, adminPages: 1, ...extra } });
     };
 
@@ -63,7 +64,7 @@ describe('ClientsComponent', () => {
 
     beforeEach(() => {
         channel = new Subject();
-        emit = vi.fn();
+        emit = vi.fn<SocketIOService['emit']>();
         clients = signal<ReadonlyArray<ColibriClient>>([]);
 
         TestBed.configureTestingModule({
@@ -90,7 +91,7 @@ describe('ClientsComponent', () => {
 
     it('subscribes to the clients while open, and stops when it closes', async () => {
         const { harness } = await open('/clients');
-        expect(emit).toHaveBeenCalledWith('colibri::admin', 'subscribe', { topic: 'clients', request: expect.any(Number) });
+        expect(emit).toHaveBeenCalledWith('colibri::admin', 'subscribe', { topic: 'clients', request: expect.any(Number) as number });
 
         harness.fixture.destroy();
         expect(emit).toHaveBeenLastCalledWith('colibri::admin', 'unsubscribe', { topic: 'clients' });

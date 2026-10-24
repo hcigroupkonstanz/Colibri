@@ -3,6 +3,7 @@ import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Subject } from 'rxjs';
+import type { Mock } from 'vitest';
 import type { ConnectionState, Reconnect } from '../connection/socketio.service';
 import type { ModelRow } from '../connection/admin.service';
 import { SocketIOService } from '../connection/socketio.service';
@@ -14,11 +15,11 @@ const model = (id: string, overrides: Partial<ModelRow> = {}): ModelRow => ({
 
 describe('ModelsComponent', () => {
     let channel: Subject<{ command: string; payload: unknown }>;
-    let emit: ReturnType<typeof vi.fn>;
+    let emit: Mock<SocketIOService['emit']>;
 
-    const asked = (topic: string) => emit.mock.calls.filter(call => call[2]?.topic === topic && call[1] !== 'unsubscribe').at(-1);
+    const asked = (topic: string) => emit.mock.calls.filter(call => (call[2] as { topic?: string } | undefined)?.topic === topic && call[1] !== 'unsubscribe').at(-1);
     const answer = (topic: string, payload: object) =>
-        channel.next({ command: topic, payload: { request: asked(topic)![2].request, at: 61_000, ...payload } });
+        channel.next({ command: topic, payload: { request: (asked(topic)![2] as { request: number }).request, at: 61_000, ...payload } });
     const list = (models: ModelRow[], extra: object = {}) => answer('models', {
         query: { app: '', channel: '', filter: '', offset: 0, limit: MODELS_PAGE_SIZE },
         channels: [ { app: 'demo', channel: 'scene', models: models.length, deleted: 1 } ],
@@ -40,7 +41,7 @@ describe('ModelsComponent', () => {
 
     beforeEach(() => {
         channel = new Subject();
-        emit = vi.fn();
+        emit = vi.fn<SocketIOService['emit']>();
 
         TestBed.configureTestingModule({
             providers: [
@@ -62,7 +63,7 @@ describe('ModelsComponent', () => {
     it('asks once for the app, channel, filter and page in the address, every second when live', async () => {
         const { harness } = await open('/models?app=demo&channel=scene&q=piece&page=3');
         expect(asked('models')).toEqual([ 'colibri::admin', 'request', {
-            topic: 'models', app: 'demo', channel: 'scene', filter: 'piece', offset: 2 * MODELS_PAGE_SIZE, limit: MODELS_PAGE_SIZE, request: expect.any(Number)
+            topic: 'models', app: 'demo', channel: 'scene', filter: 'piece', offset: 2 * MODELS_PAGE_SIZE, limit: MODELS_PAGE_SIZE, request: expect.any(Number) as number
         } ]);
         // no model open, nothing asked for it
         expect(asked('model')).toBeUndefined();
@@ -93,7 +94,7 @@ describe('ModelsComponent', () => {
 
     it('shows the open model\'s value, and what became of one deleted', async () => {
         const { harness, component } = await open('/models?model=m1&modelApp=demo&modelChannel=scene');
-        expect(asked('model')?.[2]).toEqual({ topic: 'model', app: 'demo', channel: 'scene', id: 'm1', request: expect.any(Number) });
+        expect(asked('model')?.[2]).toEqual({ topic: 'model', app: 'demo', channel: 'scene', id: 'm1', request: expect.any(Number) as number });
 
         answer('model', { app: 'demo', channel: 'scene', id: 'm1', found: true, fields: 1, bytes: 20, updatedAt: 1000, json: '{\n  "id": "m1",\n  "on": true\n}', truncated: false });
         harness.detectChanges();

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
+import type { Mock } from 'vitest';
 import type { ConnectionState, Reconnect } from '../connection/socketio.service';
 import type { ServerSnapshot } from '../connection/admin.service';
 import { SocketIOService } from '../connection/socketio.service';
@@ -39,11 +40,11 @@ const snapshot = (overrides: Partial<ServerSnapshot> = {}): ServerSnapshot => ({
 
 describe('ServerComponent', () => {
     let channel: Subject<{ command: string; payload: unknown }>;
-    let emit: ReturnType<typeof vi.fn>;
+    let emit: Mock<SocketIOService['emit']>;
 
     beforeEach(() => {
         channel = new Subject();
-        emit = vi.fn();
+        emit = vi.fn<SocketIOService['emit']>();
         TestBed.configureTestingModule({
             providers: [
                 provideRouter([]),
@@ -64,7 +65,7 @@ describe('ServerComponent', () => {
     const row = (overrides: Partial<ServerSnapshot>, label: string) => {
         const fixture = TestBed.createComponent(ServerComponent);
         fixture.detectChanges();
-        const request = emit.mock.calls.filter(call => call[1] === 'subscribe').at(-1)![2].request;
+        const request = (emit.mock.calls.filter(call => call[1] === 'subscribe').at(-1)![2] as { request: number }).request;
         channel.next({ command: 'server', payload: snapshot({ request, ...overrides }) });
         fixture.detectChanges();
         const shownFact = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.fact')).find(f => f.querySelector('dt')?.textContent === label)!;

@@ -157,7 +157,7 @@ describe('ThroughputChartComponent', () => {
         fixture.componentRef.setInput('snapshot', first);
         fixture.detectChanges();
         TestBed.flushEffects();
-        await environment.settle(fixture.nativeElement);
+        await environment.settle(fixture.nativeElement as HTMLElement);
         return fixture;
     };
 
@@ -171,7 +171,7 @@ describe('ThroughputChartComponent', () => {
     // The interval of ngAfterViewInit: the chart slides and redraws.
     const slide = async (fixture: ComponentFixture<ThroughputChartComponent>) => {
         secondTimer!();
-        await environment.settle(fixture.nativeElement);
+        await environment.settle(fixture.nativeElement as HTMLElement);
     };
 
     beforeEach(() => {
@@ -185,13 +185,13 @@ describe('ThroughputChartComponent', () => {
         vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(800);
         vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(300);
         // The chart's own 1 s timer is held back; d3's and jsdom's frame timers must run.
-        const setInterval = window.setInterval;
+        const setInterval = window.setInterval.bind(window);
         vi.spyOn(window, 'setInterval').mockImplementation(((handler: () => void, delay?: number) => {
             if (delay === 1000 && !secondTimer) {
                 secondTimer = handler;
                 return 0;
             }
-            return setInterval.call(window, handler, delay);
+            return setInterval(handler, delay);
         }) as typeof window.setInterval);
         vi.stubGlobal('ResizeObserver', class {
             public readonly observe = vi.fn();
@@ -587,7 +587,7 @@ describe('ThroughputChartComponent', () => {
         ]));
         fixture.detectChanges();
         TestBed.flushEffects();
-        await environment.settle(fixture.nativeElement);
+        await environment.settle(fixture.nativeElement as HTMLElement);
         expect(fixture.componentInstance.total()).toBe(90);
         expect(markup(fixture)).toBe(`<svg width="800" height="300">
 <clipPath id="throughput-clip-N">

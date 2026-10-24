@@ -123,10 +123,10 @@ describe('serverSections', () => {
                 certificate: { ...certificate, trusted: true, trustError: null }, error: null } ]);
 
             const [ section ] = sectionsOf(s);
-            expect(section!.title).toBe('Proxy TLS certificate');
-            expect(section!.facts.map(f => f.label)).toEqual([ 'Addresses', 'Trusted', 'Names', 'Issuer', 'Valid from', 'Valid until', 'SHA-256 fingerprint', 'Checked' ]);
-            expect(section!.facts[1]).toEqual(expect.objectContaining({ value: 'Yes', tone: 'ok' }));
-            expect(section!.facts[5]).toEqual(expect.objectContaining({ note: 'in 50 days' }));
+            expect(section.title).toBe('Proxy TLS certificate');
+            expect(section.facts.map(f => f.label)).toEqual([ 'Addresses', 'Trusted', 'Names', 'Issuer', 'Valid from', 'Valid until', 'SHA-256 fingerprint', 'Checked' ]);
+            expect(section.facts[1]).toEqual(expect.objectContaining({ value: 'Yes', tone: 'ok' }));
+            expect(section.facts[5]).toEqual(expect.objectContaining({ note: 'in 50 days' }));
         });
 
         it('marks one clients would refuse, and an address it could not reach', () => {
@@ -137,9 +137,9 @@ describe('serverSections', () => {
             ]);
 
             const [ refused, unreachable ] = sectionsOf(s);
-            expect(refused!.facts.find(f => f.label === 'Trusted')).toEqual(expect.objectContaining({ value: 'No', tone: 'err', note: 'CERT_HAS_EXPIRED' }));
-            expect(refused!.facts.find(f => f.label === 'Valid until')).toEqual(expect.objectContaining({ tone: 'warn', note: 'expires in 5 days' }));
-            expect(unreachable!.facts.map(f => [ f.label, f.value, f.tone, f.note ])).toEqual([
+            expect(refused.facts.find(f => f.label === 'Trusted')).toEqual(expect.objectContaining({ value: 'No', tone: 'err', note: 'CERT_HAS_EXPIRED' }));
+            expect(refused.facts.find(f => f.label === 'Valid until')).toEqual(expect.objectContaining({ tone: 'warn', note: 'expires in 5 days' }));
+            expect(unreachable.facts.map(f => [ f.label, f.value, f.tone, f.note ])).toEqual([
                 [ 'Addresses', 'colibri.example.org:9212', undefined, undefined ],
                 [ 'Connection', 'Failed', 'err', 'connect ECONNREFUSED 10.20.0.1:9212' ],
                 [ 'Checked', String(99 * DAY), undefined, undefined ]
@@ -152,7 +152,7 @@ describe('serverSections', () => {
             const s = proxied([ { addresses: [ 'colibri.example.org:443' ], checkedAt: 99 * DAY,
                 certificate: { ...certificate, validTo: 100 * DAY - 1, trusted: true, trustError: null }, error: null } ]);
 
-            expect(sectionsOf(s)[0]!.facts.find(f => f.label === 'Trusted')).toEqual(expect.objectContaining({ value: 'No', tone: 'err', note: 'expired' }));
+            expect(sectionsOf(s)[0].facts.find(f => f.label === 'Trusted')).toEqual(expect.objectContaining({ value: 'No', tone: 'err', note: 'expired' }));
         });
 
         // TLS from the proxy to the server as well: clients see the proxy's certificate, the
@@ -873,8 +873,8 @@ describe('serverSections, the complete output', () => {
 
         it('and certificates that clients would refuse', () => {
             const s = proxied([
-                checked(addresses[0]!, { certificate: presented({ validTo: 105 * DAY, trusted: false, trustError: 'CERT_HAS_EXPIRED', fingerprint256: '01:01' }), error: null }),
-                checked(addresses[1]!, { certificate: presented({ trusted: false, fingerprint256: '02:02' }), error: null }),
+                checked(addresses[0], { certificate: presented({ validTo: 105 * DAY, trusted: false, trustError: 'CERT_HAS_EXPIRED', fingerprint256: '01:01' }), error: null }),
+                checked(addresses[1], { certificate: presented({ trusted: false, fingerprint256: '02:02' }), error: null }),
                 checked('colibri.example.org:8443', { certificate: presented({ validTo: 100 * DAY, fingerprint256: '03:03' }), error: null }),
                 checked('colibri.example.org:8444', { certificate: presented({ validTo: 99 * DAY, trusted: false, trustError: 'CERT_HAS_EXPIRED', fingerprint256: '04:04' }), error: null })
             ]);
@@ -946,8 +946,8 @@ describe('serverSections, the complete output', () => {
 
         it('and addresses that could not be reached', () => {
             const s = proxied([
-                checked(addresses[0]!, { certificate: null, error: 'connect ECONNREFUSED 10.20.0.1:443' }),
-                checked(addresses[1]!, { certificate: null, error: null })
+                checked(addresses[0], { certificate: null, error: 'connect ECONNREFUSED 10.20.0.1:443' }),
+                checked(addresses[1], { certificate: null, error: null })
             ]);
             expect(sections(s)).toEqual([
                 SERVER, COUNTS, NETWORK_PROXY_ADDRESSES,

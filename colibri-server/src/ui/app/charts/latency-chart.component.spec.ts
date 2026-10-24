@@ -66,7 +66,7 @@ describe('LatencyChartComponent', () => {
         const fixture = TestBed.createComponent(LatencyChartComponent);
         fixture.detectChanges();
         TestBed.flushEffects();
-        await environment.settle(fixture.nativeElement);
+        await environment.settle(fixture.nativeElement as HTMLElement);
         return fixture;
     };
 
@@ -74,7 +74,7 @@ describe('LatencyChartComponent', () => {
     const nextSecond = async (fixture: ComponentFixture<LatencyChartComponent>) => {
         wall += 1000;
         secondTimer!();
-        await environment.settle(fixture.nativeElement);
+        await environment.settle(fixture.nativeElement as HTMLElement);
     };
 
     beforeEach(() => {
@@ -89,13 +89,13 @@ describe('LatencyChartComponent', () => {
         vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(() => size.width);
         vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(() => size.height);
         // The chart's own 1 s timer is held back; d3's and jsdom's frame timers must run.
-        const setInterval = window.setInterval;
+        const setInterval = window.setInterval.bind(window);
         vi.spyOn(window, 'setInterval').mockImplementation(((handler: () => void, delay?: number) => {
             if (delay === 1000 && !secondTimer) {
                 secondTimer = handler;
                 return 0;
             }
-            return setInterval.call(window, handler, delay);
+            return setInterval(handler, delay);
         }) as typeof window.setInterval);
         vi.stubGlobal('ResizeObserver', class {
             public readonly observe = vi.fn();
@@ -467,7 +467,7 @@ describe('LatencyChartComponent', () => {
 
         size.width = 500;
         resizeCallbacks[0]();
-        await environment.settle(fixture.nativeElement);
+        await environment.settle(fixture.nativeElement as HTMLElement);
         expect(fixture.componentInstance.boxesHidden()).toBe('narrow');
         expect(markup(fixture)).toBe(`<svg width="500" height="300">
 <g transform="translate(488, 12)">

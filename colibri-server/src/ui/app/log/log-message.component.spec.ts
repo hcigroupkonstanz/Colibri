@@ -36,7 +36,7 @@ describe('LogMessageComponent', () => {
     });
 
     it('shows time, level, app, client and the message without the client prefix', () => {
-        const root: HTMLElement = render(message({})).nativeElement;
+        const root = render(message({})).nativeElement as HTMLElement;
 
         expect(text(root, '.time')).toBe('12:00:09.970');
         expect(text(root, '.level [aria-hidden]')).toBe('ERR');
@@ -48,10 +48,10 @@ describe('LogMessageComponent', () => {
 
     // every web client on one host has the same address for a name
     it('shows a web client by the start of its id, with the address in its title', () => {
-        const root: HTMLElement = render(message({
+        const root = render(message({
             message: '[172.20.0.1] Scene loaded',
             metadata: { clientApp: 'demo-app', clientName: '172.20.0.1', clientId: 'AysXA7fAeXWU9b__AAAT' }
-        })).nativeElement;
+        })).nativeElement as HTMLElement;
 
         expect(text(root, '.client')).toBe('AysXA7');
         expect(root.querySelector('.client')?.getAttribute('title')).toBe('172.20.0.1, client AysXA7fAeXWU9b__AAAT');
@@ -59,16 +59,16 @@ describe('LogMessageComponent', () => {
     });
 
     it('shows a repeat count with when it first occurred, and none for a single line', () => {
-        const root: HTMLElement = render(message({})).nativeElement;
+        const root = render(message({})).nativeElement as HTMLElement;
         expect(text(root, '.count')).toBe('×10');
         expect(root.querySelector('.count')?.getAttribute('title')).toBe('10 times, first at 12:00:08.706');
 
-        expect(render(message({ count: 0 })).nativeElement.querySelector('.count')).toBeNull();
+        expect((render(message({ count: 0 })).nativeElement as HTMLElement).querySelector('.count')).toBeNull();
     });
 
     it('opens on a click to show the details', () => {
         const fixture = render(message({}));
-        const root: HTMLElement = fixture.nativeElement;
+        const root = fixture.nativeElement as HTMLElement;
         expect(root.querySelector('.details')).toBeNull();
 
         (root.querySelector('.time') as HTMLElement).click();
@@ -81,35 +81,38 @@ describe('LogMessageComponent', () => {
 
     it('filters to the app when its name is clicked, without opening', () => {
         const fixture = render(message({}));
-        (fixture.nativeElement.querySelector('.app-chip') as HTMLElement).click();
+        const root = fixture.nativeElement as HTMLElement;
+        (root.querySelector('.app-chip') as HTMLElement).click();
         fixture.detectChanges();
 
         expect(filter()).toBe('demo-app');
-        expect(fixture.nativeElement.querySelector('.details')).toBeNull();
+        expect(root.querySelector('.details')).toBeNull();
     });
 
     it('links an opened line to the clients of its app, with its client marked', () => {
         const fixture = render(message({}));
-        (fixture.nativeElement.querySelector('.time') as HTMLElement).click();
+        const root = fixture.nativeElement as HTMLElement;
+        (root.querySelector('.time') as HTMLElement).click();
         fixture.detectChanges();
 
-        const link: HTMLAnchorElement = fixture.nativeElement.querySelector('.details a.link');
+        const link = root.querySelector<HTMLAnchorElement>('.details a.link')!;
         expect(link.textContent).toBe('Show clients');
         expect(link.getAttribute('href')).toBe('/clients?app=demo-app&client=abc');
     });
 
     it('marks the line Previous and Next went to', () => {
         const fixture = render(message({}));
-        expect(fixture.nativeElement.querySelector('.row.current')).toBeNull();
+        const root = fixture.nativeElement as HTMLElement;
+        expect(root.querySelector('.row.current')).toBeNull();
 
         fixture.componentRef.setInput('current', true);
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.row.current')).not.toBeNull();
+        expect(root.querySelector('.row.current')).not.toBeNull();
     });
 
     it('marks the search text in the message', () => {
-        const root: HTMLElement = render(message({}), 'asset').nativeElement;
+        const root = render(message({}), 'asset').nativeElement as HTMLElement;
         expect([ ...root.querySelectorAll('mark') ].map(m => m.textContent)).toEqual([ 'asset' ]);
     });
 });

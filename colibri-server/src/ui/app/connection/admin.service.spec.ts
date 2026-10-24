@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { EnvironmentInjector, createEnvironmentInjector, runInInjectionContext, signal } from '@angular/core';
 import { Subject } from 'rxjs';
-import type { AdminFeed, AdminQuery, Snapshot } from './admin.service';
+import type { Mock } from 'vitest';
+import type { AdminQuery, Snapshot } from './admin.service';
 import { ADMIN_CHANNEL, AdminService } from './admin.service';
 import type { Reconnect } from './socketio.service';
 import { SocketIOService } from './socketio.service';
@@ -13,25 +14,25 @@ interface Answer extends Snapshot {
 describe('AdminService', () => {
     let channel: Subject<{ command: string; payload: unknown }>;
     let reconnected: Subject<Reconnect>;
-    let emit: ReturnType<typeof vi.fn>;
+    let emit: Mock<SocketIOService['emit']>;
 
     const answer = (topic: string, request: number | null, value = 'x') =>
         channel.next({ command: topic, payload: { request, at: 1000, value } });
     const sent = () => emit.mock.calls.map(call => [ call[1], call[2] ]);
-    const lastRequest = (): number => emit.mock.lastCall![2].request;
+    const lastRequest = (): number => (emit.mock.lastCall![2] as { request: number }).request;
 
     // A feed as a page holds it: until its injector, standing in for the page, is destroyed.
     const open = (topic: 'server' | 'clients' | 'models' | 'model', options: { query?: () => AdminQuery | null; live?: () => boolean } = {}) => {
         const injector = createEnvironmentInjector([], TestBed.inject(EnvironmentInjector));
         const feed = runInInjectionContext(injector, () => TestBed.inject(AdminService).feed<Answer>(topic, options));
         TestBed.flushEffects();
-        return { feed: feed as AdminFeed<Answer>, close: () => injector.destroy() };
+        return { feed, close: () => injector.destroy() };
     };
 
     beforeEach(() => {
         channel = new Subject();
         reconnected = new Subject();
-        emit = vi.fn();
+        emit = vi.fn<SocketIOService['emit']>();
 
         TestBed.configureTestingModule({
             providers: [{

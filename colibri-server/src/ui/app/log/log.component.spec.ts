@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
+import type { Mock } from 'vitest';
 import type { ConnectionState, Reconnect } from '../connection/socketio.service';
 import type { LogMessage } from './log.service';
 import { FLUSH_INTERVAL, LogService } from './log.service';
@@ -23,7 +24,7 @@ const message = (overrides: Partial<LogMessage>): LogMessage => ({
 
 describe('LogComponent', () => {
     let channels: Map<string, Subject<{ command: string; payload: unknown }>>;
-    let emit: ReturnType<typeof vi.fn>;
+    let emit: Mock<SocketIOService['emit']>;
     let state: ReturnType<typeof signal<ConnectionState>>;
     let lostAt: ReturnType<typeof signal<number | null>>;
 
@@ -32,7 +33,7 @@ describe('LogComponent', () => {
         return channels.get(name)!;
     };
     const history = (messages: LogMessage[]) => {
-        const request = emit.mock.calls.filter(call => call[1] === 'requestLog').at(-1)![2].request;
+        const request = (emit.mock.calls.filter(call => call[1] === 'requestLog').at(-1)![2] as { request: number }).request;
         channel('colibri::log').next({ command: 'history', payload: { request, messages } });
     };
     const live = (overrides: Partial<LogMessage>) => {
@@ -45,7 +46,7 @@ describe('LogComponent', () => {
 
     const create = () => {
         const fixture = TestBed.createComponent(LogComponent);
-        page = fixture.nativeElement;
+        page = fixture.nativeElement as HTMLElement;
         fixture.detectChanges();
         TestBed.flushEffects();
         return { fixture, component: fixture.componentInstance, log: TestBed.inject(LogService) };
@@ -54,11 +55,11 @@ describe('LogComponent', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.stubGlobal('ResizeObserver', class {
-            observe(): void { /* not needed here */ }
-            disconnect(): void { /* not needed here */ }
+            public observe(): void { /* not needed here */ }
+            public disconnect(): void { /* not needed here */ }
         });
         channels = new Map();
-        emit = vi.fn();
+        emit = vi.fn<SocketIOService['emit']>();
         state = signal<ConnectionState>('connected');
         lostAt = signal<number | null>(null);
 
@@ -88,7 +89,7 @@ describe('LogComponent', () => {
 
         expect(component.rows().length).toBe(PAGE_SIZE);
         expect(component.rows()[0].id).toBe('5');
-        expect(fixture.nativeElement.querySelector('.older').textContent).toContain('Show 5 older lines');
+        expect((fixture.nativeElement as HTMLElement).querySelector('.older')!.textContent).toContain('Show 5 older lines');
 
         component.showOlder();
         expect(component.rows().length).toBe(PAGE_SIZE + 5);
@@ -138,7 +139,7 @@ describe('LogComponent', () => {
         const { fixture, component, log } = create();
         history([]);
         fixture.detectChanges();
-        expect(fixture.nativeElement.querySelector('.empty').textContent).toContain('No log lines yet.');
+        expect((fixture.nativeElement as HTMLElement).querySelector('.empty')!.textContent).toContain('No log lines yet.');
 
         log.setLevels([]);
         TestBed.flushEffects();
@@ -159,26 +160,28 @@ describe('LogComponent', () => {
         history([ message({ id: 'a', message: 'Scene loaded' }) ]);
         log.search.set('zzz');
         fixture.detectChanges();
+        const root = fixture.nativeElement as HTMLElement;
 
-        (fixture.nativeElement.querySelector('.empty button') as HTMLElement).click();
+        (root.querySelector('.empty button') as HTMLElement).click();
         fixture.detectChanges();
         expect(log.search()).toBe('');
         expect(component.following()).toBe(true);
 
-        (fixture.nativeElement.querySelector('app-log-message .message') as HTMLElement).click();
+        (root.querySelector('app-log-message .message') as HTMLElement).click();
         expect(component.following()).toBe(false);
     });
 
     it('shows that the connection is lost', () => {
         const { fixture } = create();
+        const root = fixture.nativeElement as HTMLElement;
         history([ message({ id: 'a' }) ]);
-        expect(fixture.nativeElement.querySelector('.banner')).toBeNull();
+        expect(root.querySelector('.banner')).toBeNull();
 
         state.set('reconnecting');
         lostAt.set(new Date(2026, 9, 10, 12, 30, 5).getTime());
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.banner').textContent).toContain('Connection to the server lost at 12:30:05.');
+        expect(root.querySelector('.banner')!.textContent).toContain('Connection to the server lost at 12:30:05.');
     });
 
     describe('errors and warnings', () => {
@@ -186,8 +189,11 @@ describe('LogComponent', () => {
         const key = (key: string, target: EventTarget = page.querySelector('.scroller')!) =>
             target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
 
+        let scrollIntoView: Mock;
+
         beforeEach(() => {
-            Element.prototype.scrollIntoView = vi.fn();
+            scrollIntoView = vi.fn();
+            Element.prototype.scrollIntoView = scrollIntoView;
         });
 
         afterEach(() => {
@@ -198,15 +204,16 @@ describe('LogComponent', () => {
             const { fixture, component } = create();
             history([ message({ id: 'e', level: 0 }), message({ id: 'i' }), message({ id: 'w', level: 1 }), message({ id: 'd', level: 3 }) ]);
             fixture.detectChanges();
+            const root = fixture.nativeElement as HTMLElement;
             expect(component.nav()).toEqual(expect.objectContaining({ problems: 2, position: null }));
 
             // the log 300px high, 100px from the top; the warning 20px high, 900px from it
-            const scroller: HTMLElement = fixture.nativeElement.querySelector('.scroller');
+            const scroller = root.querySelector<HTMLElement>('.scroller')!;
             let scrollTop = 0;
             Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTop, set: (value: number) => { scrollTop = value; } });
             Object.defineProperty(scroller, 'clientHeight', { value: 300 });
             scroller.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
-            const warning: HTMLElement = fixture.nativeElement.querySelector('app-log-message[data-id="w"]');
+            const warning = root.querySelector<HTMLElement>('app-log-message[data-id="w"]')!;
             Object.defineProperty(warning, 'offsetHeight', { value: 20 });
             warning.getBoundingClientRect = () => ({ top: 900 }) as DOMRect;
 
@@ -216,7 +223,7 @@ describe('LogComponent', () => {
             // move the page around it too.
             TestBed.tick();
             expect(scrollTop).toBe(800 - (300 - 20) / 2);
-            expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+            expect(scrollIntoView).not.toHaveBeenCalled();
             key('p');
             expect(component.current()).toBe('e');
             key('p');
@@ -225,10 +232,10 @@ describe('LogComponent', () => {
             expect(component.current()).toBe('e');
 
             fixture.detectChanges();
-            expect(fixture.nativeElement.querySelector('.row.current .message').textContent).toBe('m');
+            expect(root.querySelector('.row.current .message')!.textContent).toBe('m');
 
             // Previous and Next by "Jump to latest", for a phone, where the toolbar's are folded away
-            const [ previous, next ] = fixture.nativeElement.querySelectorAll('.jump-bar .jump-step') as NodeListOf<HTMLButtonElement>;
+            const [ previous, next ] = root.querySelectorAll<HTMLButtonElement>('.jump-bar .jump-step');
             next.click();
             expect(component.current()).toBe('w');
             previous.click();
@@ -237,14 +244,14 @@ describe('LogComponent', () => {
             component.follow();
             expect(component.current()).toBeNull();
             fixture.detectChanges();
-            expect(fixture.nativeElement.querySelector('.jump-bar')).toBeNull();
+            expect(root.querySelector('.jump-bar')).toBeNull();
         });
 
         it('ignores the keys while typing, and with the focus outside the log', () => {
             const { fixture, component } = create();
             history([ message({ id: 'e', level: 0 }) ]);
 
-            key('n', fixture.nativeElement.querySelector('.search input'));
+            key('n', (fixture.nativeElement as HTMLElement).querySelector('.search input')!);
             expect(component.current()).toBeNull();
             key('n', document.body);
             key('e', document.body);
@@ -253,16 +260,16 @@ describe('LogComponent', () => {
 
         it('takes the focus on a page just loaded, so that the keys work, and goes to the search on /', () => {
             const fixture = TestBed.createComponent(LogComponent);
-            page = fixture.nativeElement;
+            page = fixture.nativeElement as HTMLElement;
             document.body.appendChild(page);
             (document.activeElement as HTMLElement | null)?.blur();
             fixture.detectChanges();
             TestBed.tick();
-            expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.scroller'));
+            expect(document.activeElement).toBe(page.querySelector('.scroller'));
 
             key('/');
-            expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.search input'));
-            fixture.nativeElement.remove();
+            expect(document.activeElement).toBe(page.querySelector('.search input'));
+            page.remove();
         });
 
         it('goes to the first error since the page was opened with e', () => {
@@ -299,7 +306,7 @@ describe('LogComponent', () => {
             blobs = [];
             // jsdom's Blob cannot be read back
             vi.stubGlobal('Blob', class {
-                constructor(public parts: string[]) {}
+                public constructor(public parts: string[]) {}
             });
             URL.createObjectURL = vi.fn((blob: { parts: string[] }) => {
                 blobs.push(blob.parts.join(''));
@@ -333,7 +340,7 @@ describe('LogComponent', () => {
             expect(text).toContain('ERR g/test: Asset missing\n    at Load() [3 times since ');
             expect(text).not.toContain('Scene loaded');
 
-            const json = JSON.parse(files[1].text);
+            const json = JSON.parse(files[1].text) as { filters: unknown; lines: LogMessage[] };
             expect(json.filters).toEqual({ app: '', levels: [ 'error', 'warn', 'info', 'debug' ], search: 'asset', syncTraffic: false, connections: true });
             expect(json.lines.map((line: LogMessage) => line.id)).toEqual([ 'b' ]);
         });

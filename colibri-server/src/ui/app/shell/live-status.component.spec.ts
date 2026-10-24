@@ -10,7 +10,7 @@ describe('LiveStatusComponent', () => {
         TestBed.configureTestingModule({ providers: [ { provide: SocketIOService, useValue: { state } } ] });
         const fixture = TestBed.createComponent(LiveStatusComponent);
         fixture.detectChanges();
-        const live = fixture.nativeElement.querySelector('.live') as HTMLElement;
+        const live = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.live')!;
         expect([ live.textContent, live.classList.contains('off') ]).toEqual([ 'Live', false ]);
 
         state.set('reconnecting');

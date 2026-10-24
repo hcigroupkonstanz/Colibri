@@ -78,7 +78,7 @@ describe('LogToolbarComponent', () => {
         await fixture.whenStable();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.apps .p-select-label').textContent.trim()).toBe('demo');
+        expect((fixture.nativeElement as HTMLElement).querySelector('.apps .p-select-label')!.textContent.trim()).toBe('demo');
     });
 
     it('searches once typing pauses', () => {
@@ -103,7 +103,7 @@ describe('LogToolbarComponent', () => {
         try {
             const fixture = TestBed.createComponent(LogToolbarComponent);
             fixture.detectChanges();
-            const input: HTMLInputElement = fixture.nativeElement.querySelector('.search input');
+            const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('.search input')!;
 
             input.value = 'frame ';
             input.dispatchEvent(new Event('input'));
@@ -128,21 +128,22 @@ describe('LogToolbarComponent', () => {
     it('clears the search with its own button, and stays in the field', () => {
         const fixture = TestBed.createComponent(LogToolbarComponent);
         fixture.detectChanges();
-        document.body.appendChild(fixture.nativeElement);
-        const input: HTMLInputElement = fixture.nativeElement.querySelector('.search input');
-        expect(fixture.nativeElement.querySelector('.clear-search')).toBeNull();
+        const root = fixture.nativeElement as HTMLElement;
+        document.body.appendChild(root);
+        const input = root.querySelector<HTMLInputElement>('.search input')!;
+        expect(root.querySelector('.clear-search')).toBeNull();
 
         input.value = 'asset';
         input.dispatchEvent(new Event('input'));
         fixture.detectChanges();
-        (fixture.nativeElement.querySelector('.clear-search') as HTMLElement).click();
+        (root.querySelector('.clear-search') as HTMLElement).click();
         fixture.detectChanges();
 
         expect(input.value).toBe('');
         expect(log.search()).toBe('');
         expect(document.activeElement).toBe(input);
-        expect(fixture.nativeElement.querySelector('.clear-search')).toBeNull();
-        fixture.nativeElement.remove();
+        expect(root.querySelector('.clear-search')).toBeNull();
+        root.remove();
     });
 
     it('lists the filters folded away on a phone, each with a way to remove it', () => {
@@ -166,7 +167,7 @@ describe('LogToolbarComponent', () => {
         // ngModel writes its value a microtask later
         await fixture.whenStable();
         fixture.detectChanges();
-        const [ sync, connections ] = fixture.nativeElement.querySelectorAll('.switch input') as NodeListOf<HTMLInputElement>;
+        const [ sync, connections ] = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>('.switch input');
         expect([ sync.checked, connections.checked ]).toEqual([ false, true ]);
 
         connections.click();
@@ -184,7 +185,7 @@ describe('LogToolbarComponent', () => {
             fixture.componentRef.setInput('nav', value);
             fixture.detectChanges();
         };
-        const root: HTMLElement = fixture.nativeElement;
+        const root = fixture.nativeElement as HTMLElement;
         const buttons = () => root.querySelectorAll<HTMLButtonElement>('.nav button');
 
         nav({ problems: 0, position: null, newErrors: 0, openedAt: 0 });
@@ -201,7 +202,7 @@ describe('LogToolbarComponent', () => {
         const fixture = TestBed.createComponent(LogToolbarComponent);
         fixture.componentRef.setInput('nav', { problems: 3, position: null, newErrors: 0, openedAt: 0 });
         fixture.detectChanges();
-        const next = fixture.nativeElement.querySelectorAll('.nav button')[1] as HTMLButtonElement;
+        const next = (fixture.nativeElement as HTMLElement).querySelectorAll('.nav button')[1] as HTMLButtonElement;
         const phone = (matches: boolean) => vi.stubGlobal('matchMedia', (query: string) => ({ matches: matches && query === PHONE }));
 
         phone(false);
@@ -235,12 +236,13 @@ describe('LogToolbarComponent', () => {
     it('moves to the search for the log page\'s / key, and opens the filters for it', () => {
         const fixture = TestBed.createComponent(LogToolbarComponent);
         fixture.detectChanges();
-        document.body.appendChild(fixture.nativeElement);
-        const input: HTMLInputElement = fixture.nativeElement.querySelector('.search input');
+        const root = fixture.nativeElement as HTMLElement;
+        document.body.appendChild(root);
+        const input = root.querySelector<HTMLInputElement>('.search input')!;
 
         fixture.componentInstance.focusSearch();
         expect(document.activeElement).toBe(input);
         expect(fixture.componentInstance.open()).toBe(true);
-        fixture.nativeElement.remove();
+        root.remove();
     });
 });
