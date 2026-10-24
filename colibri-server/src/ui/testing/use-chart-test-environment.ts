@@ -35,7 +35,7 @@ export const useChartTestEnvironment = function (): ChartTestEnvironment {
         }
     });
 
-    const realNow = performance.now;
+    const realNow = performance.now.bind(performance);
     performance.now = () => now;
 
     return {

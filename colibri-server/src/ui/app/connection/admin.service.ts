@@ -270,7 +270,7 @@ export class AdminService {
         // The server keeps one subscription per topic and page: one the previous page left is
         // replaced by this feed's, or ended if this one asks only once.
         feed.subscribed = this.feeds.get(topic)?.subscribed ?? false;
-        this.feeds.set(topic, feed as unknown as Feed<Snapshot>);
+        this.feeds.set(topic, feed);
 
         effect(() => {
             const query = options.query ? options.query() : {};
@@ -282,7 +282,7 @@ export class AdminService {
             });
         });
 
-        inject(DestroyRef).onDestroy(() => this.close(feed as unknown as Feed<Snapshot>));
+        inject(DestroyRef).onDestroy(() => this.close(feed));
         return feed;
     }
 

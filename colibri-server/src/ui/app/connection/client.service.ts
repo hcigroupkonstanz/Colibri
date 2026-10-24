@@ -14,6 +14,11 @@ export interface ColibriClient {
     slot: number;
 }
 
+interface ClientEvent {
+    command: string;
+    payload: Omit<ColibriClient, 'latency' | 'slot'>;
+}
+
 /** How long a client's latency samples are kept, by the server's clock: the chart's 120 s plus the 2 s it slides. */
 export const LATENCY_KEEP_MILLIS = 122_000;
 // What the server keeps: 125 s of 100 ms pings.
@@ -49,7 +54,7 @@ export class ClientService {
     public constructor() {
         this.socketio
             .listen('colibri::latency')
-            .subscribe(msg => this.addLatency(msg.payload));
+            .subscribe(msg => this.addLatency(msg.payload as Record<string, unknown>));
 
         this.socketio
             .listen(ADMIN_CHANNEL)
@@ -58,7 +63,7 @@ export class ClientService {
 
         this.socketio
             .listen('colibri::clients')
-            .subscribe(msg => this.updateClients(msg));
+            .subscribe(msg => this.updateClients(msg as ClientEvent));
 
         this.request();
 
@@ -100,7 +105,7 @@ export class ClientService {
         }));
     }
 
-    private updateClients(msg: { command: string; payload: Omit<ColibriClient, 'latency' | 'slot'> }): void {
+    private updateClients(msg: ClientEvent): void {
         if (msg.command === 'client::connected') {
             const taken = new Set(this._clients().map(c => c.slot));
             let slot = 0;

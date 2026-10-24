@@ -7,6 +7,11 @@ import * as io from 'socket.io-client';
 /** `connecting` until the first connection, `reconnecting` after it is lost. */
 export type ConnectionState = 'connecting' | 'connected' | 'reconnecting';
 
+export interface ChannelMessage {
+    command: string;
+    payload: unknown;
+}
+
 export interface Reconnect {
     /** When the connection was lost. */
     lostAt: number;
@@ -21,7 +26,7 @@ export class SocketIOService {
     private readonly zone = inject(NgZone);
 
     private readonly socket: io.Socket<any, any>;
-    private readonly listeners: { [name: string]: Subject<any> } = {};
+    private readonly listeners: { [name: string]: Subject<ChannelMessage> } = {};
     // Throttled empty zone.run() that triggers change detection after socket events.
     // Only needed while zone.js change detection is active.
     private readonly changeTrigger$ = new Subject<void>();
@@ -72,12 +77,12 @@ export class SocketIOService {
     }
 
 
-    public listen(channel: string): Observable<any> {
+    public listen(channel: string): Observable<ChannelMessage> {
         if (!this.listeners[channel]) {
-            const msgStream = new Subject<any>();
+            const msgStream = new Subject<ChannelMessage>();
             this.listeners[channel] = msgStream;
 
-            this.socket.on(channel, (msg: any) => {
+            this.socket.on(channel, (msg: ChannelMessage) => {
                 msgStream.next({ command: msg.command, payload: msg.payload });
                 this.changeTrigger$.next();
             });
