@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client';
 import { connect } from 'socket.io-client';
 import { ColibriError, ProtocolMismatchError } from './ColibriError';
 import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnected } from './lifecycle';
+import { RestStore } from './RestStore';
 import { pageHostname, resolveServer } from './serverAddress';
 
 /**
@@ -11,10 +12,6 @@ import { pageHostname, resolveServer } from './serverAddress';
  * client that announces another version.
  */
 export const PROTOCOL_VERSION = '2';
-
-// Accept of every REST request, and Content-Type of setRestObject. colibri-server 2.x refuses a
-// value sent as plain application/json. The version in it lets a reverse proxy route by Accept.
-const REST_MEDIA_TYPE = `application/vnd.colibri.v${PROTOCOL_VERSION}+json`;
 
 const COLIBRI_CHANNEL = 'colibri';
 // The app name of the server's admin UI. Unrelated to the channel above, though spelt the same.
@@ -77,6 +74,7 @@ export class Colibri {
     public readonly uriRestApi: string;
     /** The port connected to: the one in the server address, else the one passed, else 9211. */
     public readonly port: number;
+    private readonly restStore: RestStore;
 
     private oldServerTimer: ReturnType<typeof setTimeout> | undefined;
     // Once per instance, not per connection, so a reconnect does not repeat the warning.
@@ -118,6 +116,7 @@ export class Colibri {
         this.port = resolved.port;
         this.uri = resolved.uri;
         this.uriRestApi = resolved.uriRestApi;
+        this.restStore = new RestStore(key => this.getRestUri(key), PROTOCOL_VERSION);
 
         // there is already an instance running
         if (Colibri.instance) throw new ColibriError('A Colibri instance already exists!');
@@ -384,19 +383,8 @@ export class Colibri {
      *   status, such as 404 for a key that was never stored. A stored `null` looks the same.
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    public async getRestObject(key: string): Promise<any> {
-        const uri = this.getRestUri(key);
-        if (!uri) return null;
-
-        const response = await fetch(uri, {
-            method: 'GET',
-            headers: {
-                Accept: REST_MEDIA_TYPE
-            }
-        });
-
-        if (response.status >= 400) return null;
-        else return response.json();
+    public getRestObject(key: string): Promise<any> {
+        return this.restStore.getRestObject(key);
     }
 
     /**
@@ -409,20 +397,8 @@ export class Colibri {
      * @returns true if the server stored the data; false if `key` is empty or the server answered
      *   with any other status
      */
-    public async setRestObject(key: string, data: unknown): Promise<boolean> {
-        const uri = this.getRestUri(key);
-        if (!uri) return false;
-
-        const response = await fetch(uri, {
-            method: 'PUT',
-            headers: {
-                Accept: REST_MEDIA_TYPE,
-                'Content-Type': REST_MEDIA_TYPE
-            },
-            body: JSON.stringify(data)
-        });
-
-        return response.status >= 200 && response.status < 300;
+    public setRestObject(key: string, data: unknown): Promise<boolean> {
+        return this.restStore.setRestObject(key, data);
     }
 
     /**
@@ -433,18 +409,8 @@ export class Colibri {
      * @returns true if the server deleted the value; false if `key` is empty or the server answered
      *   with any other status, such as 404 for a key that holds no value
      */
-    public async deleteRestObject(key: string): Promise<boolean> {
-        const uri = this.getRestUri(key);
-        if (!uri) return false;
-
-        const response = await fetch(uri, {
-            method: 'DELETE',
-            headers: {
-                Accept: REST_MEDIA_TYPE
-            }
-        });
-
-        return response.status >= 200 && response.status < 300;
+    public deleteRestObject(key: string): Promise<boolean> {
+        return this.restStore.deleteRestObject(key);
     }
     // #endregion
 }
