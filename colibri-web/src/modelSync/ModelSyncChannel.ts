@@ -7,13 +7,11 @@ import { askForEnd, END_CHANNEL } from './askForEnd';
 import { AwaitedAnswers } from './AwaitedAnswers';
 import { ChangesByModel } from './ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './channelRegistry';
-import type { Confirmation } from './Confirmations';
 import { compareWithShown, Confirmations, judgeConfirmation } from './Confirmations';
 import { DeletedHere } from './DeletedHere';
 import { GuardWindow } from './GuardWindow';
 import { KnownValues } from './KnownValues';
 import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelUpdate';
-import type { AfterOutage } from './ReconnectRound';
 import { ReconnectRound } from './ReconnectRound';
 import { detachOf, toJsonOf, updateOf } from './syncModelMethods';
 import { withColibri } from './withColibri';
@@ -261,15 +259,13 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
             return;
         }
 
-        const afterOutage = this.reconnectRound.get(id);
-        if (afterOutage) {
-            this.checkAfterOutage(model, modelData, afterOutage);
+        if (this.reconnectRound.has(id)) {
+            this.checkAfterOutage(id, model, modelData);
             return;
         }
 
-        const confirmation = this.confirmations.get(id);
-        if (confirmation) {
-            this.checkWhileConfirming(model, modelData, confirmation);
+        if (this.confirmations.has(id)) {
+            this.checkWhileConfirming(id, model, modelData);
             return;
         }
 
@@ -293,20 +289,20 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
         this.catchUpOnceAnswered();
     }
 
-    private checkAfterOutage(model: T, modelData: Partial<T>, afterOutage: AfterOutage): void {
+    private checkAfterOutage(id: string, model: T, modelData: Partial<T>): void {
         const held = this.heldChanges.peek(model);
-        for (const key of this.knownValues.lostChanges(model, modelData, held, this.reconnectRound.lastHeard()))
-            afterOutage.lost.add(key);
-        for (const [key, value] of Object.entries(modelData)) afterOutage.shown.set(key, value);
-        this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), afterOutage.lost));
+        const lost = this.reconnectRound.recordAnswer(
+            id,
+            this.knownValues.lostChanges(model, modelData, held, this.reconnectRound.lastHeard()),
+            modelData
+        );
+        this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), lost));
     }
 
-    private checkWhileConfirming(model: T, modelData: Partial<T>, confirmation: Confirmation): void {
-        for (const key of confirmation.sent.keys()) {
-            if (key in modelData) confirmation.shown.set(key, modelData[key as keyof T]);
-        }
+    private checkWhileConfirming(id: string, model: T, modelData: Partial<T>): void {
+        this.confirmations.recordShown(id, modelData);
         const held = this.heldChanges.peek(model);
-        this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), confirmation.sent.keys()));
+        this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), this.confirmations.sentKeys(id)));
     }
 
     private settle(id: string, asker: Colibri, model: T, modelData: Partial<T>): void {

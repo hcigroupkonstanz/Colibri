@@ -15,8 +15,20 @@ export class Confirmations {
         this.confirming.set(id, confirmation);
     }
 
-    public get(id: string): Confirmation | undefined {
-        return this.confirming.get(id);
+    public has(id: string): boolean {
+        return this.confirming.has(id);
+    }
+
+    public recordShown(id: string, modelData: object): void {
+        const confirmation = this.confirming.get(id);
+        if (!confirmation) return;
+        for (const key of confirmation.sent.keys()) {
+            if (key in modelData) confirmation.shown.set(key, (modelData as Record<string, unknown>)[key]);
+        }
+    }
+
+    public sentKeys(id: string): Iterable<string> {
+        return this.confirming.get(id)?.sent.keys() ?? [];
     }
 
     public end(id: string): Confirmation | undefined {

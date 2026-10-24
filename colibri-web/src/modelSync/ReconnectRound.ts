@@ -43,8 +43,16 @@ export class ReconnectRound {
         return id === this.roundEnd;
     }
 
-    public get(id: string): AfterOutage | undefined {
-        return this.askedAfterOutage.get(id);
+    public has(id: string): boolean {
+        return this.askedAfterOutage.has(id);
+    }
+
+    public recordAnswer(id: string, lost: Iterable<string>, shown: object): ReadonlySet<string> {
+        const afterOutage = this.askedAfterOutage.get(id);
+        if (!afterOutage) return new Set();
+        for (const key of lost) afterOutage.lost.add(key);
+        for (const [key, value] of Object.entries(shown)) afterOutage.shown.set(key, value);
+        return afterOutage.lost;
     }
 
     public delete(id: string): void {
