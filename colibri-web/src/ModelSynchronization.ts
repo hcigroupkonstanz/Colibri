@@ -233,17 +233,21 @@ class ModelSyncChannel<T extends SyncModel<T>> {
     private onUpdate(modelData: Partial<T>): void {
         const model = this.models.value.find(m => m.id === modelData.id);
         const id = modelData.id;
+        if (id === undefined) {
+            this.applyUpdate(model, modelData);
+            return;
+        }
         if (this.deletedHere.dropsAfreshUpdate(id, isBare(modelData))) return;
-        if (id !== undefined && this.awaitedAnswers.takeDeleted(id) && !model && isBare(modelData)) return;
-        const asker = id === undefined ? undefined : this.awaitedAnswers.askerOf(id);
-        if (id !== undefined && asker) {
+        if (this.awaitedAnswers.takeDeleted(id) && !model && isBare(modelData)) return;
+        const asker = this.awaitedAnswers.askerOf(id);
+        if (asker) {
             this.takeAnswer(id, asker, model, modelData);
             return;
         }
 
         // The answer to another registration on this channel that has an own model with this id. Not
         // listed: the full state it sends in reply is not relayed to this client, so the model would stay empty.
-        if (!model && id !== undefined && isBare(modelData) && ownedElsewhere(this.name, this.hasOwn, id)) return;
+        if (!model && isBare(modelData) && ownedElsewhere(this.name, this.hasOwn, id)) return;
         this.applyUpdate(model, modelData);
     }
 

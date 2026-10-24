@@ -52,9 +52,9 @@ export class DeletedHere {
         this.afresh.clear();
     }
 
-    public dropsAfreshUpdate(id: string | undefined, bare: boolean): boolean {
-        const afreshSince = id === undefined ? undefined : this.afresh.get(id);
-        if (id === undefined || afreshSince === undefined) return false;
+    public dropsAfreshUpdate(id: string, bare: boolean): boolean {
+        const afreshSince = this.afresh.get(id);
+        if (afreshSince === undefined) return false;
         // Until the bare-id answer, updates are ones sent before the server had the delete (see
         // sendAfresh).
         const waiting = this.now() - afreshSince < AFRESH_ANSWER_MS;
