@@ -6,13 +6,11 @@ import { REST_MEDIA_TYPE } from '../protocol/protocol.js';
 import { StoreCheckpointer } from './store-checkpoint.js';
 import type { StoreEntry } from './store-database.js';
 import { STORE_DATABASE_FILENAME, StoreDatabase, WAL_BACKSTOP_PAGES } from './store-database.js';
+import type { LoadedStoreJson } from './store-json-import.js';
+import { STORE_JSON_FILENAME, StoreJsonImport } from './store-json-import.js';
 import { Router } from 'express';
-import { lstat, mkdir, readFile, rename } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import * as path from 'path';
-
-// What Colibri 1.x and the 2.0 development versions kept the store in. Imported once, into a new
-// store.db, then renamed.
-const STORE_JSON_FILENAME = 'store.json';
 
 const DAY_MILLIS = 24 * 60 * 60 * 1000;
 const EXPIRY_INTERVAL_MILLIS = 60 * 60 * 1000;
@@ -33,23 +31,14 @@ export interface RestStoreOptions {
     now?: () => number;
 }
 
-// What store.json held, as far as it could be loaded.
-interface LoadedStoreJson {
-    // Whether there was a store.json at all.
-    present: boolean;
-    entries: StoreEntry[];
-    apps: number;
-    // Why it was not loaded, or only in part (unreadable, not JSON, not an object of objects).
-    unloadedReason?: string;
-}
-
 export class RestAPI extends Service {
     public serviceName = 'RestAPI';
     public groupName = 'web';
 
     private db: StoreDatabase | undefined;
     private readonly databasePath: string;
-    private readonly storeJsonPath: string;
+    // Imports store.json into a new store.db. Logs through this service, so under its name.
+    private readonly storeJsonImport: StoreJsonImport;
     private readonly expiryDays: number;
     private readonly maxBytes: number;
     private readonly now: () => number;
@@ -62,7 +51,12 @@ export class RestAPI extends Service {
         super();
 
         this.databasePath = path.join(dataPath, STORE_DATABASE_FILENAME);
-        this.storeJsonPath = path.join(dataPath, STORE_JSON_FILENAME);
+        this.storeJsonImport = new StoreJsonImport(dataPath, {
+            now: () => this.now(),
+            logInfo: (msg) => this.logInfo(msg),
+            logWarning: (msg) => this.logWarning(msg),
+            logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
+        });
         this.expiryDays = options.expiryDays ?? 0;
         this.maxBytes = options.maxBytes ?? 0;
         this.now = options.now ?? Date.now;
@@ -195,7 +189,7 @@ export class RestAPI extends Service {
             if (db.initialized) {
                 db.initialize();
             } else {
-                loaded = await this.loadStoreJson();
+                loaded = await this.storeJsonImport.loadStoreJson();
                 db.initialize(loaded.entries, this.now());
             }
             db.assertWritable();
@@ -207,8 +201,8 @@ export class RestAPI extends Service {
         }
 
         this.startCheckpointer(this.db);
-        if (loaded?.present) await this.retireStoreJson(loaded);
-        else await this.reportStoreJsonLeftBehind();
+        if (loaded?.present) await this.storeJsonImport.retireStoreJson(loaded);
+        else await this.storeJsonImport.reportStoreJsonLeftBehind();
     }
 
     private async openInMemory(err: unknown, loaded: LoadedStoreJson | undefined): Promise<void> {
@@ -222,7 +216,7 @@ export class RestAPI extends Service {
                 readOnly.close();
             }
         } catch {
-            loaded ??= await this.loadStoreJson();
+            loaded ??= await this.storeJsonImport.loadStoreJson();
             entries = loaded.entries;
             source = loaded.present ? STORE_JSON_FILENAME : undefined;
         }
@@ -256,95 +250,6 @@ export class RestAPI extends Service {
                 + 'This is logged at most once a minute.');
         });
         db.setAutoCheckpoint(WAL_BACKSTOP_PAGES);
-    }
-
-    // store.json is an object of objects. A store file that parses to null, an array, or a
-    // scalar (hand-edited, truncated by an older version, restored from the wrong place) is
-    // ignored, and so is an app whose values are not an object. JSON.parse defines every key as
-    // an own property, '__proto__' included, so Object.entries sees all of them.
-    private async loadStoreJson(): Promise<LoadedStoreJson> {
-        let raw: string;
-        try {
-            raw = await readFile(this.storeJsonPath, 'utf8');
-        } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { present: false, entries: [], apps: 0 };
-            const unloadedReason = errorMessage(err);
-            this.logError(`Could not load ${this.storeJsonPath}: ${unloadedReason}. The store starts without it.`, false);
-            return { present: true, entries: [], apps: 0, unloadedReason };
-        }
-
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(raw);
-        } catch (err) {
-            const unloadedReason = errorMessage(err);
-            this.logError(`Could not load ${this.storeJsonPath}: ${unloadedReason}. The store starts without it.`, false);
-            return { present: true, entries: [], apps: 0, unloadedReason };
-        }
-
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            const unloadedReason = 'expected a JSON object at the top level';
-            this.logError(`Ignoring ${STORE_JSON_FILENAME}: ${unloadedReason}`, false);
-            return { present: true, entries: [], apps: 0, unloadedReason };
-        }
-
-        const entries: StoreEntry[] = [];
-        let apps = 0;
-        let unloadedReason: string | undefined;
-        for (const [ app, values ] of Object.entries(parsed)) {
-            if (values === null || typeof values !== 'object' || Array.isArray(values)) {
-                unloadedReason ??= `expected an object of values for app '${app}'`;
-                this.logError(`Ignoring app '${app}' in ${STORE_JSON_FILENAME}: expected an object of values`, false);
-                continue;
-            }
-            apps++;
-            for (const [ name, value ] of Object.entries(values)) {
-                entries.push([ app, name, JSON.stringify(value) ]);
-            }
-        }
-        return { present: true, entries, apps, unloadedReason };
-    }
-
-    // Renames the store.json that has just been imported, so that nothing reads it again and a
-    // look at the data folder shows what happened: store.json.imported-<date and time>, or
-    // store.json.corrupt-<date and time> if it could not be loaded, or only in part, with its
-    // contents kept there unchanged. Never over an existing file: a name that is taken gets a
-    // counter. Logs, rather than throws, when it cannot: store.db is fine either way.
-    private async retireStoreJson(loaded: LoadedStoreJson): Promise<void> {
-        const corrupt = loaded.unloadedReason !== undefined;
-        // No colons, which a Windows file name cannot have.
-        const base = `${this.storeJsonPath}.${corrupt ? 'corrupt' : 'imported'}-${new Date(this.now()).toISOString().replace(/:/g, '-')}`;
-        try {
-            let target = base;
-            for (let n = 2; await RestAPI.exists(target); n++) {
-                target = `${base}-${n}`;
-            }
-            await rename(this.storeJsonPath, target);
-
-            if (corrupt) {
-                this.logError(`Moved ${this.storeJsonPath} to ${target}: it could not be loaded, or only in part `
-                    + `(${loaded.unloadedReason}). ${loaded.entries.length} value(s) of ${loaded.apps} app(s) were imported `
-                    + `into ${STORE_DATABASE_FILENAME}. Its contents are kept there, unchanged.`, false);
-            } else {
-                this.logInfo(`Imported ${loaded.entries.length} value(s) of ${loaded.apps} app(s) from ${STORE_JSON_FILENAME} `
-                    + `into ${STORE_DATABASE_FILENAME}, and renamed it to ${path.basename(target)}`);
-            }
-        } catch (err) {
-            // Removed since it was read: there is nothing left to rename.
-            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
-            this.logError(`Imported ${STORE_JSON_FILENAME} into ${STORE_DATABASE_FILENAME}, but could not rename `
-                + `${this.storeJsonPath} to ${base}: ${errorMessage(err)}. It is not read again.`, false);
-        }
-    }
-
-    // A store.json next to a store.db that already holds the store is not imported: it would
-    // overwrite newer values with older ones. Most likely it is a copy put there to restore the
-    // store, which works in a data folder without store.db.
-    private async reportStoreJsonLeftBehind(): Promise<void> {
-        if (!await RestAPI.exists(this.storeJsonPath)) return;
-        this.logWarning(`Not importing ${this.storeJsonPath}: ${STORE_DATABASE_FILENAME} already holds the data store. `
-            + `To restore the store from it, stop the server and remove ${STORE_DATABASE_FILENAME} `
-            + `(and ${STORE_DATABASE_FILENAME}-wal and -shm next to it) first.`);
     }
 
     // Deletes the values not written for expiryDays. Never throws: at startup that would stop the
@@ -388,15 +293,5 @@ export class RestAPI extends Service {
         await this.checkpointer?.stop();
         this.checkpointer = undefined;
         this.db?.close();
-    }
-
-    private static async exists(file: string): Promise<boolean> {
-        try {
-            await lstat(file);
-            return true;
-        } catch (err) {
-            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
-            throw err;
-        }
     }
 }
