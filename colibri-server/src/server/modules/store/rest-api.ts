@@ -1,15 +1,13 @@
 import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import type { WebServer } from '../http/web-server.js';
-import { hasEmptyJsonBody, hasRestMediaType } from '../http/web-server.js';
-import { REST_MEDIA_TYPE } from '../protocol/protocol.js';
 import { StoreCheckpointer } from './store-checkpoint.js';
 import type { StoreEntry } from './store-database.js';
 import { STORE_DATABASE_FILENAME, StoreDatabase, WAL_BACKSTOP_PAGES } from './store-database.js';
 import type { LoadedStoreJson } from './store-json-import.js';
 import { STORE_JSON_FILENAME, StoreJsonImport } from './store-json-import.js';
 import { StoreQuota } from './store-quota.js';
-import { Router } from 'express';
+import { storeRouter } from './store-router.js';
 import { mkdir } from 'fs/promises';
 import * as path from 'path';
 
@@ -63,95 +61,11 @@ export class RestAPI extends Service {
         });
         this.now = options.now ?? Date.now;
 
-        webserver.addApi('/store', Router()
-            .get('/', (req, res) => {
-                // Return all available apps
-                res.status(200).json(this.store.apps());
-            })
-            .get('/:app', (req, res) => {
-                // If app not exist return an error
-                if (!this.store.hasApp(req.params.app)) {
-                    res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
-                } else {
-                    // Return all available values of the app
-                    res.status(200).json(this.store.names(req.params.app));
-                }
-            })
-            .get('/:app/:value', (req, res) => {
-                // If app not exist return an error
-                if (!this.store.hasApp(req.params.app)) {
-                    res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
-                } else {
-                    const json = this.store.get(req.params.app, req.params.value);
-                    // If value not exist return an error
-                    if (json === undefined) {
-                        res.status(404).json({ error: 'Value with name ' + req.params.value + ' not found' });
-                    } else {
-                        // Return data of value
-                        res.status(200).json(JSON.parse(json));
-                    }
-                }
-            })
-            .put('/:app/:value', (req, res) => {
-                // Only a body in the store's media type is parsed. application/json, form data
-                // and a body without a Content-Type are refused, rather than stored as whatever
-                // they parse to: form data made an object of `curl -d`'s JSON text.
-                if (!hasRestMediaType(req)) {
-                    const error = `Value with name ${req.params.value} not saved: send the value as JSON, with Content-Type: ${REST_MEDIA_TYPE}`;
-                    this.logWarning(`PUT /api/store/${req.params.app}/${req.params.value} answered 415: ${error}`);
-                    res.status(415).json({ error });
-                    return;
-                }
-                // express.json() leaves req.body undefined for no body at all, and makes {} of
-                // an empty JSON body. The undefined used to be stored: a name listed under its
-                // app that GET and DELETE then answered 404 for. Both clients always send a JSON
-                // body. An empty body is told from `{}` by its raw length, not by
-                // Content-Length: a chunked request has none, and its empty body used to be
-                // stored as {}.
-                if (req.body === undefined || hasEmptyJsonBody(req)) {
-                    const error = `Value with name ${req.params.value} not saved: send the value as a JSON body`;
-                    this.logWarning(`PUT /api/store/${req.params.app}/${req.params.value} answered 400: ${error}`);
-                    res.status(400).json({ error });
-                    return;
-                }
-
-                const json = JSON.stringify(req.body);
-                if (this.quota.wouldExceedMaxBytes(req.params.app, req.params.value, json)) {
-                    const error = `Value with name ${req.params.value} not saved: the data store is full `
-                        + `(STORE_MAX_MB ${this.quota.maxBytes / (1024 * 1024)})`;
-                    this.quota.warnFull(error);
-                    res.status(507).json({ error });
-                    return;
-                }
-
-                // 201 for a value, or an app, that was not there before
-                const created = this.store.put(req.params.app, req.params.value, json, this.now()) === 'created';
-                // Return successful result with the sended data
-                res.status(created ? 201 : 200).json({ result: 'Value with name ' + req.params.value + ' saved successfully', data: req.body });
-            })
-            .delete('/:app', (req, res) => {
-                // If app not exist return an error
-                if (!this.store.hasApp(req.params.app)) {
-                    res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
-                } else {
-                    // Delete the app
-                    this.store.deleteApp(req.params.app);
-                    // Return successful result
-                    res.status(200).json({ result: 'App with name ' + req.params.app + ' deleted successfully' });
-                }
-            })
-            .delete('/:app/:value', (req, res) => {
-                // If app not exist return an error
-                if (!this.store.hasApp(req.params.app)) {
-                    res.status(404).json({ error: 'App with name ' + req.params.app + ' not found' });
-                } else if (!this.store.delete(req.params.app, req.params.value)) {
-                    // If value not exist return an error
-                    res.status(404).json({ error: 'Value with name ' + req.params.value + ' not found' });
-                } else {
-                    // Return successful result
-                    res.status(200).json({ result: 'Value with name ' + req.params.value + ' deleted successfully' });
-                }
-            }));
+        webserver.addApi('/store', storeRouter(this.quota, {
+            store: () => this.store,
+            now: () => this.now(),
+            logWarning: (msg) => this.logWarning(msg),
+        }));
     }
 
     private get store(): StoreDatabase {
