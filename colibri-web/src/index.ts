@@ -12,8 +12,9 @@ export {
 export type { Message } from './Colibri';
 export { ColibriError, ProtocolMismatchError } from './ColibriError';
 
-export { Sync, toHexColor, toRgbaColor } from './Broadcasting';
-export type { ColorValue } from './Broadcasting';
+export { Sync } from './Broadcasting';
+export { toHexColor, toRgbaColor } from './ColorValue';
+export type { ColorValue } from './ColorValue';
 
 export { RemoteLogger } from './RemoteLogger';
 

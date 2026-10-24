@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type * as Broadcasting from '../src/Broadcasting';
 import type { Message } from '../src/Colibri';
+import type * as ColorValue from '../src/ColorValue';
 
 vi.mock('../src/Colibri', () => ({
     SendMessage: vi.fn(),
@@ -12,8 +13,8 @@ type SyncSender = (channel: string, value: unknown) => void;
 type SyncReceiver = (channel: string, callback: (value: unknown) => void) => void;
 
 let Sync: (typeof Broadcasting)['Sync'];
-let toHexColor: (typeof Broadcasting)['toHexColor'];
-let toRgbaColor: (typeof Broadcasting)['toRgbaColor'];
+let toHexColor: (typeof ColorValue)['toHexColor'];
+let toRgbaColor: (typeof ColorValue)['toRgbaColor'];
 let sendMessage: Mock<(channel: string, command: string, payload?: unknown) => void>;
 let registerChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
 let unregisterChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
@@ -33,7 +34,8 @@ beforeEach(async () => {
     sendMessage.mockClear();
     registerChannel.mockClear();
     unregisterChannel.mockClear();
-    ({ Sync, toHexColor, toRgbaColor } = await import('../src/Broadcasting'));
+    ({ Sync } = await import('../src/Broadcasting'));
+    ({ toHexColor, toRgbaColor } = await import('../src/ColorValue'));
 });
 
 describe('Sync senders', () => {
