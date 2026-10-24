@@ -2,7 +2,7 @@ import { CONNECTION_LINE } from '../core/log-message.js';
 import type { Metadata } from '../core/log-message.js';
 import { voiceClientKey } from './voice-client-key.js';
 
-// What VoiceClients reads of a voice client: where it sends from, who it is and its app.
+// What VoiceClients reads of a voice client.
 interface ListedVoiceClient {
     readonly ip: string;
     readonly port: number;
@@ -10,30 +10,28 @@ interface ListedVoiceClient {
     readonly appId: number;
 }
 
-// What VoiceClients needs from the VoiceServer that owns it: taking a client out of its group, its
-// log method, so that its lines keep the server's name as their origin, and keeping a recording.
+// What VoiceClients needs from VoiceServer. logDebug is the server's own, so the lines keep its name
+// as their origin.
 interface VoiceClientsCallbacks<C> {
     leaveGroup(client: C): void;
     logDebug(msg: string, metadata?: Metadata): void;
     queueRecording(client: C): void;
 }
 
-// What getAppClients hands back for an app with no voice clients.
 const NO_CLIENTS: readonly never[] = [];
 
-// The VoiceServer's voice clients, by voiceClientKey, and those of each app. One for the server's
-// lifetime: the server reads and writes `clients` itself.
+// The VoiceServer's voice clients, by voiceClientKey, and those of each app. VoiceServer reads and
+// writes `clients` itself.
 export class VoiceClients<C extends ListedVoiceClient> {
     public readonly clients = new Map<string, C>();
 
-    // The voice clients of each app, by appId. Rebuilt only when a client joins, times out or
-    // changes app, instead of re-scanning/re-deriving `this.clients` on every incoming voice
-    // packet (received at up to ~50 packets/s/client).
+    // The voice clients of each app, by appId. Built lazily and kept, as relaying runs per packet
+    // (up to ~50/s per client).
     private appClients: Map<number, C[]> | undefined;
 
     public constructor(private readonly callbacks: VoiceClientsCallbacks<C>) {}
 
-    // A client joined, left or changed app: getAppClients rebuilds the lists on its next call.
+    // Call when a client joins, leaves or changes app.
     public invalidateAppClients(): void {
         this.appClients = undefined;
     }

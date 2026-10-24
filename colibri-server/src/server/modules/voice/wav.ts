@@ -1,8 +1,7 @@
 import { endianness } from 'os';
 
-// Recordings can run for minutes at 48kHz, so a plain number[] would mean millions of
-// boxed-double pushes. This keeps samples in a flat Int16Array, growing (doubling) only
-// when the current capacity is exhausted, same trade-off as FrameReader's growable buffer.
+// Samples in a flat Int16Array, doubled when full: a recording can run for minutes at 48 kHz, which
+// is millions of samples.
 export class GrowableInt16Buffer {
     private data: Int16Array;
     private len = 0;
@@ -34,13 +33,12 @@ const WAV_HEADER_LENGTH = 44;
 /**
  * The 44-byte RIFF header of a mono, 16-bit PCM .wav file holding `dataBytes` bytes of samples.
  *
- * Written by hand because it is all a recording needs: building the file with wavefile
- * (fromScratch, then toBuffer) re-encoded every sample on the main thread, which held up all
- * TCP and Socket.IO relaying for seconds when a long recording was saved.
+ * Written by hand: wavefile re-encodes every sample on the main thread, which would hold up
+ * TCP and Socket.IO relaying while a long recording is saved.
  */
 export const wavHeader = function (samplingRate: number, dataBytes: number): Buffer {
-    // The sizes are 32-bit. Past 4 GiB (12 h at 48 kHz) they say "as much as there is", which
-    // players read to the end of the file, instead of failing the save and losing it all.
+    // The sizes are 32-bit. Past 4 GiB (12 h at 48 kHz) they are clamped to 0xFFFFFFFF, which
+    // players read as "to the end of the file", instead of failing the save.
     const size = (value: number) => Math.min(value, 0xFFFFFFFF);
     const header = Buffer.alloc(WAV_HEADER_LENGTH);
     header.write('RIFF', 0, 'ascii');

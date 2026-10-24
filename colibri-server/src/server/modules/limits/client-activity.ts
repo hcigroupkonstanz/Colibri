@@ -10,7 +10,6 @@ export interface ClientActivity {
     // window has passed. Heartbeats and latency pings (and their echoes) are not counted.
     in: number | null;
     out: number | null;
-    // The limit in effect now, if any.
     limit: LoadLimit | null;
     // Objects with model updates held back.
     held: number;
@@ -28,12 +27,11 @@ export const RATE_WINDOW_MILLIS = 1000;
 // throughput chart, so a page opened later is full at once.
 export const RATE_HISTORY_LENGTH = 125;
 
-// Message counts and rates of one client. The transport counts messages with plain increments and
-// calls sample() about once per RATE_WINDOW_MILLIS.
-// The history is kept with or without an admin page open: it is three numbers per sample, and
-// sampling only for open pages would leave the chart empty for the first page after a quiet spell.
-// The TCP worker sends its history only when requested (a page's first snapshot): asking for it
-// each second would cost a message each way.
+// Message counts and rates of one client. The transport increments the counts and calls sample()
+// about once per RATE_WINDOW_MILLIS.
+// The history is kept even with no admin page open, so the first page after a quiet spell has a
+// full chart. The TCP worker sends it only with a page's first snapshot: each second it would cost
+// a message each way.
 export class TrafficMeter {
     public received = 0;
     public sent = 0;

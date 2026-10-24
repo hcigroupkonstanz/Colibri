@@ -4,26 +4,23 @@ import { errorMessage } from '../core/error-message.js';
 import { VOICE_HEADER_VERSION } from './voice-packet.js';
 import { formatAppId } from './format-app-id.js';
 
-// A source sending malformed packets, or a peer that can't be relayed to, fails at packet rate
-// (up to ~50/s per voice client), so each is reported at most once per this interval rather
-// than once per packet...
+// Packets that are dropped or cannot be relayed come at packet rate (up to ~50/s per voice client),
+// so each source or peer is reported at most once per this interval.
 export const REPORT_INTERVAL_MILLIS = 10000;
-// ...and only this many distinct sources and peers are remembered at a time, so a burst from
-// many addresses can't grow the map without bound. Once full, new ones go unreported until
-// the next prune frees a slot.
+// Sources and peers remembered at a time, so a burst from many addresses cannot grow the maps
+// without bound. Once full, new ones go unreported until the next prune.
 const REPORT_MAX_KEYS = 100;
 
-// A Unity client opens its voice socket and its TCP connection at about the same time, and its
-// voice often starts a moment (0.1 to 0.2 s) before the TCP handshake has registered it. Its first
-// packets are dropped then (see VoiceAdmission.admit), as are those of a second client at the same
-// address until its own handshake is in, and those of a voice socket opened again on a new port
-// until the old one has been quiet for VOICE_CLIENT_GONE_MILLIS. Each of those used to be a
-// warning, the first at every client start. Now the first packet dropped from a source is logged at
-// debug level only, and the source is reported as a warning once its packets have been dropped for
-// this long. One let in before that is never reported, and its next drop starts over.
+// A Unity client's voice often starts 0.1 to 0.2 s before its TCP handshake has registered it, so
+// its first packets are dropped (see VoiceAdmission.admit). So are those of a second client at the
+// same address until its handshake is in, and those of a voice socket reopened on a new port until
+// the old one has been quiet for VOICE_CLIENT_GONE_MILLIS. None of that is worth a warning, so the
+// first packet dropped from a source is logged at debug level, and the source is reported as a
+// warning only once its packets have been dropped for this long. A source let in before that is
+// never reported.
 const JOIN_GRACE_MILLIS = 3000;
 
-// A source whose packets admit drops, while it does (see JOIN_GRACE_MILLIS).
+// A source whose packets VoiceAdmission.admit is dropping (see JOIN_GRACE_MILLIS).
 interface Rejection {
     // When its first dropped packet came in.
     readonly since: number;
@@ -31,8 +28,7 @@ interface Rejection {
     last: number;
 }
 
-// What VoiceReports needs from the VoiceServer that owns it: its log methods, so that the reports
-// keep its name as their origin.
+// The VoiceServer's log methods, so that the reports keep its name as their origin.
 interface VoiceReportsCallbacks {
     logDebug(msg: string, metadata?: Metadata): void;
     logInfo(msg: string): void;
@@ -41,18 +37,16 @@ interface VoiceReportsCallbacks {
 }
 
 // The VoiceServer's reports of the packets it drops or cannot relay, and of its socket errors,
-// throttled per source and peer. One for the server's lifetime: all of them share REPORT_MAX_KEYS.
+// throttled per source and peer.
 export class VoiceReports {
-    // Report key (see reportMalformedPacket and reportRelayFailure) -> when it was last
-    // reported. See REPORT_INTERVAL_MILLIS; pruned every disconnect-check tick.
+    // Report key -> when it was last reported (see claimReport); pruned every disconnect-check tick.
     private readonly reportedAt = new Map<string, number>();
-    // The sources whose packets admit drops, by voiceClientKey (see JOIN_GRACE_MILLIS). One is
-    // forgotten once it is let in, or by pruneReports once none of its packets has been dropped for
-    // REPORT_INTERVAL_MILLIS. Bounded by REPORT_MAX_KEYS, as reportedAt: once full, a new source is
-    // neither timed nor reported until the next prune frees a slot.
+    // Sources whose packets are being dropped, by voiceClientKey. Removed when the source is let in
+    // (forgetRejection), or by pruneReports after REPORT_INTERVAL_MILLIS without a dropped packet.
+    // Capped like reportedAt: once full, a new source is neither timed nor reported until a prune.
     private readonly rejections = new Map<string, Rejection>();
-    // The trusted proxies whose voice has been said to be relayed unchecked, so it is said once for
-    // each. Bounded by REPORT_MAX_KEYS, as TRUSTED_PROXIES may name whole ranges.
+    // Trusted proxies already logged as relayed unchecked, so each is logged once. Capped like
+    // reportedAt, as TRUSTED_PROXIES may name whole ranges.
     private readonly uncheckedProxies = new Set<string>();
 
     public constructor(private readonly callbacks: VoiceReportsCallbacks) {}
@@ -72,10 +66,10 @@ export class VoiceReports {
         this.rejections.delete(source);
     }
 
-    // How a packet admit has dropped from `source` is to be logged, if at all (see JOIN_GRACE_MILLIS):
-    // the first one of the source at debug level, then nothing until they have been dropped for
-    // JOIN_GRACE_MILLIS, then as a warning at most once per REPORT_INTERVAL_MILLIS (claimReport).
-    // Called at packet rate, so the message is built only when there is one to log.
+    // The level to log a packet dropped from `source` at, if any: debug for the first, nothing until
+    // the source has been dropped for JOIN_GRACE_MILLIS, then a warning at most once per
+    // REPORT_INTERVAL_MILLIS (claimReport). Runs per packet, so the caller builds the message only
+    // when there is a level.
     private rejectionReport(source: string, nowMillis: number): 'debug' | 'warning' | undefined {
         const rejection = this.rejections.get(source);
         if (!rejection) {
@@ -148,8 +142,8 @@ export class VoiceReports {
                 this.reportedAt.delete(key);
             }
         }
-        // By the latest dropped packet, not the first: a source dropped for good would otherwise
-        // start over every REPORT_INTERVAL_MILLIS, and its warning come JOIN_GRACE_MILLIS late each time.
+        // Judged by the latest dropped packet, not the first, so a source that stays dropped is not
+        // restarted every REPORT_INTERVAL_MILLIS, which would delay its warning by JOIN_GRACE_MILLIS each time.
         for (const [source, rejection] of this.rejections) {
             if (nowMillis - rejection.last >= REPORT_INTERVAL_MILLIS) {
                 this.rejections.delete(source);

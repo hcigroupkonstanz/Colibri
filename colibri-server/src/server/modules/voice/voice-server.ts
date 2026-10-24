@@ -39,7 +39,6 @@ interface VoiceClient {
     group: VoiceClientGroup<VoiceClient> | undefined;
 }
 
-// A new voice client, from the header of its first packet and where that came from.
 const newVoiceClient = function (remote: dgram.RemoteInfo, header: VoiceHeader, samplingRate: number, now: Date, nowMillis: number): VoiceClient {
     const { userId, sequence, frameSize, codec, appId } = header;
     return {
@@ -61,8 +60,8 @@ const newVoiceClient = function (remote: dgram.RemoteInfo, header: VoiceHeader, 
 /**
  * The UDP socket voice listens on, for VOICE_HOST. An IPv6 address, `::` included, gets an IPv6
  * socket that takes IPv4 as well (ipv6Only false), so that VOICE_HOST=:: serves Unity clients of
- * either kind. Anything else, a host name included, gets the IPv4 socket voice always had: a udp4
- * socket cannot bind an IPv6 address at all, so an IPv6 VOICE_HOST used to leave voice off.
+ * either kind. Anything else, a host name included, gets a udp4 socket, which cannot bind an IPv6
+ * address at all.
  */
 export const voiceSocketOptions = function (hostname: string): dgram.SocketOptions {
     return isIPv6(hostname) ? { type: 'udp6', ipv6Only: false } : { type: 'udp4' };
@@ -87,23 +86,19 @@ export class VoiceServer extends Service {
     public get groupName(): string { return 'web'; }
 
     private udpSocket!: dgram.Socket;
-    // Holds the voice clients and those of each app, and drops them. Logs through this service, so
-    // under its name.
+    // The helpers below log through this service's methods, so their lines carry its name.
     private readonly voiceClients = new VoiceClients<VoiceClient>({
         leaveGroup: (client) => this.admission.leaveGroup(client),
         logDebug: (msg, metadata) => this.logDebug(msg, metadata),
         queueRecording: (client) => this.recorder.queueRecording(client),
     });
-    // The Map voiceClients holds, by voiceClientKey.
+    // The map voiceClients holds, by voiceClientKey.
     private readonly clients: Map<string, VoiceClient> = this.voiceClients.clients;
     private disconnectTimeoutMillis = 2000;
     private disconnectCheckInterval!: NodeJS.Timeout;
 
-    // Holds the recordings and saves them. Logs through this service, so under its name.
     private readonly recorder: VoiceRecorder;
 
-    // Throttles the reports of dropped and unrelayable packets and of socket errors; pruned every
-    // disconnect-check tick. Logs through this service, so under its name.
     private readonly reports = new VoiceReports({
         logDebug: (msg, metadata) => this.logDebug(msg, metadata),
         logInfo: (msg) => this.logInfo(msg),
@@ -114,8 +109,6 @@ export class VoiceServer extends Service {
     // Whether the UDP socket is listening: false before start(), and for good if it could not bind.
     private listening = false;
 
-    // Lets in the senders voice is relayed from and to, and drops them once their Unity clients
-    // leave. Drops and reports through voiceClients and reports.
     private readonly admission: VoiceAdmission<VoiceClient>;
 
     // `unityClients`: TCPServerProxy. `trustProxy`: TRUSTED_PROXIES, whose voice is relayed unchecked.
@@ -173,10 +166,7 @@ export class VoiceServer extends Service {
         });
         this.udpSocket.on('message', (message, remote) => this.handlePacket(message, remote));
         // A failed bind (the voice port taken, a VOICE_HOST that does not resolve or is not
-        // this machine's) is only ever reported here, and the rest of the server runs on
-        // without voice. This used to be a bare console.error of the message - on stderr
-        // only, never in the admin UI's log, and as nothing more than
-        // 'bind EADDRINUSE 0.0.0.0:9013', without saying what had failed or what it meant.
+        // this machine's) is only reported here, and the rest of the server runs on without voice.
         this.udpSocket.on('error', (err: NodeJS.ErrnoException) => {
             if (!this.listening && hostname === '::' && err.code === 'EAFNOSUPPORT') {
                 this.logWarning(ipv4OnlyWarning('VOICE_HOST', 'voice port'));
@@ -214,11 +204,8 @@ export class VoiceServer extends Service {
             return;
         }
 
-        // Source port 0 means the sender named no port to reply to (RFC 768), and nothing
-        // can be sent back to it: udpSocket.send() rejects port 0 synchronously with
-        // ERR_SOCKET_BAD_PORT.
-        // Such a sender used to register like any other, and the next packet from anyone
-        // else threw out of this listener while relaying to it and shut the server down.
+        // Source port 0 means the sender named no port to reply to (RFC 768), and nothing can be
+        // sent back to it: udpSocket.send() rejects port 0 synchronously with ERR_SOCKET_BAD_PORT.
         // Only a raw socket can send one, but that is one packet from any machine on the LAN.
         if (remote.port === 0) {
             this.reports.reportMalformedPacket(clientKey, 'its source port is 0, so nothing can be relayed back to it', nowMillis);
@@ -237,8 +224,8 @@ export class VoiceServer extends Service {
         if (codec === VoiceCodec.PCM && this.recordingVoiceData) this.recorder.record(message, voiceClient);
     }
 
-    // The voice client `remote` sends as, added or moved to the app of `header` first if it is new or
-    // changes app. Undefined if VoiceAdmission.admit drops the packet.
+    // The sender's voice client, registered if new or moved if it changes app. Undefined if
+    // VoiceAdmission.admit drops the packet.
     private admitSender(remote: dgram.RemoteInfo, clientKey: string, header: VoiceHeader, now: Date, nowMillis: number): VoiceClient | undefined {
         const { userId, codec, appId } = header;
 
@@ -279,7 +266,7 @@ export class VoiceServer extends Service {
         return voiceClient;
     }
 
-    // Sends `message` to all other clients of the app `appId`.
+    // Send message to all other clients
     private relay(message: Buffer, sender: VoiceClient, appId: number, nowMillis: number): void {
         for (const peer of this.voiceClients.getAppClients(appId)) {
             if (peer === sender) continue;
@@ -310,10 +297,7 @@ export class VoiceServer extends Service {
 
     // Tolerates never having been started, for the same reason as SocketIOServer.stop().
     //
-    // Saves every recording still held before it resolves. A recording used to be saved only
-    // once its client had been quiet for disconnectTimeoutMillis, so stopping the server (docker
-    // stop, a restart, a crash) while anyone was still talking, or within 2 s of them stopping,
-    // dropped their whole recording without a word.
+    // Saves every recording still held before it resolves, those of clients not yet timed out included.
     public async stop(): Promise<void> {
         if (this.disconnectCheckInterval) clearInterval(this.disconnectCheckInterval);
         // A socket closed already must not cost the recordings below.
@@ -330,10 +314,6 @@ export class VoiceServer extends Service {
         await this.recorder.saveBeforeStopping(pendingRecordings);
     }
 
-    // setInterval never awaits this, so the timed-out clients are collected and removed
-    // before anything is awaited. Deleting only after `await VoiceRecorder.saveDropped()`
-    // meant a save slower than the 1s tick let the next tick find the same client still
-    // registered and write the same recording to the same filename a second time.
     private async checkClientsDisconnected(): Promise<void> {
         if (this.recorder.saving) return;
 

@@ -68,9 +68,7 @@ export type VoiceHeaderReading =
 
 /** Reads the header of the voice packet `message`, or says why it has none the relay can use. */
 export const readVoiceHeader = function (message: Buffer): VoiceHeaderReading {
-    // A Colibri 1.x client's header has no appId, so there is no app to relay its
-    // packets to. Its codec byte (0 or 1) is where the header version is now, which
-    // makes its version 0.
+    // Version 0 is a Colibri 1.x header, which has no appId, so there is no app to relay to.
     if (message.length > VOICE_VERSION_AND_CODEC_OFFSET) {
         const version = message.readUInt8(VOICE_VERSION_AND_CODEC_OFFSET) >> 4;
         if (version === 0) {
@@ -87,7 +85,7 @@ export const readVoiceHeader = function (message: Buffer): VoiceHeaderReading {
         return { kind: 'malformed', reason: `${message.length} bytes is shorter than the ${VOICE_HEADER_LENGTH}-byte header` };
     }
 
-    // |userId(2)|sequence(2)|frameSize(2)|version and codec(1)|appId(4)|data|
+    // Voice message with 11 bytes header: |userId(2)|sequence(2)|frameSize(2)|version and codec(1)|appId(4)|data|
     const userId = message.readInt16LE(0); // .net (Unity) decodes default in little-endian order
     const sequence = message.readInt16LE(2);
     const frameSize = message.readInt16LE(4);

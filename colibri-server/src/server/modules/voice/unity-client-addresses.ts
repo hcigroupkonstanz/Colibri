@@ -3,7 +3,7 @@ import { Subject } from 'rxjs';
 import { normalizeAddress } from '../net/addresses.js';
 import { voiceAppId } from './voice-packet.js';
 
-// A Unity (TCP) client as the voice server needs to know it. TCPServerProxy's clients are these.
+// What the voice server reads of a Unity (TCP) client; TCPServerProxy's clients fit.
 export interface UnityClient {
     readonly app: string;
     // Behind a proxy, the one its PROXY protocol header named.
@@ -17,7 +17,7 @@ export interface UnityClientSource {
     readonly clientDisconnected$: Observable<UnityClient>;
 }
 
-// An app, and an address one of its Unity clients there has left.
+// A Unity client of the app `appId` has left `address`.
 export interface UnityClientLeft {
     address: string;
     appId: number;
@@ -30,8 +30,8 @@ export interface UnityClientLeft {
  */
 export class UnityClientAddresses {
     // Address (see normalizeAddress) -> app id -> how many Unity clients of that app are connected
-    // from it. Two lookups per check, however many clients there are: the voice server checks every
-    // packet from a sender it has not let in yet, which a flood of forged ones makes thousands a second.
+    // from it. Two lookups per check however many clients there are: every packet from a sender not
+    // let in yet is checked, and a flood of forged ones makes that thousands a second.
     private readonly apps = new Map<string, Map<number, number>>();
     private readonly leftStream = new Subject<UnityClientLeft>();
 
@@ -47,12 +47,12 @@ export class UnityClientAddresses {
         return this.leftStream.asObservable();
     }
 
-    // Whether a Unity client of the app `appId` is connected from `address`, normalized.
+    // Whether a Unity client of the app `appId` is connected from `address`, which has to be normalized.
     public has(address: string, appId: number): boolean {
         return this.apps.get(address)?.has(appId) === true;
     }
 
-    // How many Unity clients of the app `appId` are connected from `address`, normalized.
+    // How many Unity clients of the app `appId` are connected from `address`, which has to be normalized.
     public count(address: string, appId: number): number {
         return this.apps.get(address)?.get(appId) ?? 0;
     }
@@ -83,11 +83,10 @@ export class UnityClientAddresses {
             if (counts.size === 0) this.apps.delete(address);
         }
 
-        // A client that handshakes again on its connection is reported gone and then connected,
-        // one right after the other (TCPServerProxy.onClientConnected). Told once that is over, and
-        // only if fewer are left then, so that one staying in its app does not lose its voice, nor
-        // have its recording cut in two. A microtask still runs before the next voice packet is
-        // handled.
+        // A client that handshakes again on its connection is reported gone, then connected, in a row
+        // (TCPServerProxy.onClientConnected). Reported after a microtask, and only if fewer are left by
+        // then, so one that stays in its app keeps its voice and recording. The microtask still runs
+        // before the next voice packet is handled.
         queueMicrotask(() => {
             if (this.count(address, appId) <= left) this.leftStream.next({ address, appId });
         });

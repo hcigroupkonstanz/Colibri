@@ -145,8 +145,7 @@ export const MAX_HELD_OBJECTS = 1000;
 // each object was first held.
 //
 // The store (DataStore.updateModel) and the receiving clients both merge a delta field by field,
-// so applying two in turn equals applying their merge once. Merging skips intermediate states but
-// the latest value of every field still arrives; a dropped delta would be lost for good.
+// so applying two in turn equals applying their merge once.
 export class HeldUpdates {
     private readonly byObject = new Map<string, HeldUpdate>();
 

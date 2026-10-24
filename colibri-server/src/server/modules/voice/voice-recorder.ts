@@ -7,7 +7,7 @@ import { voiceClientKey } from './voice-client-key.js';
 import type { GrowableInt16Buffer } from './wav.js';
 import { littleEndianBytes, wavHeader } from './wav.js';
 
-// What VoiceRecorder reads of a voice client: who it is, and its recording.
+// What VoiceRecorder reads of a voice client.
 interface RecordedVoiceClient {
     readonly ip: string;
     readonly port: number;
@@ -17,23 +17,21 @@ interface RecordedVoiceClient {
     readonly recordingData: GrowableInt16Buffer;
 }
 
-// What VoiceRecorder needs from the VoiceServer that owns it: its log methods, so that its lines
-// keep the server's name as their origin.
+// The VoiceServer's log methods, so that the lines keep its name as their origin.
 interface VoiceRecorderCallbacks {
     logInfo(msg: string): void;
     logError(msg: string, printStacktrace: boolean): void;
 }
 
 // The VoiceServer's recordings of PCM voice, saved as .wav files once their voice client is dropped
-// or the server stops. One for the server's lifetime.
+// or the server stops.
 export class VoiceRecorder {
-    // The recordings of voice clients dropped (see VoiceClients.dropVoiceClient), for the next
-    // disconnect check, or stop(), to save.
+    // Recordings of dropped voice clients (VoiceClients.dropVoiceClient), for the next disconnect
+    // check, or stop(), to save.
     private droppedRecordings: RecordedVoiceClient[] = [];
 
-    // The recordings saveDropped is saving, while it is. Guards VoiceServer.checkClientsDisconnected
-    // against overlapping fs work when a save outlives its tick (see the comment there), and lets
-    // stop() wait for it.
+    // Set while saveDropped runs. VoiceServer.checkClientsDisconnected skips its tick while it is set,
+    // and stop() waits for it, so saves never overlap.
     private savingRecordings: Promise<void> | undefined;
 
     public constructor(
@@ -42,7 +40,6 @@ export class VoiceRecorder {
         private readonly callbacks: VoiceRecorderCallbacks
     ) {}
 
-    // The save saveDropped is running, if any.
     public get saving(): Promise<void> | undefined {
         return this.savingRecordings;
     }
@@ -54,16 +51,14 @@ export class VoiceRecorder {
         }
     }
 
-    // Keeps the recording of `client`, just dropped, for the next saveDropped or takeRecordings, if
-    // it has any samples.
+    // Keeps the recording of `client`, just dropped, for the next saveDropped or takeRecordings. Skips
+    // an empty one.
     public queueRecording(client: RecordedVoiceClient): void {
         if (client.recordingData.length > 0) this.droppedRecordings.push(client);
     }
 
     // Saves the recordings queued since the last call, one at a time.
     public async saveDropped(): Promise<void> {
-        // Those just timed out or trimmed, and those dropped since the last check for another
-        // reason (see VoiceClients.dropVoiceClient's callers).
         const pendingRecordings = this.droppedRecordings;
         this.droppedRecordings = [];
         if (pendingRecordings.length === 0) return;
@@ -99,13 +94,12 @@ export class VoiceRecorder {
         }
     }
 
-    // Never throws: a failed save is logged. Nothing here re-encodes the samples on the main
-    // thread (see wavHeader): writeFile hands their bytes to the file system in chunks.
+    // Never throws: a failed save is logged. The samples go to writeFile as they are (see
+    // wavHeader), not re-encoded on the main thread.
     //
-    // The app and the source port are in the file name because the start time and the voice id
-    // alone do not tell recordings apart: two apps may use the same voice id, and after a
-    // restart or a dropped network every client registers again within the same few ms. Two
-    // recordings with the same name used to overwrite each other without a word.
+    // The app and the source port are in the file name because start time and voice id alone do not
+    // tell recordings apart: two apps may use the same voice id, and after a restart or a dropped
+    // network every client registers again within the same few ms.
     private async saveRecording(client: RecordedVoiceClient): Promise<void> {
         const samples = client.recordingData.toTypedArray();
         const dateString = client.recordingStartDate.toISOString().replace(/:/g, '_');
