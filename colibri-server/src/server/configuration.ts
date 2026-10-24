@@ -5,16 +5,14 @@ import { readTlsFiles } from './modules/tls/tls-files.js';
 import { parseProxyTlsAddresses } from './modules/tls/proxy-certificate.js';
 import { parseTrustedProxies } from './modules/net/trusted-proxies.js';
 
-// automatically load .env file. Quietly: dotenv 17 otherwise prints an "injected env"
-// line with a rotating advertising tip on every start, docker logs included.
+// automatically load .env file
+// Quiet: dotenv 17 otherwise prints a log line with a tip on every start.
 dotenv.config({ quiet: true });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// `Number(process.env.X)` silently yields NaN for anything malformed, which then
-// propagates into `net.Server.listen`/`dgram.Socket.bind` and fails in confusing ways far
-// from the actual misconfiguration. Fail fast at startup instead, with a message that
-// names the offending variable.
+// Number(raw) yields NaN for malformed input, which would only fail later in listen() or bind().
+// So these throw at startup, naming the variable.
 const parsePort = function (name: string, raw: string | undefined, fallback: number): number {
     if (raw === undefined) return fallback;
     const value = Number(raw);
@@ -43,9 +41,8 @@ const parseNonNegativeInt = function (name: string, raw: string | undefined, fal
     return value;
 };
 
-// TLS_CERT and TLS_KEY: both or neither. Read and checked here, so that a server that cannot serve
-// TLS with them does not start at all, rather than start without TLS, or fail only once the first
-// client connects. Resolved like DATA_ROOT below.
+// TLS_CERT and TLS_KEY: both or neither. The files are read here, so a server that cannot serve TLS
+// with them fails at startup, not at the first client. Resolved like DATA_ROOT below.
 const parseTlsFiles = function (rawCert: string | undefined, rawKey: string | undefined): { cert: string; key: string } | undefined {
     const cert = rawCert?.trim() ?? '';
     const key = rawKey?.trim() ?? '';
@@ -59,15 +56,15 @@ const parseTlsFiles = function (rawCert: string | undefined, rawKey: string | un
     }
 
     const files = { cert: path.resolve(__dirname, cert), key: path.resolve(__dirname, key) };
-    // Throws, naming the variable, the file and the fix, if they cannot be used.
+    // Throws if they cannot be used.
     readTlsFiles(files.cert, files.key);
     return files;
 };
 
 const tlsFiles = parseTlsFiles(process.env.TLS_CERT, process.env.TLS_KEY);
 
-// Strictly true or false: TCP_PROXY_PROTOCOL mistyped and taken as false would leave every Unity
-// connection through the proxy failing, with nothing at startup to say why.
+// Strictly true or false: a mistyped TCP_PROXY_PROTOCOL taken as false would make every Unity
+// connection through the proxy fail, with nothing at startup to say why.
 const parseBoolean = function (name: string, raw: string | undefined, fallback: boolean): boolean {
     const value = raw?.trim().toLowerCase() ?? '';
     if (value === '') return fallback;
@@ -85,15 +82,12 @@ if (tcpProxyProtocol && trustedProxies.length === 0) {
     );
 }
 // Whether the proxy in front of the TCP port ends TLS. nginx's PROXY protocol header, version 1,
-// does not say, so the operator does. Without TCP_PROXY_PROTOCOL it has no effect; see
-// configurationWarnings.
+// does not say, so the operator does. No effect without TCP_PROXY_PROTOCOL (configurationWarnings).
 const tcpTlsAtProxy = parseBoolean('TCP_TLS_AT_PROXY', process.env.TCP_TLS_AT_PROXY, false);
 const proxyTlsAddresses = parseProxyTlsAddresses(process.env.PROXY_TLS_ADDRESSES);
 
-// The default ports are 9211, 9212 and 9213, not 1.x's 9011, 9012 and 9013: a 1.x and a 2.x
-// server can then run side by side on one host, and a client of one version does not reach a
-// server of the other by its defaults. A 1.x Unity client cannot even decode this server's
-// refusal.
+// The default ports are 9211 to 9213, not 1.x's 9011 to 9013, so a 1.x and a 2.x server can run
+// side by side on one host, and a client of one version does not reach the other by its defaults.
 //
 // The hosts default to ::, which listens on IPv6 and IPv4, or on IPv4 only on a system without
 // IPv6 (see listenHost and VoiceServer.start). 1.x listened on IPv4 only (0.0.0.0).
@@ -108,10 +102,8 @@ export const Config = {
 
     WEBSERVER_HOST: process.env.WEBSERVER_HOST || '::',
     WEBSERVER_PORT: parsePort('WEBSERVER_PORT', process.env.WEBSERVER_PORT, 9211),
-    // WEBSERVER_ROOT and DATA_ROOT use path.resolve, not path.join: join glued even an
-    // absolute path onto __dirname, so DATA_ROOT=/var/lib/colibri ended up at
-    // dist/server/var/lib/colibri. A relative path still resolves against __dirname
-    // (dist/server) to the same place as before.
+    // WEBSERVER_ROOT and DATA_ROOT use path.resolve, not path.join, so an absolute path stays absolute.
+    // A relative one resolves against __dirname (dist/server).
     WEBSERVER_ROOT: path.resolve(
         __dirname,
         process.env.WEBSERVER_ROOT || '../ui/'
@@ -130,9 +122,8 @@ export const Config = {
     // MiB of JSON the data store may hold before it refuses a PUT with 507; 0: no limit.
     STORE_MAX_MB: parseNonNegativeInt('STORE_MAX_MB', process.env.STORE_MAX_MB, 0),
 
-    // Default of 30 (was Error.stackTraceLimit = Infinity) caps the cost of every stack
-    // capture - each logError call with printStacktrace on walks this many frames - while
-    // still being enough to see past RxJS's internal call chain into application code.
+    // Frames per captured stack. Caps the cost of logError's stack capture, yet is deep enough to get
+    // past RxJS internals into application code.
     STACK_TRACE_LIMIT: parsePositiveInt('STACK_TRACE_LIMIT', process.env.STACK_TRACE_LIMIT, 30),
 
     // How many TCP messages may wait for the main thread before the TCP worker holds back incoming
@@ -179,15 +170,15 @@ export const Config = {
 type TcpTlsAtProxySettings = Pick<typeof Config, 'TRUSTED_PROXIES' | 'TCP_PROXY_PROTOCOL' | 'TCP_TLS_AT_PROXY'>;
 
 // Whether TCP_TLS_AT_PROXY applies: only a connection that starts with a PROXY protocol header from
-// a trusted proxy counts as TLS at the proxy, and only with TCP_PROXY_PROTOCOL is one read. The
-// server topic's tlsAtProxy.tcp.
+// a trusted proxy counts as TLS at the proxy, and only with TCP_PROXY_PROTOCOL is one read. This is
+// the server topic's tlsAtProxy.tcp.
 export const tcpTlsAtProxyInEffect = function (config: TcpTlsAtProxySettings): boolean {
     return config.TCP_TLS_AT_PROXY && config.TCP_PROXY_PROTOCOL && config.TRUSTED_PROXIES.length > 0;
 };
 
-// Settings that are valid but have no effect as set, as warnings. Not refused like the errors above:
-// the server works the same without them. Returned rather than logged, since nothing listens to the
-// log yet while this module loads; main.ts logs them at startup.
+// Warnings for settings that are valid but have no effect as set; unlike the errors above, they do
+// not stop the server. Returned rather than logged, since nothing listens to the log while this
+// module loads; main.ts logs them at startup.
 export const configurationWarnings = function (config: TcpTlsAtProxySettings): string[] {
     if (!config.TCP_TLS_AT_PROXY || tcpTlsAtProxyInEffect(config)) return [];
 

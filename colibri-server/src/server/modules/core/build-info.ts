@@ -40,11 +40,9 @@ const isTrue = function (value: string | undefined): boolean {
 export type Git = (...args: string[]) => string;
 
 /**
- * Records the commit, and whether colibri-server has uncommitted changes, for `npm run build`.
- * If COLIBRI_COMMIT is set, it is the only source, and COLIBRI_COMMIT_DIRTY gives the dirty flag: a
- * Docker build has no .git, so it gets both as build arguments. A value that is not a hash gives no
- * commit. Otherwise git is asked about colibri-server only, untracked files included, and a failed
- * `git status` counts as clean. `source` names where the commit came from.
+ * Collects the commit and whether colibri-server has uncommitted changes, for `npm run build`.
+ * COLIBRI_COMMIT, when set, replaces git, and COLIBRI_COMMIT_DIRTY gives the dirty flag: a Docker
+ * build has no .git, so it gets both as build arguments. `source` names where the commit came from.
  */
 export const collectBuildInfo = function (env: NodeJS.ProcessEnv, git: Git, now = new Date()): { info: BuildInfoFile; source: string } {
     const builtAt = now.toISOString();
@@ -74,9 +72,8 @@ export const collectBuildInfo = function (env: NodeJS.ProcessEnv, git: Git, now 
     return { info: { commit, dirty, builtAt }, source: 'git' };
 };
 
-// A tsc-only build writes no file, so without one everything is unknown. `npm run watch` deletes the
-// old file, which would name an earlier build's commit. A bad commit or builtAt is unknown, and dirty
-// counts only with a commit.
+// A tsc-only build writes no file, and `npm run watch` deletes it, so everything is then unknown. A bad
+// commit or builtAt is unknown, and dirty counts only with a commit.
 export const readBuildInfo = function (path: string): BuildInfo {
     let fields: Record<string, unknown>;
     try {

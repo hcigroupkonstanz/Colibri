@@ -17,6 +17,9 @@ export default tseslint.config(
     },
     js.configs.recommended,
     ...tseslint.configs.recommended,
+    // The typed blocks sit before the main rules block on purpose. After it, recommendedTypeChecked would
+    // turn no-explicit-any and no-unused-vars from warn back into error, and disableTypeChecked would
+    // switch naming-convention off for the environments.
     {
         files: ['src/**/*.ts'],
         extends: tseslint.configs.recommendedTypeChecked,
@@ -33,6 +36,8 @@ export default tseslint.config(
             },
         },
     },
+    // The UI's tsconfigs are not named tsconfig.json, so the project service does not find them;
+    // project lists them.
     {
         files: ['src/ui/**/*.ts'],
         ignores: ['src/ui/environments/**'],
@@ -44,6 +49,7 @@ export default tseslint.config(
             },
         },
     },
+    // Angular swaps environment.prod.ts in through fileReplacements, so neither UI tsconfig includes it: typed rules off.
     {
         files: ['src/ui/environments/**'],
         extends: [tseslint.configs.disableTypeChecked],

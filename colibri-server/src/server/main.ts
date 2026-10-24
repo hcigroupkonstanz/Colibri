@@ -29,15 +29,13 @@ import { Config, configurationWarnings, tcpTlsAtProxyInEffect } from './configur
  * Debugging
  */
 
-// See Config.STACK_TRACE_LIMIT for why this isn't Infinity.
 Error.stackTraceLimit = Config.STACK_TRACE_LIMIT;
 
 // Attached before any service exists, so nothing logged during construction or init() is missed
-// - the admin UI's WebLog only starts listening once its own init() has run. The options are
-// read here rather than when modules/ is imported, which happens before Config loads .env.
+// (the admin UI's WebLog only listens once its own init() has run). The options are read here, not
+// when modules/ is imported, which happens before Config loads .env.
 new ConsoleLog(ConsoleLog.optionsFromEnv(process.env)).attach(Service.output$);
 
-// The release, and the commit it was built from: dist/server/build-info.json, next to this file.
 const version = readServerVersion(fileURLToPath(new URL('../../package.json', import.meta.url)));
 const build = readBuildInfo(fileURLToPath(new URL('./build-info.json', import.meta.url)));
 
@@ -48,20 +46,19 @@ dataStore.tombstoneMillis = Config.MODEL_TOMBSTONE_SECONDS * 1000;
  *    Servers
  */
 
-// With TLS_CERT and TLS_KEY set, the TCP port and the web port serve TLS with the same certificate,
-// and take up a renewed one together. Config has checked both files already.
+// The TCP port and the web port share one certificate, so both switch to a renewed one together.
+// Config has checked the files already.
 const tlsCertificate = Config.TLS_CERT && Config.TLS_KEY
     ? new TlsCertificate(Config.TLS_CERT, Config.TLS_KEY)
     : undefined;
 
-// The certificates the proxy in front of the server presents to clients, which the server cannot
-// see otherwise, for the monitoring page.
+// The certificates the proxy in front of the server presents to clients, for the monitoring page.
 const proxyCertificates = Config.PROXY_TLS_ADDRESSES.length > 0
     ? new ProxyCertificateCheck(Config.PROXY_TLS_ADDRESSES)
     : undefined;
 
-// Behind these proxies, a web client's address is taken from X-Forwarded-For. The TCP worker
-// compiles its own from the same list, for the PROXY protocol.
+// A web client's address is taken from X-Forwarded-For when the peer is one of these proxies. The TCP
+// worker compiles its own from the same list, for the PROXY protocol.
 const trustProxy = compileTrustedProxies(Config.TRUSTED_PROXIES);
 
 const webServer = new WebServer({
@@ -93,9 +90,7 @@ const dataRootCheck = new DataRootCheck(Config.DATA_ROOT);
 /**
  *    Plumbing
  *
- *    Constructed for their side effects only (each subscribes to the connection pool /
- *    registers itself as a Service in its constructor) - never referenced again, so none
- *    of these are assigned to a variable.
+ *    Constructed for their side effects only: each is a Service and hooks itself up in its constructor.
  */
 new ClientLogger(connectionPool);
 new WebLog(socketioServer);
@@ -105,8 +100,8 @@ new BroadcastLogger(connectionPool);
 new ClientBroadcast(connectionPool);
 new MeasureLatency(connectionPool, socketioServer);
 
-// Read-only data for the admin UI's pages. The settings by the names of the variables that set
-// them; TLS_CERT and TLS_KEY only as the certificate's description, never their paths or contents.
+// Read-only data for the admin UI. Settings go by the names of their variables; TLS_CERT and TLS_KEY
+// only as the certificate's description (tls), never their paths or contents.
 const adminData = new AdminData({
     store: dataStore,
     socketio: socketioServer,
@@ -144,10 +139,9 @@ const adminData = new AdminData({
     restStore: restApi,
 });
 
-// Logs what happens to the process itself, and shuts it down, in this order. restApi.close()
-// checkpoints the data store's write-ahead log into store.db. The voice server goes last: it
-// saves the voice recordings still in progress, which can take a while for long ones, and must
-// not leave the data store's close to the watchdog.
+// The steps run in this order. restApi.close() checkpoints the data store's write-ahead log into
+// store.db. The voice server goes last: saving the recordings in progress can take long, and must not
+// leave the data store's close to the watchdog.
 const SHUTDOWN_TIMEOUT_MILLIS = 5000;
 const serverProcess = new ServerProcess([
     { name: 'AdminData', stop: () => adminData.stop() },
@@ -167,14 +161,12 @@ const startup = async () => {
         await service.init();
     }
 
-    // After every init(), so the admin UI's WebLog is listening for these too. First, which
-    // server this is.
+    // After every init(), so the admin UI's WebLog is listening for these too.
     serverProcess.reportStart(version, build);
-    // Settings that have no effect as set.
     for (const warning of configurationWarnings(Config)) serverProcess.reportWarning(warning);
-    // Not fatal: the server is still useful without persistence, it just has to say so.
+    // Not fatal: the server still works without persistence.
     await dataRootCheck.check();
-    // Likewise: logs the certificate's fingerprint.
+    // Logs the certificate's fingerprint.
     tlsCertificate?.start();
 
     const rateLimit = { messagesPerSecond: Config.CLIENT_MESSAGE_RATE_LIMIT, burst: Config.CLIENT_MESSAGE_RATE_BURST };
@@ -202,14 +194,10 @@ startup().catch((err) => {
  *    Shutdown
  */
 
-// `docker stop` sends SIGTERM (then SIGKILL after a grace period) with no handler
-// installed for either, so the TCP worker thread was never terminated and the data store
-// was never closed.
+// `docker stop` sends SIGTERM, then SIGKILL after a grace period.
 process.on('SIGTERM', (signal) => void serverProcess.shutdown(`Received ${signal}`, 0));
 process.on('SIGINT', (signal) => void serverProcess.shutdown(`Received ${signal}`, 0));
 
-// Both of these used to process.exit(1) directly, skipping the orderly shutdown above, in
-// exactly the situation where it matters most.
 process.on('unhandledRejection', (reason) => {
     serverProcess.reportError('Unhandled rejection', reason);
     void serverProcess.shutdown('Unhandled rejection', 1);
