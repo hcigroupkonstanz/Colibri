@@ -344,57 +344,16 @@ export class SocketIOServer extends Service implements NetworkServer {
     }
 
     private handleNewClient(socket: SocketIoSocket): void {
-        // engine.io builds the query from the URL's search params, so a value is a string or
-        // absent. An absent version becomes '' rather than undefined: the refusal below
-        // promises a string clientVersion (docs/dev/protocol.md), and JSON drops an undefined
-        // field altogether.
-        const version = socket.handshake.query.version;
-        // Behind a trusted proxy, the client's own address, from the X-Forwarded-For of the
-        // request that opened the connection. It is the client's name in colibri::clients, sent
-        // to the admin UI and to every client of its app. An IPv4 client is named by its IPv4
-        // address, also on a dual-stack WEBSERVER_HOST.
         const peer = normalizeAddress(socket.handshake.address);
-        const address = normalizeAddress(forwardedClientAddress(peer, socket.handshake.headers['x-forwarded-for'], this.trustProxy));
-        const client: SocketIoClient = {
-            id: socket.id,
-            app: socket.handshake.query.app as string,
-            version: typeof version === 'string' ? version : '',
-            name: address,
-            metadata: {},
-            socket,
-            tlsAtProxy: forwardedTls(peer, socket.handshake.headers['x-forwarded-proto'], this.trustProxy),
-        };
-
-        if (!client.app) {
-            this.logError('Websocket connection has no app specified; aborting connection', false);
-            socket.disconnect();
-            return;
-        }
-
-        // The admin UI is served by this same process and therefore can never be out of step
-        // with it, so it is warned about rather than refused - a version check that can lock
-        // you out of your own console is worse than the mismatch it detects.
-        if (client.version !== PROTOCOL_VERSION) {
-            const rejection = protocolRejection(client.version);
-            if (client.app === COLIBRI_CHANNEL) {
-                this.logWarning(`Admin UI client ${client.id} announced protocol version '${client.version || '(none)'}'; expected v${PROTOCOL_VERSION}`);
-            } else {
-                this.logError(`Refusing client ${client.id} from ${address}: ${rejection.reason}`, false, aboutClient(client));
-                socket.emit(COLIBRI_CHANNEL, { command: PROTOCOL_REJECTED_COMMAND, payload: rejection });
-                // Not disconnect(true): forcing the transport shut can truncate the rejection
-                // that was just queued. The unforced form writes the namespace disconnect
-                // behind it on the same transport, so the client sees both, in order.
-                socket.disconnect();
-                return;
-            }
-        }
+        const client = this.clientFromHandshake(socket, peer);
+        if (this.refuse(client)) return;
 
         if (client.app !== 'colibri') { // ignore colibri web interface clients
             // One line: a Socket.IO client names its app as it connects, unlike a TCP client, so
             // "waiting for app name" followed by the app, as the TCP server logs it, was noise.
-            const through = address === peer ? '' : ` through ${peer}`;
+            const through = client.name === peer ? '' : ` through ${peer}`;
             this.logDebug(
-                `New client '${client.name}' (${client.id}, v${client.version}) connected to app "${client.app}" from ${address}${through}`,
+                `New client '${client.name}' (${client.id}, v${client.version}) connected to app "${client.app}" from ${client.name}${through}`,
                 { ...aboutClient(client), ...CONNECTION_LINE }
             );
         }
@@ -404,6 +363,74 @@ export class SocketIOServer extends Service implements NetworkServer {
         // check, which cannot announce itself - see protocolAcceptance.
         socket.emit(COLIBRI_CHANNEL, { command: PROTOCOL_ACCEPTED_COMMAND, payload: protocolAcceptance() });
 
+        const traffic = this.register(client);
+        this.readEvents(client, traffic);
+
+        // Only Socket.IO's own errors get here (see socket.use in readEvents). JSON.stringify of an
+        // Error gave '{}'.
+        socket.on('error', (error: unknown) => {
+            this.logError(`Socket.IO error for client ${client.id}: ${errorMessage(error)}`, false, aboutClient(client));
+        });
+
+        socket.on('disconnect', () => {
+            this.handleSocketDisconnect(socket);
+        });
+    }
+
+    // `peer` is the address the connection came from, normalized.
+    private clientFromHandshake(socket: SocketIoSocket, peer: string): SocketIoClient {
+        // engine.io builds the query from the URL's search params, so a value is a string or
+        // absent. An absent version becomes '' rather than undefined: the refusal below
+        // promises a string clientVersion (docs/dev/protocol.md), and JSON drops an undefined
+        // field altogether.
+        const version = socket.handshake.query.version;
+        // Behind a trusted proxy, the client's own address, from the X-Forwarded-For of the
+        // request that opened the connection. It is the client's name in colibri::clients, sent
+        // to the admin UI and to every client of its app. An IPv4 client is named by its IPv4
+        // address, also on a dual-stack WEBSERVER_HOST.
+        const address = normalizeAddress(forwardedClientAddress(peer, socket.handshake.headers['x-forwarded-for'], this.trustProxy));
+        return {
+            id: socket.id,
+            app: socket.handshake.query.app as string,
+            version: typeof version === 'string' ? version : '',
+            name: address,
+            metadata: {},
+            socket,
+            tlsAtProxy: forwardedTls(peer, socket.handshake.headers['x-forwarded-proto'], this.trustProxy),
+        };
+    }
+
+    // Disconnects a client that names no app or another protocol version than this server's,
+    // except the admin UI, which is only warned about on a mismatch. True if it disconnected.
+    private refuse(client: SocketIoClient): boolean {
+        const { socket } = client;
+        if (!client.app) {
+            this.logError('Websocket connection has no app specified; aborting connection', false);
+            socket.disconnect();
+            return true;
+        }
+
+        // The admin UI is served by this same process and therefore can never be out of step
+        // with it, so it is warned about rather than refused. A version check that can lock
+        // you out of your own console is worse than the mismatch it detects.
+        if (client.version !== PROTOCOL_VERSION) {
+            const rejection = protocolRejection(client.version);
+            if (client.app === COLIBRI_CHANNEL) {
+                this.logWarning(`Admin UI client ${client.id} announced protocol version '${client.version || '(none)'}'; expected v${PROTOCOL_VERSION}`);
+            } else {
+                this.logError(`Refusing client ${client.id} from ${client.name}: ${rejection.reason}`, false, aboutClient(client));
+                socket.emit(COLIBRI_CHANNEL, { command: PROTOCOL_REJECTED_COMMAND, payload: rejection });
+                // Not disconnect(true): forcing the transport shut can truncate the rejection
+                // that was just queued. The unforced form writes the namespace disconnect
+                // behind it on the same transport, so the client sees both, in order.
+                socket.disconnect();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private register(client: SocketIoClient): WebTraffic {
         const traffic: WebTraffic = {
             meter: new TrafficMeter(performance.now()),
             direct: 0,
@@ -413,28 +440,21 @@ export class SocketIOServer extends Service implements NetworkServer {
         this.traffic.set(client.id, traffic);
         this.clients.push(client);
         this.addToAppIndex(client);
-        void socket.join(client.app);
+        void client.socket.join(client.app);
         this.clientConnectedStream.next(client);
         this.clientStream.next(this.clients);
+        return traffic;
+    }
 
-        // Once per client: a client that sends one malformed event usually sends it in a loop.
-        let reportedMalformed = false;
-        const ignoreMalformed = (reason: string): void => {
-            if (reportedMalformed) return;
-            reportedMalformed = true;
-            this.logError(
-                `Ignoring malformed events from client '${client.name}' (${client.id}, app '${client.app}'): ${reason}. Logged once per client.`,
-                false,
-                aboutClient(client)
-            );
-        };
+    private readEvents(client: SocketIoClient, traffic: WebTraffic): void {
+        const ignoreMalformed = this.malformedReporter(client);
 
         // Every client event ends here: `next` is never called, so none reaches Socket.IO's own
-        // listeners. Those are the 'error' and 'disconnect' handlers below, and a client naming
-        // its event 'error' or 'disconnect' would otherwise run them with whatever it sent; a
-        // deeply nested payload on 'error' made the handler's JSON.stringify throw, which ended
-        // the whole server.
-        socket.use(([channel, content]: SocketIoEvent) => {
+        // listeners. Those are the 'error' and 'disconnect' handlers of handleNewClient, and a
+        // client naming its event 'error' or 'disconnect' would otherwise run them with whatever it
+        // sent; a deeply nested payload on 'error' made the handler's JSON.stringify throw, which
+        // ended the whole server.
+        client.socket.use(([channel, content]: SocketIoEvent) => {
             // socket.io-parser takes any JSON value as the event name, e.g. a number sent from
             // plain JavaScript as `sendMessage(roomNumber, ...)`. Every handler expects a string;
             // a number reached ConnectionPool's channel.startsWith and ended the whole server.
@@ -475,16 +495,20 @@ export class SocketIOServer extends Service implements NetworkServer {
                 this.messageStream.next(msg);
             }
         });
+    }
 
-        // Only Socket.IO's own errors get here (see socket.use above). JSON.stringify of an Error
-        // gave '{}'.
-        socket.on('error', (error: unknown) => {
-            this.logError(`Socket.IO error for client ${client.id}: ${errorMessage(error)}`, false, aboutClient(client));
-        });
-
-        socket.on('disconnect', () => {
-            this.handleSocketDisconnect(socket);
-        });
+    // Once per client: a client that sends one malformed event usually sends it in a loop.
+    private malformedReporter(client: SocketIoClient): (reason: string) => void {
+        let reportedMalformed = false;
+        return (reason: string): void => {
+            if (reportedMalformed) return;
+            reportedMalformed = true;
+            this.logError(
+                `Ignoring malformed events from client '${client.name}' (${client.id}, app '${client.app}'): ${reason}. Logged once per client.`,
+                false,
+                aboutClient(client)
+            );
+        };
     }
 
     private handleSocketDisconnect(socket: SocketIoSocket): void {
