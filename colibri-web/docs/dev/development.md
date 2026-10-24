@@ -13,3 +13,5 @@ For developers working on colibri-web itself. Using Colibri: [README](../../READ
 
 `npm run test:e2e` starts a server from `../colibri-server` with Docker Compose on port 9211, unless
 `COLIBRI_E2E_SERVER` names a running server (port: `COLIBRI_E2E_PORT`, default 9211).
+
+Code structure, style and size limits: [conventions.md](conventions.md).
