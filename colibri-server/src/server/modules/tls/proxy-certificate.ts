@@ -240,6 +240,10 @@ export class ProxyCertificateCheck extends Service {
             this.logInfo(`The proxy's TLS certificate at ${name} is trusted now (was refused: ${previousTrust}).`);
         }
 
+        this.reportValidity(name, certificate, validity);
+    }
+
+    private reportValidity(name: string, certificate: ProxyCertificate, validity: Validity): void {
         const renew = 'Renew it at the proxy.';
         switch (validity) {
             case 'expired':
