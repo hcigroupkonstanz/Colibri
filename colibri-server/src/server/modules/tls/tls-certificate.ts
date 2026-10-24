@@ -159,6 +159,11 @@ export class TlsCertificate extends Service implements TlsCredentialSource {
 
         if (this.refused && sameCredentials(found, this.refused)) return;
 
+        this.takeUp(found);
+    }
+
+    // Switches to new contents that two reads in a row have found, unless they cannot be used.
+    private takeUp(found: TlsCredentials): void {
         let info: CertificateInfo;
         try {
             info = checkTlsCredentials(found, this.certPath, this.keyPath);
