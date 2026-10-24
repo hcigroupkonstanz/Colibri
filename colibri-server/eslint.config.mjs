@@ -18,6 +18,37 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
+        files: ['src/**/*.ts'],
+        extends: tseslint.configs.recommendedTypeChecked,
+        rules: {
+            '@typescript-eslint/explicit-member-accessibility': ['error', { accessibility: 'explicit' }],
+        },
+    },
+    {
+        files: ['src/server/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                projectService: true,
+                tsconfigRootDir: import.meta.dirname,
+            },
+        },
+    },
+    {
+        files: ['src/ui/**/*.ts'],
+        ignores: ['src/ui/environments/**'],
+        languageOptions: {
+            parserOptions: {
+                projectService: false,
+                project: ['src/ui/tsconfig.app.json', 'src/ui/tsconfig.spec.json'],
+                tsconfigRootDir: import.meta.dirname,
+            },
+        },
+    },
+    {
+        files: ['src/ui/environments/**'],
+        extends: [tseslint.configs.disableTypeChecked],
+    },
+    {
         plugins: {
             '@angular-eslint': angular,
         },
@@ -64,16 +95,16 @@ export default tseslint.config(
             ],
         },
     },
-    // Size guides from docs/dev/conventions.md. Warnings until the refactor brings the code under them.
+    // Size guides from docs/dev/conventions.md.
     {
         files: ['src/**/*.ts'],
         ignores: ['**/*.spec.ts', 'src/ui/testing/**'],
         rules: {
-            'max-lines': ['warn', { max: 400, skipBlankLines: true, skipComments: true }],
-            'max-lines-per-function': ['warn', { max: 40, skipBlankLines: true, skipComments: true }],
-            'complexity': ['warn', 15],
-            'max-depth': ['warn', 4],
-            'max-params': ['warn', 5],
+            'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
+            'max-lines-per-function': ['error', { max: 40, skipBlankLines: true, skipComments: true }],
+            'complexity': ['error', 15],
+            'max-depth': ['error', 4],
+            'max-params': ['error', 5],
         },
     },
 );
