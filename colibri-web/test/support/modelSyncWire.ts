@@ -9,17 +9,15 @@ export const deliver = (socket: FakeSocket, channel: string, msg: { command: str
     }
 };
 
-// The server's answer to each request a RegisterModelSync sent on 'colibri::reconnect' and that was
-// not answered yet, or to the first `count` of them: one sent after asking again for its own models
-// on a reconnect, after asking for one again, or after asking for every model. The answers to the
-// requests sent before those are all in.
+// The server's answer to the requests RegisterModelSync sent on 'colibri::reconnect' to mark the end
+// of the answers before them: to all that are unanswered, or to the first `count`.
 export const endOfAnswers = (socket: FakeSocket, count = Infinity) => {
     for (const id of socket.endMarkers.splice(0, count)) {
         deliver(socket, 'colibri::reconnect', { command: 'model::update', payload: { id } });
     }
 };
 
-// The id each of those requests asks for, which is new every time.
+// The id of such a request, which is new every time.
 export const endId: unknown = expect.any(String);
 
 // One of those requests, as [command, payload].

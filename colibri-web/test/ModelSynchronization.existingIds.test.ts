@@ -25,15 +25,14 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
 // The server may already have a model under the id registered: another client created it, or this
-// one did before the page was reloaded, while another client kept the app alive. registerModel sent
-// the model in full straight away, and the answer to the request for every model, already on its
-// way, then put the old copy back here only: this client showed the old values while the server and
-// every other client had the new ones.
+// one did before a page reload while another client kept the app alive. What the server has wins;
+// the full model is sent only if it has nothing.
 describe('registering a model whose id the server may already have', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
@@ -47,11 +46,10 @@ describe('registering a model whose id the server may already have', () => {
         }
     };
 
-    /** Everything emitted, as [command, payload], in the order it was. */
     const sentInOrder = () =>
         fakeSocket.emit.mock.calls.map(([, msg]) => [(msg as Message).command, (msg as Message).payload]);
 
-    // Long enough for a change a model reported to have been sent: SyncModel buffers for 1ms.
+    // Longer than SyncModel's 1 ms buffer, so a change has been reported and sent by then.
     const settle = () => new Promise(resolve => setTimeout(resolve, 10));
 
     class Pair extends SyncModel<Pair> {
@@ -104,8 +102,7 @@ describe('registering a model whose id the server may already have', () => {
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['server-a', 'server-b']);
-        // The update taken for the answer may not be it (see 'keeping a change made after
-        // registerModel'): nothing more is sent than the request whose answer comes after it.
+        // The update taken for the answer may not be it, so a request follows whose answer comes after it.
         expect(sentInOrder()).toEqual([['model::request', { id: 'p1' }], endRequest]);
         expect(latest(models$)).toEqual([pair]);
     });
@@ -133,7 +130,7 @@ describe('registering a model whose id the server may already have', () => {
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
-        // Asked for again, to see that the server has it (see the next describe).
+        // Asked for again, to see that the server has the change.
         expect(sentInOrder()).toEqual([
             ['model::request', { id: 'p1' }],
             ['model::update', { id: 'p1', a: 'changed' }],
@@ -198,7 +195,6 @@ describe('registering a model whose id the server may already have', () => {
         expect(sentInOrder()).toEqual([['model::request', { id: 'p1' }]]);
     });
 
-    // Both used to stay listed, and every later update for the id went to the first of them only.
     it('replaces the copy of the id the server told it about, instead of listing the id twice', async () => {
         new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
@@ -251,7 +247,7 @@ describe('registering a model whose id the server may already have', () => {
         await settle();
         expect(latest(other$)).toEqual([]);
 
-        // One another client has is still listed, fields or not.
+        // A model that no registration here owns is listed even when the update is bare.
         deliver(fakeSocket, 'reg-twice', { command: 'model::update', payload: { id: 'theirs' } });
         expect(latest(other$).map(m => m.id)).toEqual(['theirs']);
     });

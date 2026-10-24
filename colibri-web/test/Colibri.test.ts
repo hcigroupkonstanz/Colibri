@@ -32,6 +32,7 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
@@ -49,13 +50,12 @@ describe('Colibri constructor', () => {
         expect(() => new Colibri('app', 'localhost', port)).toThrow('Port out of allowed range (1 - 65535)');
     });
 
-    // NaN fails every range comparison, so it used to sail through and connect to "host:NaN".
+    // NaN fails every range comparison, so only the whole-number check catches it.
     it.each([NaN, 9211.5])('throws a ColibriError for the port %d, which is not a whole number', port => {
         expect(() => new Colibri('app', 'localhost', port)).toThrow(ColibriError);
     });
 
-    // 1.x took a port string such as '9011' from plain JavaScript because its range checks coerced
-    // it; the stricter whole-number check must not turn that into a refusal.
+    // 1.x accepted a port string such as '9011' from plain JavaScript; a digit string still means that port.
     it.each(['9211', ' 9211 '])('accepts the port as the numeric string %j', port => {
         const colibri = new Colibri('app', 'localhost', port as unknown as number);
         expect(colibri.port).toBe(9211);
@@ -74,8 +74,7 @@ describe('Colibri constructor', () => {
         expect(new Colibri('app', 'localhost', 65535).uri).toBe('ws://localhost:65535');
     });
 
-    // Under Node there is no `window` at all, so the default used to be a ReferenceError that
-    // escaped the constructor instead of a ColibriError saying what was missing.
+    // Under Node there is no `window` to take the default server from.
     it('throws a ColibriError, not a ReferenceError, when no server is given outside a browser', () => {
         expect(typeof window).toBe('undefined');
         expect(() => new Colibri('app')).toThrow(ColibriError);
@@ -116,8 +115,7 @@ describe('Colibri constructor', () => {
         expect(c.uriRestApi).toBe('https://example.com:443/api/store/myapp/');
     });
 
-    // http(s):// is what an address bar shows for the same server, and used to be glued behind a
-    // second scheme: 'ws://https://example.com:9011' and 'http://https://example.com:9011'.
+    // http(s):// is what an address bar shows for the same server.
     it.each([
         ['example.com', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
         ['ws://example.com', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
@@ -125,7 +123,7 @@ describe('Colibri constructor', () => {
         ['http://example.com', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
         ['https://example.com', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/'],
         ['HTTPS://example.com', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/'],
-        // A trailing slash, as copied out of an address bar, used to land in front of the port.
+        // A trailing slash, as copied out of an address bar.
         ['example.com/', 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
         ['https://example.com/', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/'],
         ['  wss://example.com//  ', 'wss://example.com:9211', 'https://example.com:9211/api/store/app/']
@@ -146,8 +144,7 @@ describe('Colibri constructor', () => {
         expect(() => new Colibri('app', 'https://', 9211)).toThrow('Server Address missing or empty!');
     });
 
-    // The admin UI's URL is 'http://<server>:9211', and the port in it used to stay part of the
-    // host: 'ws://host:9011:9011', which retried forever without a word.
+    // The admin UI's URL is 'http://<server>:9211', so the address may carry the port.
     it.each([
         ['http://example.com:9211/', 9211, 'ws://example.com:9211', 'http://example.com:9211/api/store/app/'],
         ['ws://example.com:8080', 8080, 'ws://example.com:8080', 'http://example.com:8080/api/store/app/'],
@@ -182,7 +179,7 @@ describe('Colibri constructor', () => {
         expect(() => new Colibri('app', server)).toThrow('Port out of allowed range (1 - 65535)');
     });
 
-    // A path used to land in front of the port: 'wss://example.com/colibri:9011'.
+    // The URLs are host and port only, so a path would land before the port: 'wss://example.com/colibri:9211'.
     it.each([
         'https://example.com/colibri',
         'https://example.com/colibri/',
@@ -254,7 +251,7 @@ describe('Colibri constructor', () => {
     });
 
     // The server takes a client of the app 'colibri' for its own admin UI: it gets the server's log
-    // and every client's connects, and is exempt from the version check. Nothing used to say so.
+    // and every client's connects, and is exempt from the version check.
     it("warns that the app name 'colibri' is reserved for the admin UI", () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -343,8 +340,7 @@ describe('Colibri instance methods delegate to the socket', () => {
 });
 
 describe('wrapper functions', () => {
-    // RegisterChannel, UnregisterChannel and RegisterOnce are covered under "registering before
-    // new Colibri()": they no longer do nothing without an instance.
+    // RegisterChannel, UnregisterChannel and RegisterOnce work without an instance; Colibri.beforeInstance.test.ts covers them.
     it('return undefined when Colibri is not initialized', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 

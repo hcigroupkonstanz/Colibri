@@ -25,14 +25,15 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
 // A connection that dies without closing (Wi-Fi dropping out, say) is noticed by Socket.IO only once
 // its ping timeout has run out, and a change sent until then is lost. The answer to asking for the
-// model again after the reconnect then had the value from before it, and applying it undid the
-// change on this client alone: the server and every other client never saw it.
+// model again after the reconnect then has the value from before the change; applied, it would undo
+// the change on this client alone.
 describe('sending again a change lost in a connection that died', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
@@ -46,19 +47,18 @@ describe('sending again a change lost in a connection that died', () => {
         }
     };
 
-    // What every message from the server goes through, the latency probe that comes every 100 ms
-    // included: it is how the client knows when it last heard from the server.
+    // Any message from the server, such as the 100 ms latency probe, tells the client when it last
+    // heard from it.
     const hearFromServer = () => {
         getAnyHandler(fakeSocket.onAny)('colibri', { command: 'latency', payload: '1' });
     };
 
-    /** Everything emitted on 'own', as [command, payload], in the order it was. */
     const sentInOrder = () =>
         fakeSocket.emit.mock.calls
             .filter(([channel]) => channel === 'own')
             .map(([, msg]) => [(msg as Message).command, (msg as Message).payload]);
 
-    // Long enough for a change a model reported to have been sent: SyncModel buffers for 1ms.
+    // Longer than SyncModel's 1 ms buffer, so a change has been reported and sent by then.
     const settle = () => new Promise(resolve => setTimeout(resolve, 10));
 
     class Pair extends SyncModel<Pair> {
@@ -138,9 +138,9 @@ describe('sending again a change lost in a connection that died', () => {
         expect(pair.a).toBe('A3');
     });
 
-    // A model that changes all the time, a tracked pose say, changed again before every answer: the
-    // changes made meanwhile went out with one more request each time, so the model stayed asked
-    // for, one update a round trip went out, and everything else was never asked for.
+    // A model that changes all the time, a tracked pose say, changes again before every answer.
+    // Asking again once is enough; otherwise it stays asked for and the request for every model
+    // never follows.
     it('asks for every model after asking again once, though the model changed before every answer', async () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
@@ -278,7 +278,7 @@ describe('sending again a change lost in a connection that died', () => {
         await settle();
         clock += 9_000;
         hearFromServer();
-        // The default ping timeout, 25 s and 20 s, before Socket.IO noticed.
+        // Socket.IO's default ping interval and timeout, 25 s and 20 s, pass before it notices.
         clock += 45_000;
         disconnectSocket();
         connectSocket();
@@ -292,8 +292,8 @@ describe('sending again a change lost in a connection that died', () => {
         expect(sentInOrder()[0]).toEqual(['model::update', { id: 'p1', a: 'A2' }]);
     });
 
-    // Only the answer to asking again after a reconnect: an update relayed from another client is
-    // that client's change, made after this one's.
+    // Updates are checked only until the answers to asking again after a reconnect are over: a remote
+    // update after that is another client's change, made after this one's.
     it('applies an update another client made as it comes, whatever value it has', async () => {
         const { pair } = await connectedWithOwnPair();
         pair.a = 'A2';
@@ -307,9 +307,8 @@ describe('sending again a change lost in a connection that died', () => {
         expect(sentInOrder()).toEqual([]);
     });
 
-    // The server relays another client's update to the new connection as it comes, so one made right
-    // after the reconnect arrives ahead of the answer. Taken for the answer, it settled the model:
-    // the field lost was not in it and never checked, and the answer that followed undid the change.
+    // The server relays remote updates to the new connection as they are made, so one can arrive ahead
+    // of the answer. It must not be taken for the answer, or the lost field would never be checked.
     it("checks every update until the answers are over, another client's that comes first included", async () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
@@ -326,8 +325,8 @@ describe('sending again a change lost in a connection that died', () => {
         ]);
     });
 
-    // Nor may such an update end the outage the change is judged from, when the connection dies again
-    // before the answer comes.
+    // A remote update must not end the outage the change is judged from either, if the connection
+    // dies again before the answer comes.
     it("still judges from the earlier outage when another client's update came before the next one", async () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
@@ -361,8 +360,8 @@ describe('sending again a change lost in a connection that died', () => {
     });
 
     // Each RegisterModelSync sends its own request after its re-requests, so the answer to the one
-    // sent first comes ahead of the answers to the next one's re-requests. Taken for the end of those,
-    // it settled the model early, and the answer that came next undid the change.
+    // sent first comes ahead of the answers to the next one's re-requests, and must not be taken for
+    // the end of those.
     it('waits for the end of its own answers when another RegisterModelSync asked again first', async () => {
         new Colibri('app', 'localhost', 9211);
         const [, registerOther] = RegisterModelSync({ name: 'other', type: Pair });
@@ -444,8 +443,8 @@ describe('sending again a change lost in a connection that died', () => {
         ]);
     });
 
-    // The connection died again before the answer to asking again came, long after the change: the
-    // change is still judged from when this client last heard from the server before the first.
+    // The connection dies again before the answer to asking again comes, long after the change; the
+    // change is still judged from when the server was last heard from before the first outage.
     it('sends it again when the connection dies again before the answer comes', async () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
@@ -466,9 +465,9 @@ describe('sending again a change lost in a connection that died', () => {
         ]);
     });
 
-    // The answer came only after a while, and the update sending the change again was lost in a
-    // connection that died soon after: the value that answer had tells, however long before the
-    // change itself was made.
+    // The answer comes only after a while, and the update sending the change again is lost in a
+    // connection that dies soon after. The value that answer had still shows the loss, however long
+    // ago the change was made.
     it('sends it again when the update sending it again is lost long after the change', async () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');

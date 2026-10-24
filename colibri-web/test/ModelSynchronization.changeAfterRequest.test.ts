@@ -25,14 +25,14 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
-// The server answers the request for every model with what it has when it reads that request, and
-// reads a change sent just after it only then. Applied, that answer undid the change on this client
-// alone, for good: the server relays an update to every client but the one that sent it, so the
-// server and every other client had the change while this one showed the old value.
+// The server answers the request for every model with what it had when it read the request, which
+// may predate a change sent just after it. The answer must not undo the change here: the server
+// relays an update to every client but the sender, so nobody would correct this client.
 describe('keeping a change sent just after asking for every model', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
@@ -46,13 +46,12 @@ describe('keeping a change sent just after asking for every model', () => {
         }
     };
 
-    /** Everything emitted on 'own', as [command, payload], in the order it was. */
     const sentInOrder = () =>
         fakeSocket.emit.mock.calls
             .filter(([channel]) => channel === 'own')
             .map(([, msg]) => [(msg as Message).command, (msg as Message).payload]);
 
-    // Long enough for a change a model reported to have been sent: SyncModel buffers for 1ms.
+    // Longer than SyncModel's 1 ms buffer, so a change has been reported and sent by then.
     const settle = () => new Promise(resolve => setTimeout(resolve, 10));
 
     class Pair extends SyncModel<Pair> {
@@ -218,8 +217,8 @@ describe('keeping a change sent just after asking for every model', () => {
         expect([theirs.a, theirs.b]).toEqual(['A2', 'B2']);
     });
 
-    // SyncModel reports a change 1 ms after it is made. An update that came in between was applied
-    // over it, and the report sent that update's value in its place.
+    // SyncModel reports a change 1 ms after it is made; a remote update that comes in between must
+    // not be applied over it.
     it('keeps a change to a model another client made when an update for it comes before it is sent', async () => {
         new Colibri('app', 'localhost', 9211);
         const [models$] = RegisterModelSync({ name: 'own', type: Pair });

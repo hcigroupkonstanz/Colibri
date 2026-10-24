@@ -23,12 +23,13 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
-// Socket.IO retries a connection that fails, for as long as it takes, and a wrong address or a
-// server that is down used to look like nothing more than a slow connection.
+// Socket.IO retries a failed connection silently, so a wrong address or a server that is down
+// looks like a slow connection.
 describe('reporting a server that cannot be reached', () => {
     const fire = (event: string, ...args: unknown[]) => {
         for (const [e, handler] of fakeSocket.on.mock.calls) {
@@ -192,8 +193,6 @@ describe('detecting a server that predates the version check', () => {
     const TIMEOUT_MS = 5000;
 
     // Mirrors socket.io: onAny sees every event, and a channel handler sees its own channel.
-    // Both matter here - the message stream runs through onAny, but only the colibri channel
-    // handler clears the timer.
     const deliver = (channel: string, msg: { command: string; payload?: unknown }) => {
         getAnyHandler(fakeSocket.onAny)(channel, msg);
         const channelCall = fakeSocket.on.mock.calls.find(([event]) => event === channel);
@@ -225,10 +224,10 @@ describe('detecting a server that predates the version check', () => {
 
         const error = await mismatch;
         expect(error).toBeInstanceOf(ProtocolMismatchError);
-        // A protocol version on both paths, so the two are comparable - not a release range.
+        // Both are protocol versions, so they are comparable; not a release range.
         expect(error.serverVersion).toBe('1');
         expect(error.clientVersion).toBe(PROTOCOL_VERSION);
-        // The Socket.IO envelope did not change between v1 and v2, so this connection works.
+        // The Socket.IO envelope is the same in v1 and v2, so the connection works.
         // Reporting it as fatal, or hanging up, would turn a warning into an outage.
         expect(error.fatal).toBe(false);
         expect(fakeSocket.disconnect).not.toHaveBeenCalled();
@@ -241,7 +240,7 @@ describe('detecting a server that predates the version check', () => {
         client.protocolMismatch.subscribe(e => seen.push(e));
 
         connectSocket();
-        // Late, but inside the window - a loaded server is not an old one.
+        // Late, but inside the window: a loaded server is not an old one.
         vi.advanceTimersByTime(TIMEOUT_MS - 100);
         deliver('colibri', { command: 'protocol::accepted', payload: { serverVersion: PROTOCOL_VERSION } });
         vi.advanceTimersByTime(TIMEOUT_MS * 2);
@@ -249,10 +248,8 @@ describe('detecting a server that predates the version check', () => {
         expect(seen).toEqual([]);
     });
 
-    // The signal has to be the server naming itself, not any traffic that happens to look like a
-    // current server. colibri-server 1.2.0 added the 100 ms `latency` broadcast while still
-    // speaking the old protocol, so keying on that silently accepts every 1.2.x and 1.3.x server
-    // as current - confirmed against the published 1.1.1 and 1.3.1 images.
+    // 1.2.x and 1.3.x servers send the 100 ms `latency` broadcast but speak protocol v1, so it
+    // does not show a current server.
     it('still reports an old server that sends the latency broadcast', async () => {
         const client = new Colibri('app', 'localhost', 9211);
         const mismatch = firstValueFrom(client.protocolMismatch);
@@ -267,8 +264,8 @@ describe('detecting a server that predates the version check', () => {
         await expect(mismatch).resolves.toBeInstanceOf(ProtocolMismatchError);
     });
 
-    // A pre-2.0.0 server relays broadcasts and model updates perfectly well, so if ordinary
-    // traffic cleared the timer the check would never fire against a busy one.
+    // A pre-2.0.0 server relays broadcasts and model updates too, so ordinary traffic must not
+    // clear the timer.
     it('still reports a busy old server that is relaying traffic', async () => {
         const client = new Colibri('app', 'localhost', 9211);
         const mismatch = firstValueFrom(client.protocolMismatch);
@@ -339,8 +336,8 @@ describe('detecting a server that predates the version check', () => {
         expect(seen).toEqual([]);
     });
 
-    // A frozen tab stops draining the socket while timers keep their own schedule, so beats can
-    // still be queued when this fires. Waiting another window costs nothing.
+    // A hidden tab may not have drained the socket yet, so the announcement can still be queued
+    // when the timer fires.
     it('waits another window instead of reporting while the tab is hidden', () => {
         vi.stubGlobal('document', { visibilityState: 'hidden' });
         const client = new Colibri('app', 'localhost', 9211);

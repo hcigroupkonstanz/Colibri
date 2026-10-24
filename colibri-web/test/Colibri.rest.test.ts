@@ -42,9 +42,7 @@ describe('Colibri.getRestUri', () => {
         expect(c.getRestUri('   ')).toBeNull();
     });
 
-    // The key is one path segment. Written in unencoded, '#' and '?' cut it short - 'a#b' and
-    // 'a?b' were both stored as 'a', over each other - '/' made a path no route matched, and '%'
-    // a URL the server answered 400 for.
+    // The key is one path segment, so '#', '?', '/' and '%' have to be escaped.
     it.each([
         ['a b', 'a%20b'],
         ['a#b', 'a%23b'],
@@ -60,8 +58,7 @@ describe('Colibri.getRestUri', () => {
         expect(c.getRestUri(key)).toBe(`http://localhost:9211/api/store/app/${segment}`);
     });
 
-    // A URL parser resolves '.' and '..' - encoded or not - as directory steps, so '..' used to
-    // GET the server's list of apps instead of a value. No URL can name them as a key.
+    // A URL parser resolves '.' and '..', encoded or not, as directory steps, so no URL can name them as a key.
     it.each(['.', '..', ' .. ', '/..'])('returns null for the key %j, which a URL cannot carry', key => {
         const c = new Colibri('app', 'localhost', 9211);
         expect(c.getRestUri(key)).toBeNull();
@@ -183,8 +180,7 @@ describe('Colibri REST API', () => {
         await expect(c.deleteRestObject('mykey')).resolves.toBe(false);
     });
 
-    // What the JSDoc promises: a server that cannot be reached is not a null or a false, it is a
-    // rejection, exactly as fetch gives it.
+    // As documented on the methods: an unreachable server rejects with fetch's own error, not null or false.
     it('getRestObject, setRestObject and deleteRestObject reject when the server cannot be reached', async () => {
         const c = new Colibri('app', 'localhost', 9211);
         const networkError = new TypeError('fetch failed');

@@ -26,13 +26,13 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
-// SyncModel's own update(), toJson() and detach() are used, whatever a model class has under those
-// names: an update() of its own, to move the model each frame say, took over how other clients'
-// changes were applied, and none of them arrived.
+// SyncModel's own update(), toJson() and detach() are used whatever a model class defines under
+// those names, an update() that moves the model each frame say.
 describe("a model class with methods named like SyncModel's", () => {
     class Mover extends SyncModel<Mover> {
         @Synced() accessor x = 0;
@@ -75,8 +75,7 @@ describe("a model class with methods named like SyncModel's", () => {
     });
 });
 
-// A change of a model another client created made the list emit, one of this client's own did not,
-// so a page rendering the list never showed it.
+// The list emits on a change of an own model too, as a page rendering it has to show the change.
 describe('the list of models', () => {
     it('emits when this client changes one of its own models', async () => {
         new Colibri('app', 'localhost', 9211);

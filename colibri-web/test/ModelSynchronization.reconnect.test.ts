@@ -26,12 +26,13 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
-// The server relays model updates, it does not replay them, so one relayed while this client was
-// disconnected is simply gone for it - and it used to stay stale until that model changed again.
+// The server relays model updates without replaying them, so one relayed while this client was
+// disconnected is gone for it.
 describe('catching up on models after a reconnect', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
@@ -39,7 +40,7 @@ describe('catching up on models after a reconnect', () => {
         }
     };
 
-    // Leaving out the one on 'colibri::reconnect' that follows each (see endOfAnswers).
+    // Without the requests on 'colibri::reconnect', which only mark the end of other answers.
     const requested = () =>
         fakeSocket.emit.mock.calls
             .filter(
@@ -111,9 +112,8 @@ describe('catching up on models after a reconnect', () => {
     });
 });
 
-// The server forgets every model of an app when the app's last client leaves, and when it restarts.
-// A model this client had registered itself was never sent again after that, so a client joining
-// later never saw it.
+// The server forgets every model of an app when the app's last client leaves, and when it restarts,
+// so own models are asked for again after a reconnect and sent in full if it has nothing.
 describe('sending its own models again after a reconnect', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
@@ -121,13 +121,12 @@ describe('sending its own models again after a reconnect', () => {
         }
     };
 
-    /** Everything emitted with `command`, as [channel, payload]. */
     const sent = (command: string) =>
         fakeSocket.emit.mock.calls
             .filter(([, msg]) => (msg as Message).command === command)
             .map(([channel, msg]) => [channel, (msg as Message).payload]);
 
-    // Long enough for a change a model reported to have been sent: SyncModel buffers for 1ms.
+    // Longer than SyncModel's 1 ms buffer, so a change has been reported and sent by then.
     const settle = () => new Promise(resolve => setTimeout(resolve, 10));
 
     let debugSpy: ReturnType<typeof vi.spyOn>;
@@ -184,7 +183,7 @@ describe('sending its own models again after a reconnect', () => {
     });
 
     // Asked for again, the server would answer model::delete for an id another client deleted a
-    // moment ago - but this client has the model now, and has never had an answer for it.
+    // moment ago, but this client has the model now and has never had an answer for it.
     it('asks afresh after a reconnect for an own model the server has not answered for yet', async () => {
         new Colibri('app', 'localhost', 9211);
         const [, registerModel] = RegisterModelSync({ name: 'own', type: Widget });
@@ -320,7 +319,6 @@ describe('sending its own models again after a reconnect', () => {
         }
     };
 
-    /** Everything emitted, as [command, payload], in the order it was. */
     const sentInOrder = () =>
         fakeSocket.emit.mock.calls.map(([, msg]) => [(msg as Message).command, (msg as Message).payload]);
 
@@ -362,8 +360,8 @@ describe('sending its own models again after a reconnect', () => {
     });
 
     // Socket.IO buffers what is sent while disconnected and sends it on the reconnect, ahead of the
-    // request for the model. A server that had forgotten the model kept that one change as all of
-    // it, answered with it rather than a bare id, and the rest was never sent again.
+    // request for the model. A server that had forgotten the model would keep that one change as all
+    // of it and answer with it rather than a bare id.
     it('holds back a change made while disconnected, and sends it with the rest when the server forgot the model', async () => {
         const { pair } = disconnectedWithOwnPair();
 
@@ -416,8 +414,8 @@ describe('sending its own models again after a reconnect', () => {
         expect(sent('model::update')).toEqual([['own', { id: 'p1', b: 'B3' }]]);
     });
 
-    // Sent at once, it would reach the server after the request, whose answer - without it - would
-    // then undo it here.
+    // Sent at once, it would reach the server after the request, whose answer, without it, would
+    // undo it here.
     it('holds back a change made after the reconnect until the answer has come', async () => {
         const { pair } = disconnectedWithOwnPair();
         connectSocket();

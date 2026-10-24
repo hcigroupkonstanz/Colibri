@@ -26,12 +26,13 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
 // delete() deletes a model for every client, as destroying a SyncBehaviour does in Unity: the
-// server removes it and tells every other client. It used to only stop this client syncing it.
+// server removes it and tells every other client.
 describe('deleting a model for every client', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
@@ -39,13 +40,12 @@ describe('deleting a model for every client', () => {
         }
     };
 
-    /** Everything emitted with `command`, as [channel, payload]. */
     const sent = (command: string) =>
         fakeSocket.emit.mock.calls
             .filter(([, msg]) => (msg as Message).command === command)
             .map(([channel, msg]) => [channel, (msg as Message).payload]);
 
-    // Long enough for a change a model reported to have been sent: SyncModel buffers for 1ms.
+    // Longer than SyncModel's 1 ms buffer, so a change has been reported and sent by then.
     const settle = () => new Promise(resolve => setTimeout(resolve, 10));
 
     let debugSpy: ReturnType<typeof vi.spyOn>;
@@ -87,6 +87,8 @@ describe('deleting a model for every client', () => {
 
     it('deletes a model another client created', () => {
         new Colibri('app', 'localhost', 9211);
+        // Own channel: registrations stay in module state for the file, and this test's setTimeout(0)
+        // catch-up fires after it ends. On 'del' it would keep a field of the next test's registration out.
         const [models$] = RegisterModelSync({ name: 'del-theirs', type: Widget });
         connectSocket();
         deliver(fakeSocket, 'del-theirs', { command: 'model::update', payload: { id: 'r1', label: 'theirs' } });
@@ -137,7 +139,7 @@ describe('deleting a model for every client', () => {
         expect(latest(models$).map(m => m.id)).toEqual(['r2']);
     });
 
-    // Relayed before the server had the delete, another client's update comes after it.
+    // A remote update relayed before the server had the delete can still arrive after it.
     it('does not list a model it deleted again from an update in the next 60 s', async () => {
         vi.useFakeTimers({ toFake: ['Date'] });
         const { models$ } = await connectedWithOwnWidget();
@@ -166,8 +168,8 @@ describe('deleting a model for every client', () => {
         expect(latest(models$)).toEqual([again]);
     });
 
-    // A change still buffered goes out before the delete, never after it: with
-    // MODEL_TOMBSTONE_SECONDS=0 that update created the object again on every client.
+    // A change still buffered goes out before the delete: sent after it, with
+    // MODEL_TOMBSTONE_SECONDS=0, it would create the object again on every client.
     it('sends a change made just before delete() ahead of the delete', async () => {
         const { widget } = await connectedWithOwnWidget();
 
@@ -214,9 +216,8 @@ describe('deleting a model for every client', () => {
         expect(sent('model::delete')).toEqual([['del', { id: 'w1' }]]);
     });
 
-    // An update another client sent before the server had the delete still comes after it. Taken
-    // for the answer to registering the id again, it settled the new object with the deleted
-    // one's values, and the new object was never sent.
+    // A remote update relayed before the server had the delete can still arrive after it, and must
+    // not be taken for the answer to registering the id again.
     it('sends a model registered again with the id it deleted in full, and drops updates until the answer', async () => {
         const { models$, registerModel, widget } = await connectedWithOwnWidget();
         widget.delete();
@@ -227,7 +228,7 @@ describe('deleting a model for every client', () => {
         registerModel(again);
         deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'stale' } });
         deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1' } });
-        // What it sends is kept out of updates until the answers asked before are over.
+        // The fields it sent are kept out of updates until the answers asked before are over.
         endOfAnswers(fakeSocket);
         deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'from another client' } });
 

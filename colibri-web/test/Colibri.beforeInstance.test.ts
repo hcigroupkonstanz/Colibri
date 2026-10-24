@@ -29,9 +29,8 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-// Registering first and constructing Colibri second is the natural order for module-level code
-// (`const [players$] = RegisterModelSync(...)` at the top of a file), and it used to leave every
-// one of those registrations listening to nothing, silently.
+// Registering first and constructing Colibri second is the natural order for module-level code,
+// e.g. `const [players$] = RegisterModelSync(...)` at the top of a file.
 describe('registering before new Colibri()', () => {
     let warnSpy: ReturnType<typeof vi.spyOn>;
 
@@ -54,7 +53,7 @@ describe('registering before new Colibri()', () => {
 
         expect(fakeSocket.on).toHaveBeenCalledWith('early', handler);
         expect(fakeSocket.once).toHaveBeenCalledWith('early-once', onceHandler);
-        // Registering early is supported now, so it is no longer worth a warning.
+        // Registering early is supported, so there is nothing to warn about.
         expect(warnSpy).not.toHaveBeenCalled();
     });
 

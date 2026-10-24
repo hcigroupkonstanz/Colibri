@@ -25,16 +25,15 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    // Otherwise an earlier instance's 5 s old-server timer would warn during a later test.
     fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
 // A change made after registerModel, before the server has answered for the model, is held back and
-// sent on top of what the server has. The update taken for the answer need not be the answer,
-// though: the answer to the request for every model carries the id too, and so does an update
-// another client made. The real answer then came after the change was sent, without it, and undid
-// it on this client only: it showed the old value while the server and every other client had the
-// new one.
+// sent on top of what the server has. The update taken for the answer need not be the answer: the
+// answer to the request for every model carries the id too, and so can a remote update. The real
+// answer, made before the server had the change, would then undo it on this client only.
 describe('keeping a change made after registerModel', () => {
     const connectSocket = () => {
         for (const [event, handler] of fakeSocket.on.mock.calls) {
@@ -48,17 +47,16 @@ describe('keeping a change made after registerModel', () => {
         }
     };
 
-    /** Everything emitted, as [command, payload], in the order it was. */
     const sentInOrder = () =>
         fakeSocket.emit.mock.calls.map(([, msg]) => [(msg as Message).command, (msg as Message).payload]);
 
-    /** The same, without the requests on 'colibri::reconnect' (see endOfAnswers). */
+    /** Like sentInOrder, without the requests on 'colibri::reconnect'. */
     const sentOnChannel = () =>
         fakeSocket.emit.mock.calls
             .filter(([channel]) => channel !== 'colibri::reconnect')
             .map(([, msg]) => [(msg as Message).command, (msg as Message).payload]);
 
-    // Long enough for a change a model reported to have been sent: SyncModel buffers for 1ms.
+    // Longer than SyncModel's 1 ms buffer, so a change has been reported and sent by then.
     const settle = () => new Promise(resolve => setTimeout(resolve, 10));
 
     class Pair extends SyncModel<Pair> {
@@ -120,8 +118,8 @@ describe('keeping a change made after registerModel', () => {
         expect([pair.a, pair.b]).toEqual(['changed', 'changed too']);
     });
 
-    // SyncModel reports a change 1 ms after it is made. Decided then, the change was not held, the
-    // answer was applied over it, and the report sent the server's old value to every client.
+    // Whether to hold a change is decided when it is made, not when SyncModel reports it 1 ms later:
+    // an answer arriving in between would be applied over it.
     it('keeps it when the answer comes before SyncModel reports the change', async () => {
         const { pair } = await registeredLate();
         pair.a = 'changed';
@@ -143,11 +141,11 @@ describe('keeping a change made after registerModel', () => {
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
     });
 
-    // With nothing held when the update taken for the answer came, a change made after it went out at
-    // once, and the answer, made before the server had the change, undid it here only.
+    // A remote update arrives first and is taken for the answer, so a change made after it goes out at
+    // once. The real answer, made before the server had the change, must not undo it.
     it("keeps a change made after another client's update came first, and the answer after it", async () => {
         const { pair } = await registeredLate();
-        // The end of the answers to the request for every model, then another client's update.
+        // The end of the answers to the request for every model, then a remote update.
         endOfAnswers(fakeSocket);
         deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
         pair.a = 'changed';
@@ -167,8 +165,8 @@ describe('keeping a change made after registerModel', () => {
         expect(pair.a).toBe('theirs too');
     });
 
-    // SyncModel reports a change 1 ms after it is made. The answer that came in between was applied
-    // over it, and the report sent the server's old value in its place, to every client.
+    // SyncModel reports a change 1 ms after it is made; an answer that comes in between must not be
+    // applied over it.
     it("keeps a change made after another client's update came first, when the answer comes before it is sent", async () => {
         const { pair } = await registeredLate();
         endOfAnswers(fakeSocket);
@@ -185,8 +183,8 @@ describe('keeping a change made after registerModel', () => {
         ]);
     });
 
-    // The server read the request for the id after the delete, so its answer is the bare id, which
-    // was listed as a model with no fields that no other client has.
+    // The server read the request for the id after the delete, so its answer is a bare id, which must
+    // not be listed as a model.
     it("does not list the bare answer that comes after another client's update and delete", async () => {
         const { models$ } = await registeredLate('reg-deleted');
         endOfAnswers(fakeSocket);
@@ -222,7 +220,7 @@ describe('keeping a change made after registerModel', () => {
         const { pair } = await registeredLate();
         endOfAnswers(fakeSocket);
         pair.a = 'server-a';
-        // Another client's update.
+        // A remote update.
         deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a' } });
         await settle();
         pair.a = 'changed';
@@ -237,8 +235,8 @@ describe('keeping a change made after registerModel', () => {
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
     });
 
-    // A field sent before that request is kept out only until the answer to the request after asking
-    // for every model: what another client sets once the server has it comes after that answer.
+    // A field is kept out of updates only until the answer to the last 'colibri::reconnect' request
+    // pending when it was sent; longer would drop another client's later change to it.
     it('takes what another client sets after a field sent before it, once the server has that', async () => {
         new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
@@ -315,7 +313,7 @@ describe('keeping a change made after registerModel', () => {
         await settle();
 
         // The answer to the request for the id, made before the server had the change, then the one to
-        // asking again, and another client's change, relayed.
+        // asking again, and a remote update.
         deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'mine' } });
         deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'theirs' } });
@@ -366,10 +364,9 @@ describe('keeping a change made after registerModel', () => {
         ]);
     });
 
-    // A model that changes all the time from the start, a tracked pose say, changed again before
-    // every answer: the changes made meanwhile went out with one more request each time, so the
-    // model stayed asked for, one update a round trip went out, and everything else was never asked
-    // for.
+    // A model that changes all the time, a tracked pose say, changes again before every answer.
+    // Asking again once is enough; otherwise it stays asked for and the request for every model
+    // never follows.
     it('asks for every model after asking again once, though the model changed before every answer', async () => {
         new Colibri('app', 'localhost', 9211);
         connectSocket();
@@ -398,8 +395,8 @@ describe('keeping a change made after registerModel', () => {
         ]);
     });
 
-    // Two updates from another client that changes the model all the time too came before the answer
-    // to asking again, and the second was taken for it: the same again, every round trip.
+    // Remote updates from a client that changes the model all the time arrive ahead of the answer to
+    // asking again, and must not be taken for it.
     it('sends every change after asking again once, while another client changes the model all the time', async () => {
         const { pair } = await registeredLate();
         pair.a = 'a1';
@@ -426,8 +423,7 @@ describe('keeping a change made after registerModel', () => {
     });
 
     // The server holds back the updates of a client over its limit (CLIENT_MESSAGE_RATE_LIMIT), but
-    // never a request, so the answer to asking again may come without the change. Taken for the
-    // answer, it undid the change here, while the server had it once it handled the update.
+    // never a request, so the answer to asking again may come without the change. It is sent again.
     it('sends the change again when the answers are over without it, with what it held since', async () => {
         const { pair } = await registeredLate();
         pair.a = 'mine';
@@ -450,9 +446,9 @@ describe('keeping a change made after registerModel', () => {
         expect(sentInOrder()).toEqual([['model::update', { id: 'p1', b: 'now' }]]);
     });
 
-    // Sent while the connection was down, a change goes into Socket.IO's buffer, which sends it on
-    // the reconnect ahead of asking for the model again: a server that had forgotten the model took
-    // that one change for all of it, and the rest was never sent.
+    // A change sent while disconnected waits in Socket.IO's buffer and goes out on the reconnect ahead
+    // of the request for the model; a server that had forgotten the model would take that one change
+    // for all of it.
     it('holds a change made while disconnected as it asks again, and sends it all after the reconnect', async () => {
         const { pair } = await registeredLate();
         pair.a = 'mine';

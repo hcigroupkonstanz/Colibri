@@ -4,8 +4,7 @@ import type { Message } from '../../src/Colibri';
 type SocketHandler = (...args: unknown[]) => void;
 
 export function makeFakeSocket() {
-    // The ids asked for on 'colibri::reconnect', kept apart from emit's calls, which a test may
-    // clear: see endOfAnswers.
+    // The ids requested on 'colibri::reconnect', kept apart from emit's calls, which a test may clear.
     const endMarkers: string[] = [];
     return {
         on: vi.fn<(event: string, cb: SocketHandler) => void>(),
@@ -17,14 +16,11 @@ export function makeFakeSocket() {
         }),
         endMarkers,
         disconnect: vi.fn<() => void>(),
-        // Read when the old-server timer expires: a socket that is already down explains the
-        // silence by itself, so the check must not fire on it.
+        // Read when the old-server timer expires; a socket that is down explains the silence by itself.
         connected: true,
-        // Whether Socket.IO will retry after a failed connection attempt, which it does unless
-        // told not to.
+        // Whether Socket.IO retries after a failed connection attempt.
         active: true,
-        // The Manager, which is what actually owns the retry policy - a protocol rejection
-        // has to switch it off there, not on the socket.
+        // The Manager owns the retry policy; a protocol rejection has to switch it off there.
         io: { reconnection: vi.fn<(on: boolean) => void>() }
     };
 }

@@ -20,17 +20,13 @@ let registerChannel: Mock<(channel: string, handler: (payload: Message) => void)
 let unregisterChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
 
 beforeEach(async () => {
-    // Broadcasting.ts keeps a module-level `listeners` registry that must not
-    // leak between tests, so force a fresh module (and a fresh Colibri mock)
-    // on every run.
+    // broadcastListeners.ts keeps a module-level registry, so import fresh modules for every test.
     vi.resetModules();
     const colibri = await import('../src/Colibri');
     sendMessage = colibri.SendMessage as unknown as Mock;
     registerChannel = colibri.RegisterChannel as unknown as Mock;
     unregisterChannel = colibri.UnregisterChannel as unknown as Mock;
-    // vi.mock's factory result is cached across resetModules(), so the mock
-    // functions themselves persist between tests - clear their call history
-    // explicitly rather than relying on a fresh instance.
+    // The vi.mock factory result survives resetModules(), so the mocks keep their calls.
     sendMessage.mockClear();
     registerChannel.mockClear();
     unregisterChannel.mockClear();
@@ -139,8 +135,8 @@ describe('Sync receivers', () => {
         expect(cb).not.toHaveBeenCalled();
     });
 
-    // colibri-unity sends "#RRGGBBAA", colibri-web sends [r,g,b,a], and both reach the same
-    // callback - so receiveColor has to hand over whichever arrived rather than declaring one.
+    // colibri-unity sends "#RRGGBBAA", colibri-web [r,g,b,a]; both reach the same callback,
+    // so receiveColor passes on whichever arrived.
     it.each([
         ['a Unity peer', '#ff0000ff'],
         ['a colibri-web peer', [1, 0, 0, 1]]
@@ -265,14 +261,13 @@ describe('Sync receivers', () => {
 
 describe('colour normalization', () => {
     it.each([
-        // The four forms Unity's ColorUtility.TryParseHtmlString accepts, so anything a Unity
-        // client can put on the wire has to come back as a colour here.
+        // The four forms Unity's ColorUtility.TryParseHtmlString accepts; a Unity client may send any of them.
         ['#f00', [1, 0, 0, 1]],
         ['#f00f', [1, 0, 0, 1]],
         ['#ff0000', [1, 0, 0, 1]],
         ['#ff0000ff', [1, 0, 0, 1]],
         ['#00ff0080', [0, 1, 0, 128 / 255]],
-        // Unprefixed, which is what a hand-written payload tends to look like.
+        // Unprefixed, as in a hand-written payload.
         ['ff0000', [1, 0, 0, 1]]
     ] as const)('toRgbaColor reads %s as an [r,g,b,a]', (hex, expected) => {
         expect(toRgbaColor(hex)).toEqual(expected);
@@ -289,8 +284,7 @@ describe('colour normalization', () => {
 
     it('toHexColor renders both forms as #RRGGBBAA', () => {
         expect(toHexColor([1, 0, 0, 1])).toBe('#ff0000ff');
-        // Shorthand and RGB-only strings are normalized rather than passed through, so a caller
-        // can rely on the result always being 9 characters.
+        // Shorthand and RGB-only strings are normalized, so the result is always 9 characters.
         expect(toHexColor('#f00')).toBe('#ff0000ff');
         expect(toHexColor('#ff0000')).toBe('#ff0000ff');
     });
