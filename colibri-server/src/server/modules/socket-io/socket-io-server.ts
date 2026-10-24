@@ -45,11 +45,10 @@ export interface SocketIoServerOptions {
     trustProxy?: TrustProxy;
 }
 
-// The largest packet a web client may send. engine.io's default is 1e6 bytes, past which the
-// client is disconnected outright - while a TCP client may send frames of up to MAX_FRAME_LENGTH
-// (5 MiB), so a web client was cut off for sending a fifth of what a Unity client can. This fits a
-// MAX_FRAME_LENGTH payload plus the Socket.IO envelope around it: the event name (the channel)
-// and the command, each at most MAX_FIELD_LENGTH as on TCP, and some JSON punctuation.
+// The largest packet a web client may send. engine.io disconnects a client whose packet is over
+// maxHttpBufferSize (1e6 bytes by default), while a TCP frame can be MAX_FRAME_LENGTH. This fits such a
+// payload plus the Socket.IO envelope: the event name (the channel) and the command, each at most
+// MAX_FIELD_LENGTH as on TCP, and some JSON punctuation.
 const MAX_SOCKET_IO_PACKET_BYTES = MAX_FRAME_LENGTH + 2 * MAX_FIELD_LENGTH + 1024;
 
 export interface SocketIoClient extends NetworkClient {
@@ -67,10 +66,9 @@ export class SocketIOServer extends Service implements NetworkServer {
     private ioServer!: SocketIoServer;
 
     private readonly clients: SocketIoClient[] = [];
-    // Mirrors the Socket.IO room membership we join below, so broadcastToApp can answer
-    // "does this app have any recipient at all?" without touching the adapter or the
-    // payload. Ids rather than a plain count, so the very common "the only member of this
-    // app is the client the message came from" case can early-out too.
+    // Mirrors the Socket.IO room membership, so broadcastToApp can tell whether an app has a
+    // recipient without touching the adapter or the payload. Ids rather than a count, so that a
+    // message from the app's only member can early-out too.
     private readonly clientIdsByApp = new AppIndex<string>();
     private readonly clientsById = new Map<string, SocketIoClient>();
     private readonly clientStream = new Subject<SocketIoClient[]>();
@@ -86,8 +84,8 @@ export class SocketIOServer extends Service implements NetworkServer {
     private rateLimitSweep: NodeJS.Timeout | undefined;
     private trustProxy: TrustProxy = trustNoProxy;
 
-    // See WebTraffic. Messages on the 'colibri' channel itself, the latency pings and their echoes
-    // and the protocol messages, are not counted, as heartbeats are not on TCP.
+    // See WebTraffic. Messages on the 'colibri' channel (latency pings and their echoes, protocol
+    // messages) are not counted, as heartbeats are not on TCP.
     private readonly trafficCounter = new WebTrafficCounter({
         isInApp: (app, clientId) => this.clientIdsByApp.get(app)?.has(clientId) ?? false,
     });
@@ -114,12 +112,13 @@ export class SocketIOServer extends Service implements NetworkServer {
         this.clientStream.next(this.clients);
     }
 
-    // Tolerates never having been started - a signal (or a crash) arriving while startup()
-    // is still running must not throw here and skip the shutdown steps behind it.
+    // Tolerates never having been started: a signal during startup() must not throw here and skip
+    // the shutdown steps behind it.
     public stop(): void {
         clearInterval(this.rateLimitSweep);
         if (!this.ioServer) return;
 
+        // Not awaited, so stop() stays synchronous; the promise only reports the HTTP server closing.
         void this.ioServer.close();
         this.logInfo('Stopped SocketIO server');
     }
@@ -129,9 +128,8 @@ export class SocketIOServer extends Service implements NetworkServer {
         this.trafficCounter.sample(this.clients, now);
     }
 
-    // What the admin UI's client view shows of a web client's traffic, with `history` its rate
-    // history too. A web client has only the rate limit: there is no queue to the main thread to
-    // fall behind on.
+    // What the admin UI's client view shows of a web client's traffic, with its rate history if
+    // `history`. The limit is only ever 'rate': there is no queue to the main thread to fall behind on.
     public activityOf(client: SocketIoClient, history = false): ClientActivity {
         const meter = this.trafficCounter.meterOf(client.id);
         const held = this.inboundGate.heldSize(client);
@@ -160,8 +158,8 @@ export class SocketIOServer extends Service implements NetworkServer {
         return this.clients;
     }
 
-    // O(1) alternative to scanning currentClients, for hooks that hold a NetworkClient (or
-    // just an id) and need the concrete client back to send to it.
+    // O(1) alternative to scanning currentClients, for hooks that hold a NetworkClient or an id and
+    // need the SocketIoClient to send to.
     public getClient(id: string): SocketIoClient | undefined {
         return this.clientsById.get(id);
     }
@@ -187,9 +185,8 @@ export class SocketIOServer extends Service implements NetworkServer {
     // Every client of an app shares a Socket.IO room named after that app, so this
     // encodes the packet once for the whole room instead of once per recipient.
     public broadcastToApp(msg: NetworkMessage, app: string, exceptClientId?: string): void {
-        // Checked before resolvePayload(), which for a TCP-origin payload is a full
-        // JSON.parse: a TCP-only deployment would otherwise pay a parse plus an adapter
-        // encode per model::update with no web client to receive any of it.
+        // Before resolvePayload(), which JSON-parses a TCP-origin payload: a TCP-only deployment
+        // would otherwise pay that per model::update with no web client to receive it.
         if (!this.hasRecipients(app, exceptClientId)) return;
 
         const payload = this.resolvePayload(msg);
@@ -207,10 +204,8 @@ export class SocketIOServer extends Service implements NetworkServer {
     }
 
     private resolvePayload(msg: NetworkMessage): unknown {
-        // Cross-transport (TCP-origin) payloads are only guaranteed to be a wire string;
-        // fall back to the raw string if it doesn't happen to be valid JSON. Web-origin
-        // payloads already have a resolved value here, so this costs nothing for the
-        // common web-to-web relay case.
+        // A TCP-origin payload is only guaranteed to be a wire string, so fall back to it if it is
+        // not valid JSON. A web-origin payload already holds its value, so web-to-web costs nothing.
         try {
             return msg.payload?.asValue();
         } catch {
@@ -224,8 +219,7 @@ export class SocketIOServer extends Service implements NetworkServer {
         if (this.refuse(client)) return;
 
         if (client.app !== ADMIN_APP) { // ignore colibri web interface clients
-            // One line: a Socket.IO client names its app as it connects, unlike a TCP client, so
-            // "waiting for app name" followed by the app, as the TCP server logs it, was noise.
+            // One line: a Socket.IO client names its app as it connects, unlike a TCP client.
             const through = client.name === peer ? '' : ` through ${peer}`;
             this.logDebug(
                 `New client '${client.name}' (${client.id}, v${client.version}) connected to app "${client.app}" from ${client.name}${through}`,
@@ -233,16 +227,14 @@ export class SocketIOServer extends Service implements NetworkServer {
             );
         }
 
-        // Announced to everyone that got this far, before any application traffic. A client
-        // waiting for this is how it tells a current server from one predating the version
-        // check, which cannot announce itself - see protocolAcceptance.
+        // Before any application traffic. A client tells a current server from one predating the
+        // version check by waiting for this (see protocolAcceptance).
         socket.emit(COLIBRI_CHANNEL, { command: PROTOCOL_ACCEPTED_COMMAND, payload: protocolAcceptance() });
 
         const traffic = this.register(client);
         this.readEvents(client, traffic);
 
-        // Only Socket.IO's own errors get here (see socket.use in readEvents). JSON.stringify of an
-        // Error gave '{}'.
+        // Only Socket.IO's own errors get here (see socket.use in readEvents).
         socket.on('error', (error: unknown) => {
             this.logError(`Socket.IO error for client ${client.id}: ${errorMessage(error)}`, false, aboutClient(client));
         });
@@ -254,15 +246,12 @@ export class SocketIOServer extends Service implements NetworkServer {
 
     // `peer` is the address the connection came from, normalized.
     private clientFromHandshake(socket: SocketIoSocket, peer: string): SocketIoClient {
-        // engine.io builds the query from the URL's search params, so a value is a string or
-        // absent. An absent version becomes '' rather than undefined: the refusal below
-        // promises a string clientVersion (docs/dev/protocol.md), and JSON drops an undefined
-        // field altogether.
+        // An absent version becomes '' rather than undefined: the refusal below promises a string
+        // clientVersion (docs/dev/protocol.md), and JSON drops an undefined field.
         const version = socket.handshake.query.version;
-        // Behind a trusted proxy, the client's own address, from the X-Forwarded-For of the
-        // request that opened the connection. It is the client's name in colibri::clients, sent
-        // to the admin UI and to every client of its app. An IPv4 client is named by its IPv4
-        // address, also on a dual-stack WEBSERVER_HOST.
+        // Behind a trusted proxy, the client's own address from the X-Forwarded-For of the request
+        // that opened the connection. It is the client's name in colibri::clients. An IPv4 client is
+        // named by its IPv4 address, also on a dual-stack WEBSERVER_HOST.
         const address = normalizeAddress(forwardedClientAddress(peer, socket.handshake.headers['x-forwarded-for'], this.trustProxy));
         return {
             id: socket.id,
@@ -285,9 +274,8 @@ export class SocketIOServer extends Service implements NetworkServer {
             return true;
         }
 
-        // The admin UI is served by this same process and therefore can never be out of step
-        // with it, so it is warned about rather than refused. A version check that can lock
-        // you out of your own console is worse than the mismatch it detects.
+        // The admin UI is served by this same process, so it is warned about rather than refused:
+        // a version check must not lock you out of your own console.
         if (client.version !== PROTOCOL_VERSION) {
             const rejection = protocolRejection(client.version);
             if (client.app === COLIBRI_CHANNEL) {
@@ -295,9 +283,7 @@ export class SocketIOServer extends Service implements NetworkServer {
             } else {
                 this.logError(`Refusing client ${client.id} from ${client.name}: ${rejection.reason}`, false, aboutClient(client));
                 socket.emit(COLIBRI_CHANNEL, { command: PROTOCOL_REJECTED_COMMAND, payload: rejection });
-                // Not disconnect(true): forcing the transport shut can truncate the rejection
-                // that was just queued. The unforced form writes the namespace disconnect
-                // behind it on the same transport, so the client sees both, in order.
+                // Not disconnect(true): closing the transport could truncate the rejection just queued.
                 socket.disconnect();
                 return true;
             }
@@ -318,30 +304,25 @@ export class SocketIOServer extends Service implements NetworkServer {
     private readEvents(client: SocketIoClient, traffic: WebTraffic): void {
         const ignoreMalformed = this.malformedReporter(client);
 
-        // Every client event ends here: `next` is never called, so none reaches Socket.IO's own
-        // listeners. Those are the 'error' and 'disconnect' handlers of handleNewClient, and a
-        // client naming its event 'error' or 'disconnect' would otherwise run them with whatever it
-        // sent; a deeply nested payload on 'error' made the handler's JSON.stringify throw, which
-        // ended the whole server.
+        // `next` is never called, so no client event reaches Socket.IO's own listeners: a client
+        // naming its event 'error' or 'disconnect' would otherwise run the handlers of
+        // handleNewClient with its payload.
         client.socket.use(([channel, content]: SocketIoEvent) => {
-            // socket.io-parser takes any JSON value as the event name, e.g. a number sent from
-            // plain JavaScript as `sendMessage(roomNumber, ...)`. Every handler expects a string;
-            // a number reached ConnectionPool's channel.startsWith and ended the whole server.
+            // socket.io-parser takes any JSON value as the event name, a number say, but every
+            // handler expects a string.
             if (typeof channel !== 'string' || channel === '') {
                 ignoreMalformed(`the channel must be a non-empty string, not ${typeof channel === 'string' ? 'empty' : typeof channel}`);
                 return;
             }
 
-            // An event emitted with no argument at all (`socket.emit('foo')`) leaves
-            // `content` undefined; reading `.command` off it used to throw, and while
-            // Socket.IO catches that synchronously it still drops the client.
+            // An event emitted with no argument (`socket.emit('foo')`) leaves `content` undefined.
             const body = (content ?? {}) as { command?: unknown; payload?: unknown };
             if (typeof body.command !== 'string') {
                 ignoreMalformed(`an event on channel '${abbreviate(channel)}' has no command`);
                 return;
             }
-            // Relayed to Unity, stored or logged, a deeper one is written out with JSON.stringify
-            // or Socket.IO's encoder, and both overflow the stack (see MAX_PAYLOAD_DEPTH).
+            // Relayed, stored or logged, a payload is written out with JSON.stringify or Socket.IO's
+            // encoder, which overflow the stack on deep nesting (see MAX_PAYLOAD_DEPTH).
             if (nestsDeeperThan(body.payload)) {
                 ignoreMalformed(`a payload on channel '${abbreviate(channel)}' nests deeper than ${MAX_PAYLOAD_DEPTH} levels`);
                 return;
@@ -358,8 +339,8 @@ export class SocketIOServer extends Service implements NetworkServer {
             if (isLimitable(channel, body.command)) {
                 this.inboundGate.acceptLimitable(msg, body.payload, performance.now());
             } else {
-                // Held-back updates first: a model::delete must not arrive ahead of an update
-                // to the same object and have that update bring it back.
+                // Held-back updates first: a model::delete must not overtake an update to the same
+                // object, which would bring it back.
                 this.inboundGate.releaseHeld(client);
                 this.messageStream.next(msg);
             }

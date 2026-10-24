@@ -32,11 +32,9 @@ export class RestAPI extends Service {
 
     private db: StoreDatabase | undefined;
     private readonly databasePath: string;
-    // Imports store.json into a new store.db. Logs through this service, so under its name.
+    // These log through this service, so their lines carry its name.
     private readonly storeJsonImport: StoreJsonImport;
-    // Deletes the values not written for STORE_EXPIRY_DAYS, at startup and every hour.
     private readonly expiry: StoreExpiry;
-    // The limit on the bytes of JSON the store holds, and the warning when a PUT is refused for it.
     private readonly quota: StoreQuota;
     private readonly now: () => number;
     private checkpointer: StoreCheckpointer | undefined;
@@ -77,25 +75,23 @@ export class RestAPI extends Service {
         return this.db;
     }
 
-    // How many apps the store holds values for, how many values, and how many bytes of JSON they
-    // take, for the admin UI.
+    // Apps, values and bytes of JSON the store holds, for the admin UI.
     public counts(): { apps: number; keys: number; bytes: number } {
         return this.db?.counts() ?? { apps: 0, keys: 0, bytes: 0 };
     }
 
-    // Runs before the web server starts serving requests, so a request can never find the store
-    // before store.db is open, or before store.json has been imported into it.
+    // Runs before the web server starts serving, so a request never finds the store unopened or
+    // before the store.json import.
     public override async init(): Promise<void> {
         await this.open();
 
         this.expiry.start();
     }
 
-    // Opens store.db, importing store.json into it if store.db is new. A store.db that cannot be
-    // opened, created or written (a DATA_ROOT or a store.db the server cannot write, a full disk, a
-    // damaged file) leaves the store in memory, with the values store.db holds if it can still be
-    // read, or else store.json's, as the store used to run when it could not save: answering, but
-    // forgetting every change at the next restart.
+    // Opens store.db, importing store.json into it if store.db is new. If store.db cannot be opened,
+    // created or written (an unwritable DATA_ROOT or file, a full disk, a damaged file), the store
+    // runs in memory instead, with the values store.db holds if it can still be read, or else
+    // store.json's: it answers, but forgets every change at the next restart.
     private async open(): Promise<void> {
         let db: StoreDatabase | undefined;
         let loaded: LoadedStoreJson | undefined;
@@ -145,13 +141,11 @@ export class RestAPI extends Service {
     }
 
     // A worker thread does the checkpoints (see StoreCheckpointer), and the server's own commits
-    // only as a backstop, far later than SQLite's default. The worker's PASSIVE checkpoints never
-    // start the log over: SQLite only does that when a write begins on a log that is copied in
-    // full, and once PUTs come faster than a checkpoint takes, one always lands during it. With
-    // automatic checkpoints off, a client calling Store.Put every frame grew store.db-wal by about
-    // 150 MB a minute, until the volume was full. The backstop is a checkpoint by the writer
-    // itself, which copies everything, so the next write starts the log over. If the worker ends,
-    // the default comes back.
+    // only as a backstop, far later than SQLite's default. SQLite starts the log over only when a write
+    // begins on a fully copied log; with PUTs faster than a PASSIVE checkpoint, one always lands during
+    // it, so the log would grow without bound. The backstop is a checkpoint by the writer itself, which
+    // copies everything, so the next write starts the log over. If the worker ends, SQLite's default
+    // comes back.
     private startCheckpointer(db: StoreDatabase): void {
         this.checkpointer = StoreCheckpointer.start(this.databasePath, CHECKPOINT_INTERVAL_MILLIS, (error, workerGone) => {
             if (workerGone) {
@@ -168,8 +162,8 @@ export class RestAPI extends Service {
         db.setAutoCheckpoint(WAL_BACKSTOP_PAGES);
     }
 
-    // At shutdown. Every write is committed when its request is answered, so there is nothing to
-    // save; closing checkpoints the write-ahead log into store.db.
+    // At shutdown. Every write is already committed; closing checkpoints the write-ahead log into
+    // store.db.
     public async close(): Promise<void> {
         this.expiry.stop();
         await this.checkpointer?.stop();

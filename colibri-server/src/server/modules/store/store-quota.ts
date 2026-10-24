@@ -1,12 +1,10 @@
 import type { StoreDatabase } from './store-database.js';
 
-// A full store refuses every PUT that would grow it; the warning that says so is logged at most
-// this often.
+// The warning that a full store refused a PUT is logged at most this often.
 const FULL_WARNING_INTERVAL_MILLIS = 60_000;
 
-// What StoreQuota needs from the RestAPI that owns it: the store, which is opened in init() and so
-// is asked for at every check, its clock, and its warning log method, so that the line keeps the
-// RestAPI's name as its origin.
+// What StoreQuota needs from the RestAPI that owns it. The store is opened in init(), so it is
+// asked for at every check. logWarning keeps the RestAPI as the line's origin.
 interface StoreQuotaCallbacks {
     store(): StoreDatabase;
     now(): number;
@@ -14,7 +12,7 @@ interface StoreQuotaCallbacks {
 }
 
 // The RestAPI's limit on the bytes of JSON the store holds (STORE_MAX_MB), and the throttled warning
-// when a PUT is refused for it. One for the RestAPI's lifetime.
+// when a PUT is refused for it.
 export class StoreQuota {
     private fullWarnedAt = -Infinity;
 

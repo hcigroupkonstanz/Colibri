@@ -25,7 +25,8 @@ export const formatProxyTlsAddress = function (address: ProxyTlsAddress): string
 // A host name: letters, digits and hyphens in dot-separated labels.
 const HOST_NAME = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$/;
 
-// One entry of PROXY_TLS_ADDRESSES; throws if it is none.
+// One entry of PROXY_TLS_ADDRESSES. An IPv6 address has to be in brackets, or its colons could not be
+// told from the port's. Throws if the entry is no host name or IP address with an optional port.
 const parseProxyTlsEntry = function (entry: string): ProxyTlsAddress {
     const match = /^(?:\[([^\]]+)\]|([^:[\]]+))(?::(\d{1,5}))?$/.exec(entry);
     const host = match?.[1] ?? match?.[2];

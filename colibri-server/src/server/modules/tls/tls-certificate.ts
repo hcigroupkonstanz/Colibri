@@ -16,13 +16,12 @@ import {
 } from './tls-files.js';
 
 /**
- * How often the server reads TLS_CERT and TLS_KEY again, to take up a renewed certificate. New
- * contents are taken up once two reads in a row have found them, so within twice this.
+ * How often the server reads TLS_CERT and TLS_KEY again, to reload a renewed certificate. New
+ * contents are reloaded once two reads in a row have found them, so within twice this.
  *
  * Read rather than watched: a renewal often swaps a symbolic link (Let's Encrypt's live/
  * directory) or a whole directory (a Kubernetes secret) instead of writing to the file, and a file
- * watcher sees neither through a Docker bind mount on every platform. Reading two small files every
- * few seconds costs nothing and sees every kind of change.
+ * watcher sees neither through a Docker bind mount on every platform.
  */
 export const TLS_FILE_CHECK_MILLIS = 10_000;
 
@@ -45,7 +44,7 @@ export interface TlsCertificateOptions {
 /**
  * The certificate and key from TLS_CERT and TLS_KEY, which the TCP port and the web port both serve
  * TLS with. Logs the certificate's SHA-256 fingerprint at startup, which is what a Unity app can be
- * told to accept as the only certificate; takes up a renewed certificate without a restart; and
+ * told to accept as the only certificate; reloads a renewed certificate without a restart; and
  * warns about one that is about to expire, or has.
  */
 export class TlsCertificate extends Service implements TlsCredentialSource {
@@ -55,7 +54,7 @@ export class TlsCertificate extends Service implements TlsCredentialSource {
     private current: { credentials: TlsCredentials; info: CertificateInfo };
     private readonly changes = new Subject<TlsCredentials>();
 
-    // New contents one read has found, taken up if the next one finds them too: until then the
+    // New contents one read has found, reloaded if the next one finds them too: until then the
     // file may still be being written, or the other of the two still be the old one.
     private candidate: TlsCredentials | undefined;
     // New contents that cannot be used and have been warned about, so that they are not warned
@@ -117,7 +116,7 @@ export class TlsCertificate extends Service implements TlsCredentialSource {
         this.timer = undefined;
     }
 
-    /** Reads both files again and takes up new contents, as start() does every few seconds. */
+    /** Reads both files again and reloads new contents, as start() does every few seconds. */
     public check(): Promise<void> {
         // One at a time: a read that takes longer than the interval, on a network file system say,
         // is not overtaken by the next.
@@ -162,7 +161,7 @@ export class TlsCertificate extends Service implements TlsCredentialSource {
         this.takeUp(found);
     }
 
-    // Switches to new contents that two reads in a row have found, unless they cannot be used.
+    // Switches to the new contents unless they cannot be used; that is warned about once (see refused).
     private takeUp(found: TlsCredentials): void {
         let info: CertificateInfo;
         try {
@@ -180,6 +179,7 @@ export class TlsCertificate extends Service implements TlsCredentialSource {
         this.current = { credentials: found, info };
         this.candidate = undefined;
         this.refused = undefined;
+        // So that a new certificate that is already expiring is warned about too.
         this.validity = 'valid';
         this.logInfo(
             `Reloaded the TLS certificate from ${this.certPath}: ${describeCertificateInfo(info)} (was ${previous.fingerprint256}). ` +

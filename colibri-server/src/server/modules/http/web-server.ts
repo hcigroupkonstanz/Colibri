@@ -14,22 +14,15 @@ import type { TrustProxy } from '../net/trusted-proxies.js';
 import { trustNoProxy } from '../net/trusted-proxies.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost } from '../net/addresses.js';
 
-// Requests whose JSON body was empty; see hasEmptyJsonBody.
+// Filled by the verify hook of express.json() below.
 const emptyJsonBodies = new WeakSet<http.IncomingMessage>();
 
-/**
- * Whether the request came with a JSON body of zero bytes. express.json() hands a route such a
- * body as `{}`, the same as the two bytes `{}`; this tells them apart however the body was framed:
- * `Content-Length: 0`, an empty chunked body, or a compressed one that inflates to nothing.
- */
+/** Whether the request's JSON body was zero bytes, which express.json() hands on as `{}`. */
 export const hasEmptyJsonBody = function (req: http.IncomingMessage): boolean {
     return emptyJsonBodies.has(req);
 };
 
-/**
- * Whether the request's Content-Type is the REST store's media type, parameters aside, which is
- * the only body express.json() here parses.
- */
+/** Whether the request's Content-Type is the REST store's media type, parameters aside. */
 export const hasRestMediaType = function (req: http.IncomingMessage): boolean {
     const contentType = req.headers['content-type'];
     return typeof contentType === 'string' && contentType.split(';')[0]!.trim().toLowerCase() === REST_MEDIA_TYPE;
@@ -73,24 +66,17 @@ export class WebServer extends Service {
         this.baseUrl = options.baseUrl;
         this.tls = options.tls;
 
-        // Nothing is listening yet: start() logs 'Web server listening on ...' once listen()
-        // has succeeded, and the console sink prints that line too.
         this.app = express();
         this.app.set('port', this.webPort);
-        // So that req.ip names the same client as SocketIOServer does. It also lets a trusted proxy
-        // set req.protocol and req.hostname (X-Forwarded-Proto and X-Forwarded-Host), which nothing
-        // here reads.
+        // So that req.ip names the same client as SocketIOServer does.
         this.app.set('trust proxy', trustProxy);
 
-        // enable CORS - first, so that every response carries the headers, including the
-        // errors of the body parsers below: a browser hides a cross-origin response without
-        // them, and a web client saw a bare network error instead of the 413 or 400.
+        // enable CORS
+        // First, so that the errors of the body parsers below carry the headers too.
         this.app.use(cors());
 
         // Every answer under /api, errors included, is in the REST store's media type. A request
-        // whose Accept rules that type out is refused with 406 before its body is read. Without an
-        // Accept, or with */* or application/* in it (curl, a browser, the Docker health check),
-        // the type is acceptable. CORS preflights never get here: cors() above answers them.
+        // whose Accept rules it out gets 406 before its body is read.
         this.app.use('/api', (req, res, next) => {
             res.type(REST_MEDIA_TYPE);
             if (req.accepts(REST_MEDIA_TYPE)) {
@@ -101,15 +87,10 @@ export class WebServer extends Service {
                 { status: 406, expose: true }));
         });
 
-        // Any JSON value, not just an object or array: both clients send a bare value as its
-        // JSON text (Unity's Store.Put(name, 42) sends `42`, web's setRestObject(key, 'text')
-        // sends `"text"`), and the store hands it back the same way. The defaults (strict,
-        // 100 kB) answered those with 400 and anything larger with 413, though the same data
-        // fits through the TCP transport - hence its frame limit here too. `verify` sees the
-        // raw body (decompressed, if it was sent compressed) before it is parsed, and is the
-        // only place that can still tell an empty body from `{}`. Only a body in the REST
-        // store's media type is parsed: application/json and form data are left unread, and the
-        // store refuses them with 415.
+        // Not strict: both clients send a bare value as its JSON text (Store.Put(name, 42) sends `42`). The
+        // limit is the TCP frame limit, so the same data fits over HTTP. `verify` sees the raw body, the only
+        // place that can tell an empty body from `{}`. Other media types are left unread; the store refuses
+        // them with 415.
         this.app.use(express.json({
             type: REST_MEDIA_TYPE,
             strict: false,
@@ -124,28 +105,23 @@ export class WebServer extends Service {
     }
 
     public start(): http.Server {
-        // Whatever reached /api without an API route answering it: a mistyped path, or a method
-        // the route does not have (POST /api/store/app/name). The SPA fallback below used to
-        // answer these too, with 200 and the admin UI's index.html, so a REST store write that
-        // stored nothing looked like it had worked. Any method, and whatever BASE_URL is, since
-        // addApi mounts the API at /api regardless of it.
+        // Whatever reached /api without an API route answering it: a mistyped path, or a method the
+        // route does not have. Otherwise the SPA fallback below could answer 200 with index.html.
+        // Mounted at /api whatever BASE_URL is, as addApi does.
         this.app.use('/api', (req, _res, next) => {
             next(Object.assign(new Error(`No API route for ${req.method} ${req.originalUrl}`), { status: 404, expose: true }));
         });
 
-        // SPA fallback, added last: the Angular router owns every path that isn't a static
-        // asset or an API route (e.g. /log, /statistics), so this fires on every normal page
-        // load/refresh, not just on genuine 404s - it must not log, or the log viewer fills up
-        // with a spurious entry every time someone opens the very page that's watching it.
+        // SPA fallback, added last: the Angular router owns every path that isn't a static asset or
+        // an API route (/log, /statistics), so this fires on every page load, not only on 404s.
+        // It must not log: opening the log viewer would add an entry to it.
         this.app.use(this.baseUrl, (req, res) => {
             res.sendFile(path.join(this.webRoot, 'index.html'));
         });
 
-        // Last, so it handles the errors of every route and middleware above. Express's
-        // default handler writes the stack trace, absolute paths into this install included,
-        // into the response whenever NODE_ENV isn't "production". The Docker image sets it,
-        // but a server started from a checkout (npm start, node dist/server/main.js) usually
-        // runs without it, so this must not rely on it.
+        // Last, so it handles the errors of every route above. Express's default handler puts the
+        // stack trace into the response unless NODE_ENV is "production", which a server started
+        // from a checkout usually lacks.
         this.app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
             this.handleError(err, req, res, next);
         });
@@ -171,8 +147,8 @@ export class WebServer extends Service {
     private createHttpsServer(tls: TlsCredentialSource): https.Server {
         const server = https.createServer(this.secureContextOptions(tls.credentials), this.app);
         this.tlsChanges = tls.changes$.subscribe(credentials => {
-            // TlsCertificate hands on only credentials it has checked, so this should never throw.
-            // If it does all the same, this keeps the one in use instead of crashing the server.
+            // TlsCertificate hands on only checked credentials, so this should not throw. If it
+            // does, keep the one in use.
             try {
                 server.setSecureContext(this.secureContextOptions(credentials));
             } catch (err) {
@@ -202,11 +178,9 @@ export class WebServer extends Service {
             return;
         }
 
-        // Client errors carry a 4xx status: malformed JSON (400) and a body over the limit
-        // (413) from body-parser, a missing file (404) from send, an undecodable URL (400)
-        // from the router. http-errors' `expose` marks the ones whose message is meant for
-        // the client; send's file errors, which name the path on disk, are not, and neither
-        // is the router's URIError, so those get the plain status text.
+        // Besides the 406 and 404 above, 4xx errors come from body-parser (400, 413), send (404) and the
+        // router (400). http-errors' `expose` marks messages meant for the client; send's errors name the path
+        // on disk and the router's URIError is not exposed, so those get the plain status text.
         const { status, statusCode, expose, message } = (err ?? {}) as { status?: unknown; statusCode?: unknown; expose?: unknown; message?: unknown };
         const clientStatus = status ?? statusCode;
         if (typeof clientStatus === 'number' && clientStatus >= 400 && clientStatus < 500) {

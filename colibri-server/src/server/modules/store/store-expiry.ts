@@ -4,9 +4,8 @@ import type { StoreDatabase } from './store-database.js';
 const DAY_MILLIS = 24 * 60 * 60 * 1000;
 const EXPIRY_INTERVAL_MILLIS = 60 * 60 * 1000;
 
-// What StoreExpiry needs from the RestAPI that owns it: the store, which is opened in init() and so
-// is asked for at every sweep, its clock, and its log methods, so that its lines keep the RestAPI's
-// name as their origin.
+// What StoreExpiry needs from the RestAPI that owns it. The store is opened in init(), so it is
+// asked for at every sweep. The log methods keep the RestAPI as the lines' origin.
 interface StoreExpiryCallbacks {
     store(): StoreDatabase | undefined;
     now(): number;
@@ -15,7 +14,7 @@ interface StoreExpiryCallbacks {
 }
 
 // The RestAPI's sweep that deletes the values not written for STORE_EXPIRY_DAYS: once at startup,
-// then every hour. One for the RestAPI's lifetime.
+// then every hour.
 export class StoreExpiry {
     private expiryTimer: NodeJS.Timeout | undefined;
 
@@ -36,8 +35,8 @@ export class StoreExpiry {
     }
 
     // Deletes the values not written for expiryDays. Never throws: at startup that would stop the
-    // server, and in the timer it would be an uncaught exception, both for a store.db that another
-    // program has locked for a moment, or a full disk.
+    // server, and in the timer it would be an uncaught exception, for a store.db another program has
+    // locked for a moment or a full disk.
     private expire(): void {
         const store = this.callbacks.store();
         if (!store) return;

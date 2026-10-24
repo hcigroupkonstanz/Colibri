@@ -21,10 +21,10 @@ interface CheckpointWorkerData {
  * `intervalMillis`.
  *
  * SQLite's automatic checkpoint runs in the connection whose commit makes the log pass 1000 pages,
- * and with synchronous=NORMAL it syncs the log and the database to disk there. For the server that
- * was the main thread, in the middle of a PUT: 16 to 63 ms about every 500 small PUTs, during which
- * no realtime message was relayed. The server's connection now has automatic checkpoints off, and
- * this worker's own connection does them. A PASSIVE checkpoint never waits for the writer.
+ * and with synchronous=NORMAL it syncs the log and the database to disk there. On the main thread
+ * that would stall realtime relaying in the middle of a PUT, so the server's connection checkpoints
+ * itself only as a far later backstop (see RestAPI.startCheckpointer) and this worker's own
+ * connection does the regular ones. A PASSIVE checkpoint never waits for the writer.
  */
 export class StoreCheckpointer {
     private readonly worker: Worker;

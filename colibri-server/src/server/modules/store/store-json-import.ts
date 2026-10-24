@@ -4,8 +4,7 @@ import { STORE_DATABASE_FILENAME } from './store-database.js';
 import { lstat, readFile, rename } from 'fs/promises';
 import * as path from 'path';
 
-// What Colibri 1.x and the 2.0 development versions kept the store in. Imported once, into a new
-// store.db, then renamed.
+// What Colibri 1.x kept the store in. Imported once, into a new store.db, then renamed.
 export const STORE_JSON_FILENAME = 'store.json';
 
 // What store.json held, as far as it could be loaded.
@@ -18,8 +17,8 @@ export interface LoadedStoreJson {
     unloadedReason?: string;
 }
 
-// What StoreJsonImport needs from the RestAPI that owns it: its clock, and its log methods, so that
-// its lines keep the RestAPI's name as their origin.
+// What StoreJsonImport needs from the RestAPI that owns it. The log methods keep the RestAPI as the
+// lines' origin.
 interface StoreJsonImportCallbacks {
     now(): number;
     logInfo(msg: string): void;
@@ -27,8 +26,7 @@ interface StoreJsonImportCallbacks {
     logError(msg: string, printStacktrace: boolean): void;
 }
 
-// The RestAPI's store.json in the data folder: loaded into a new store.db, then renamed. One for the
-// RestAPI's lifetime.
+// The RestAPI's import of the data folder's store.json into a new store.db.
 export class StoreJsonImport {
     private readonly storeJsonPath: string;
 
@@ -36,10 +34,9 @@ export class StoreJsonImport {
         this.storeJsonPath = path.join(dataPath, STORE_JSON_FILENAME);
     }
 
-    // store.json is an object of objects. A store file that parses to null, an array, or a
-    // scalar (hand-edited, truncated by an older version, restored from the wrong place) is
-    // ignored, and so is an app whose values are not an object. JSON.parse defines every key as
-    // an own property, '__proto__' included, so Object.entries sees all of them.
+    // store.json is an object of objects: a file that parses to anything else is ignored, and so is
+    // an app whose values are not an object. JSON.parse defines every key as an own property,
+    // '__proto__' included, so Object.entries sees all of them.
     public async loadStoreJson(): Promise<LoadedStoreJson> {
         let raw: string;
         try {
@@ -83,11 +80,10 @@ export class StoreJsonImport {
         return { present: true, entries, apps, unloadedReason };
     }
 
-    // Renames the store.json that has just been imported, so that nothing reads it again and a
-    // look at the data folder shows what happened: store.json.imported-<date and time>, or
-    // store.json.corrupt-<date and time> if it could not be loaded, or only in part, with its
-    // contents kept there unchanged. Never over an existing file: a name that is taken gets a
-    // counter. Logs, rather than throws, when it cannot: store.db is fine either way.
+    // Renames the imported store.json to store.json.imported-<date and time>, or to
+    // store.json.corrupt-<date and time> if it could not be loaded, or only in part, so that nothing
+    // reads it again and the data folder shows what happened. Never over an existing file: a taken
+    // name gets a counter. Logs rather than throws: store.db is fine either way.
     public async retireStoreJson(loaded: LoadedStoreJson): Promise<void> {
         const corrupt = loaded.unloadedReason !== undefined;
         // No colons, which a Windows file name cannot have.
@@ -115,9 +111,9 @@ export class StoreJsonImport {
         }
     }
 
-    // A store.json next to a store.db that already holds the store is not imported: it would
+    // A store.json next to a store.db that already holds the store is not imported, as it would
     // overwrite newer values with older ones. Most likely it is a copy put there to restore the
-    // store, which works in a data folder without store.db.
+    // store, which only works in a data folder without store.db.
     public async reportStoreJsonLeftBehind(): Promise<void> {
         if (!await StoreJsonImport.exists(this.storeJsonPath)) return;
         this.callbacks.logWarning(`Not importing ${this.storeJsonPath}: ${STORE_DATABASE_FILENAME} already holds the data store. `

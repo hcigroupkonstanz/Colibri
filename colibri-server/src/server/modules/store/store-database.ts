@@ -18,13 +18,12 @@ export const WAL_BACKSTOP_PAGES = 4000;
 const SCHEMA_VERSION = 1;
 
 // A rowid table with its own index on (app, name), not a WITHOUT ROWID table keyed by them: a value
-// can be up to 5 MiB, and SQLite keeps a WITHOUT ROWID row inside its key's B-tree, where listing an
-// app's names then read its large values as well (28 ms for 450 names next to 100 MB of values).
-// The index holds only app and name: a value is one index lookup, an app's names are one range of
-// the index alone. value is the last column, so that reading bytes or updated_at never walks the
-// overflow pages of a large value. updated_at is indexed for the expiry sweep alone, which then
-// reads only the rows past its cutoff. Every further index would cost a B-tree write on each PUT
-// and DELETE.
+// can be up to 5 MiB, and SQLite keeps a WITHOUT ROWID row inside its key's B-tree, so listing an
+// app's names would read the large values too. The index holds only app and name: a value is one
+// index lookup, an app's names are one range of the index alone. value is the last column, so that
+// reading bytes or updated_at never walks the overflow pages of a large value. updated_at is
+// indexed for the expiry sweep alone, which then reads only the rows past its cutoff. Every further
+// index would cost a B-tree write on each PUT and DELETE.
 const SCHEMA = `
     CREATE TABLE IF NOT EXISTS store_values (
         app TEXT NOT NULL,
@@ -38,14 +37,10 @@ const SCHEMA = `
 `;
 
 /**
- * The REST store's values, in SQLite.
+ * The REST store's values, in SQLite. A write is one row, and only the per-app counts are kept in
+ * memory.
  *
- * store.json kept every value in memory and was rewritten as a whole after every change, on the
- * main thread: 26 ms per save for 5 MB of JSON, 640 ms for 95 MB, during which no realtime message
- * was relayed. Here a write is one row, and only the per-app counts are kept in memory.
- *
- * Synchronous on purpose: a write is a few tens of microseconds, and the routes stay as simple as
- * they were with the Maps.
+ * Synchronous on purpose: a write is a few tens of microseconds, and the routes stay simple.
  */
 export class StoreDatabase {
     private statements: ReturnType<StoreDatabase['prepare']> | undefined;
@@ -64,14 +59,12 @@ export class StoreDatabase {
     public static open(file: string): StoreDatabase {
         const db = new DatabaseSync(file, { timeout: 5000 });
         try {
-            // WAL: a write appends to the log instead of rewriting pages in place, and readers
-            // such as store-export.js are not blocked. NORMAL syncs at checkpoints only, which in
-            // WAL mode can lose the last writes on a power cut but never corrupts the database.
+            // WAL, so readers such as store-export.js are not blocked. NORMAL syncs at checkpoints
+            // only: a power cut can lose the last writes but never corrupts the database.
             if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
             db.exec('PRAGMA synchronous = NORMAL');
-            // SQLite reuses the write-ahead log from its start once a checkpoint has copied all
-            // of it, but leaves the file at its largest size until the database is closed. This
-            // cuts it back to 16 MiB whenever it starts over.
+            // SQLite leaves the log file at its largest size until the database is closed. This cuts
+            // it back to WAL_SIZE_LIMIT_BYTES whenever the log starts over.
             db.exec(`PRAGMA journal_size_limit = ${WAL_SIZE_LIMIT_BYTES}`);
         } catch (err) {
             db.close();

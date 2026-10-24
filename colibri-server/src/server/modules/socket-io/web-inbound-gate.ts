@@ -19,16 +19,16 @@ import { aboutClient } from './about-client.js';
 
 // What WebInboundGate needs from the SocketIOServer that owns it.
 interface WebInboundGateCallbacks {
-    // Passes a client message on to the server's hooks (messages$), synchronously.
+    // Passes a client message on to messages$, synchronously: the callers' ordering depends on it.
     emit(msg: NetworkMessage): void;
     logDebug(msg: string, metadata: Metadata): void;
     logWarning(msg: string, metadata: Metadata): void;
 }
 
-// The SocketIOServer's per-client rate limit and the model updates it holds back. One for the server's lifetime.
+// The SocketIOServer's per-client rate limit and the model updates it holds back.
 export class WebInboundGate {
-    // The same per-client backstop as the TCP worker's, against a web client's runaway send loop,
-    // with the same treatment of what is over it: updates held back and merged, broadcasts dropped.
+    // The same per-client limit as the TCP worker's: updates over it are held back and merged,
+    // broadcasts dropped.
     private rateLimiter = this.createRateLimiter(DEFAULT_RATE_LIMIT);
     private readonly heldUpdates = new Map<NetworkClient, HeldUpdates>();
 
@@ -50,10 +50,10 @@ export class WebInboundGate {
         });
     }
 
-    // A model::update or broadcast::* (see isLimitable) from a client: on at once while it is
-    // under its rate limit and has nothing held back, otherwise an update is held back and merged
-    // per object (see HeldUpdates) and a broadcast dropped. Mirrors TCPServerWorker, minus the
-    // backlog limit: a Socket.IO message is handled as it is read, so there is no queue to bound.
+    // A model::update or broadcast::* (see isLimitable) from a client: passed on at once while it is
+    // under its rate limit and has nothing held back, otherwise held or dropped. Like the TCP
+    // worker's InboundGate, minus the backlog limit: a Socket.IO message is handled as it is read,
+    // so there is no queue to bound.
     public acceptLimitable(msg: NetworkMessage & { origin: NetworkClient }, value: unknown, now: number): void {
         const client = msg.origin;
         if (this.drainHeld(client, now) && this.rateLimiter.take(client, now)) {
@@ -61,8 +61,8 @@ export class WebInboundGate {
             return;
         }
 
-        // A broadcast, or an update the server could not apply anyway, is dropped; an update for one
-        // object too many is lost (see Limited).
+        // A broadcast, or an update the server could not apply anyway, is dropped; one over
+        // MAX_HELD_OBJECTS is lost (see Limited).
         const model = msg.command === MODEL_UPDATE_COMMAND ? asModelUpdate(value) : undefined;
         if (!model) {
             this.rateLimiter.record(client, now, 'dropped');
@@ -91,7 +91,7 @@ export class WebInboundGate {
         return true;
     }
 
-    // Every held update regardless of the limit: before something from the same client that must
+    // Passes on every held update of the client regardless of the limit: before a message that must
     // not overtake them, and when it leaves.
     public releaseHeld(client: NetworkClient): void {
         const held = this.heldUpdates.get(client);
@@ -101,7 +101,6 @@ export class WebInboundGate {
         for (const update of held.takeAll()) this.emitHeld(client, update);
     }
 
-    // A client that left: its held updates go on, and the rate limit forgets it.
     public clientLeft(client: NetworkClient): void {
         this.releaseHeld(client);
         this.rateLimiter.forget(client);
@@ -122,7 +121,6 @@ export class WebInboundGate {
         this.rateLimiter.sweep(now);
     }
 
-    // How many of the client's updates are held back.
     public heldSize(client: NetworkClient): number {
         return this.heldUpdates.get(client)?.size ?? 0;
     }

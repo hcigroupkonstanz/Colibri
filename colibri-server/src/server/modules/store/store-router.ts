@@ -5,9 +5,8 @@ import type { StoreQuota } from './store-quota.js';
 import type { RequestHandler } from 'express';
 import { Router } from 'express';
 
-// What the store routes need from the RestAPI that owns them: the store, which is opened in init()
-// and so is asked for at every request, its clock, and its warning log method, so that the lines
-// keep the RestAPI's name as their origin.
+// What the store routes need from the RestAPI that owns them. The store is opened in init(), so it
+// is asked for at every request. logWarning keeps the RestAPI as the lines' origin.
 interface StoreRouterCallbacks {
     store(): StoreDatabase;
     now(): number;
@@ -62,21 +61,17 @@ const getValue = function (callbacks: StoreRouterCallbacks): RequestHandler<Valu
 
 const putValue = function (quota: StoreQuota, callbacks: StoreRouterCallbacks): RequestHandler<ValueParams, unknown, unknown> {
     return (req, res) => {
-        // Only a body in the store's media type is parsed. application/json, form data
-        // and a body without a Content-Type are refused, rather than stored as whatever
-        // they parse to: form data made an object of `curl -d`'s JSON text.
+        // Only a body in the store's media type is parsed. application/json, form data and a body
+        // without a Content-Type are refused rather than stored as whatever they parse to.
         if (!hasRestMediaType(req)) {
             const error = `Value with name ${req.params.value} not saved: send the value as JSON, with Content-Type: ${REST_MEDIA_TYPE}`;
             callbacks.logWarning(`PUT /api/store/${req.params.app}/${req.params.value} answered 415: ${error}`);
             res.status(415).json({ error });
             return;
         }
-        // express.json() leaves req.body undefined for no body at all, and makes {} of
-        // an empty JSON body. The undefined used to be stored: a name listed under its
-        // app that GET and DELETE then answered 404 for. Both clients always send a JSON
-        // body. An empty body is told from `{}` by its raw length, not by
-        // Content-Length: a chunked request has none, and its empty body used to be
-        // stored as {}.
+        // express.json() leaves req.body undefined for no body at all and makes {} of an empty JSON
+        // body. Both clients always send a JSON body. An empty body is told from `{}` by its raw
+        // length, as a chunked request has no Content-Length.
         if (req.body === undefined || hasEmptyJsonBody(req)) {
             const error = `Value with name ${req.params.value} not saved: send the value as a JSON body`;
             callbacks.logWarning(`PUT /api/store/${req.params.app}/${req.params.value} answered 400: ${error}`);
@@ -93,7 +88,6 @@ const putValue = function (quota: StoreQuota, callbacks: StoreRouterCallbacks): 
             return;
         }
 
-        // 201 for a value, or an app, that was not there before
         const created = callbacks.store().put(req.params.app, req.params.value, json, callbacks.now()) === 'created';
         // Return successful result with the sended data
         res.status(created ? 201 : 200).json({ result: 'Value with name ' + req.params.value + ' saved successfully', data: req.body });

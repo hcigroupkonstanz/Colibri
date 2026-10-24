@@ -1,10 +1,9 @@
 import type { NetworkClient } from '../protocol/network.js';
 import { RATE_WINDOW_MILLIS, TrafficMeter } from '../limits/client-activity.js';
 
-// A web client's messages, for the admin UI. What it sends is counted as it arrives. What it is
-// sent through its app's room (broadcastToApp) is counted once per room, not per member, so the
-// room's single encode stays a single step: the client was sent every room message since it joined,
-// less those it was the one left out of.
+// A web client's message counts, for the admin UI. What it sends is counted on arrival. Room
+// messages (broadcastToApp) are counted once per room, not per member, so a room emit stays one
+// step: a client was sent every room message since it joined, less those it was left out of.
 export interface WebTraffic {
     readonly meter: TrafficMeter;
     // Messages emitted to it alone (broadcast()).
@@ -17,11 +16,10 @@ export interface WebTraffic {
 
 // What WebTrafficCounter needs from the SocketIOServer that owns it.
 interface WebTrafficCounterCallbacks {
-    // Whether the client is in the app's room.
     isInApp(app: string, clientId: string): boolean;
 }
 
-// The SocketIOServer's message counts per web client and per app room. One for the server's lifetime.
+// The SocketIOServer's message counts per web client and per app room.
 export class WebTrafficCounter {
     // By client id.
     private readonly traffic = new Map<string, WebTraffic>();
@@ -31,7 +29,8 @@ export class WebTrafficCounter {
 
     public constructor(private readonly callbacks: WebTrafficCounterCallbacks) {}
 
-    // Starts the counts of a client before it joins its app's room. `now` is on performance.now()'s clock.
+    // Starts a client's counts. Call before it joins its app's room, whose count becomes its roomBase.
+    // `now` is on performance.now()'s clock.
     public register(client: NetworkClient, now: number): WebTraffic {
         const traffic: WebTraffic = {
             meter: new TrafficMeter(now),
