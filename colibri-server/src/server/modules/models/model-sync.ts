@@ -1,7 +1,7 @@
 import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../protocol/payload.js';
 import { Service } from '../core/service.js';
 import type { ConnectionPool } from '../hooks/connection-pool.js';
-import type { NetworkMessage } from '../protocol/network.js';
+import type { NetworkClient, NetworkMessage } from '../protocol/network.js';
 import type { DataStore, SyncModel } from './data-store.js';
 
 export class ModelSynchronization extends Service {
@@ -38,41 +38,7 @@ export class ModelSynchronization extends Service {
             const payload = (msg.payload?.asValue<{ id?: string; again?: unknown }>()) || {};
 
             if (typeof(payload?.id) === 'string') {
-                const id = payload.id;
-                const model = this.store.getModel(app, msg.channel, id);
-                const deletion = model ? undefined : this.store.deletion(app, msg.channel, id);
-
-                if (deletion && payload.again === true) {
-                    // The model was deleted while the sender was disconnected, so the relayed delete never reached it.
-                    // The tombstone stays for other clients that return.
-                    this.logDebug(
-                        `Answering client '${msg.origin.name}' (${msg.origin.id}, app '${app}') with model::delete for '${id}' ` +
-                            `on channel '${msg.channel}': it asked again after a reconnect, and that model was deleted meanwhile`
-                    );
-                    this.connectionPool.emit({
-                        channel: msg.channel,
-                        command: 'model::delete',
-                        payload: Payload.fromValue({ id })
-                    }, msg.origin);
-                    return;
-                }
-
-                if (deletion) {
-                    // A fresh request means the sender has the object in its scene again, so the id is in use
-                    // and its updates must no longer be ignored.
-                    this.logDebug(
-                        `Client '${msg.origin.name}' (${msg.origin.id}, app '${app}') has '${id}' on channel '${msg.channel}', ` +
-                            'which was deleted a moment ago, in its scene again: updates to it are taken from now on'
-                    );
-                    this.store.forgetDeletion(app, msg.channel, id);
-                }
-
-                // No model for this id: the bare id tells the requester the server holds nothing.
-                this.connectionPool.emit({
-                    channel: msg.channel,
-                    command: 'model::update',
-                    payload: Payload.fromValue(model || { id })
-                }, msg.origin);
+                this.sendRequestedModel(msg, msg.origin, payload.id, payload.again === true);
             } else {
                 for (const model of this.store.getAll(app, msg.channel)) {
                     this.connectionPool.emit({
@@ -85,6 +51,44 @@ export class ModelSynchronization extends Service {
         } catch (error) {
             this.logError(`Failed to send initial state to client ${msg.origin.id}: ${error}`, false);
         }
+    }
+
+    private sendRequestedModel(msg: NetworkMessage, origin: NetworkClient, id: string, again: boolean): void {
+        const app = origin.app;
+        const model = this.store.getModel(app, msg.channel, id);
+        const deletion = model ? undefined : this.store.deletion(app, msg.channel, id);
+
+        if (deletion && again) {
+            // The model was deleted while the sender was disconnected, so the relayed delete never reached it.
+            // The tombstone stays for other clients that return.
+            this.logDebug(
+                `Answering client '${origin.name}' (${origin.id}, app '${app}') with model::delete for '${id}' ` +
+                    `on channel '${msg.channel}': it asked again after a reconnect, and that model was deleted meanwhile`
+            );
+            this.connectionPool.emit({
+                channel: msg.channel,
+                command: 'model::delete',
+                payload: Payload.fromValue({ id })
+            }, origin);
+            return;
+        }
+
+        if (deletion) {
+            // A fresh request means the sender has the object in its scene again, so the id is in use
+            // and its updates must no longer be ignored.
+            this.logDebug(
+                `Client '${origin.name}' (${origin.id}, app '${app}') has '${id}' on channel '${msg.channel}', ` +
+                    'which was deleted a moment ago, in its scene again: updates to it are taken from now on'
+            );
+            this.store.forgetDeletion(app, msg.channel, id);
+        }
+
+        // No model for this id: the bare id tells the requester the server holds nothing.
+        this.connectionPool.emit({
+            channel: msg.channel,
+            command: 'model::update',
+            payload: Payload.fromValue(model || { id })
+        }, origin);
     }
 
     public onModelUpdate(msg: NetworkMessage): void {
