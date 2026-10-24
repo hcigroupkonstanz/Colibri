@@ -8,7 +8,7 @@ For developers working on colibri-web itself. Running the tests: [development.md
   after its main export: PascalCase for a class or a PascalCase-named function or const (`Colibri.ts` exports
   `Colibri`, `Synced.ts` exports `Synced`), camelCase for a module of plain functions (`lifecycle.ts`). Small types and
   functions only that module uses may stay in it.
-- Folders are lowercase.
+- Folders are camelCase, as `src/modelSync/`.
 - Existing file names stay as they are, so nothing about 2.0 looks different.
 - No generic names like `utils.ts`, `helpers.ts` or `common.ts`.
 - No barrel files except `src/index.ts`, the package's single entry point. Import from the defining file. Barrels bring
@@ -47,9 +47,18 @@ files are linted without it. `npm run lint` must report 0 problems.
 - No new module-level state. A dual ESM/CJS package can be loaded twice, and module state then exists twice.
 - Keep state with the code that changes it. Prefer a `WeakMap` keyed by the instance, as `lifecycle.ts` does.
 - Module functions rather than classes with only static members.
-- Functional core, imperative shell: one coordinator sends messages, emits and schedules timers (`Colibri` for the
-  connection, `RegisterModelSync` for the models). Its collaborators only decide. They take the time and callbacks as
-  parameters, so unit tests reach them without a socket.
+- Functional core, imperative shell: the coordinators send messages, emit and start timers. `Colibri` is the
+  coordinator for the connection, `ModelSyncChannel` for one model sync registration (`RegisterModelSync` creates one
+  per call).
+- A class split out of `Colibri` may own one timer or one request, and `Colibri` starts and stops it:
+  `OldServerDetector` (its timer and the warning it logs), `RestStore` (the store's requests).
+- The model sync collaborators in `src/modelSync/` (for example `DeletedHere`, `KnownValues`, `GuardWindow`,
+  `ReconnectRound`) keep state and decide. Where they need the time or a request, they take the clock
+  (`() => Date.now()`) or a callback as a parameter, so unit tests reach them without a socket.
+- `OwnModelAnswers` holds part of `ModelSyncChannel`'s work: settling own models after their request. It sends and
+  applies only through callbacks that `ModelSyncChannel` passes it.
+- A class split out of another gets what it needs through its constructor (values, shared collaborators, callbacks),
+  never a reference to its owner.
 - Read the time with `Date.now()`, so tests control it with fake timers.
 
 ## Style
@@ -74,6 +83,8 @@ files are linted without it. `npm run lint` must report 0 problems.
 
 - Unit tests are `test/<Module>.test.ts`. A module whose tests are split by concern gets
   `test/<Module>.<concern>.test.ts`.
+- Unit tests for a module in a `src/` subfolder sit in the matching `test/` subfolder, as
+  `test/modelSync/Confirmations.test.ts` for `src/modelSync/Confirmations.ts`.
 - Helpers several test files share sit in `test/support/`.
 - A test file resets the module state it uses (`Colibri`'s singleton, `RemoteLogger`'s patched console and the like),
   so files and tests run in any order.
