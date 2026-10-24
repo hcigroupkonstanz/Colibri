@@ -9,7 +9,7 @@ import type { LogNav, NavStep } from './log-toolbar.component';
 import { LogToolbarComponent, PHONE } from './log-toolbar.component';
 import { OfflineBannerComponent } from '../shell/offline-banner.component';
 import { LEVEL_TAGS, matchesSearch, messageText, sourceOf } from './log-format';
-import { download, fileNamePart } from '../format';
+import { download, fileNamePart } from '../download';
 
 /**
  * Lines shown at first and added by each "Show older lines"; half as many on a phone. Rows are

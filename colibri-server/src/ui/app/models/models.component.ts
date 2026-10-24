@@ -9,7 +9,8 @@ import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import type { ModelRow, ModelSnapshot, ModelsSnapshot } from '../connection/admin.service';
 import { AdminService } from '../connection/admin.service';
 import { OfflineBannerComponent } from '../shell/offline-banner.component';
-import { bytes, count, download, duration, fileNamePart } from '../format';
+import { download, fileNamePart } from '../download';
+import { bytes, count, duration } from '../format';
 
 /** Rows per page of the models list. */
 export const MODELS_PAGE_SIZE = 50;
