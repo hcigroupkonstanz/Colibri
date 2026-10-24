@@ -1,4 +1,3 @@
-// Sending again a change that a connection which died without closing lost.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

@@ -1,4 +1,3 @@
-// A model class with methods named like SyncModel's, and the list of models a RegisterModelSync emits.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

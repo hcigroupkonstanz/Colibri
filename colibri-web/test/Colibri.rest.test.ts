@@ -1,4 +1,3 @@
-// The REST side of Colibri: getRestUri, and the get, set and delete calls against the server's store.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

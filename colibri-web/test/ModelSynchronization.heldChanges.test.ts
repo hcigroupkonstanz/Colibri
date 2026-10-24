@@ -1,4 +1,3 @@
-// Holding back a change made after registerModel, before the server has answered for the model.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

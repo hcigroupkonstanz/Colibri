@@ -1,4 +1,3 @@
-// Helpers for the Colibri tests that drive Sync and RegisterModelSync through the real Colibri.
 import type { Observable } from 'rxjs';
 import { expect } from 'vitest';
 import type { FakeSocket } from './fakeSocket';

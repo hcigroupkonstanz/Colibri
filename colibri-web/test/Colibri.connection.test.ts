@@ -1,4 +1,3 @@
-// The connection of Colibri: an unreachable server, the protocol version handshake and a server that predates it.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

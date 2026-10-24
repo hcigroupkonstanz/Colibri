@@ -1,4 +1,3 @@
-// A fake Socket.IO client socket for the Colibri tests, and lookups of the handlers registered on it.
 import { vi } from 'vitest';
 import type { Message } from '../../src/Colibri';
 

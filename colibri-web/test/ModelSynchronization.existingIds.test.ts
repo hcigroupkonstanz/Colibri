@@ -1,4 +1,3 @@
-// Registering a model whose id the server may already have: it asks for the id before it sends the model.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

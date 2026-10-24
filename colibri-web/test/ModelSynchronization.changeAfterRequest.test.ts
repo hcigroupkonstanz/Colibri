@@ -1,4 +1,3 @@
-// What a client does with a change sent just after it asked for every model.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

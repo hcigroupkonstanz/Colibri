@@ -1,4 +1,3 @@
-// Deleting a model for every client: delete() on an own model and on one another client created.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

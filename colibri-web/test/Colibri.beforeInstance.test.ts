@@ -1,4 +1,3 @@
-// Registering channels, listeners and models before new Colibri() exists: they attach once it is constructed.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({

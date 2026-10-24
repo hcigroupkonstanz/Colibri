@@ -1,4 +1,3 @@
-// What a client does on a reconnect: asking for the models again and sending its own models again.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 vi.mock('socket.io-client', () => ({
