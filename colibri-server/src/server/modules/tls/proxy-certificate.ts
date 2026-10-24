@@ -25,6 +25,20 @@ export const formatProxyTlsAddress = function (address: ProxyTlsAddress): string
 // A host name: letters, digits and hyphens in dot-separated labels.
 const HOST_NAME = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$/;
 
+// One entry of PROXY_TLS_ADDRESSES; throws if it is none.
+const parseProxyTlsEntry = function (entry: string): ProxyTlsAddress {
+    const match = /^(?:\[([^\]]+)\]|([^:[\]]+))(?::(\d{1,5}))?$/.exec(entry);
+    const host = match?.[1] ?? match?.[2];
+    const port = match?.[3] === undefined ? DEFAULT_PORT : Number(match[3]);
+    const validHost = host !== undefined && (match?.[1] !== undefined ? isIP(host) === 6 : isIP(host) === 4 || HOST_NAME.test(host));
+    if (!validHost || !Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error(`Invalid PROXY_TLS_ADDRESSES: "${entry}" is not a host name or IP address with an optional port, `
+            + 'e.g. colibri.example.org or colibri.example.org:9212 (an IPv6 address in brackets, e.g. [2001:db8::1]:443)');
+    }
+    // Without a trailing dot: SNI may not carry one, and Go's TLS servers (Traefik, Caddy) refuse it.
+    return { host: host!.replace(/\.$/, ''), port };
+};
+
 /**
  * PROXY_TLS_ADDRESSES: `host[:port]` entries separated by commas, an IPv6 address in brackets, port
  * 443 if left out. Throws for the first entry that is none, naming it.
@@ -32,16 +46,7 @@ const HOST_NAME = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?
 export const parseProxyTlsAddresses = function (raw: string | undefined): ProxyTlsAddress[] {
     const addresses: ProxyTlsAddress[] = [];
     for (const entry of (raw ?? '').split(',').map(part => part.trim()).filter(part => part !== '')) {
-        const match = /^(?:\[([^\]]+)\]|([^:[\]]+))(?::(\d{1,5}))?$/.exec(entry);
-        const host = match?.[1] ?? match?.[2];
-        const port = match?.[3] === undefined ? DEFAULT_PORT : Number(match[3]);
-        const validHost = host !== undefined && (match?.[1] !== undefined ? isIP(host) === 6 : isIP(host) === 4 || HOST_NAME.test(host));
-        if (!validHost || !Number.isInteger(port) || port < 1 || port > 65535) {
-            throw new Error(`Invalid PROXY_TLS_ADDRESSES: "${entry}" is not a host name or IP address with an optional port, `
-                + 'e.g. colibri.example.org or colibri.example.org:9212 (an IPv6 address in brackets, e.g. [2001:db8::1]:443)');
-        }
-        // Without a trailing dot: SNI may not carry one, and Go's TLS servers (Traefik, Caddy) refuse it.
-        addresses.push({ host: host!.replace(/\.$/, ''), port });
+        addresses.push(parseProxyTlsEntry(entry));
     }
     return addresses;
 };
