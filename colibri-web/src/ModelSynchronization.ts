@@ -429,35 +429,44 @@ class ModelSyncChannel<T extends SyncModel<T>> {
     // Fields with a change SyncModel has not reported yet keep their value: the update predates the
     // change, and applying it would make the report send the update's value instead.
     private applyUpdate(model: T | undefined, modelData: Partial<T>): void {
-        if (model) {
-            const unsent = this.changesToSend.peek(model);
-            const update = withoutKeys(withoutChanges(modelData, model, unsent), this.guardWindow.keptOutOf(model));
-            if (this.ownModels.has(model)) this.knownValues.remember(model, update);
+        if (model) this.applyToListed(model, modelData);
+        else if (modelData.id) this.addRemoteModel(modelData.id, modelData);
+    }
 
-            // Update existing model
-            updateOf(model, update);
+    private applyToListed(model: T, modelData: Partial<T>): void {
+        const unsent = this.changesToSend.peek(model);
+        const update = withoutKeys(withoutChanges(modelData, model, unsent), this.guardWindow.keptOutOf(model));
+        if (this.ownModels.has(model)) this.knownValues.remember(model, update);
+
+        // Update existing model
+        updateOf(model, update);
+        this.models.next([...this.models.value]);
+    }
+
+    private addRemoteModel(id: string, modelData: Partial<T>): void {
+        if (this.deletedHere.recently(id)) return;
+        const newModel = this.create(id);
+        this.wireRemoteModel(newModel);
+
+        updateOf(newModel, modelData);
+        this.models.next([...this.models.value, newModel]);
+    }
+
+    private wireRemoteModel(newModel: T): void {
+        newModel.deletions.subscribe(() => {
+            this.deleteHere(newModel);
+        });
+
+        newModel.modelChanges.subscribe(change => {
+            this.changesToSend.add(newModel, [change]);
+        });
+        newModel.modelChanges$.subscribe(changes => {
+            this.changesToSend.drop(newModel);
+            const update = toJsonOf(newModel, changes);
+            SendMessage(this.name, 'model::update', update);
+            this.guardWindow.keepOut(newModel, update);
             this.models.next([...this.models.value]);
-        } else if (modelData.id) {
-            if (this.deletedHere.recently(modelData.id)) return;
-            const newModel = this.create(modelData.id);
-            newModel.deletions.subscribe(() => {
-                this.deleteHere(newModel);
-            });
-
-            newModel.modelChanges.subscribe(change => {
-                this.changesToSend.add(newModel, [change]);
-            });
-            newModel.modelChanges$.subscribe(changes => {
-                this.changesToSend.drop(newModel);
-                const update = toJsonOf(newModel, changes);
-                SendMessage(this.name, 'model::update', update);
-                this.guardWindow.keepOut(newModel, update);
-                this.models.next([...this.models.value]);
-            });
-
-            updateOf(newModel, modelData);
-            this.models.next([...this.models.value, newModel]);
-        }
+        });
     }
 
     private onDelete(id: string): void {
