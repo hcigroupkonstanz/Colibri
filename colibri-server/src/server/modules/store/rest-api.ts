@@ -4,6 +4,7 @@ import type { WebServer } from '../http/web-server.js';
 import { StoreCheckpointer } from './store-checkpoint.js';
 import type { StoreEntry } from './store-database.js';
 import { STORE_DATABASE_FILENAME, StoreDatabase, WAL_BACKSTOP_PAGES } from './store-database.js';
+import { StoreExpiry } from './store-expiry.js';
 import type { LoadedStoreJson } from './store-json-import.js';
 import { STORE_JSON_FILENAME, StoreJsonImport } from './store-json-import.js';
 import { StoreQuota } from './store-quota.js';
@@ -11,8 +12,6 @@ import { storeRouter } from './store-router.js';
 import { mkdir } from 'fs/promises';
 import * as path from 'path';
 
-const DAY_MILLIS = 24 * 60 * 60 * 1000;
-const EXPIRY_INTERVAL_MILLIS = 60 * 60 * 1000;
 // How often the write-ahead log is copied into store.db (see StoreCheckpointer), and how often a
 // checkpoint that keeps failing is logged.
 const CHECKPOINT_INTERVAL_MILLIS = 1000;
@@ -35,11 +34,11 @@ export class RestAPI extends Service {
     private readonly databasePath: string;
     // Imports store.json into a new store.db. Logs through this service, so under its name.
     private readonly storeJsonImport: StoreJsonImport;
-    private readonly expiryDays: number;
+    // Deletes the values not written for STORE_EXPIRY_DAYS, at startup and every hour.
+    private readonly expiry: StoreExpiry;
     // The limit on the bytes of JSON the store holds, and the warning when a PUT is refused for it.
     private readonly quota: StoreQuota;
     private readonly now: () => number;
-    private expiryTimer: NodeJS.Timeout | undefined;
     private checkpointer: StoreCheckpointer | undefined;
     private checkpointWarnedAt = -Infinity;
 
@@ -53,7 +52,12 @@ export class RestAPI extends Service {
             logWarning: (msg) => this.logWarning(msg),
             logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
         });
-        this.expiryDays = options.expiryDays ?? 0;
+        this.expiry = new StoreExpiry(options.expiryDays ?? 0, {
+            store: () => this.db,
+            now: () => this.now(),
+            logInfo: (msg) => this.logInfo(msg),
+            logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
+        });
         this.quota = new StoreQuota(options.maxBytes ?? 0, {
             store: () => this.store,
             now: () => this.now(),
@@ -84,11 +88,7 @@ export class RestAPI extends Service {
     public override async init(): Promise<void> {
         await this.open();
 
-        if (this.expiryDays > 0) {
-            this.expire();
-            this.expiryTimer = setInterval(() => this.expire(), EXPIRY_INTERVAL_MILLIS);
-            this.expiryTimer.unref();
-        }
+        this.expiry.start();
     }
 
     // Opens store.db, importing store.json into it if store.db is new. A store.db that cannot be
@@ -168,27 +168,10 @@ export class RestAPI extends Service {
         db.setAutoCheckpoint(WAL_BACKSTOP_PAGES);
     }
 
-    // Deletes the values not written for expiryDays. Never throws: at startup that would stop the
-    // server, and in the timer it would be an uncaught exception, both for a store.db that another
-    // program has locked for a moment, or a full disk.
-    private expire(): void {
-        if (!this.db) return;
-        try {
-            const removed = this.db.expire(this.now() - this.expiryDays * DAY_MILLIS);
-            if (removed > 0) {
-                this.logInfo(`Data store: removed ${removed} value(s) not written for ${this.expiryDays} days (STORE_EXPIRY_DAYS)`);
-            }
-        } catch (err) {
-            this.logError(`Data store: could not remove the values not written for ${this.expiryDays} days: `
-                + `${errorMessage(err)}. Tried again in an hour.`, false);
-        }
-    }
-
     // At shutdown. Every write is committed when its request is answered, so there is nothing to
     // save; closing checkpoints the write-ahead log into store.db.
     public async close(): Promise<void> {
-        if (this.expiryTimer) clearInterval(this.expiryTimer);
-        this.expiryTimer = undefined;
+        this.expiry.stop();
         await this.checkpointer?.stop();
         this.checkpointer = undefined;
         this.db?.close();
