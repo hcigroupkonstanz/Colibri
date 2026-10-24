@@ -1,0 +1,14 @@
+// An item of a p-select list: the name on the left, a muted note on the right.
+
+@mixin option {
+    .option {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        width: 100%;
+
+        .muted {
+            font-size: 12px;
+        }
+    }
+}
