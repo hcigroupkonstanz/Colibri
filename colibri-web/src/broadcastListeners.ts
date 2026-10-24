@@ -5,7 +5,7 @@ export type GenericCallback = (val: any) => void;
 const listeners: Partial<Record<string, Partial<Record<string, GenericCallback[]>>>> = {};
 const channelHandlers: Partial<Record<string, Parameters<typeof RegisterChannel>[1]>> = {};
 
-// NOTE: T pins the payload type the call site's callback expects
+// T pins the payload type the call site's callback expects
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export const registerListener = <T>(channel: string, type: string, callback: (val: T) => void) => {
     let channelListeners = listeners[channel];

@@ -1,7 +1,7 @@
 import { ColibriError } from './ColibriError';
 
-// The "dom" lib declares these as non-optional, but under plain Node (samples, e2e) they are
-// absent. Shadowed so the types say so.
+// The "dom" lib declares `window` as always present, but it is absent under plain Node (samples,
+// e2e). Shadowed so the type says so.
 declare const window: Window | undefined;
 
 // The default server: the host that served the page. `typeof` rather than `window?.`, since under

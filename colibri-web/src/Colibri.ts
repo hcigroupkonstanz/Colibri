@@ -27,8 +27,8 @@ interface ProtocolRejection {
     clientVersion?: string;
 }
 
-// The "dom" lib declares these as non-optional, but under plain Node (samples, e2e) they are
-// absent. Shadowed so the types say so.
+// The "dom" lib declares `window` as always present, but it is absent under plain Node (samples,
+// e2e). Shadowed so the type says so.
 declare const window: Window | undefined;
 
 export interface Message {
@@ -136,6 +136,7 @@ export class Colibri {
         }
     }
 
+    // Returns the socket instead of assigning it: the field is readonly, so only the constructor may.
     private openSocket() {
         const socket = connect(this.uri, {
             query: { app: this.app, version: PROTOCOL_VERSION },
@@ -170,9 +171,9 @@ export class Colibri {
         this.hasReportedOutage = false;
         this.oldServerDetector.start();
 
-        // The server relays without replaying, so whatever it relayed while this client was away is
-        // lost. Whoever has state to catch up on is told now. Socket.IO has already flushed what
-        // was queued while disconnected, so a catch-up goes out after it.
+        // The server relays without replaying, so what it relayed while this client was away is lost;
+        // whoever has state to catch up on is told now. Socket.IO has already flushed its send
+        // buffer, so a catch-up goes out after it.
         if (this.hasConnected) colibriReconnected(this);
         this.hasConnected = true;
     }

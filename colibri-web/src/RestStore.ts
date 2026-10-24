@@ -1,3 +1,7 @@
+/**
+ * Sends the REST store's requests in the Colibri media type. `uriFor` calls `Colibri.getRestUri`, so
+ * a subclass that overrides it still decides the URI.
+ */
 export class RestStore {
     // Accept of every REST request, and Content-Type of setRestObject. colibri-server 2.x refuses a
     // value sent as plain application/json. The version in it lets a reverse proxy route by Accept.

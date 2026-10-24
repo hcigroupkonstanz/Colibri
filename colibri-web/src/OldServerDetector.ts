@@ -10,16 +10,14 @@ const OLD_SERVER_TIMEOUT_MS = 5000;
 // The protocol of every release before 2.0.0, none of which announce themselves.
 const OLD_SERVER_PROTOCOL_VERSION = '1';
 
-// The "dom" lib declares these as non-optional, but under plain Node (samples, e2e) they are
-// absent. Shadowed so the types say so.
+// The "dom" lib declares `document` as always present, but it is absent under plain Node (samples,
+// e2e). Shadowed so the type says so.
 declare const document: Document | undefined;
 
-/*
- *  Detecting a server that predates the protocol version check.
- *
- *  Such a server neither refuses this client nor says what it speaks, so a current one
- *  announces itself unprompted and the missing announcement is the signal. The timer only
- *  observes; it does not gate message delivery.
+/**
+ * Detects a server that predates the protocol version check. Such a server neither refuses this
+ * client nor says what it speaks, while a current one announces itself on connect, so the signal
+ * is that announcement not arriving. The timer only observes; it does not gate message delivery.
  */
 export class OldServerDetector {
     private oldServerTimer: ReturnType<typeof setTimeout> | undefined;
@@ -32,6 +30,8 @@ export class OldServerDetector {
         private readonly report: (error: ProtocolMismatchError) => void
     ) {}
 
+    // Restarts the wait if one is running, as after a reconnect. Does nothing once reported or
+    // given up.
     public start(): void {
         if (this.hasReportedOldServer) return;
 
@@ -46,6 +46,7 @@ export class OldServerDetector {
         this.oldServerTimer = undefined;
     }
 
+    // Unlike stop(), also makes start() do nothing from now on.
     public giveUp(): void {
         this.stop();
         this.hasReportedOldServer = true;
@@ -55,8 +56,8 @@ export class OldServerDetector {
         // A disconnected socket explains the silence by itself, and a reconnect re-arms this.
         if (!this.isConnected()) return;
 
-        // A frozen or backgrounded tab stops draining the socket while timers keep running, so this
-        // can fire ahead of the queued announcement. Wait another window.
+        // A hidden tab can be frozen, and on resume this timer may run before the queued
+        // announcement. Wait another window.
         //
         // `typeof` rather than `document?.`: under Node `document` is undeclared, which throws a
         // ReferenceError that optional chaining does not catch.
