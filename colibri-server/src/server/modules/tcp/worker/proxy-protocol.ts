@@ -87,6 +87,18 @@ const formatIPv6 = function (bytes: Buffer): string {
     return new net.SocketAddress({ address: groups.join(':'), family: 'ipv6' }).address;
 };
 
+const readV2SourceAddress = function (family: number, data: Buffer): string | undefined {
+    if (family === V2_AF_INET || family === V2_AF_INET6) {
+        const ipv4 = family === V2_AF_INET;
+        if (data.length < (ipv4 ? V2_INET_ADDRESS_LENGTH : V2_INET6_ADDRESS_LENGTH)) {
+            throw new ProxyHeaderError(`${data.length} bytes are too few for the ${ipv4 ? 'IPv4' : 'IPv6'} addresses of a version 2 header`);
+        }
+        return ipv4 ? Array.from(data.subarray(0, 4)).join('.') : formatIPv6(data.subarray(0, 16));
+    }
+    // AF_UNSPEC or AF_UNIX: no client IP.
+    return undefined;
+};
+
 const readV2 = function (bytes: Buffer): ProxyHeader | 'incomplete' {
     if (bytes.length < V2_FIXED_LENGTH) return 'incomplete';
 
@@ -113,15 +125,7 @@ const readV2 = function (bytes: Buffer): ProxyHeader | 'incomplete' {
     if (command === V2_LOCAL || transport !== V2_STREAM) return { length, sourceAddress: undefined };
 
     const data = bytes.subarray(V2_FIXED_LENGTH, length);
-    if (family === V2_AF_INET || family === V2_AF_INET6) {
-        const ipv4 = family === V2_AF_INET;
-        if (dataLength < (ipv4 ? V2_INET_ADDRESS_LENGTH : V2_INET6_ADDRESS_LENGTH)) {
-            throw new ProxyHeaderError(`${dataLength} bytes are too few for the ${ipv4 ? 'IPv4' : 'IPv6'} addresses of a version 2 header`);
-        }
-        return { length, sourceAddress: ipv4 ? Array.from(data.subarray(0, 4)).join('.') : formatIPv6(data.subarray(0, 16)) };
-    }
-    // AF_UNSPEC or AF_UNIX: no client IP.
-    return { length, sourceAddress: undefined };
+    return { length, sourceAddress: readV2SourceAddress(family, data) };
 };
 
 // Parses the header at the start of a connection from the bytes received so far. 'incomplete' while
