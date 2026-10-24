@@ -125,6 +125,8 @@ const rateLabel = function (value: d3.NumberValue): string {
 
 type Layer = d3.Series<StackRow, string> & { color: string };
 
+type ScaleY = d3.ScaleLinear<number, number, never>;
+
 // a clipPath id of its own for each chart on the page
 let clipIds = 0;
 
@@ -307,50 +309,65 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
 
         const { rows, series } = this.stack();
         const plotHeight = Math.max(0, this.height - margin.top - margin.bottom);
+
+        const layers = this.stackLayers(rows, series);
+        const y = this.scaleY(layers, plotHeight);
+
+        this.drawLayers(layers, y);
+        this.drawLeftAxis(y, plotHeight);
+    }
+
+    private stackLayers(rows: StackRow[], series: Series[]): Layer[] {
         const colors = new Map(series.map(s => [ s.id, s.color ]));
 
-        const layers: Layer[] = d3.stack<StackRow, string>()
+        return d3.stack<StackRow, string>()
             .keys(series.map(s => s.id))
             .value((row, id) => row.values[id] ?? 0)(rows)
             .map(layer => Object.assign(layer, { color: colors.get(layer.key) ?? 'var(--text-muted)' }));
+    }
 
+    private scaleY(layers: Layer[], plotHeight: number): ScaleY {
         const top = d3.max(layers.at(-1) ?? [], point => point[1]) ?? 0;
-        const y = d3.scaleLinear()
+        return d3.scaleLinear()
             .domain([Math.max(top, 10), 0])
             .range([0, plotHeight])
             .nice();
+    }
 
-        if (this.areaSvg) {
-            const area = d3.area<d3.SeriesPoint<StackRow>>()
-                .defined(point => !point.data.gap)
+    private drawLayers(layers: Layer[], y: ScaleY): void {
+        if (!this.areaSvg) return;
+
+        const area = d3.area<d3.SeriesPoint<StackRow>>()
+            .defined(point => !point.data.gap)
+            .x(point => this.x(point.data.at))
+            .y0(point => y(point[0]))
+            .y1(point => y(point[1]));
+        const edge = (layer: Layer) => {
+            const shown = edgeShown(layer);
+            return d3.line<d3.SeriesPoint<StackRow>>()
+                .defined((_, i) => shown[i])
                 .x(point => this.x(point.data.at))
-                .y0(point => y(point[0]))
-                .y1(point => y(point[1]));
-            const edge = (layer: Layer) => {
-                const shown = edgeShown(layer);
-                return d3.line<d3.SeriesPoint<StackRow>>()
-                    .defined((_, i) => shown[i])
-                    .x(point => this.x(point.data.at))
-                    .y(point => y(point[1]))(layer);
-            };
+                .y(point => y(point[1]))(layer);
+        };
 
-            this.areaSvg
-                .selectAll<SVGGElement, Layer>('g.layer')
-                .data(layers, layer => layer.key)
-                .join(enter => {
-                    const g = enter.append('g').attr('class', 'layer');
-                    g.append('path').attr('class', 'area').attr('fill-opacity', 0.35);
-                    g.append('path').attr('class', 'edge').attr('fill', 'none').attr('stroke-width', 1.5);
-                    return g;
-                })
-                .each(function (layer) {
-                    const g = d3.select(this);
-                    // a style, not an attribute: the colour of a client without a slot is a CSS variable
-                    g.select('path.area').style('fill', layer.color).attr('d', area(layer));
-                    g.select('path.edge').style('stroke', layer.color).attr('d', edge(layer));
-                });
-        }
+        this.areaSvg
+            .selectAll<SVGGElement, Layer>('g.layer')
+            .data(layers, layer => layer.key)
+            .join(enter => {
+                const g = enter.append('g').attr('class', 'layer');
+                g.append('path').attr('class', 'area').attr('fill-opacity', 0.35);
+                g.append('path').attr('class', 'edge').attr('fill', 'none').attr('stroke-width', 1.5);
+                return g;
+            })
+            .each(function (layer) {
+                const g = d3.select(this);
+                // a style, not an attribute: the colour of a client without a slot is a CSS variable
+                g.select('path.area').style('fill', layer.color).attr('d', area(layer));
+                g.select('path.edge').style('stroke', layer.color).attr('d', edge(layer));
+            });
+    }
 
+    private drawLeftAxis(y: ScaleY, plotHeight: number): void {
         if (this.axisLeft) {
             this.axisLeft.call(d3.axisLeft(y).ticks(Math.max(2, Math.floor(plotHeight / 40))).tickFormat(rateLabel));
         }
