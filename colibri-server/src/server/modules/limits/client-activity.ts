@@ -49,7 +49,7 @@ export class TrafficMeter {
 
     public constructor(private sampledAt: number) {}
 
-    // `sent`: for a transport that does not count sends in this.sent (see SocketIOServer.sentTo).
+    // `sent`: for a transport that does not count sends in this.sent (see WebTrafficCounter.sentTo).
     public sample(now: number, sent = this.sent): void {
         const elapsed = now - this.sampledAt;
         if (elapsed < RATE_WINDOW_MILLIS) return;

@@ -42,7 +42,8 @@ import type { TrustProxy } from '../net/trusted-proxies.js';
 import { forwardedClientAddress, forwardedTls, trustNoProxy } from '../net/trusted-proxies.js';
 import { normalizeAddress } from '../net/addresses.js';
 import type { ClientActivity } from '../limits/client-activity.js';
-import { RATE_WINDOW_MILLIS, TrafficMeter } from '../limits/client-activity.js';
+import type { WebTraffic } from './web-traffic-counter.js';
+import { WebTrafficCounter } from './web-traffic-counter.js';
 
 // How often held-back updates are passed on as a limited client's tokens refill, and finished
 // episodes reported.
@@ -77,20 +78,6 @@ export interface SocketIoClient extends NetworkClient {
     tlsAtProxy: boolean;
 }
 
-// A web client's messages, for the admin UI. What it sends is counted as it arrives. What it is
-// sent through its app's room (broadcastToApp) is counted once per room, not per member, so the
-// room's single encode stays a single step: the client was sent every room message since it joined,
-// less those it was the one left out of.
-interface WebTraffic {
-    readonly meter: TrafficMeter;
-    // Messages emitted to it alone (broadcast()).
-    direct: number;
-    // Room messages it was left out of, as their sender.
-    excluded: number;
-    // The room's count when it joined.
-    readonly roomBase: number;
-}
-
 export class SocketIOServer extends Service implements NetworkServer {
     public readonly serviceName = 'SocketIO';
     public readonly groupName = 'networking';
@@ -118,10 +105,9 @@ export class SocketIOServer extends Service implements NetworkServer {
 
     // See WebTraffic. Messages on the 'colibri' channel itself, the latency pings and their echoes
     // and the protocol messages, are not counted, as heartbeats are not on TCP.
-    private readonly traffic = new Map<string, WebTraffic>();
-    // Messages emitted to each app's room, while it has clients.
-    private readonly roomEmits = new Map<string, number>();
-    private trafficSampledAt = 0;
+    private readonly trafficCounter = new WebTrafficCounter({
+        isInApp: (app, clientId) => this.clientIdsByApp.get(app)?.has(clientId) ?? false,
+    });
 
     public start(server: HttpServer, options: SocketIoServerOptions = {}): void {
         this.rateLimiter = this.createRateLimiter(options.rateLimit ?? DEFAULT_RATE_LIMIT);
@@ -230,32 +216,21 @@ export class SocketIOServer extends Service implements NetworkServer {
     private sweepRateLimit(now: number): void {
         for (const client of Array.from(this.heldUpdates.keys())) this.drainHeld(client, now);
         this.rateLimiter.sweep(now);
-
-        if (now - this.trafficSampledAt >= RATE_WINDOW_MILLIS) {
-            this.trafficSampledAt = now;
-            for (const client of this.clients) {
-                const traffic = this.traffic.get(client.id);
-                traffic?.meter.sample(now, this.sentTo(client, traffic));
-            }
-        }
-    }
-
-    private sentTo(client: SocketIoClient, traffic: WebTraffic): number {
-        return traffic.direct + (this.roomEmits.get(client.app) ?? 0) - traffic.roomBase - traffic.excluded;
+        this.trafficCounter.sample(this.clients, now);
     }
 
     // What the admin UI's client view shows of a web client's traffic, with `history` its rate
     // history too. A web client has only the rate limit: there is no queue to the main thread to
     // fall behind on.
     public activityOf(client: SocketIoClient, history = false): ClientActivity {
-        const traffic = this.traffic.get(client.id);
+        const meter = this.trafficCounter.meterOf(client.id);
         const held = this.heldUpdates.get(client)?.size ?? 0;
         return {
-            in: traffic?.meter.receivedPerSecond ?? null,
-            out: traffic?.meter.sentPerSecond ?? null,
+            in: meter?.receivedPerSecond ?? null,
+            out: meter?.sentPerSecond ?? null,
             limit: held > 0 || this.rateLimiter.isLimited(client) ? 'rate' : null,
             held,
-            ...(history ? { history: traffic?.meter.history(performance.now()) ?? [] } : {}),
+            ...(history ? { history: meter?.history(performance.now()) ?? [] } : {}),
         };
     }
 
@@ -295,10 +270,7 @@ export class SocketIOServer extends Service implements NetworkServer {
                 command: msg.command,
                 payload
             });
-            if (counted) {
-                const traffic = this.traffic.get(client.id);
-                if (traffic) traffic.direct += 1;
-            }
+            if (counted) this.trafficCounter.countDirect(client.id);
         }
     }
 
@@ -317,15 +289,7 @@ export class SocketIOServer extends Service implements NetworkServer {
             command: msg.command,
             payload
         });
-        if (msg.channel !== COLIBRI_CHANNEL) this.countRoomEmit(app, exceptClientId);
-    }
-
-    private countRoomEmit(app: string, exceptClientId: string | undefined): void {
-        this.roomEmits.set(app, (this.roomEmits.get(app) ?? 0) + 1);
-        if (exceptClientId === undefined || !this.clientIdsByApp.get(app)?.has(exceptClientId)) return;
-
-        const traffic = this.traffic.get(exceptClientId);
-        if (traffic) traffic.excluded += 1;
+        if (msg.channel !== COLIBRI_CHANNEL) this.trafficCounter.countRoomEmit(app, exceptClientId);
     }
 
     public hasRecipients(app: string, exceptClientId?: string): boolean {
@@ -432,13 +396,7 @@ export class SocketIOServer extends Service implements NetworkServer {
     }
 
     private register(client: SocketIoClient): WebTraffic {
-        const traffic: WebTraffic = {
-            meter: new TrafficMeter(performance.now()),
-            direct: 0,
-            excluded: 0,
-            roomBase: this.roomEmits.get(client.app) ?? 0,
-        };
-        this.traffic.set(client.id, traffic);
+        const traffic = this.trafficCounter.register(client, performance.now());
         this.clients.push(client);
         this.addToAppIndex(client);
         void client.socket.join(client.app);
@@ -527,7 +485,7 @@ export class SocketIOServer extends Service implements NetworkServer {
             // held back when it left.
             this.releaseHeld(rc);
             this.rateLimiter.forget(rc);
-            this.traffic.delete(rc.id);
+            this.trafficCounter.forget(rc.id);
             if (rc.app !== ADMIN_APP) { // ignore colibri web interface clients
                 this.logDebug(`Colibri client '${rc.name}' (${rc.id}) disconnected`, { ...aboutClient(rc), ...CONNECTION_LINE });
             }
@@ -544,7 +502,7 @@ export class SocketIOServer extends Service implements NetworkServer {
         this.clientsById.delete(client.id);
 
         if (this.clientIdsByApp.remove(client.app, client.id) === 0) {
-            this.roomEmits.delete(client.app);
+            this.trafficCounter.forgetRoom(client.app);
         }
     }
 }
