@@ -1,5 +1,5 @@
 import * as net from 'net';
-import * as tls from 'tls';
+import type * as tls from 'tls';
 import { AppIndex } from '../../core/app-index.js';
 import { errorMessage } from '../../core/error-message.js';
 import { CONNECTION_LINE } from '../../core/log-message.js';
@@ -11,11 +11,9 @@ import { randomUUID } from 'crypto';
 import {
     COLIBRI_CHANNEL,
     FrameError,
-    FrameReader,
     FrameType,
     PROTOCOL_REJECTED_COMMAND,
     PROTOCOL_VERSION,
-    TLS_HANDSHAKE_PREFIX_LENGTH,
     V1FramingError,
     encodeHeartbeatFrame,
     encodeMessageFrame,
@@ -48,6 +46,7 @@ import {
 import { AddressThrottle } from './address-throttle.js';
 import { CLOSE_GRACE_MILLIS, endRefused } from './end-refused.js';
 import { KEEPALIVE_INITIAL_DELAY_MILLIS } from './keepalive.js';
+import { TLS_HANDSHAKE_TIMEOUT_MILLIS, TlsPort } from './tls-port.js';
 import { createTcpClient, maxBufferSize } from './tcp-client.js';
 import type { Refusal, TcpClient } from './tcp-client.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from '../../net/addresses.js';
@@ -55,7 +54,7 @@ import { RATE_WINDOW_MILLIS } from '../../limits/client-activity.js';
 import { toBuffer } from '../../protocol/to-buffer.js';
 import { readProxyHeader } from './proxy-protocol.js';
 import type { ProxyHeader } from './proxy-protocol.js';
-import { PEER_GONE_ERRORS, WRITE_CANCELLED_ERRORS, describeTlsFailure, errorCode, tcpSocketOf } from './socket-errors.js';
+import { PEER_GONE_ERRORS, WRITE_CANCELLED_ERRORS, errorCode, tcpSocketOf } from './socket-errors.js';
 import type { TrustProxy } from '../../net/trusted-proxies.js';
 import { compileTrustedProxies, trustNoProxy } from '../../net/trusted-proxies.js';
 import type {
@@ -148,10 +147,6 @@ export const HEARTBEAT_EVERY_BYTES = 64 * 1024;
 // during the stall has been read.
 const TICK_STALL_MILLIS = 2000;
 
-// How long a connection to the TLS port has to send its first bytes, and then, separately, to
-// complete its TLS handshake. colibri-unity gives up on a connect after 5 s, handshake included.
-export const TLS_HANDSHAKE_TIMEOUT_MILLIS = 10_000;
-
 // With TCP_PROXY_PROTOCOL set: how long a connection has to send its PROXY protocol header, or, from
 // a peer that is not a trusted proxy, enough of its first bytes to show that it sends none. The same
 // as for a TLS handshake.
@@ -210,20 +205,16 @@ const decideOnProxyHeader = function (received: Buffer, trusted: boolean): Proxy
 
 type FrameOf<T extends FrameType> = Extract<DecodedFrame, { type: T }>;
 
-const secureContextOptions = function (credentials: TcpTlsCredentials): { cert: Buffer; key: Buffer } {
-    return { cert: toBuffer(credentials.cert), key: toBuffer(credentials.key) };
-};
-
 export class TCPServerWorker extends WorkerService {
     private server: net.Server | undefined;
-    // With TLS on: never listens itself, but is handed each connection to the port that starts a TLS
-    // handshake, and hands it on to handleConnection once the handshake is done.
-    private tlsServer: tls.Server | undefined;
-    private tlsCredentials: TcpTlsCredentials | undefined;
-    private tlsHandshakeTimeoutMillis = TLS_HANDSHAKE_TIMEOUT_MILLIS;
-    // The TCP sockets of every connection to the TLS port, from when it is accepted until it closes,
-    // so that stop() can end those still in their handshake too.
-    private readonly tlsPortSockets = new Set<net.Socket>();
+    private readonly tlsPort = new TlsPort({
+        clientAddress: (socket, unknown) => this.clientAddress(socket, unknown),
+        handleConnection: (socket) => this.handleConnection(socket),
+        logDebug: (msg) => this.logDebug(msg),
+        logInfo: (msg) => this.logInfo(msg),
+        logWarning: (msg) => this.logWarning(msg),
+        logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
+    });
 
     private proxyProtocol = false;
     private tlsAtProxy = false;
@@ -268,11 +259,8 @@ export class TCPServerWorker extends WorkerService {
 
     // When a Colibri 1.x client at each remote address was last warned about.
     private readonly v1WarnedAt = new AddressThrottle();
-    // The same for a client without TLS on the TLS port, a TLS client on an unencrypted one, and a
-    // failed TLS handshake.
-    private readonly withoutTlsWarnedAt = new AddressThrottle();
+    // The same for a TLS client on an unencrypted port.
     private readonly tlsWithoutTlsPortWarnedAt = new AddressThrottle();
-    private readonly tlsFailureLoggedAt = new AddressThrottle();
     // The same for a connection refused for its PROXY protocol header, by the address of the peer
     // that sent it (or did not).
     private readonly proxyHeaderWarnedAt = new AddressThrottle();
@@ -349,27 +337,16 @@ export class TCPServerWorker extends WorkerService {
         );
         this.rateLimiter = this.createRateLimiter(options.rateLimit ?? DEFAULT_RATE_LIMIT);
         this.idleTimeoutMillis = options.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MILLIS;
-        this.tlsCredentials = options.tls;
+        this.tlsPort.configure(options.tls);
         this.proxyProtocol = options.proxyProtocol ?? false;
         this.tlsAtProxy = options.tlsAtProxy ?? false;
         this.trustedProxies = options.trustedProxies ?? [];
         this.trustProxy = compileTrustedProxies(this.trustedProxies);
     }
 
-    // A renewed certificate, for every connection from now on. Open ones keep the one they started
-    // with: TLS has no way to change it under them.
+    // Switches the TLS port to a renewed certificate; TlsPort.useTlsCredentials has the details.
     public useTlsCredentials(credentials: TcpTlsCredentials): void {
-        this.tlsCredentials = credentials;
-        if (!this.tlsServer) return;
-
-        try {
-            this.tlsServer.setSecureContext(secureContextOptions(credentials));
-        } catch (err) {
-            this.logError(
-                `Could not switch the TCP server to the renewed TLS certificate: ${errorMessage(err)}`,
-                false
-            );
-        }
+        this.tlsPort.useTlsCredentials(credentials);
     }
 
     private createRateLimiter(limit: RateLimit): InboundRateLimiter<TcpClient> {
@@ -385,11 +362,10 @@ export class TCPServerWorker extends WorkerService {
     }
 
     public start(port: number, host: string): void {
-        const credentials = this.tlsCredentials;
+        const tlsOnly = this.tlsPort.start();
         let handle: ConnectionHandler;
-        if (credentials) {
-            this.tlsServer = this.createTlsServer(credentials);
-            handle = (socket, alreadyRead) => this.handleTlsPortConnection(socket, alreadyRead);
+        if (tlsOnly) {
+            handle = (socket, alreadyRead) => this.tlsPort.handleTlsPortConnection(socket, alreadyRead);
         } else {
             handle = (socket, alreadyRead) => this.handleConnection(socket, alreadyRead);
         }
@@ -407,7 +383,7 @@ export class TCPServerWorker extends WorkerService {
             ? `, PROXY protocol header required from TRUSTED_PROXIES (${this.trustedProxies.join(', ')})` +
                 (this.tlsAtProxy ? ', TLS terminated by proxy (TCP_TLS_AT_PROXY)' : '')
             : '';
-        this.logInfo(`Starting Colibri TCP server on ${hostPort(host, port)}${credentials ? ', TLS only' : ''}${proxyProtocol}`);
+        this.logInfo(`Starting Colibri TCP server on ${hostPort(host, port)}${tlsOnly ? ', TLS only' : ''}${proxyProtocol}`);
         this.heartbeatInterval = setInterval(() => this.tick(), 100);
     }
 
@@ -500,120 +476,6 @@ export class TCPServerWorker extends WorkerService {
     private clientAddress(socket: net.Socket, unknown = 'UNDEFINED'): string {
         const tcpSocket = tcpSocketOf(socket);
         return normalizeAddress(this.proxiedAddresses.get(tcpSocket) || socket.remoteAddress || tcpSocket.remoteAddress || unknown);
-    }
-
-    // TLS wraps the same frames, unchanged: past the handshake, a TLS client is handled exactly like
-    // an unencrypted one.
-    private createTlsServer(credentials: TcpTlsCredentials): tls.Server {
-        const server = tls.createServer({
-            ...secureContextOptions(credentials),
-            handshakeTimeout: this.tlsHandshakeTimeoutMillis,
-        });
-        server.on('secureConnection', (socket: tls.TLSSocket) => this.handleConnection(socket));
-        server.on('tlsClientError', (error: Error, socket: tls.TLSSocket) => this.handleTlsClientError(error, socket));
-        return server;
-    }
-
-    // A connection to the TLS port. Its first bytes say whether it starts a TLS handshake: if so, it
-    // is handed to tlsServer; if not, it is refused, and the warning can name it and the fix. Handed
-    // to tlsServer straight away, it would only fail its handshake with OpenSSL's "wrong version
-    // number", which names neither.
-    private handleTlsPortConnection(socket: net.Socket, alreadyRead: Buffer = NOTHING_READ): void {
-        // Read now, which caches it for clientAddress.
-        const address = this.clientAddress(socket);
-        // Set on the TCP socket: the TLS socket on top of it does not pass either one down.
-        socket.setNoDelay(true);
-        socket.setKeepAlive(true, KEEPALIVE_INITIAL_DELAY_MILLIS);
-        this.tlsPortSockets.add(socket);
-
-        let firstBytes: Buffer = Buffer.alloc(0);
-        const silence = setTimeout(() => {
-            this.logDebug(`Disconnecting ${address}: it sent nothing within ${this.tlsHandshakeTimeoutMillis / 1000} s of connecting`);
-            socket.destroy();
-        }, this.tlsHandshakeTimeoutMillis);
-        silence.unref();
-
-        const onError = (error: Error) => {
-            this.logDebug(`Lost the connection to ${address} before it started TLS: ${error.message}`);
-        };
-        const onData = (chunk: Buffer) => {
-            firstBytes = firstBytes.length === 0 ? chunk : Buffer.concat([firstBytes, chunk]);
-            if (firstBytes.length < TLS_HANDSHAKE_PREFIX_LENGTH) return;
-
-            clearTimeout(silence);
-            socket.off('data', onData);
-            socket.pause();
-
-            if (!looksLikeTlsHandshake(firstBytes)) {
-                this.refuseClientWithoutTls(socket, address, firstBytes);
-                return;
-            }
-            if (!this.tlsServer) {
-                socket.destroy();
-                return;
-            }
-
-            // The TLS socket reads what was read here from the TCP socket's buffer first, and reports
-            // the TCP socket's errors from now on, as tlsClientError until the handshake is done.
-            socket.unshift(firstBytes);
-            socket.off('error', onError);
-            this.tlsServer.emit('connection', socket);
-        };
-
-        socket.on('data', onData);
-        socket.on('error', onError);
-        socket.on('close', () => {
-            clearTimeout(silence);
-            this.tlsPortSockets.delete(socket);
-        });
-        if (alreadyRead.length > 0) onData(alreadyRead);
-    }
-
-    // Nothing is sent to such a client: it speaks neither TLS nor, necessarily, this protocol. A
-    // Unity app sees the connection closed, and this warning is the diagnostic.
-    private refuseClientWithoutTls(socket: net.Socket, address: string, firstBytes: Buffer): void {
-        let v1 = false;
-        let who = '';
-        try {
-            const handshake = new FrameReader(maxBufferSize).append(firstBytes).find(frame => frame.type === FrameType.Handshake);
-            if (handshake) who = ` (Unity client '${handshake.name}', app '${handshake.app}')`;
-        } catch (err) {
-            v1 = err instanceof V1FramingError;
-        }
-
-        if (!this.withoutTlsWarnedAt.shouldWarn(address, performance.now())) {
-            this.logDebug(`Refusing a connection without TLS from ${address}${who} (warned about this address already)`);
-        } else if (v1) {
-            this.logWarning(
-                `Refusing a connection from ${address}: it looks like a Colibri 1.x client, which cannot use TLS, and this ` +
-                    'server\'s TCP port accepts only TLS connections (TLS_CERT and TLS_KEY are set). Upgrade the Colibri Unity ' +
-                    'package (de.uni.kn.colibri) in that app to 2.x, and tick \'Server supports SSL/TLS?\' in its Colibri ' +
-                    'configuration. This is logged at most once a minute per address.'
-            );
-        } else {
-            this.logWarning(
-                `Refusing a connection from ${address}${who}: it does not use TLS, and this server's TCP port accepts only TLS ` +
-                    'connections (TLS_CERT and TLS_KEY are set). Tick \'Server supports SSL/TLS?\' in that Unity app\'s Colibri ' +
-                    'configuration. This is logged at most once a minute per address.'
-            );
-        }
-
-        endRefused(socket);
-    }
-
-    // At info, not as an error: a client that does not accept the certificate, or gives up on a slow
-    // network, is no fault of this server.
-    private handleTlsClientError(error: Error, socket: tls.TLSSocket): void {
-        // tls.Server leaves a socket whose handshake timed out open.
-        socket.destroy();
-
-        const address = this.clientAddress(socket, 'an unknown address');
-        const text = `TLS handshake with ${address} failed: ${describeTlsFailure(error, this.tlsHandshakeTimeoutMillis)}`;
-        if (this.tlsFailureLoggedAt.shouldWarn(address, performance.now())) {
-            this.logInfo(`${text} This is logged at most once a minute per address.`);
-        } else {
-            this.logDebug(text);
-        }
     }
 
     private tick(): void {
@@ -728,19 +590,19 @@ export class TCPServerWorker extends WorkerService {
     public stop(): void {
         clearInterval(this.heartbeatInterval);
         this.server?.close();
-        this.tlsServer = undefined;
+        this.tlsPort.stop();
 
         for (const client of [...this.clients.values(), ...this.waitingClients.values()]) {
             client.socket.destroy();
         }
         // And those still in their TLS handshake, or yet to start it, or to send a PROXY protocol header.
-        for (const socket of [...this.tlsPortSockets, ...this.proxyHeaderSockets]) {
+        this.tlsPort.destroySockets();
+        for (const socket of [...this.proxyHeaderSockets]) {
             socket.destroy();
         }
         this.clients.clear();
         this.waitingClients.clear();
         this.clientsByApp.clear();
-        this.tlsPortSockets.clear();
         this.proxyHeaderSockets.clear();
     }
 

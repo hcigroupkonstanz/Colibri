@@ -52,7 +52,7 @@ export interface TcpServerOptions {
     // See DEFAULT_IDLE_TIMEOUT_MILLIS. 0 never times a client out.
     idleTimeoutMillis?: number;
     // Set, the port accepts only TLS connections, served with this certificate; see
-    // handleTlsPortConnection. 'm:tlsCredentials' replaces it.
+    // TlsPort.handleTlsPortConnection. 'm:tlsCredentials' replaces it.
     tls?: TcpTlsCredentials;
     // The proxies whose PROXY protocol headers name the client, as TRUSTED_PROXIES lists them. The
     // list rather than the main thread's TrustProxy, which cannot be posted to the worker thread:

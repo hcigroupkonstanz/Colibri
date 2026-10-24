@@ -31,8 +31,10 @@ vi.mock('worker_threads', async (importOriginal) => {
 
 interface WorkerInternals {
     server: net.Server | undefined;
-    tlsHandshakeTimeoutMillis: number;
-    tlsPortSockets: Set<net.Socket>;
+    tlsPort: {
+        tlsHandshakeTimeoutMillis: number;
+        tlsPortSockets: Set<net.Socket>;
+    };
     handleParentMessage(msg: { channel: string; content: Record<string, unknown> }): void;
     postMessage(channel: string, content: Record<string, unknown>): void;
 }
@@ -229,7 +231,7 @@ describe('TCPServerWorker with TLS', () => {
 
             peer.socket.end();
 
-            await eventually(() => internals.tlsPortSockets.size === 0);
+            await eventually(() => internals.tlsPort.tlsPortSockets.size === 0);
             await eventually(() => posted.some(p => p.channel === 'clientDisconnected$'));
         });
     });
@@ -278,7 +280,7 @@ describe('TCPServerWorker with TLS', () => {
         });
 
         it('is disconnected if it sends nothing at all', async () => {
-            internals.tlsHandshakeTimeoutMillis = 100;
+            internals.tlsPort.tlsHandshakeTimeoutMillis = 100;
             const peer = await connectPlain();
 
             await peer.closed;
@@ -318,7 +320,7 @@ describe('TCPServerWorker with TLS', () => {
         });
 
         it('that never completes is ended, and logged', async () => {
-            internals.tlsHandshakeTimeoutMillis = 200;
+            internals.tlsPort.tlsHandshakeTimeoutMillis = 200;
             await start({ tls: { cert: first.cert, key: first.key } });
             const peer = await connectPlain();
             // A TLS record header, and then nothing more.
@@ -366,7 +368,7 @@ describe('TCPServerWorker with TLS', () => {
             const silent = await connectPlain();
             const halfway = await connectPlain();
             halfway.send(Buffer.from([ 0x16, 0x03, 0x01, 0x00, 0x80 ]));
-            await eventually(() => internals.tlsPortSockets.size === 2);
+            await eventually(() => internals.tlsPort.tlsPortSockets.size === 2);
 
             worker.stop();
 
