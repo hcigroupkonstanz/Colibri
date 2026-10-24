@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import type { Reconnect } from '../connection/socketio.service';
 import { SocketIOService } from '../connection/socketio.service';
 
 export interface LogMessage {
@@ -221,59 +222,69 @@ export class LogService {
     constructor() {
         this.socketio
             .listen('colibri::log')
-            .subscribe((msg) => {
-                if (msg.command === 'history') {
-                    this.receiveHistory(msg.payload as LogHistory);
-                } else if (this.awaiting === null) {
-                    this.queue(msg.payload as LogMessage);
-                }
-            });
+            .subscribe(msg => this.receiveLog(msg));
 
-        effect(() => {
-            this.filter();
-            this.levels();
-            this.showBroadcastTraffic();
-            this.showConnections();
+        effect(() => this.reloadOnFilterChange());
 
-            untracked(() => {
-                this.clear();
-                this.requestLog();
-            });
-        });
-
-        effect(() => {
-            this.filter();
-            this.levels();
-            this.showBroadcastTraffic();
-            this.showConnections();
-            this.search();
-            untracked(() => this.updateAddress());
-        });
+        effect(() => this.updateAddressOnChange());
 
         // Back/forward, a link to another app's log, or a hand-edited address.
-        const follow = () => {
-            if (this.pageOpen && isLogPath()) this.applyAddress();
-        };
+        const follow = () => this.followAddress();
         window.addEventListener('popstate', follow);
         window.addEventListener('hashchange', follow);
 
-        // Existing lines stay. The history adds what was logged meanwhile after a row marking the
-        // gap; after a server restart that is the new server's whole log.
-        this.socketio.reconnected$.subscribe(({ lostAt, at }) => {
-            this.add([ {
-                id: `reconnect-${at}`,
-                origin: '',
-                level: 2,
-                message: '',
-                group: '',
-                created: at,
-                first: lostAt,
-                count: 0,
-                metadata: {},
-                reconnect: true
-            } ]);
+        this.socketio.reconnected$.subscribe(reconnect => this.addReconnectRow(reconnect));
+    }
+
+    private receiveLog(msg: { command: string; payload: unknown }): void {
+        if (msg.command === 'history') {
+            this.receiveHistory(msg.payload as LogHistory);
+        } else if (this.awaiting === null) {
+            this.queue(msg.payload as LogMessage);
+        }
+    }
+
+    private reloadOnFilterChange(): void {
+        this.filter();
+        this.levels();
+        this.showBroadcastTraffic();
+        this.showConnections();
+
+        untracked(() => {
+            this.clear();
             this.requestLog();
         });
+    }
+
+    private updateAddressOnChange(): void {
+        this.filter();
+        this.levels();
+        this.showBroadcastTraffic();
+        this.showConnections();
+        this.search();
+        untracked(() => this.updateAddress());
+    }
+
+    private followAddress(): void {
+        if (this.pageOpen && isLogPath()) this.applyAddress();
+    }
+
+    // Existing lines stay. The history adds what was logged meanwhile after a row marking the
+    // gap; after a server restart that is the new server's whole log.
+    private addReconnectRow({ lostAt, at }: Reconnect): void {
+        this.add([ {
+            id: `reconnect-${at}`,
+            origin: '',
+            level: 2,
+            message: '',
+            group: '',
+            created: at,
+            first: lostAt,
+            count: 0,
+            metadata: {},
+            reconnect: true
+        } ]);
+        this.requestLog();
     }
 
     private requestLog(): void {
