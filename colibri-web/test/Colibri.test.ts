@@ -4,7 +4,7 @@ vi.mock('socket.io-client', () => ({
     connect: vi.fn()
 }));
 
-import { firstValueFrom, type Observable } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { connect } from 'socket.io-client';
 import type * as BroadcastingModule from '../src/Broadcasting';
 import { type Message, PROTOCOL_VERSION } from '../src/Colibri';
@@ -13,6 +13,17 @@ import type * as ColibriErrorModule from '../src/ColibriError';
 import type * as ModelSynchronizationModule from '../src/ModelSynchronization';
 import { SyncModel } from '../src/SyncModel';
 import { Synced } from '../src/Synced';
+import { type FakeSocket, getAnyHandler, getHandler, makeFakeSocket } from './support/fakeSocket';
+import {
+    Widget,
+    deliver,
+    endId,
+    endOfAnswers,
+    endRequest,
+    everything,
+    latest,
+    nextTask
+} from './support/modelSyncHelpers';
 
 const connectMock = connect as unknown as Mock;
 
@@ -31,47 +42,7 @@ let ProtocolMismatchError: typeof ColibriErrorModule.ProtocolMismatchError;
 type ProtocolMismatchError = ColibriErrorModule.ProtocolMismatchError;
 let RegisterModelSync: typeof ModelSynchronizationModule.RegisterModelSync;
 
-type SocketHandler = (...args: unknown[]) => void;
-
-function makeFakeSocket() {
-    // The ids asked for on 'colibri::reconnect', kept apart from emit's calls, which a test may
-    // clear: see endOfAnswers.
-    const endMarkers: string[] = [];
-    return {
-        on: vi.fn<(event: string, cb: SocketHandler) => void>(),
-        once: vi.fn<(event: string, cb: SocketHandler) => void>(),
-        off: vi.fn<(event: string, cb: SocketHandler) => void>(),
-        onAny: vi.fn<(cb: SocketHandler) => void>(),
-        emit: vi.fn<(event: string, ...args: unknown[]) => void>((event, msg) => {
-            if (event === 'colibri::reconnect') endMarkers.push(((msg as Message).payload as { id: string }).id);
-        }),
-        endMarkers,
-        disconnect: vi.fn<() => void>(),
-        // Read when the old-server timer expires: a socket that is already down explains the
-        // silence by itself, so the check must not fire on it.
-        connected: true,
-        // Whether Socket.IO will retry after a failed connection attempt, which it does unless
-        // told not to.
-        active: true,
-        // The Manager, which is what actually owns the retry policy - a protocol rejection
-        // has to switch it off there, not on the socket.
-        io: { reconnection: vi.fn<(on: boolean) => void>() }
-    };
-}
-
-function getAnyHandler(mock: ReturnType<typeof makeFakeSocket>['onAny']): SocketHandler {
-    const call = mock.mock.calls.at(0);
-    if (!call) throw new Error('no onAny handler registered');
-    return call[0];
-}
-
-function getHandler(mock: ReturnType<typeof makeFakeSocket>['on'], event: string): SocketHandler {
-    const call = mock.mock.calls.find(([e]) => e === event);
-    if (!call) throw new Error(`no handler registered for "${event}"`);
-    return call[1];
-}
-
-let fakeSocket: ReturnType<typeof makeFakeSocket>;
+let fakeSocket: FakeSocket;
 
 beforeEach(async () => {
     vi.resetModules();
@@ -604,48 +575,6 @@ describe('wrapper functions', () => {
     });
 });
 
-// Shared by the two describes below, which drive Sync and RegisterModelSync through the real
-// Colibri rather than a mock of it.
-class Widget extends SyncModel<Widget> {
-    @Synced() accessor label = '';
-}
-
-// Mirrors socket.io: a message reaches every handler registered for its channel.
-const deliver = (channel: string, msg: { command: string; payload?: unknown }) => {
-    for (const [event, handler] of [...fakeSocket.on.mock.calls, ...fakeSocket.once.mock.calls]) {
-        if (event === channel) handler({ channel, ...msg });
-    }
-};
-
-// The server's answer to each request a RegisterModelSync sent on 'colibri::reconnect' and that was
-// not answered yet, or to the first `count` of them: one sent after asking again for its own models
-// on a reconnect, after asking for one again, or after asking for every model. The answers to the
-// requests sent before those are all in.
-const endOfAnswers = (count = Infinity) => {
-    for (const id of fakeSocket.endMarkers.splice(0, count)) {
-        deliver('colibri::reconnect', { command: 'model::update', payload: { id } });
-    }
-};
-
-// The id each of those requests asks for, which is new every time.
-const endId: unknown = expect.any(String);
-
-// One of those requests, as [command, payload].
-const endRequest = ['model::request', { id: endId, again: true }];
-
-// Asking for every model, as [command, payload]: the request, and one of those after it.
-const everything = [['model::request', {}], endRequest];
-
-const latest = <T>(models$: Observable<T[]>): T[] => {
-    let current: T[] = [];
-    models$.subscribe(m => (current = m)).unsubscribe();
-    return current;
-};
-
-// RegisterModelSync asks for every model on the next task, once the models registered in the same
-// block of code have been asked for.
-const nextTask = () => new Promise(resolve => setTimeout(resolve, 0));
-
 // Registering first and constructing Colibri second is the natural order for module-level code
 // (`const [players$] = RegisterModelSync(...)` at the top of a file), and it used to leave every
 // one of those registrations listening to nothing, silently.
@@ -693,7 +622,7 @@ describe('registering before new Colibri()', () => {
         Sync.receiveString('early-sync', received);
 
         new Colibri('app', 'localhost', 9211);
-        deliver('early-sync', { command: 'broadcast::string', payload: 'hello' });
+        deliver(fakeSocket, 'early-sync', { command: 'broadcast::string', payload: 'hello' });
 
         expect(received).toHaveBeenCalledWith('hello');
     });
@@ -717,7 +646,10 @@ describe('registering before new Colibri()', () => {
 
         expect(fakeSocket.emit).toHaveBeenCalledWith('early-widget', { command: 'model::request', payload: {} });
 
-        deliver('early-widget', { command: 'model::update', payload: { id: 'w1', label: 'from the server' } });
+        deliver(fakeSocket, 'early-widget', {
+            command: 'model::update',
+            payload: { id: 'w1', label: 'from the server' }
+        });
 
         const models = latest(models$);
         expect(models).toHaveLength(1);
@@ -740,7 +672,7 @@ describe('registering before new Colibri()', () => {
             });
 
             // The server has nothing for it.
-            deliver('early-local', { command: 'model::update', payload: { id: 'w1' } });
+            deliver(fakeSocket, 'early-local', { command: 'model::update', payload: { id: 'w1' } });
 
             expect(fakeSocket.emit).toHaveBeenCalledWith('early-local', {
                 command: 'model::update',
@@ -814,7 +746,7 @@ describe('catching up on models after a reconnect', () => {
         const [models$] = RegisterModelSync({ name: 'resync-widget', type: Widget });
         await nextTask();
         connectSocket();
-        deliver('resync-widget', { command: 'model::update', payload: { id: 'w1', label: 'before' } });
+        deliver(fakeSocket, 'resync-widget', { command: 'model::update', payload: { id: 'w1', label: 'before' } });
         const [widget] = latest(models$);
 
         // Disconnected; another client changes w1 and the server relays it to everyone but us.
@@ -822,7 +754,10 @@ describe('catching up on models after a reconnect', () => {
         expect(requested()).toEqual(['resync-widget', 'resync-widget']);
 
         // What the server answers that request with: one model::update per model it has.
-        deliver('resync-widget', { command: 'model::update', payload: { id: 'w1', label: 'during the outage' } });
+        deliver(fakeSocket, 'resync-widget', {
+            command: 'model::update',
+            payload: { id: 'w1', label: 'during the outage' }
+        });
 
         const models = latest(models$);
         expect(models).toHaveLength(1);
@@ -870,7 +805,7 @@ describe('sending its own models again after a reconnect', () => {
 
         connectSocket();
         // The server had nothing for it, and was sent all of it.
-        deliver('own', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1' } });
         connectSocket();
         return { models$, widget };
     };
@@ -887,8 +822,8 @@ describe('sending its own models again after a reconnect', () => {
             ['own', { id: 'w1' }],
             ['own', { id: 'w2' }]
         ]);
-        deliver('own', { command: 'model::update', payload: { id: 'w1' } });
-        deliver('own', { command: 'model::update', payload: { id: 'w2' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w2' } });
         expect(sent('model::request').slice(2)).toEqual([
             ['own', {}],
             ['colibri::reconnect', { id: endId, again: true }]
@@ -923,7 +858,7 @@ describe('sending its own models again after a reconnect', () => {
         const { models$, widget } = reconnectedWithOwnModel();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1' } });
 
         expect(sent('model::update')).toEqual([['own', { id: 'w1', label: 'mine' }]]);
         expect(latest(models$)).toEqual([widget]);
@@ -936,8 +871,8 @@ describe('sending its own models again after a reconnect', () => {
         fakeSocket.emit.mockClear();
 
         // The answers to the request for every model, and to the one for w1.
-        deliver('own', { command: 'model::update', payload: { id: 'w1', label: 'newer' } });
-        deliver('own', { command: 'model::update', payload: { id: 'w1', label: 'newer' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1', label: 'newer' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1', label: 'newer' } });
         await settle();
 
         expect(sent('model::update')).toEqual([]);
@@ -950,7 +885,7 @@ describe('sending its own models again after a reconnect', () => {
         RegisterModelSync({ name: 'own', type: Widget });
         await nextTask();
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'theirs', label: 'not mine' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs', label: 'not mine' } });
 
         connectSocket();
         expect(sent('model::request').filter(([channel]) => channel === 'own')).toEqual([
@@ -958,7 +893,7 @@ describe('sending its own models again after a reconnect', () => {
             ['own', {}]
         ]);
 
-        deliver('own', { command: 'model::update', payload: { id: 'theirs' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs' } });
         await settle();
         expect(sent('model::update')).toEqual([]);
     });
@@ -968,7 +903,7 @@ describe('sending its own models again after a reconnect', () => {
         const { models$ } = reconnectedWithOwnModel();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::delete', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::delete', payload: { id: 'w1' } });
 
         expect(sentInOrder()).toEqual(everything);
         expect(latest(models$)).toEqual([]);
@@ -984,10 +919,10 @@ describe('sending its own models again after a reconnect', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::delete', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::delete', payload: { id: 'w1' } });
         expect(sent('model::request')).toEqual([]);
 
-        deliver('own', { command: 'model::update', payload: { id: 'w2', label: 'kept' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w2', label: 'kept' } });
         expect(sentInOrder()).toEqual(everything);
         expect(latest(models$)).toEqual([kept]);
     });
@@ -998,8 +933,8 @@ describe('sending its own models again after a reconnect', () => {
         const { models$ } = reconnectedWithOwnModel();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::delete', payload: { id: 'w1' } });
-        deliver('own', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::delete', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1' } });
 
         expect(sentInOrder()).toEqual(everything);
         expect(latest(models$)).toEqual([]);
@@ -1007,10 +942,10 @@ describe('sending its own models again after a reconnect', () => {
 
     it('does it again on every reconnect', () => {
         reconnectedWithOwnModel();
-        deliver('own', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1' } });
 
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1' } });
 
         expect(sent('model::update')).toEqual([
             ['own', { id: 'w1', label: 'mine' }],
@@ -1029,7 +964,7 @@ describe('sending its own models again after a reconnect', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own-early', { command: 'model::update', payload: { id: 'early' } });
+        deliver(fakeSocket, 'own-early', { command: 'model::update', payload: { id: 'early' } });
 
         expect(sent('model::update')).toEqual([['own-early', { id: 'early', label: 'mine' }]]);
     });
@@ -1058,7 +993,7 @@ describe('sending its own models again after a reconnect', () => {
         pair.b = 'B';
         registerModel(pair);
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
         disconnectSocket();
         fakeSocket.emit.mockClear();
         return { models$, pair };
@@ -1073,11 +1008,11 @@ describe('sending its own models again after a reconnect', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'w1', label: 'kept' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1', label: 'kept' } });
         // Not for every model yet: only the request whose answer comes after w1's, in case this was not it.
         expect(sentInOrder()).toEqual([endRequest]);
 
-        deliver('own', { command: 'model::update', payload: { id: 'w2' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w2' } });
         expect(sentInOrder().slice(1)).toEqual([['model::update', { id: 'w2', label: '' }], ...everything]);
     });
 
@@ -1092,7 +1027,7 @@ describe('sending its own models again after a reconnect', () => {
         expect(sent('model::update')).toEqual([]);
 
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(sentInOrder()).toEqual([
@@ -1110,8 +1045,8 @@ describe('sending its own models again after a reconnect', () => {
         await settle();
         connectSocket();
         // Another client changed b meanwhile; a is still what this client last sent.
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B2' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B2' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['A2', 'B2']);
@@ -1125,8 +1060,8 @@ describe('sending its own models again after a reconnect', () => {
             ['model::request', { id: 'p1', again: true }],
             endRequest
         ]);
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B2' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B2' } });
+        endOfAnswers(fakeSocket);
         expect(sentInOrder().slice(5)).toEqual(everything);
 
         // Answered, so from now on a change goes out as it is made.
@@ -1146,8 +1081,8 @@ describe('sending its own models again after a reconnect', () => {
         await settle();
         expect(sent('model::update')).toEqual([]);
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['A', 'B2']);
@@ -1162,7 +1097,7 @@ describe('sending its own models again after a reconnect', () => {
         connectSocket();
         disconnectSocket();
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(sentInOrder()).toEqual([
@@ -1191,7 +1126,7 @@ describe('sending its own models again after a reconnect', () => {
         fakeSocket.emit.mockClear();
 
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'w1' } });
         await settle();
 
         expect(sentInOrder()).toEqual(everything);
@@ -1204,8 +1139,8 @@ describe('sending its own models again after a reconnect', () => {
         await settle();
 
         connectSocket();
-        deliver('own', { command: 'model::delete', payload: { id: 'p1' } });
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::delete', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(sent('model::update')).toEqual([]);
@@ -1263,7 +1198,7 @@ describe('keeping a change sent just after asking for every model', () => {
         pair.b = 'B';
         registerModel(pair);
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
         return { models$, pair };
     };
 
@@ -1278,19 +1213,19 @@ describe('keeping a change sent just after asking for every model', () => {
             ['model::update', { id: 'p1', b: 'B2' }]
         ]);
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
 
         expect([pair.a, pair.b]).toEqual(['A', 'B2']);
     });
 
     it('keeps a change to an own model sent just after it, after a reconnect', async () => {
         const { pair } = connectedWithOwnPair();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         disconnectSocket();
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         expect(sentInOrder().at(-1)).toEqual(['model::request', {}]);
         fakeSocket.emit.mockClear();
 
@@ -1298,12 +1233,12 @@ describe('keeping a change sent just after asking for every model', () => {
         await settle();
         expect(sentInOrder()).toEqual([['model::update', { id: 'p1', b: 'B2' }]]);
         // Another client changed a during the outage, and that is applied.
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'theirs', b: 'B' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'theirs', b: 'B' } });
         expect([pair.a, pair.b]).toEqual(['theirs', 'B2']);
 
         // The answers to it are over: from now on an update is applied as it comes.
-        endOfAnswers();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', b: 'theirs too' } });
+        endOfAnswers(fakeSocket);
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', b: 'theirs too' } });
         expect(pair.b).toBe('theirs too');
     });
 
@@ -1319,15 +1254,15 @@ describe('keeping a change sent just after asking for every model', () => {
         registerModel(pair);
         connectSocket();
         await nextTask();
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
         pair.b = 'B2';
         await settle();
         expect(fakeSocket.endMarkers).toHaveLength(2);
 
         // The end of the answers to the request the other one sent for every model, then the answer
         // to this one's.
-        endOfAnswers(1);
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket, 1);
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
 
         expect(pair.b).toBe('B2');
     });
@@ -1337,7 +1272,7 @@ describe('keeping a change sent just after asking for every model', () => {
     it('keeps a change to an own model sent just after another RegisterModelSync on the channel asked', async () => {
         const { pair } = connectedWithOwnPair();
         await nextTask();
-        endOfAnswers();
+        endOfAnswers(fakeSocket);
         RegisterModelSync({ name: 'own', type: Pair });
         await nextTask();
         pair.b = 'B2';
@@ -1347,12 +1282,12 @@ describe('keeping a change sent just after asking for every model', () => {
             ['model::update', { id: 'p1', b: 'B2' }]
         ]);
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
         expect([pair.a, pair.b]).toEqual(['A', 'B2']);
 
         // The answers to it are over: from now on an update is applied as it comes.
-        endOfAnswers();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
+        endOfAnswers(fakeSocket);
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
         expect(pair.b).toBe('theirs');
     });
 
@@ -1365,9 +1300,9 @@ describe('keeping a change sent just after asking for every model', () => {
         registerModel(new Pair('p1'));
         connectSocket();
         await nextTask();
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
-        deliver('own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         const [, theirs] = latest(models$);
         disconnectSocket();
         connectSocket();
@@ -1377,7 +1312,7 @@ describe('keeping a change sent just after asking for every model', () => {
         await settle();
         expect(sentInOrder()).toEqual([['model::update', { id: 'theirs', b: 'B2' }]]);
         // The answer to the other one's request for every model.
-        deliver('own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
 
         expect([theirs.a, theirs.b]).toEqual(['A', 'B2']);
     });
@@ -1387,8 +1322,8 @@ describe('keeping a change sent just after asking for every model', () => {
         const [models$] = RegisterModelSync({ name: 'own', type: Pair });
         connectSocket();
         await nextTask();
-        deliver('own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         const [theirs] = latest(models$);
         disconnectSocket();
         connectSocket();
@@ -1397,7 +1332,7 @@ describe('keeping a change sent just after asking for every model', () => {
         theirs.b = 'B2';
         await settle();
         expect(sentInOrder().at(-1)).toEqual(['model::update', { id: 'theirs', b: 'B2' }]);
-        deliver('own', { command: 'model::update', payload: { id: 'theirs', a: 'A2', b: 'B' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs', a: 'A2', b: 'B' } });
 
         expect([theirs.a, theirs.b]).toEqual(['A2', 'B2']);
     });
@@ -1409,12 +1344,12 @@ describe('keeping a change sent just after asking for every model', () => {
         const [models$] = RegisterModelSync({ name: 'own', type: Pair });
         connectSocket();
         await nextTask();
-        deliver('own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         const [theirs] = latest(models$);
 
         theirs.b = 'B2';
-        deliver('own', { command: 'model::update', payload: { id: 'theirs', a: 'A2', b: 'B3' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'theirs', a: 'A2', b: 'B3' } });
         await settle();
 
         expect([theirs.a, theirs.b]).toEqual(['A2', 'B2']);
@@ -1473,7 +1408,7 @@ describe('registering a model whose id the server may already have', () => {
         await nextTask();
         expect(sentInOrder()).toEqual(everything);
         // The server has none.
-        endOfAnswers();
+        endOfAnswers(fakeSocket);
         fakeSocket.emit.mockClear();
 
         const pair = new Pair('p1');
@@ -1493,7 +1428,7 @@ describe('registering a model whose id the server may already have', () => {
     it('takes what the server has for the id instead of overwriting it', async () => {
         const { models$, pair } = await registered();
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['server-a', 'server-b']);
@@ -1507,8 +1442,8 @@ describe('registering a model whose id the server may already have', () => {
     it('takes the answer to the request for every model as its answer too', async () => {
         const { models$, pair } = await registered();
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['server-a', 'server-b']);
@@ -1522,7 +1457,7 @@ describe('registering a model whose id the server may already have', () => {
         await settle();
         expect(sentInOrder()).toEqual([['model::request', { id: 'p1' }]]);
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
@@ -1534,8 +1469,8 @@ describe('registering a model whose id the server may already have', () => {
             endRequest
         ]);
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'changed', b: 'server-b' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'changed', b: 'server-b' } });
+        endOfAnswers(fakeSocket);
         fakeSocket.emit.mockClear();
         pair.b = 'changed too';
         await settle();
@@ -1545,7 +1480,7 @@ describe('registering a model whose id the server may already have', () => {
     it('does not ask for everything again once the server has answered', async () => {
         await registered();
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(sentInOrder()).toEqual([
@@ -1570,7 +1505,7 @@ describe('registering a model whose id the server may already have', () => {
         expect(sentInOrder()).toEqual([]);
 
         connectSocket();
-        deliver('reg', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(sentInOrder()).toEqual([
@@ -1585,7 +1520,7 @@ describe('registering a model whose id the server may already have', () => {
         const { pair } = await registered();
         pair.detach();
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(sentInOrder()).toEqual([['model::request', { id: 'p1' }]]);
@@ -1597,7 +1532,7 @@ describe('registering a model whose id the server may already have', () => {
         const [models$, registerModel] = RegisterModelSync({ name: 'reg', type: Pair });
         connectSocket();
         await nextTask();
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
         const [copy] = latest(models$);
         fakeSocket.emit.mockClear();
 
@@ -1605,8 +1540,8 @@ describe('registering a model whose id the server may already have', () => {
         registerModel(pair);
         expect(latest(models$)).toEqual([pair]);
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', b: 'changed by another client' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a', b: 'server-b' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', b: 'changed by another client' } });
         await settle();
         expect([pair.a, pair.b]).toEqual(['server-a', 'changed by another client']);
         expect(latest(models$)).toEqual([pair]);
@@ -1621,7 +1556,7 @@ describe('registering a model whose id the server may already have', () => {
         const { models$, registerModel, pair } = await registered();
         registerModel(pair);
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(latest(models$)).toEqual([pair]);
@@ -1640,12 +1575,12 @@ describe('registering a model whose id the server may already have', () => {
         await nextTask();
         registerModel(new Pair('p1'));
 
-        deliver('reg-twice', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg-twice', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
         expect(latest(other$)).toEqual([]);
 
         // One another client has is still listed, fields or not.
-        deliver('reg-twice', { command: 'model::update', payload: { id: 'theirs' } });
+        deliver(fakeSocket, 'reg-twice', { command: 'model::update', payload: { id: 'theirs' } });
         expect(latest(other$).map(m => m.id)).toEqual(['theirs']);
     });
 
@@ -1653,7 +1588,7 @@ describe('registering a model whose id the server may already have', () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         try {
             const { models$, registerModel, pair } = await registered();
-            deliver('reg', { command: 'model::update', payload: { id: 'p1' } });
+            deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1' } });
 
             const second = new Pair('p1');
             registerModel(second);
@@ -1661,7 +1596,7 @@ describe('registering a model whose id the server may already have', () => {
             expect(warnSpy).toHaveBeenCalledTimes(1);
             expect(warnSpy.mock.calls[0][0]).toContain("'p1'");
 
-            deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'mine-a', b: 'mine-b' } });
+            deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'mine-a', b: 'mine-b' } });
             fakeSocket.emit.mockClear();
             pair.a = 'changed on the first';
             second.b = 'changed on the second';
@@ -1717,7 +1652,7 @@ describe('deleting a model for every client', () => {
         widget.label = 'mine';
         registerModel(widget);
         connectSocket();
-        deliver('del', { command: 'model::update', payload: { id: 'w1', label: 'mine' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'mine' } });
         await settle();
         fakeSocket.emit.mockClear();
         return { models$, registerModel, widget };
@@ -1739,7 +1674,7 @@ describe('deleting a model for every client', () => {
         new Colibri('app', 'localhost', 9211);
         const [models$] = RegisterModelSync({ name: 'del', type: Widget });
         connectSocket();
-        deliver('del', { command: 'model::update', payload: { id: 'r1', label: 'theirs' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'r1', label: 'theirs' } });
         const [theirs] = latest(models$);
         fakeSocket.emit.mockClear();
 
@@ -1777,10 +1712,10 @@ describe('deleting a model for every client', () => {
         new Colibri('app', 'localhost', 9211);
         const [models$, registerModel] = RegisterModelSync({ name: 'del', type: Widget });
         connectSocket();
-        deliver('del', { command: 'model::update', payload: { id: 'r1', label: 'theirs' } });
-        deliver('del', { command: 'model::update', payload: { id: 'r2', label: 'theirs' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'r1', label: 'theirs' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'r2', label: 'theirs' } });
 
-        deliver('del', { command: 'model::delete', payload: { id: 'r1' } });
+        deliver(fakeSocket, 'del', { command: 'model::delete', payload: { id: 'r1' } });
         registerModel(new Widget('r2'));
 
         expect(sent('model::delete')).toEqual([]);
@@ -1794,11 +1729,11 @@ describe('deleting a model for every client', () => {
         const [widget] = latest(models$);
 
         widget.delete();
-        deliver('del', { command: 'model::update', payload: { id: 'w1', label: 'late' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'late' } });
         expect(latest(models$)).toEqual([]);
 
         vi.setSystemTime(Date.now() + 60_000);
-        deliver('del', { command: 'model::update', payload: { id: 'w1', label: 'created again' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'created again' } });
         expect(latest(models$).map(m => [m.id, m.label])).toEqual([['w1', 'created again']]);
     });
 
@@ -1810,7 +1745,7 @@ describe('deleting a model for every client', () => {
 
         const again = new Widget('w1');
         registerModel(again);
-        deliver('del', { command: 'model::update', payload: { id: 'w1', label: 'other' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'other' } });
 
         expect(sent('model::request').filter(([channel]) => channel === 'del')).toEqual([['del', { id: 'w1' }]]);
         expect(latest(models$)).toEqual([again]);
@@ -1875,11 +1810,11 @@ describe('deleting a model for every client', () => {
         const again = new Widget('w1');
         again.label = 'fresh';
         registerModel(again);
-        deliver('del', { command: 'model::update', payload: { id: 'w1', label: 'stale' } });
-        deliver('del', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'stale' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1' } });
         // What it sends is kept out of updates until the answers asked before are over.
-        endOfAnswers();
-        deliver('del', { command: 'model::update', payload: { id: 'w1', label: 'from another client' } });
+        endOfAnswers(fakeSocket);
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'from another client' } });
 
         expect(sent('model::request').filter(([channel]) => channel === 'del')).toEqual([['del', { id: 'w1' }]]);
         expect(sent('model::update')).toEqual([['del', { id: 'w1', label: 'fresh' }]]);
@@ -1903,7 +1838,7 @@ describe('deleting a model for every client', () => {
             if (models.some(m => m.b === 'server')) pair.delete();
         });
 
-        deliver('del', { command: 'model::update', payload: { id: 'p1', a: 'old', b: 'server' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'p1', a: 'old', b: 'server' } });
         await settle();
         subscription.unsubscribe();
 
@@ -1926,8 +1861,8 @@ describe('deleting a model for every client', () => {
         expect(sent('model::request')).toContainEqual(['del', { id: 'w1' }]);
 
         widget.delete();
-        deliver('del', { command: 'model::update', payload: { id: 'w1' } });
-        deliver('del', { command: 'model::update', payload: { id: 'w1', label: 'server' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1' } });
+        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'w1', label: 'server' } });
         await settle();
 
         expect(latest(models$)).toEqual([]);
@@ -1965,7 +1900,7 @@ describe("a model class with methods named like SyncModel's", () => {
         const [movers$] = RegisterModelSync({ name: 'movers', type: Mover });
         connectSocket();
 
-        deliver('movers', { command: 'model::update', payload: { id: 'm1', x: 5 } });
+        deliver(fakeSocket, 'movers', { command: 'model::update', payload: { id: 'm1', x: 5 } });
         const [mover] = latest(movers$);
         expect(mover.x).toBe(5);
         expect(mover.moves).toBe(0);
@@ -2060,10 +1995,10 @@ describe('keeping a change made after registerModel', () => {
         pair.a = 'changed';
         await settle();
 
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
         // The answer to the request for the id, made before the server had the change.
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
@@ -2076,8 +2011,8 @@ describe('keeping a change made after registerModel', () => {
 
         // The answer to asking again has it, and the answers are over: from now on a change goes out
         // as it is made.
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
+        endOfAnswers(fakeSocket);
         fakeSocket.emit.mockClear();
         pair.b = 'changed too';
         await settle();
@@ -2090,7 +2025,7 @@ describe('keeping a change made after registerModel', () => {
     it('keeps it when the answer comes before SyncModel reports the change', async () => {
         const { pair } = await registeredLate();
         pair.a = 'changed';
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
@@ -2101,8 +2036,8 @@ describe('keeping a change made after registerModel', () => {
             endRequest
         ]);
 
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
+        endOfAnswers(fakeSocket);
         await settle();
         expect(sentInOrder()).toHaveLength(4);
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
@@ -2113,8 +2048,8 @@ describe('keeping a change made after registerModel', () => {
     it("keeps a change made after another client's update came first, and the answer after it", async () => {
         const { pair } = await registeredLate();
         // The end of the answers to the request for every model, then another client's update.
-        endOfAnswers();
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
+        endOfAnswers(fakeSocket);
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
         pair.a = 'changed';
         await settle();
         expect(sentOnChannel()).toEqual([
@@ -2123,12 +2058,12 @@ describe('keeping a change made after registerModel', () => {
         ]);
 
         // The answer to the request for the id.
-        deliver('reg', { command: 'model::update', payload: { ...server, b: 'theirs' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, b: 'theirs' } });
         expect([pair.a, pair.b]).toEqual(['changed', 'theirs']);
 
         // Once the answers are over, an update is applied as it comes.
-        endOfAnswers();
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'theirs too' } });
+        endOfAnswers(fakeSocket);
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'theirs too' } });
         expect(pair.a).toBe('theirs too');
     });
 
@@ -2136,11 +2071,11 @@ describe('keeping a change made after registerModel', () => {
     // over it, and the report sent the server's old value in its place, to every client.
     it("keeps a change made after another client's update came first, when the answer comes before it is sent", async () => {
         const { pair } = await registeredLate();
-        endOfAnswers();
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
+        endOfAnswers(fakeSocket);
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
         pair.a = 'changed';
         // The answer to the request for the id.
-        deliver('reg', { command: 'model::update', payload: { ...server, b: 'theirs' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, b: 'theirs' } });
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['changed', 'theirs']);
@@ -2154,11 +2089,11 @@ describe('keeping a change made after registerModel', () => {
     // was listed as a model with no fields that no other client has.
     it("does not list the bare answer that comes after another client's update and delete", async () => {
         const { models$ } = await registeredLate('reg-deleted');
-        endOfAnswers();
-        deliver('reg-deleted', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
-        deliver('reg-deleted', { command: 'model::delete', payload: { id: 'p1' } });
+        endOfAnswers(fakeSocket);
+        deliver(fakeSocket, 'reg-deleted', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
+        deliver(fakeSocket, 'reg-deleted', { command: 'model::delete', payload: { id: 'p1' } });
         // The answer to the request for the id.
-        deliver('reg-deleted', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg-deleted', { command: 'model::update', payload: { id: 'p1' } });
         await settle();
 
         expect(latest(models$)).toEqual([]);
@@ -2167,9 +2102,9 @@ describe('keeping a change made after registerModel', () => {
 
     it('keeps a change made after the answer for every model came first, and the answer after it', async () => {
         const { pair } = await registeredLate();
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         // The end of the answers to the request for every model.
-        endOfAnswers(1);
+        endOfAnswers(fakeSocket, 1);
         pair.a = 'changed';
         await settle();
         expect(sentOnChannel()).toEqual([
@@ -2177,7 +2112,7 @@ describe('keeping a change made after registerModel', () => {
             ['model::update', { id: 'p1', a: 'changed' }]
         ]);
 
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
     });
 
@@ -2185,10 +2120,10 @@ describe('keeping a change made after registerModel', () => {
     // once too.
     it('keeps a change made after a held one that the server had anyway', async () => {
         const { pair } = await registeredLate();
-        endOfAnswers();
+        endOfAnswers(fakeSocket);
         pair.a = 'server-a';
         // Another client's update.
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'server-a' } });
         await settle();
         pair.a = 'changed';
         await settle();
@@ -2198,7 +2133,7 @@ describe('keeping a change made after registerModel', () => {
             ['model::update', { id: 'p1', a: 'changed' }]
         ]);
 
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
     });
 
@@ -2210,20 +2145,20 @@ describe('keeping a change made after registerModel', () => {
         connectSocket();
         await nextTask();
         // The answer to the request for every model, in two parts: another client's model, and 'p1'.
-        deliver('reg', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'theirs', a: 'A', b: 'B' } });
         const [theirs] = latest(models$);
         theirs.a = 'mine';
         await settle();
         const pair = new Pair('p1');
         registerModel(pair);
-        deliver('reg', { command: 'model::update', payload: server });
-        endOfAnswers(1);
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
+        endOfAnswers(fakeSocket, 1);
         pair.a = 'changed';
         await settle();
 
-        deliver('reg', { command: 'model::update', payload: { id: 'theirs', a: 'later' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'theirs', a: 'later' } });
         // The answer to the request for 'p1'.
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
 
         expect([theirs.a, pair.a]).toEqual(['later', 'changed']);
     });
@@ -2239,7 +2174,7 @@ describe('keeping a change made after registerModel', () => {
         await settle();
         expect(sentInOrder()).toEqual([['model::request', { id: 'p1' }]]);
 
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
         expect(sentInOrder().slice(1)).toEqual([
             ['model::update', { id: 'p1', a: 'changed' }],
@@ -2247,11 +2182,11 @@ describe('keeping a change made after registerModel', () => {
             endRequest
         ]);
 
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
+        endOfAnswers(fakeSocket);
         expect(sentInOrder().slice(4)).toEqual(everything);
         // What that request is answered with has the change in it.
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'changed' } });
         expect([pair.a, pair.b]).toEqual(['changed', 'server-b']);
     });
 
@@ -2265,7 +2200,7 @@ describe('keeping a change made after registerModel', () => {
         await settle();
         expect(sentInOrder()).toEqual([['model::request', { id: 'p1' }]]);
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1' } });
         expect(sentInOrder().slice(1)).toEqual([['model::update', { id: 'p1', a: 'mine', b: '' }], ...everything]);
     });
 
@@ -2275,17 +2210,17 @@ describe('keeping a change made after registerModel', () => {
         const { pair } = await registeredLate();
         pair.a = 'mine';
         // The answer to the request for every model, and the end of its answers.
-        deliver('reg', { command: 'model::update', payload: server });
-        endOfAnswers(1);
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
+        endOfAnswers(fakeSocket, 1);
         await settle();
 
         // The answer to the request for the id, made before the server had the change, then the one to
         // asking again, and another client's change, relayed.
-        deliver('reg', { command: 'model::update', payload: server });
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'mine' } });
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', a: 'theirs' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'mine' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', a: 'theirs' } });
         expect(pair.a).toBe('mine');
-        endOfAnswers();
+        endOfAnswers(fakeSocket);
         expect(pair.a).toBe('theirs');
 
         fakeSocket.emit.mockClear();
@@ -2297,13 +2232,13 @@ describe('keeping a change made after registerModel', () => {
     it('holds back a change made while it asks again, and sends it once the answers are over', async () => {
         const { pair } = await registeredLate();
         pair.a = 'mine';
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         pair.b = 'mine too';
         await settle();
         expect(sentInOrder()).toHaveLength(4);
 
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'mine' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'mine' } });
+        endOfAnswers(fakeSocket);
         await settle();
         expect(sentInOrder().slice(4)).toEqual([['model::update', { id: 'p1', b: 'mine too' }]]);
         expect([pair.a, pair.b]).toEqual(['mine', 'mine too']);
@@ -2313,14 +2248,14 @@ describe('keeping a change made after registerModel', () => {
     it('sends the change again when the connection drops while it asks again', async () => {
         const { pair } = await registeredLate();
         pair.a = 'mine';
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
         disconnectSocket();
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('reg', { command: 'model::update', payload: server });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('mine');
@@ -2343,7 +2278,7 @@ describe('keeping a change made after registerModel', () => {
         registerModel(pair);
         pair.a = 'a1';
         await settle();
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         pair.a = 'a2';
         await settle();
         expect(sentOnChannel()).toEqual([
@@ -2352,8 +2287,8 @@ describe('keeping a change made after registerModel', () => {
             ['model::request', { id: 'p1', again: true }]
         ]);
 
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'a1' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'a1' } });
+        endOfAnswers(fakeSocket);
         pair.a = 'a3';
         await settle();
         expect(sentOnChannel().slice(3)).toEqual([
@@ -2368,18 +2303,18 @@ describe('keeping a change made after registerModel', () => {
     it('sends every change after asking again once, while another client changes the model all the time', async () => {
         const { pair } = await registeredLate();
         pair.a = 'a1';
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         // The end of the answers to the request for every model.
-        endOfAnswers(1);
+        endOfAnswers(fakeSocket, 1);
         pair.a = 'a2';
         await settle();
         expect(sentOnChannel()).toHaveLength(3);
 
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', b: 'b1' } });
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', b: 'b2' } });
-        deliver('reg', { command: 'model::update', payload: { ...server, a: 'a1', b: 'b2' } });
-        deliver('reg', { command: 'model::update', payload: { id: 'p1', b: 'b3' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', b: 'b1' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', b: 'b2' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { ...server, a: 'a1', b: 'b2' } });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1', b: 'b3' } });
+        endOfAnswers(fakeSocket);
         pair.a = 'a3';
         await settle();
 
@@ -2396,15 +2331,15 @@ describe('keeping a change made after registerModel', () => {
     it('sends the change again when the answers are over without it, with what it held since', async () => {
         const { pair } = await registeredLate();
         pair.a = 'mine';
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         pair.b = 'later';
         await settle();
         expect(sentInOrder()).toHaveLength(4);
         expect([pair.a, pair.b]).toEqual(['mine', 'later']);
 
-        endOfAnswers();
+        endOfAnswers(fakeSocket);
         await settle();
         expect([pair.a, pair.b]).toEqual(['mine', 'later']);
         expect(sentInOrder().slice(4)).toEqual([['model::update', { id: 'p1', a: 'mine', b: 'later' }]]);
@@ -2421,7 +2356,7 @@ describe('keeping a change made after registerModel', () => {
     it('holds a change made while disconnected as it asks again, and sends it all after the reconnect', async () => {
         const { pair } = await registeredLate();
         pair.a = 'mine';
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
         expect(sentInOrder()).toHaveLength(4);
         disconnectSocket();
@@ -2431,8 +2366,8 @@ describe('keeping a change made after registerModel', () => {
 
         connectSocket();
         // The server restarted meanwhile.
-        deliver('reg', { command: 'model::update', payload: { id: 'p1' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: { id: 'p1' } });
+        endOfAnswers(fakeSocket);
         await settle();
         expect(sentInOrder().slice(4)).toEqual([
             ['model::request', { id: 'p1', again: true }],
@@ -2456,7 +2391,7 @@ describe('keeping a change made after registerModel', () => {
         registerModel(note);
 
         note.text = undefined;
-        deliver('notes', { command: 'model::update', payload: { id: 'n1', text: 'server' } });
+        deliver(fakeSocket, 'notes', { command: 'model::update', payload: { id: 'n1', text: 'server' } });
         await settle();
 
         expect(sentInOrder()).toEqual([
@@ -2473,12 +2408,12 @@ describe('keeping a change made after registerModel', () => {
     it('drops the model when the server answers asking again with model::delete', async () => {
         const { models$, pair } = await registeredLate();
         pair.a = 'mine';
-        deliver('reg', { command: 'model::update', payload: server });
+        deliver(fakeSocket, 'reg', { command: 'model::update', payload: server });
         await settle();
 
-        deliver('reg', { command: 'model::delete', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'reg', { command: 'model::delete', payload: { id: 'p1' } });
         pair.b = 'after the delete';
-        endOfAnswers();
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(latest(models$)).toEqual([]);
@@ -2551,9 +2486,9 @@ describe('sending again a change lost in a connection that died', () => {
         pair.b = 'B';
         registerModel(pair);
         connectSocket();
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
         fakeSocket.emit.mockClear();
         return { models$, pair };
@@ -2577,8 +2512,8 @@ describe('sending again a change lost in a connection that died', () => {
         await settle();
         await sendAndDie(pair, 'A3');
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['A3', 'B']);
@@ -2589,8 +2524,8 @@ describe('sending again a change lost in a connection that died', () => {
             ['model::request', { id: 'p1', again: true }]
         ]);
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A3', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A3', b: 'B' } });
+        endOfAnswers(fakeSocket);
         expect(sentInOrder().slice(2)).toEqual([['model::request', {}]]);
         expect(pair.a).toBe('A3');
     });
@@ -2603,8 +2538,8 @@ describe('sending again a change lost in a connection that died', () => {
         await sendAndDie(pair, 'A2');
         pair.b = 'B1';
         await settle();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
         expect(sentInOrder()).toEqual([
             ['model::update', { id: 'p1', a: 'A2', b: 'B1' }],
@@ -2613,8 +2548,8 @@ describe('sending again a change lost in a connection that died', () => {
 
         pair.b = 'B2';
         await settle();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B1' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B1' } });
+        endOfAnswers(fakeSocket);
         pair.b = 'B3';
         await settle();
         expect([pair.a, pair.b]).toEqual(['A2', 'B3']);
@@ -2630,8 +2565,8 @@ describe('sending again a change lost in a connection that died', () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A2');
@@ -2652,8 +2587,8 @@ describe('sending again a change lost in a connection that died', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['A2', 'B2']);
@@ -2667,8 +2602,8 @@ describe('sending again a change lost in a connection that died', () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A2');
@@ -2679,8 +2614,8 @@ describe('sending again a change lost in a connection that died', () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'theirs', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'theirs', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('theirs');
@@ -2693,14 +2628,14 @@ describe('sending again a change lost in a connection that died', () => {
         const { pair } = await connectedWithOwnPair();
         pair.a = 'A2';
         await settle();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'theirs' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'theirs' } });
         hearFromServer();
         disconnectSocket();
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A');
@@ -2721,8 +2656,8 @@ describe('sending again a change lost in a connection that died', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A');
@@ -2741,8 +2676,8 @@ describe('sending again a change lost in a connection that died', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A2');
@@ -2757,7 +2692,7 @@ describe('sending again a change lost in a connection that died', () => {
         await settle();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A' } });
         await settle();
 
         expect(pair.a).toBe('A');
@@ -2771,9 +2706,9 @@ describe('sending again a change lost in a connection that died', () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'theirs' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'theirs' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['A2', 'theirs']);
@@ -2788,15 +2723,15 @@ describe('sending again a change lost in a connection that died', () => {
     it("still judges from the earlier outage when another client's update came before the next one", async () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
-        deliver('own', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
         clock += 15_000;
         hearFromServer();
         disconnectSocket();
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'theirs' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'theirs' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect([pair.a, pair.b]).toEqual(['A2', 'theirs']);
@@ -2810,7 +2745,7 @@ describe('sending again a change lost in a connection that died', () => {
         const { models$, pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
 
-        deliver('own', { command: 'model::delete', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::delete', payload: { id: 'p1' } });
         await settle();
 
         expect(latest(models$)).toEqual([]);
@@ -2830,18 +2765,18 @@ describe('sending again a change lost in a connection that died', () => {
         pair.b = 'B';
         registerModel(pair);
         connectSocket();
-        deliver('other', { command: 'model::update', payload: { id: 'q1' } });
-        deliver('own', { command: 'model::update', payload: { id: 'p1' } });
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'other', { command: 'model::update', payload: { id: 'q1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
         await sendAndDie(pair, 'A2');
         expect(fakeSocket.endMarkers).toHaveLength(2);
 
-        deliver('other', { command: 'model::update', payload: { id: 'q1', a: '', b: '' } });
-        endOfAnswers(1);
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'other', { command: 'model::update', payload: { id: 'q1', a: '', b: '' } });
+        endOfAnswers(fakeSocket, 1);
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A2');
@@ -2856,9 +2791,9 @@ describe('sending again a change lost in a connection that died', () => {
         const { models$, pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
         pair.detach();
-        endOfAnswers();
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(latest(models$)).toEqual([pair]);
@@ -2870,8 +2805,8 @@ describe('sending again a change lost in a connection that died', () => {
         await sendAndDie(pair, 'A2');
 
         pair.detach();
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(sentInOrder()).toEqual([['model::request', {}]]);
@@ -2882,16 +2817,16 @@ describe('sending again a change lost in a connection that died', () => {
     it('sends it again after another reconnect when the update sending it again was lost too', async () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
         hearFromServer();
         disconnectSocket();
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A2');
@@ -2912,8 +2847,8 @@ describe('sending again a change lost in a connection that died', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A2');
@@ -2930,8 +2865,8 @@ describe('sending again a change lost in a connection that died', () => {
         const { pair } = await connectedWithOwnPair();
         await sendAndDie(pair, 'A2');
         clock += 15_000;
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
         expect(sentInOrder()[0]).toEqual(['model::update', { id: 'p1', a: 'A2' }]);
         hearFromServer();
@@ -2939,8 +2874,8 @@ describe('sending again a change lost in a connection that died', () => {
         connectSocket();
         fakeSocket.emit.mockClear();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe('A2');
@@ -2984,8 +2919,8 @@ describe('sending again a change lost in a connection that died', () => {
         await changeWithoutHearing(pair, typing(WORD), apart);
         noticeAndReconnect();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe(WORD);
@@ -3004,8 +2939,8 @@ describe('sending again a change lost in a connection that died', () => {
         await changeWithoutHearing(pair, typing(WORD), 100);
         noticeAndReconnect();
 
-        deliver('own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
-        endOfAnswers();
+        deliver(fakeSocket, 'own', { command: 'model::update', payload: { id: 'p1', a: 'A2', b: 'B' } });
+        endOfAnswers(fakeSocket);
         await settle();
 
         expect(pair.a).toBe(WORD);
