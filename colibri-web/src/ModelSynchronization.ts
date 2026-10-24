@@ -7,6 +7,7 @@ import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
 import { DeletedHere } from './modelSync/DeletedHere';
+import { KnownValues } from './modelSync/KnownValues';
 import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
@@ -25,12 +26,6 @@ interface ModelSyncRegistration<T> {
 }
 
 type ModelSync<T> = [Observable<T[]>, (model: T) => void];
-
-// History kept per field to spot changes lost in a dead connection (see keepKnown, lostChanges).
-// An earlier value counts only if it was still current within KNOWN_VALUES_MS before the outage:
-// a change sent before that has arrived for certain.
-const KNOWN_VALUES_KEPT = 8;
-const KNOWN_VALUES_MS = 10_000;
 
 export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyncRegistration<T>): ModelSync<T> => {
     const name = registration.name || registration.type.name.toLowerCase();
@@ -82,14 +77,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         return confirmation;
     };
 
-    // Per own model and field name (as sent), the values the field had, oldest first: the last one the
-    // server showed (see applyUpdate), then those sent since that keepKnown keeps (see sendUpdate).
-    interface KnownValue {
-        json: string;
-        at: number;
-        sent: boolean; // sent by this client, otherwise shown by the server
-    }
-    const knownValues = new WeakMap<T, Map<string, KnownValue[]>>();
+    const knownValues = new KnownValues<T>(() => Date.now());
 
     // Own models asked for again on a reconnect, until the answers are over (see roundEnd). Their
     // updates are checked for changes lost in the dead connection (see lostChanges): per id, the
@@ -326,7 +314,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const afterOutage = askedAfterOutage.get(id);
         if (afterOutage) {
             const held = heldChanges.peek(model);
-            for (const key of lostChanges(model, modelData, held)) afterOutage.lost.add(key);
+            for (const key of knownValues.lostChanges(model, modelData, held, lastHeardBeforeOutage))
+                afterOutage.lost.add(key);
             for (const [key, value] of Object.entries(modelData)) afterOutage.shown.set(key, value);
             applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), afterOutage.lost));
             return;
@@ -377,7 +366,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             // again below be lost too, the next outage's answer is judged against it, however long ago the
             // change was made.
             if (lost.size > 0)
-                remember(model, Object.fromEntries([...lost].map(key => [key, shown.get(key)])) as Partial<T>);
+                knownValues.remember(
+                    model,
+                    Object.fromEntries([...lost].map(key => [key, shown.get(key)])) as Partial<T>
+                );
             sendOnTop(id, asker, model, Object.fromEntries(shown) as Partial<T>, held, [...lost]);
         }
         catchUpOnceAnswered();
@@ -445,67 +437,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // Sends an update for an own model and records it for lostChanges and guardFrom.
     const sendUpdate = (colibri: Colibri, model: T, update: Partial<T>) => {
         colibri.sendMessage(name, 'model::update', update);
-        remember(model, update, lastHeardFrom(colibri) ?? Number.POSITIVE_INFINITY);
+        knownValues.remember(model, update, lastHeardFrom(colibri) ?? Number.POSITIVE_INFINITY);
         keepOut(model, update);
-    };
-
-    // Records `fields` in knownValues: as sent by this client if `heardAt` (when it last heard from the
-    // server) is given, otherwise as shown by the server, which replaces the history. Undefined fields
-    // are not sent at all, so they are skipped.
-    const remember = (model: T, fields: Partial<T>, heardAt?: number) => {
-        let known = knownValues.get(model);
-        if (!known) knownValues.set(model, (known = new Map<string, KnownValue[]>()));
-        const at = Date.now();
-        for (const [key, field] of Object.entries(fields)) {
-            const json = JSON.stringify(field) as string | undefined;
-            if (key === 'id' || json === undefined) continue;
-            const value = { json, at, sent: heardAt !== undefined };
-            known.set(key, heardAt === undefined ? [value] : keepKnown([...(known.get(key) ?? []), value], heardAt));
-        }
-    };
-
-    // Trims a field's values (oldest first) to the latest KNOWN_VALUES_KEPT up to `heardAt`, the first
-    // KNOWN_VALUES_KEPT after it, and the newest. The server's latency probe comes every 100 ms, so the
-    // connection died about when `heardAt` was: the last value that reached the server was sent around
-    // then, and later ones went into the dead link, where only the newest counts.
-    const keepKnown = (values: KnownValue[], heardAt: number): KnownValue[] => {
-        const split = values.findIndex(v => v.at > heardAt);
-        if (split < 0) return values.slice(-KNOWN_VALUES_KEPT);
-        const after = values.slice(split);
-        const newest = after.slice(KNOWN_VALUES_KEPT).slice(-1);
-        return [...values.slice(0, split).slice(-KNOWN_VALUES_KEPT), ...after.slice(0, KNOWN_VALUES_KEPT), ...newest];
-    };
-
-    // Fields of an own model that an update in the reconnect round shows with a value from before this
-    // client's last change: that change never reached the server (Socket.IO loses what is sent into a
-    // dead connection until its ping timeout). Applied, the update would revert it on this client only,
-    // so the value is kept and sent again.
-    //
-    // Any other value is applied: one the field never had is another client's, and so is one shown again
-    // after this client's last change. An earlier value counts only if it was still current
-    // KNOWN_VALUES_MS before the outage, counted from lastHeardBeforeOutage since Socket.IO notices the
-    // outage late: a change that replaced it earlier arrived for certain.
-    const lostChanges = (model: T, modelData: Partial<T>, held: string[]): string[] => {
-        const known = knownValues.get(model);
-        if (!known) return [];
-        const since = lastHeardBeforeOutage - KNOWN_VALUES_MS;
-        const heldKeys = new Set(held.length > 0 ? Object.keys(toJsonOf(model, held)) : []);
-        const current = toJsonOf(model) as Record<string, unknown>;
-        return Object.entries(modelData)
-            .filter(([key, value]) => {
-                const values = known.get(key) ?? [];
-                const last = values.at(-1);
-                if (!last?.sent || heldKeys.has(key) || !(key in current)) return false;
-                const json = JSON.stringify(value) as string | undefined;
-                const earlier = values.filter((_, i) => i + 1 < values.length && values[i + 1].at >= since);
-                return (
-                    json !== last.json &&
-                    earlier.some(v => v.json === json) &&
-                    // Nothing to send when this client has what the server has anyway.
-                    JSON.stringify(current[key]) !== json
-                );
-            })
-            .map(([key]) => key);
     };
 
     // Fields with a change SyncModel has not reported yet keep their value: the update predates the
@@ -514,7 +447,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (model) {
             const unsent = changesToSend.peek(model);
             const update = withoutKeys(withoutChanges(modelData, model, unsent), keptOutOf(model));
-            if (ownModels.has(model)) remember(model, update);
+            if (ownModels.has(model)) knownValues.remember(model, update);
 
             // Update existing model
             updateOf(model, update);
