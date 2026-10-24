@@ -35,9 +35,7 @@ export const useChartTestEnvironment = function (): ChartTestEnvironment {
         }
     });
 
-    // Bound for unbound-method; restore() puts it back on performance either way.
-    const realNow = performance.now.bind(performance);
-    performance.now = () => now;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
 
     return {
         settle: async (root: Element) => {
@@ -48,7 +46,7 @@ export const useChartTestEnvironment = function (): ChartTestEnvironment {
             if (hasTransition(root)) throw new Error('The transitions did not end');
         },
         restore: () => {
-            performance.now = realNow;
+            clock.mockRestore();
             delete (SVGElement.prototype as { transform?: unknown }).transform;
             if (timeZone === undefined) delete process.env['TZ'];
             else process.env['TZ'] = timeZone;
