@@ -26,6 +26,15 @@ interface LogHistory {
     messages: LogMessage[];
 }
 
+interface MergedBatch {
+    /** Known ids the batch changed. */
+    moved: Set<string>;
+    /** Lines to append, in order of their last change. */
+    added: Map<string, LogMessage>;
+    /** All apps seen, or undefined when the batch brings no new one. */
+    apps: Set<string> | undefined;
+}
+
 export const LOG_LEVELS: ReadonlyArray<{ value: number; label: string }> = [
     { value: 0, label: 'Error' },
     { value: 1, label: 'Warn' },
@@ -338,6 +347,19 @@ export class LogService {
     // A known id is a repeat: the server resends the merged entry with the new count and time.
     // It moves to the end, as in the history.
     private add(batch: ReadonlyArray<LogMessage>): void {
+        const { moved, added, apps } = this.mergeBatch(batch);
+
+        if (apps) this._apps.set(apps);
+        if (added.size === 0) return;
+
+        let messages = this._messages();
+        if (moved.size > 0) messages = messages.filter(m => !moved.has(m.id));
+        messages = messages.concat([ ...added.values() ]);
+
+        this._messages.set(this.evictOldest(messages));
+    }
+
+    private mergeBatch(batch: ReadonlyArray<LogMessage>): MergedBatch {
         const moved = new Set<string>();
         const added = new Map<string, LogMessage>();
         let apps: Set<string> | undefined;
@@ -361,20 +383,14 @@ export class LogService {
             }
         }
 
-        if (apps) this._apps.set(apps);
-        if (added.size === 0) return;
+        return { moved, added, apps };
+    }
 
-        let messages = this._messages();
-        if (moved.size > 0) messages = messages.filter(m => !moved.has(m.id));
-        messages = messages.concat([ ...added.values() ]);
-
-        if (messages.length > MAX_MESSAGES) {
-            for (const evicted of messages.slice(0, messages.length - MAX_MESSAGES)) {
-                if (this.byId.get(evicted.id) === evicted) this.byId.delete(evicted.id);
-            }
-            messages = messages.slice(-MAX_MESSAGES);
+    private evictOldest(messages: ReadonlyArray<LogMessage>): ReadonlyArray<LogMessage> {
+        if (messages.length <= MAX_MESSAGES) return messages;
+        for (const evicted of messages.slice(0, messages.length - MAX_MESSAGES)) {
+            if (this.byId.get(evicted.id) === evicted) this.byId.delete(evicted.id);
         }
-
-        this._messages.set(messages);
+        return messages.slice(-MAX_MESSAGES);
     }
 }
