@@ -1,5 +1,7 @@
-import { BehaviorSubject, Observable } from 'rxjs';
-import { Colibri, Message, RegisterChannel, SendMessage } from './Colibri';
+import type { Observable } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
+import type { Message } from './Colibri';
+import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected, whenColibriCreated } from './lifecycle';
 import { SyncModel } from './SyncModel';
 

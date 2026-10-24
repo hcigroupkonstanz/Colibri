@@ -1,5 +1,6 @@
 import { Subject } from 'rxjs';
-import { Socket, connect } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
+import { connect } from 'socket.io-client';
 import { ColibriError, ProtocolMismatchError } from './ColibriError';
 import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnected } from './lifecycle';
 

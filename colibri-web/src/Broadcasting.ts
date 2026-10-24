@@ -68,8 +68,8 @@ const sendJson = (channel: string, val: { [key: string]: unknown }) => {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type genericCallback = (val: any) => void;
-const listeners: Partial<Record<string, Partial<Record<string, genericCallback[]>>>> = {};
+type GenericCallback = (val: any) => void;
+const listeners: Partial<Record<string, Partial<Record<string, GenericCallback[]>>>> = {};
 const channelHandlers: Partial<Record<string, Parameters<typeof RegisterChannel>[1]>> = {};
 
 // NOTE: T pins the payload type the call site's callback expects
@@ -77,7 +77,7 @@ const channelHandlers: Partial<Record<string, Parameters<typeof RegisterChannel>
 const registerListener = <T>(channel: string, type: string, callback: (val: T) => void) => {
     let channelListeners = listeners[channel];
     if (channelListeners === undefined) {
-        const newChannelListeners: Partial<Record<string, genericCallback[]>> = {};
+        const newChannelListeners: Partial<Record<string, GenericCallback[]>> = {};
         channelListeners = newChannelListeners;
         listeners[channel] = newChannelListeners;
         const handler: Parameters<typeof RegisterChannel>[1] = msg => {
@@ -220,7 +220,7 @@ export const toRgbaColor = (val: ColorValue): [number, number, number, number] =
     return [0, 0, 0, 1];
 };
 
-const unregister = (channel: string, callback: genericCallback) => {
+const unregister = (channel: string, callback: GenericCallback) => {
     const channelListeners = listeners[channel];
     if (channelListeners === undefined) return;
 

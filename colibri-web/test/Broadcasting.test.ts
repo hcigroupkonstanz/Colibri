@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import type * as Broadcasting from '../src/Broadcasting';
 import type { Message } from '../src/Colibri';
 
 vi.mock('../src/Colibri', () => ({
@@ -10,9 +11,9 @@ vi.mock('../src/Colibri', () => ({
 type SyncSender = (channel: string, value: unknown) => void;
 type SyncReceiver = (channel: string, callback: (value: unknown) => void) => void;
 
-let Sync: (typeof import('../src/Broadcasting'))['Sync'];
-let toHexColor: (typeof import('../src/Broadcasting'))['toHexColor'];
-let toRgbaColor: (typeof import('../src/Broadcasting'))['toRgbaColor'];
+let Sync: (typeof Broadcasting)['Sync'];
+let toHexColor: (typeof Broadcasting)['toHexColor'];
+let toRgbaColor: (typeof Broadcasting)['toRgbaColor'];
 let sendMessage: Mock<(channel: string, command: string, payload?: unknown) => void>;
 let registerChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
 let unregisterChannel: Mock<(channel: string, handler: (payload: Message) => void) => void>;
