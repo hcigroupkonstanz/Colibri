@@ -4,6 +4,7 @@ import type { Message } from './Colibri';
 import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './lifecycle';
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
+import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
 import { withColibri } from './modelSync/withColibri';
@@ -24,14 +25,6 @@ type ModelSync<T> = [Observable<T[]>, (model: T) => void];
 
 // A model::update with nothing but the id is the server's answer for a model it does not have.
 const isBare = (modelData: object) => Object.keys(modelData).every(key => key === 'id');
-
-// Per channel, each registration's check for an own model with a given id. Every registration on a
-// channel receives the answers to the others' requests, and a bare id may be one of those.
-const ownOnChannel = new Map<string, Set<(id: string) => boolean>>();
-
-// Per channel, each registration's guard (see guardFrom): all of them receive the answers to the
-// others' requests.
-const guardsOnChannel = new Map<string, Set<(end: string) => void>>();
 
 // History kept per field to spot changes lost in a dead connection (see keepKnown, lostChanges).
 // An earlier value counts only if it was still current within KNOWN_VALUES_MS before the outage:
@@ -161,16 +154,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     let disconnected = false;
 
     const hasOwn = (id: string) => models.value.some(m => m.id === id && ownModels.has(m));
-    const onChannel = ownOnChannel.get(name);
-    if (onChannel) onChannel.add(hasOwn);
-    else ownOnChannel.set(name, new Set([hasOwn]));
-
     const guard = (end: string) => {
         guardEnds.push(end);
     };
-    const guards = guardsOnChannel.get(name);
-    if (guards) guards.add(guard);
-    else guardsOnChannel.set(name, new Set([guard]));
+    joinChannel(name, hasOwn, guard);
 
     // Asks the server for an own model by id; the answer arrives through onUpdate or onDelete.
     // `again: true`, for a model already answered for, makes the server reply model::delete if another
@@ -215,7 +202,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // back to its sender. Every registration on the channel receives the answer, so all of them guard.
     const guardFrom = (colibri: Colibri) => {
         const end = askForEnd(colibri);
-        for (const guardOnChannel of guardsOnChannel.get(name) ?? []) guardOnChannel(end);
+        guardChannel(name, end);
     };
 
     const keepOut = (model: T, update: object) => {
@@ -332,11 +319,9 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
         // The answer to another registration on this channel that has an own model with this id. Not
         // listed: the full state it sends in reply is not relayed to this client, so the model would stay empty.
-        if (!model && id !== undefined && isBare(modelData) && ownElsewhere(id)) return;
+        if (!model && id !== undefined && isBare(modelData) && ownedElsewhere(name, hasOwn, id)) return;
         applyUpdate(model, modelData);
     };
-
-    const ownElsewhere = (id: string) => [...(ownOnChannel.get(name) ?? [])].some(has => has !== hasOwn && has(id));
 
     // The first update for an own model after its request settles it. With fields, the server has the
     // model (it stores an update before relaying it): applied as usual, except fields this client
