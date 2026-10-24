@@ -79,7 +79,7 @@ export class WebLog extends Service {
     }
 
     public override async init(): Promise<void> {
-        super.init();
+        await super.init();
 
         this.socketio.messages$
             .pipe(filter(msg => msg.channel === 'colibri::log' && msg.command === 'requestLog'))

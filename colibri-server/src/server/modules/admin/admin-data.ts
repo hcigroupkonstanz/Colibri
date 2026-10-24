@@ -111,7 +111,7 @@ export class AdminData extends Service {
     }
 
     public override async init(): Promise<void> {
-        super.init();
+        await super.init();
 
         this.sources.socketio.messages$
             .pipe(filter(msg => msg.channel === ADMIN_CHANNEL))
