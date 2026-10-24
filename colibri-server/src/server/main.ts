@@ -64,14 +64,14 @@ const proxyCertificates = Config.PROXY_TLS_ADDRESSES.length > 0
 // compiles its own from the same list, for the PROXY protocol.
 const trustProxy = compileTrustedProxies(Config.TRUSTED_PROXIES);
 
-const webServer = new WebServer(
-    Config.WEBSERVER_HOST,
-    Config.WEBSERVER_PORT,
-    Config.WEBSERVER_ROOT,
-    Config.BASE_URL,
-    tlsCertificate,
+const webServer = new WebServer({
+    hostname: Config.WEBSERVER_HOST,
+    webPort: Config.WEBSERVER_PORT,
+    webRoot: Config.WEBSERVER_ROOT,
+    baseUrl: Config.BASE_URL,
+    tls: tlsCertificate,
     trustProxy
-);
+});
 
 const tcpServer = new TCPServerProxy();
 // Relays voice only from the address of a Unity client of the packet's app, or unchecked from a

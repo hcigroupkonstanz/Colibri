@@ -35,6 +35,17 @@ export const hasRestMediaType = function (req: http.IncomingMessage): boolean {
     return typeof contentType === 'string' && contentType.split(';')[0]!.trim().toLowerCase() === REST_MEDIA_TYPE;
 };
 
+export interface WebServerOptions {
+    hostname: string;
+    webPort: number;
+    webRoot: string;
+    baseUrl: string;
+    // Serve HTTPS (and Socket.IO's WSS) only, with this certificate and each renewed one.
+    tls?: TlsCredentialSource;
+    // The proxies whose X-Forwarded-For names the client; see TRUSTED_PROXIES. None if left out.
+    trustProxy?: TrustProxy;
+}
+
 export class WebServer extends Service {
     public get serviceName(): string {
         return 'WebServer';
@@ -43,22 +54,24 @@ export class WebServer extends Service {
         return 'web';
     }
 
+    private hostname: string;
+    private webPort: number;
+    private webRoot: string;
+    private baseUrl: string;
+    private readonly tls?: TlsCredentialSource;
     private app: express.Application;
     private server!: http.Server | https.Server;
     private isRunning = false;
     private tlsChanges: Subscription | undefined;
 
-    // `tls`: serve HTTPS (and Socket.IO's WSS) only, with this certificate and each renewed one.
-    // `trustProxy`: the proxies whose X-Forwarded-For names the client; see TRUSTED_PROXIES.
-    public constructor(
-        private hostname: string,
-        private webPort: number,
-        private webRoot: string,
-        private baseUrl: string,
-        private readonly tls?: TlsCredentialSource,
-        trustProxy: TrustProxy = trustNoProxy
-    ) {
+    public constructor(options: WebServerOptions) {
         super();
+        const { trustProxy = trustNoProxy } = options;
+        this.hostname = options.hostname;
+        this.webPort = options.webPort;
+        this.webRoot = options.webRoot;
+        this.baseUrl = options.baseUrl;
+        this.tls = options.tls;
 
         // Nothing is listening yet: start() logs 'Web server listening on ...' once listen()
         // has succeeded, and the console sink prints that line too.

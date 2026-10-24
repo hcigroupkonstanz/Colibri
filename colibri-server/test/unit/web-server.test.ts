@@ -49,7 +49,7 @@ describe('WebServer over HTTP', () => {
         webRoot = await mkdtemp(path.join(tmpdir(), 'colibri-web-server-root-'));
         await writeFile(path.join(webRoot, 'index.html'), '<!doctype html><title>Colibri</title>', 'utf8');
 
-        webServer = new WebServer('127.0.0.1', 0, webRoot, '');
+        webServer = new WebServer({ hostname: '127.0.0.1', webPort: 0, webRoot, baseUrl: '' });
         restApi = new RestAPI(dataPath, webServer);
         await restApi.init();
         // A route with a bug in it, for the error handling tests.
@@ -499,7 +499,7 @@ describe('WebServer with a BASE_URL', () => {
     it('answers an unknown /api path 404 in JSON, and serves the admin UI under BASE_URL', async () => {
         const webRoot = await mkdtemp(path.join(tmpdir(), 'colibri-web-server-base-url-'));
         await writeFile(path.join(webRoot, 'index.html'), '<!doctype html><title>Colibri</title>', 'utf8');
-        const webServer = new WebServer('127.0.0.1', 0, webRoot, '/colibri');
+        const webServer = new WebServer({ hostname: '127.0.0.1', webPort: 0, webRoot, baseUrl: '/colibri' });
         const httpServer = webServer.start();
         try {
             await once(httpServer, 'listening');
@@ -529,7 +529,7 @@ describe.skipIf(!hasIPv6Loopback)('WebServer on an IPv6 WEBSERVER_HOST', () => {
     it('serves the admin UI over IPv6, and over IPv4 too on ::', async () => {
         const webRoot = await mkdtemp(path.join(tmpdir(), 'colibri-web-server-ipv6-'));
         await writeFile(path.join(webRoot, 'index.html'), '<!doctype html><title>Colibri</title>', 'utf8');
-        const webServer = new WebServer('::', 0, webRoot, '');
+        const webServer = new WebServer({ hostname: '::', webPort: 0, webRoot, baseUrl: '' });
         const httpServer = webServer.start();
         try {
             await once(httpServer, 'listening');
@@ -556,7 +556,7 @@ describe.skipIf(!hasIPv6Loopback)('WebServer on an IPv6 WEBSERVER_HOST', () => {
 describe('WebServer behind a reverse proxy', () => {
     const ipOf = async function (trustProxy: TrustProxy | undefined, forwardedFor: string): Promise<unknown> {
         const webRoot = await mkdtemp(path.join(tmpdir(), 'colibri-web-server-proxy-'));
-        const webServer = new WebServer('127.0.0.1', 0, webRoot, '', undefined, trustProxy);
+        const webServer = new WebServer({ hostname: '127.0.0.1', webPort: 0, webRoot, baseUrl: '', trustProxy });
         webServer.addApi('/ip', (req, res) => {
             res.json({ ip: req.ip });
         });
@@ -606,7 +606,7 @@ describe('WebServer startup', () => {
         const listening = () => printed.filter(line => line.includes('Web server listening on'));
 
         const webRoot = await mkdtemp(path.join(tmpdir(), 'colibri-web-server-startup-'));
-        const webServer = new WebServer('127.0.0.1', 0, webRoot, '');
+        const webServer = new WebServer({ hostname: '127.0.0.1', webPort: 0, webRoot, baseUrl: '' });
         try {
             expect(listening()).toEqual([]);
 
@@ -708,7 +708,10 @@ describe('WebServer over HTTPS', () => {
         await writeFile(path.join(webRoot, 'index.html'), '<!doctype html><title>Colibri</title>', 'utf8');
 
         tlsChanges = new Subject<TlsCredentials>();
-        webServer = new WebServer('127.0.0.1', 0, webRoot, '', { credentials: { cert: first.cert, key: first.key }, changes$: tlsChanges });
+        webServer = new WebServer({
+            hostname: '127.0.0.1', webPort: 0, webRoot, baseUrl: '',
+            tls: { credentials: { cert: first.cert, key: first.key }, changes$: tlsChanges }
+        });
         server = webServer.start();
         socketIo = new SocketIOServer();
         socketIo.start(server);
