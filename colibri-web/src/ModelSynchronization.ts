@@ -7,6 +7,7 @@ import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
 import { DeletedHere } from './modelSync/DeletedHere';
+import { GuardWindow } from './modelSync/GuardWindow';
 import { KnownValues } from './modelSync/KnownValues';
 import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
@@ -91,16 +92,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // While reconnect requests are unanswered: the askForEnd id sent after them (see takeAnswer).
     let roundEnd: string | undefined;
 
-    // askForEnd ids whose answers end the window for stale updates (see guardFrom), oldest first.
-    let guardEnds: string[] = [];
-
-    // Per model, the field names (as sent) kept out of updates until the answer for the last guardEnds id
-    // at the time they were sent. Longer would drop another client's later change to the same field.
-    let keptOut = new WeakMap<T, Map<string, string>>();
-
-    // Own models settled by an update that may not have been their answer (see takeAnswer), mapped to
-    // the guardEnds id whose answer comes after theirs.
-    const answerMayFollow = new Map<string, string>();
+    const guardWindow = new GuardWindow<T>();
 
     // When the server was last heard from before the last outage (see lastHeardFrom).
     let lastHeardBeforeOutage = 0;
@@ -109,7 +101,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
     const hasOwn = (id: string) => models.value.some(m => m.id === id && ownModels.has(m));
     const guard = (end: string) => {
-        guardEnds.push(end);
+        guardWindow.add(end);
     };
     joinChannel(name, hasOwn, guard);
 
@@ -159,25 +151,6 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         guardChannel(name, end);
     };
 
-    const keepOut = (model: T, update: object) => {
-        const end = guardEnds.at(-1);
-        if (end === undefined) return;
-        let kept = keptOut.get(model);
-        if (!kept) keptOut.set(model, (kept = new Map<string, string>()));
-        for (const key of Object.keys(update)) if (key !== 'id') kept.set(key, end);
-    };
-
-    const keptOutOf = (model: T) =>
-        [...(keptOut.get(model) ?? [])].filter(([, end]) => guardEnds.includes(end)).map(([key]) => key);
-
-    // The answer for `end` has come, and with it those for earlier requests; without `end`, none will come.
-    const endGuard = (end?: string) => {
-        guardEnds = end === undefined ? [] : guardEnds.slice(guardEnds.indexOf(end) + 1);
-        if (guardEnds.length > 0) return;
-        keptOut = new WeakMap<T, Map<string, string>>();
-        answerMayFollow.clear();
-    };
-
     // initial data fetch
     // Repeated after every reconnect, since remote updates relayed meanwhile are lost. Applied to the
     // model with the same id, so nothing is duplicated.
@@ -193,7 +166,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             disconnected = true;
             // Answers to the requests on this connection will not come. Ended here, not on reconnect:
             // by then another registration on the channel may have sent the next one (see guardFrom).
-            endGuard();
+            guardWindow.endGuard();
             // Not updated while the last reconnect's answers are pending: changes lost in the earlier
             // outage are still in question, so they are judged from then.
             if (askedAfterOutage.size === 0) lastHeardBeforeOutage = lastHeardFrom(colibri) ?? Date.now();
@@ -245,7 +218,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const id = (message.payload as { id?: unknown } | undefined)?.id;
         if (typeof id !== 'string') return;
         if (id === roundEnd) endRound();
-        if (guardEnds.includes(id)) endGuard(id);
+        if (guardWindow.includes(id)) guardWindow.endGuard(id);
         const confirmed = [...confirming].find(([, confirmation]) => confirmation.end === id);
         if (confirmed) endWait(confirmed[0]);
     });
@@ -342,8 +315,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (sendOnTop(id, asker, model, modelData, held, [])) return;
         if (!catchUpOnceAnswered()) guardFrom(asker);
         // Whichever of the two calls ran sent a request whose answer comes after this model's.
-        const end = guardEnds.at(-1);
-        if (end !== undefined) answerMayFollow.set(id, end);
+        guardWindow.markAnswerMayFollow(id);
     };
 
     // The answers to the reconnect requests are over (see takeAnswer): settles each own model with
@@ -438,7 +410,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const sendUpdate = (colibri: Colibri, model: T, update: Partial<T>) => {
         colibri.sendMessage(name, 'model::update', update);
         knownValues.remember(model, update, lastHeardFrom(colibri) ?? Number.POSITIVE_INFINITY);
-        keepOut(model, update);
+        guardWindow.keepOut(model, update);
     };
 
     // Fields with a change SyncModel has not reported yet keep their value: the update predates the
@@ -446,7 +418,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const applyUpdate = (model: T | undefined, modelData: Partial<T>) => {
         if (model) {
             const unsent = changesToSend.peek(model);
-            const update = withoutKeys(withoutChanges(modelData, model, unsent), keptOutOf(model));
+            const update = withoutKeys(withoutChanges(modelData, model, unsent), guardWindow.keptOutOf(model));
             if (ownModels.has(model)) knownValues.remember(model, update);
 
             // Update existing model
@@ -466,7 +438,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
                 changesToSend.drop(newModel);
                 const update = toJsonOf(newModel, changes);
                 SendMessage(name, 'model::update', update);
-                keepOut(newModel, update);
+                guardWindow.keepOut(newModel, update);
                 models.next([...models.value]);
             });
 
@@ -501,12 +473,11 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         // model::delete can answer a request for an own model (another client deleted it during an
         // outage). That settles the model like an update, so catching up must not keep waiting for it.
         endConfirmation(id);
-        const answerEnd = answerMayFollow.get(id);
-        answerMayFollow.delete(id);
+        const answerMayFollow = guardWindow.takeAnswerMayFollow(id);
         if (awaitingAnswer.delete(id)) {
             deletedWhileAwaited.add(id);
             catchUpOnceAnswered();
-        } else if (answerEnd !== undefined && guardEnds.includes(answerEnd)) {
+        } else if (answerMayFollow) {
             // Settled by an update that need not have been the answer, which may still come.
             deletedWhileAwaited.add(id);
         }
