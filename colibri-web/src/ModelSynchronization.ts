@@ -5,6 +5,7 @@ import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './lifecycle';
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
+import { isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
 import { withColibri } from './modelSync/withColibri';
@@ -22,9 +23,6 @@ interface ModelSyncRegistration<T> {
 }
 
 type ModelSync<T> = [Observable<T[]>, (model: T) => void];
-
-// A model::update with nothing but the id is the server's answer for a model it does not have.
-const isBare = (modelData: object) => Object.keys(modelData).every(key => key === 'id');
 
 // History kept per field to spot changes lost in a dead connection (see keepKnown, lostChanges).
 // An earlier value counts only if it was still current within KNOWN_VALUES_MS before the outage:
@@ -556,11 +554,6 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             .map(([key]) => key);
     };
 
-    const withoutKeys = (modelData: Partial<T>, keys: Iterable<string>): Partial<T> => {
-        const drop = new Set(keys);
-        return Object.fromEntries(Object.entries(modelData).filter(([key]) => !drop.has(key))) as Partial<T>;
-    };
-
     // Fields with a change SyncModel has not reported yet keep their value: the update predates the
     // change, and applying it would make the report send the update's value instead.
     const applyUpdate = (model: T | undefined, modelData: Partial<T>) => {
@@ -605,13 +598,6 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         const held = [...(heldChanges.get(model) ?? [])];
         heldChanges.delete(model);
         return held;
-    };
-
-    // `modelData` without the fields that the property names in `changes` are sent as.
-    const withoutChanges = (modelData: Partial<T>, model: T, changes: string[]): Partial<T> => {
-        if (changes.length === 0) return modelData;
-        const changed = new Set(Object.keys(toJsonOf(model, changes)).filter(key => key !== 'id'));
-        return Object.fromEntries(Object.entries(modelData).filter(([key]) => !changed.has(key))) as Partial<T>;
     };
 
     const onDelete = (id: string) => {
