@@ -5,7 +5,6 @@ import type { Observable } from 'rxjs';
 import { Subject } from 'rxjs';
 
 import { AppIndex } from '../core/app-index.js';
-import type { Metadata } from '../core/log-message.js';
 import { CONNECTION_LINE } from '../core/log-message.js';
 import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../protocol/payload.js';
 import { errorMessage } from '../core/error-message.js';
@@ -44,16 +43,11 @@ import { normalizeAddress } from '../net/addresses.js';
 import type { ClientActivity } from '../limits/client-activity.js';
 import type { WebTraffic } from './web-traffic-counter.js';
 import { WebTrafficCounter } from './web-traffic-counter.js';
+import { aboutClient } from './about-client.js';
 
 // How often held-back updates are passed on as a limited client's tokens refill, and finished
 // episodes reported.
 const RATE_LIMIT_SWEEP_MILLIS = 100;
-
-// For a line about one client: the admin UI shows its app, and lists the line when it shows only
-// that app. A refused client's error used to appear only in the unfiltered log.
-const aboutClient = function (client: { app: string; name: string; id: string }): Metadata {
-    return { clientApp: client.app, clientName: client.name, clientId: client.id };
-};
 
 export interface SocketIoServerOptions {
     // Per client; see InboundRateLimiter.
