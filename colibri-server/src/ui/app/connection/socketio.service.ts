@@ -9,6 +9,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'reconnecting';
 
 export interface ChannelMessage {
     command: string;
+    /** Depends on the command; the receiver casts it. */
     payload: unknown;
 }
 

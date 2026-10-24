@@ -117,7 +117,7 @@ const timeLabel = function (value: Date | d3.NumberValue): string {
     return d3.timeFormat(date.getSeconds() === 0 ? '%H:%M' : ':%S')(date);
 };
 
-// 1.2k from 1000 up; below, as it is (the SI format wrote 0.5 as 500m)
+// 1.2k from 1000 up; below that as it is, since the SI format writes 0.5 as 500m
 const rateLabel = function (value: d3.NumberValue): string {
     const n = Number(value);
     return n >= 1000 ? d3.format('.2~s')(n) : d3.format('~')(n);
@@ -127,7 +127,7 @@ type Layer = d3.Series<StackRow, string> & { color: string };
 
 type ScaleY = d3.ScaleLinear<number, number, never>;
 
-// a clipPath id of its own for each chart on the page
+// Each chart needs its own clipPath id: SVG ids are global to the page.
 let clipIds = 0;
 
 @Component({

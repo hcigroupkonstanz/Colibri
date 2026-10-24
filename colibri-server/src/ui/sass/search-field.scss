@@ -1,4 +1,4 @@
-// The parts of the search field the log toolbar and the models page share, included in their `.search`.
+// Shared by the .search of the log toolbar and the models page.
 
 @mixin pi-search {
     .pi-search {
@@ -36,7 +36,7 @@
             border-color: var(--accent);
         }
 
-        // the page's own clear button replaces the browser's
+        // hides the browser's clear button, which .clear-search replaces
         &::-webkit-search-cancel-button {
             -webkit-appearance: none;
             appearance: none;

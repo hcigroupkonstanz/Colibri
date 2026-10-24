@@ -143,7 +143,7 @@
         overflow: hidden;
     }
 
-    // Not in a level colour: a yellow match looked like a WRN badge. The text is at 5:1 or more
+    // Not in a level colour: a yellow match would read as a WRN badge. The text is at 5:1 or more
     // on every row background.
     mark {
         color: var(--text-strong);

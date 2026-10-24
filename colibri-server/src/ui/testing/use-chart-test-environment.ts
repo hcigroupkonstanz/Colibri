@@ -35,6 +35,7 @@ export const useChartTestEnvironment = function (): ChartTestEnvironment {
         }
     });
 
+    // Bound for unbound-method; restore() puts it back on performance either way.
     const realNow = performance.now.bind(performance);
     performance.now = () => now;
 

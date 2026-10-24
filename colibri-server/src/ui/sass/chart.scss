@@ -1,4 +1,4 @@
-// The frame the d3 chart components share: the host, the message over the plot and the plot itself.
+// Shared by the latency and throughput charts.
 
 @mixin host {
     :host {
@@ -7,7 +7,7 @@
     }
 }
 
-// over the plot, which keeps its axes
+// over the plot area, clear of the axes (the charts' left and bottom margins)
 @mixin message {
     .message {
         position: absolute;

@@ -62,13 +62,17 @@ type PlotSelection = Selection<SVGGElement, BoxplotStats, null, undefined>;
 type PlotTransition = Transition<SVGGElement, BoxplotStats, null, undefined>;
 type PlotContext = PlotSelection | PlotTransition;
 
+// The one transition type selection.transition(t) accepts in @types/d3-transition;
+// a typed transition goes through unknown.
 type AnyTransition = Transition<BaseType, unknown, null, undefined>;
 type PartSelection<GElement extends BaseType, Datum> = Selection<GElement, Datum, SVGGElement, BoxplotStats>;
 
+// The attr() a selection and a transition both offer.
 interface RenderContext<GElement extends BaseType, Datum> {
     attr(name: string, value: string | number | ValueFn<GElement, Datum, string | number | boolean | null>): this;
 }
 
+// What drawBoxplot calls on a part, as a selection and then as its transition.
 interface PartContext<GElement extends BaseType, Datum> extends RenderContext<GElement, Datum> {
     transition(transition: AnyTransition): PartContext<GElement, Datum>;
     call(func: (ctx: RenderContext<GElement, Datum>) => void): this;
@@ -255,6 +259,7 @@ const drawBoxplot = function (ctx: PlotContext, settings: BoxplotSettings, key: 
     const { coor } = orientation;
     const renderer = pointRenderer(settings, orientation);
 
+    // A transition has selection(); in d3 v7 so does a selection, which returns itself.
     const selection = (ctx.selection ? ctx.selection() : ctx) as PlotSelection;
     const whiskerPath = (d: Whisker) =>
         `M${coor(scale(d.start || 0), -0.5 * boxwidth)} l${coor(0, boxwidth)} ` +

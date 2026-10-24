@@ -2,8 +2,8 @@
     display: block;
 }
 
-// As many columns of at least 420px as fit, up to three, the cards filling each from the top. At
-// 340px, a 1100px window got three, and the variable names under the values broke mid-word.
+// As many columns of at least 420px as fit, up to three, the cards filling each from the top.
+// Narrower columns break the variable names under the values mid-word.
 .cards {
     columns: 3 420px;
     column-gap: 16px;

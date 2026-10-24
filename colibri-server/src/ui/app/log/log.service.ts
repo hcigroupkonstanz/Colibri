@@ -27,11 +27,11 @@ interface LogHistory {
 }
 
 interface MergedBatch {
-    /** Known ids the batch changed. */
+    /** Known ids whose count or time the batch changed: they leave their old place. */
     moved: Set<string>;
     /** Lines to append, in order of their last change. */
     added: Map<string, LogMessage>;
-    /** All apps seen, or undefined when the batch brings no new one. */
+    /** All apps seen so far, or undefined when the batch adds none. */
     apps: Set<string> | undefined;
 }
 

@@ -207,12 +207,10 @@ const networkSection = function (s: ServerSnapshot): Section {
     const proxies = Array.isArray(set['TRUSTED_PROXIES']) ? set['TRUSTED_PROXIES'] : [];
     const proxyAddresses = Array.isArray(set['PROXY_TLS_ADDRESSES']) ? set['PROXY_TLS_ADDRESSES'] : [];
 
-    // TLS terminated by a reverse proxy in front of this server, which then sees only the proxy's
-    // unencrypted connections. Web: by what trusted proxies reported in X-Forwarded-Proto for the web
-    // clients and admin pages connected now, this page included (tlsAtProxy.web). TCP: the PROXY
-    // protocol header does not say, so the operator declares it with TCP_TLS_AT_PROXY
-    // (tlsAtProxy.tcp). With the server's own certificate, that is what a direct connection uses,
-    // and the rows say so instead.
+    // TLS terminated by a proxy in front of this server. Web: the X-Forwarded-Proto that trusted
+    // proxies reported for the clients and admin pages connected now (tlsAtProxy.web). TCP: the PROXY
+    // protocol header says nothing about TLS, so the operator declares it with TCP_TLS_AT_PROXY
+    // (tlsAtProxy.tcp). Ignored with the server's own certificate, which a direct connection uses: the rows show its TLS instead.
     const webTlsAtProxy = tls === null && s.tlsAtProxy.web;
     const tcpTlsAtProxy = tls === null && s.tlsAtProxy.tcp;
     return {
@@ -236,8 +234,7 @@ const networkSection = function (s: ServerSnapshot): Section {
     };
 };
 
-// The server's own certificate, and the proxy's: both when the proxy starts TLS of its own to
-// the server, and clients only ever see the proxy's.
+// The server's own certificate. Titled "this server" next to the proxy's, which clients see.
 const certificateSection = function (s: ServerSnapshot, format: (time: number) => string): Section | undefined {
     const tls = s.tls;
     const proxyTls = s.proxyTls;

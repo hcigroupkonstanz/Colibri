@@ -247,7 +247,6 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         const plotHeight = Math.max(0, this.height - margin.top - margin.bottom);
         const { band } = this.layout();
 
-        // Coloured by the client's slot, as in the Clients table.
         const lines: Line[] = clients
             .map(client => ({ client, color: clientColor(client.slot) }))
             .filter(line => line.client.latency.length > 0);

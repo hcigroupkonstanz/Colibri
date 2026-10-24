@@ -1,7 +1,7 @@
 :host {
     display: grid;
-    // minmax(0, 1fr), not the implicit auto column: that one grew to the header's widest
-    // content and laid the whole page out 1365px wide on any smaller screen.
+    // minmax(0, 1fr), not the implicit auto column: that one grows to the header's widest
+    // content and widens the whole page.
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
 

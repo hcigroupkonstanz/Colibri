@@ -166,7 +166,7 @@ td.c-transport .version {
             padding: 10px 0;
         }
 
-        // a load limit on a line of its own: next to four-digit rates it was cut off
+        // a load limit on a line of its own: it does not fit next to four-digit rates
         tr.held {
             grid-template-areas:
                 'swatch name  name  name  name  log'
@@ -223,7 +223,7 @@ td.c-transport .version {
         grid-area: trans;
     }
 
-    // "(proxy)" under the lock: next to it, it ran into the protocol version
+    // "(proxy)" under the lock: beside it, it runs into the protocol version
     .tls .by-proxy {
         display: block;
     }
