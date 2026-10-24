@@ -130,6 +130,34 @@ export const sortClients = function (rows: ReadonlyArray<ClientRow>, sort: Sort 
     });
 };
 
+const toClientView = function (client: ClientRow, at: number, slot: number | undefined): ClientView {
+    const byId = client.transport === 'web' && isAddress(client.name);
+    const tls = tlsEnd(client);
+    return {
+        id: client.id,
+        app: client.app,
+        appColor: appColor(client.app),
+        label: byId ? shortId(client.id) : client.name,
+        labelTitle: byId ? `${client.name}, client ${client.id}` : `Client ${client.id}`,
+        byId,
+        address: client.address,
+        transport: client.transport === 'tcp' ? 'TCP' : 'Web',
+        tls,
+        tlsTitle: tls === 'proxy' ? TLS_TITLES[client.transport] : tls ? TLS_TITLES[tls] : '',
+        version: client.version,
+        connectedAt: client.connectedAt,
+        connected: duration((at - client.connectedAt) / 1000),
+        latency: client.latency === null ? '-' : `${decimal(client.latency)} ms`,
+        in: decimal(client.in),
+        out: decimal(client.out),
+        limit: client.limit ? LIMIT_LABELS[client.limit] : null,
+        limitTitle: client.limit ? LIMIT_TITLES[client.limit] : '',
+        held: client.held,
+        color: slot === undefined ? null : clientColor(slot),
+        truncated: client.truncated === true
+    };
+};
+
 @Component({
     selector: 'app-clients',
     templateUrl: './clients.component.html',
@@ -199,34 +227,7 @@ export class ClientsComponent {
             sorted.sort((a, b) => (at.get(a.id) ?? held.length) - (at.get(b.id) ?? held.length));
         }
 
-        return sorted.map(client => {
-            const byId = client.transport === 'web' && isAddress(client.name);
-            const slot = slots.get(client.id);
-            const tls = tlsEnd(client);
-            return {
-                id: client.id,
-                app: client.app,
-                appColor: appColor(client.app),
-                label: byId ? shortId(client.id) : client.name,
-                labelTitle: byId ? `${client.name}, client ${client.id}` : `Client ${client.id}`,
-                byId,
-                address: client.address,
-                transport: client.transport === 'tcp' ? 'TCP' : 'Web',
-                tls,
-                tlsTitle: tls === 'proxy' ? TLS_TITLES[client.transport] : tls ? TLS_TITLES[tls] : '',
-                version: client.version,
-                connectedAt: client.connectedAt,
-                connected: duration((snapshot.at - client.connectedAt) / 1000),
-                latency: client.latency === null ? '-' : `${decimal(client.latency)} ms`,
-                in: decimal(client.in),
-                out: decimal(client.out),
-                limit: client.limit ? LIMIT_LABELS[client.limit] : null,
-                limitTitle: client.limit ? LIMIT_TITLES[client.limit] : '',
-                held: client.held,
-                color: slot === undefined ? null : clientColor(slot),
-                truncated: client.truncated === true
-            };
-        });
+        return sorted.map(client => toClientView(client, snapshot.at, slots.get(client.id)));
     });
 
     /** The count line above the table. It says so when the server has cut the client list short. */
