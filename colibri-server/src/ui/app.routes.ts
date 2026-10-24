@@ -1,8 +1,8 @@
 import type { Routes } from '@angular/router';
-import { LogComponent } from './app/pages/log/log.component';
-import { ClientsComponent } from './app/pages/clients/clients.component';
-import { ModelsComponent } from './app/pages/models/models.component';
-import { ServerComponent } from './app/pages/server/server.component';
+import { LogComponent } from './app/log/log.component';
+import { ClientsComponent } from './app/clients/clients.component';
+import { ModelsComponent } from './app/models/models.component';
+import { ServerComponent } from './app/server/server.component';
 
 // One segment each: the production build's <base href="./"> resolves asset URLs against the
 // page's directory, so /log/x would load them from /log/.

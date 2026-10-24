@@ -54,7 +54,7 @@ const versionLiterals: VersionLiteral[] = [
         pattern: /const string CLIENT_VERSION\s*=\s*"([^"]*)"/g,
     },
     {
-        file: 'colibri-server/src/ui/app/services/socketio.service.ts',
+        file: 'colibri-server/src/ui/app/connection/socketio.service.ts',
         pattern: /query:\s*\{\s*app:\s*'colibri',\s*version:\s*'([^']*)'\s*\}/g,
     },
 ];
