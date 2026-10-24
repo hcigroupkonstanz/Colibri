@@ -15,14 +15,14 @@ interface KnownValue {
 
 export class KnownValues<T extends SyncModel<T>> {
     // Per own model and field name (as sent), the values the field had, oldest first: the last one the
-    // server showed (see applyUpdate), then those sent since that keepKnown keeps (see sendUpdate).
+    // server showed, then those sent since that keepKnown keeps.
     private readonly knownValues = new WeakMap<T, Map<string, KnownValue[]>>();
 
     public constructor(private readonly now: () => number) {}
 
-    // Records `fields` in knownValues: as sent by this client if `heardAt` (when it last heard from the
-    // server) is given, otherwise as shown by the server, which replaces the history. Undefined fields
-    // are not sent at all, so they are skipped.
+    // Records `fields` as sent by this client if `heardAt` (when it last heard from the server) is given,
+    // otherwise as shown by the server, which replaces the history. Undefined fields are not sent at
+    // all, so they are skipped.
     public remember(model: T, fields: Partial<T>, heardAt?: number): void {
         let known = this.knownValues.get(model);
         if (!known) this.knownValues.set(model, (known = new Map<string, KnownValue[]>()));
@@ -41,12 +41,9 @@ export class KnownValues<T extends SyncModel<T>> {
     // Fields of an own model that an update in the reconnect round shows with a value from before this
     // client's last change: that change never reached the server (Socket.IO loses what is sent into a
     // dead connection until its ping timeout). Applied, the update would revert it on this client only,
-    // so the value is kept and sent again.
-    //
-    // Any other value is applied: one the field never had is another client's, and so is one shown again
-    // after this client's last change. An earlier value counts only if it was still current
-    // KNOWN_VALUES_MS before the outage, counted from lastHeardBeforeOutage since Socket.IO notices the
-    // outage late: a change that replaced it earlier arrived for certain.
+    // so the value is kept and sent again. Any other value is applied: one the field never had is another
+    // client's, and so is one shown again after this client's last change. The outage counts from
+    // lastHeardBeforeOutage, since Socket.IO notices it late.
     public lostChanges(model: T, modelData: Partial<T>, held: string[], lastHeardBeforeOutage: number): string[] {
         const known = this.knownValues.get(model);
         if (!known) return [];
@@ -71,7 +68,7 @@ export class KnownValues<T extends SyncModel<T>> {
     }
 
     // Trims a field's values (oldest first) to the latest KNOWN_VALUES_KEPT up to `heardAt`, the first
-    // KNOWN_VALUES_KEPT after it, and the newest. The server's latency probe comes every 100 ms, so the
+    // KNOWN_VALUES_KEPT after it, and the newest. The server's latency ping comes every 100 ms, so the
     // connection died about when `heardAt` was: the last value that reached the server was sent around
     // then, and later ones went into the dead link, where only the newest counts.
     private keepKnown(values: KnownValue[], heardAt: number): KnownValue[] {

@@ -1,3 +1,4 @@
+// Property names of changes, per model.
 export class ChangesByModel<T extends object> {
     private readonly byModel = new WeakMap<T, Set<string>>();
 

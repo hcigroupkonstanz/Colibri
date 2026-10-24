@@ -1,15 +1,18 @@
+// Keeps fields this client sent out of updates until the answers to earlier requests are over, as those
+// may predate them.
 export class GuardWindow<T extends object> {
-    // askForEnd ids whose answers end the window for stale updates (see guardFrom), oldest first.
+    // askForEnd ids whose answers end the window for stale updates, oldest first.
     private guardEnds: string[] = [];
 
     // Per model, the field names (as sent) kept out of updates until the answer for the last guardEnds id
     // at the time they were sent. Longer would drop another client's later change to the same field.
     private keptOut = new WeakMap<T, Map<string, string>>();
 
-    // Own models settled by an update that may not have been their answer (see takeAnswer), mapped to
-    // the guardEnds id whose answer comes after theirs.
+    // Own models settled by an update that may not have been their answer, mapped to the guardEnds id
+    // whose answer comes after theirs.
     private readonly answerMayFollow = new Map<string, string>();
 
+    // Ends come from every registration on the channel: each receives the answers to the others' requests.
     public add(end: string): void {
         this.guardEnds.push(end);
     }
@@ -45,6 +48,7 @@ export class GuardWindow<T extends object> {
         if (end !== undefined) this.answerMayFollow.set(id, end);
     }
 
+    // True if the id's answer may still come: the end it was marked with is still pending.
     public takeAnswerMayFollow(id: string): boolean {
         const end = this.answerMayFollow.get(id);
         this.answerMayFollow.delete(id);

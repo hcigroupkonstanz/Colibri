@@ -3,13 +3,14 @@
 // are ignored by the server (MODEL_TOMBSTONE_SECONDS).
 const DELETED_HERE_MS = 60_000;
 
-// Fallback for sendAfresh: how long updates for the id are dropped if the bare-id answer never comes.
+// Fallback for ModelSyncChannel.sendAfresh: how long updates for the id are dropped if the bare-id
+// answer never comes.
 const AFRESH_ANSWER_MS = 10_000;
 
 export class DeletedHere {
     // Ids deleted here and when (see DELETED_HERE_MS), oldest first.
     private readonly deleted = new Map<string, number>();
-    // Ids deleted here and registered again, and when (see sendAfresh).
+    // Ids deleted here and registered again, and when (see ModelSyncChannel.sendAfresh).
     private readonly afresh = new Map<string, number>();
 
     public constructor(private readonly now: () => number) {}
@@ -32,6 +33,7 @@ export class DeletedHere {
         return false;
     }
 
+    // The id lives again: idsSince must not resend its delete, nor recently() drop its updates.
     public forget(id: string): void {
         this.deleted.delete(id);
     }
@@ -52,11 +54,11 @@ export class DeletedHere {
         this.afresh.clear();
     }
 
+    // The bare-id answer is dropped too, and ends the dropping.
     public dropsAfreshUpdate(id: string, bare: boolean): boolean {
         const afreshSince = this.afresh.get(id);
         if (afreshSince === undefined) return false;
-        // Until the bare-id answer, updates are ones sent before the server had the delete (see
-        // sendAfresh).
+        // A remote update before the bare-id answer was sent before the server had the delete.
         const waiting = this.now() - afreshSince < AFRESH_ANSWER_MS;
         if (bare || !waiting) this.afresh.delete(id);
         return bare || waiting;

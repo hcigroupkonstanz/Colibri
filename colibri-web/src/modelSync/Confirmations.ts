@@ -7,8 +7,8 @@ export interface Confirmation {
 }
 
 export class Confirmations {
-    // Own models asked for again after sending their held changes (see sendOnTop), until the answers
-    // to that are over (see endWait).
+    // Own models asked for again after their held changes or lost fields replaced server values
+    // (OwnModelAnswers.sendOnTop), until the answers to that are over (OwnModelAnswers.endWait).
     private readonly confirming = new Map<string, Confirmation>();
 
     public start(id: string, confirmation: Confirmation): void {
@@ -50,10 +50,10 @@ export const compareWithShown = (
     sent: Record<string, unknown>,
     shown: Record<string, unknown>
 ): Pick<Confirmation, 'sent' | 'replaced'> | undefined => {
-    // An undefined field is not sent, so no update shows it.
     const differs = new Map<string, string>();
     for (const [key, value] of Object.entries(sent)) {
         const json = JSON.stringify(value) as string | undefined;
+        // An undefined field is not sent, so no update shows it.
         if (key === 'id' || json === undefined) continue;
         if (!(key in shown) || JSON.stringify(shown[key]) !== json) differs.set(key, json);
     }
@@ -65,6 +65,8 @@ export const compareWithShown = (
     return { sent: differs, replaced };
 };
 
+// `theirs` is the id and the fields another client set meanwhile, with their values, to apply here;
+// `again` the fields to send again, as they did not arrive or were set back.
 export const judgeConfirmation = (
     id: string,
     confirmation: Confirmation

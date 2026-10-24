@@ -3,16 +3,17 @@ export interface AfterOutage {
     lost: Set<string>;
 }
 
+// One round of reconnect requests for the own models the server had answered before, and what their answers show.
 export class ReconnectRound {
     // Own models asked for again on a reconnect, until the answers are over (see roundEnd). Their
-    // updates are checked for changes lost in the dead connection (see lostChanges): per id, the
+    // updates are checked for changes lost in the dead connection (see KnownValues.lostChanges): per id, the
     // values shown, and the fields found lost, which keep their value.
     private readonly askedAfterOutage = new Map<string, AfterOutage>();
 
-    // While reconnect requests are unanswered: the askForEnd id sent after them (see takeAnswer).
+    // While reconnect requests are unanswered: the askForEnd id sent after them. Its answer ends the round
+    // (OwnModelAnswers.endRound).
     private roundEnd: string | undefined;
 
-    // When the server was last heard from before the last outage (see lastHeardFrom).
     private lastHeardBeforeOutage = 0;
 
     public isEmpty(): boolean {
@@ -47,6 +48,7 @@ export class ReconnectRound {
         return this.askedAfterOutage.has(id);
     }
 
+    // Returns every field found lost so far, not only in this answer: they keep their value in later updates too.
     public recordAnswer(id: string, lost: Iterable<string>, shown: object): ReadonlySet<string> {
         const afterOutage = this.askedAfterOutage.get(id);
         if (!afterOutage) return new Set();
