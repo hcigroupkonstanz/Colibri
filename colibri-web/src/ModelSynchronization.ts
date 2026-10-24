@@ -3,6 +3,7 @@ import { BehaviorSubject } from 'rxjs';
 import type { Message } from './Colibri';
 import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './lifecycle';
+import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
 import { withColibri } from './modelSync/withColibri';
@@ -31,19 +32,6 @@ const ownOnChannel = new Map<string, Set<(id: string) => boolean>>();
 // Per channel, each registration's guard (see guardFrom): all of them receive the answers to the
 // others' requests.
 const guardsOnChannel = new Map<string, Set<(end: string) => void>>();
-
-// Channel for the askForEnd requests, the same one colibri-unity uses after a reconnect. It never has models.
-const END_CHANNEL = 'colibri::reconnect';
-
-let endRequests = 0;
-
-// Requests an id nobody has, on a channel without models, and returns it. The server answers one
-// client's requests in order, so the bare-id answer marks the end of the answers to earlier requests.
-const askForEnd = (colibri: Colibri) => {
-    const id = `colibri-web-${++endRequests}`;
-    colibri.sendMessage(END_CHANNEL, 'model::request', { id, again: true });
-    return id;
-};
 
 // History kept per field to spot changes lost in a dead connection (see keepKnown, lostChanges).
 // An earlier value counts only if it was still current within KNOWN_VALUES_MS before the outage:
