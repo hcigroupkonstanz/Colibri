@@ -67,7 +67,7 @@ export default tseslint.config(
     // Size guides from docs/dev/conventions.md. Warnings until the refactor brings the code under them.
     {
         files: ['src/**/*.ts'],
-        ignores: ['**/*.spec.ts'],
+        ignores: ['**/*.spec.ts', 'src/ui/testing/**'],
         rules: {
             'max-lines': ['warn', { max: 400, skipBlankLines: true, skipComments: true }],
             'max-lines-per-function': ['warn', { max: 40, skipBlankLines: true, skipComments: true }],
