@@ -4,6 +4,7 @@ import type { Message } from './Colibri';
 import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected, whenColibriCreated } from './lifecycle';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
+import { warnIfMinified } from './modelSync/warnIfMinified';
 import type { SyncModel } from './SyncModel';
 
 interface ModelSyncMsg<T extends SyncModel<T>> extends Message {
@@ -25,22 +26,6 @@ const withColibri = (action: (colibri: Colibri) => void) => {
     const colibri = Colibri.getInstance(false);
     if (colibri) action(colibri);
     else whenColibriCreated(action);
-};
-
-// Warn once per channel: the same type may be registered again, e.g. on every render.
-const warnedMinifiedNames = new Set<string>();
-
-// Minifiers rename classes, typically to one or two letters or something with a '$', so a channel
-// derived from the class name stops matching other builds and Unity.
-const warnIfMinified = (className: string, channel: string) => {
-    if ((channel.length > 2 && !channel.includes('$')) || warnedMinifiedNames.has(channel)) return;
-    warnedMinifiedNames.add(channel);
-    console.warn(
-        `Colibri: RegisterModelSync is syncing on channel '${channel}', derived from the class name ` +
-            `'${className}', which looks minified. A minified build renames classes, so this will not ` +
-            `sync with another build or with Unity. Pass the channel explicitly: ` +
-            `RegisterModelSync({ name: '...', type: ${className || 'YourModel'} }).`
-    );
 };
 
 // A model::update with nothing but the id is the server's answer for a model it does not have.
