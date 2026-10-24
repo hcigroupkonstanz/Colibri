@@ -22,6 +22,7 @@ interface ModelSyncMsg<T extends SyncModel<T>> extends Message {
     payload: Partial<T> & { id: string };
 }
 
+/** The sync behind one RegisterModelSync call. */
 export class ModelSyncChannel<T extends SyncModel<T>> {
     private readonly models = new BehaviorSubject<T[]>([]);
     public readonly models$ = this.models.asObservable();
@@ -35,11 +36,11 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
     private readonly awaitedAnswers = new AwaitedAnswers<T>();
 
     // Property names of changes to own models that are held back instead of sent: made while
-    // disconnected or before the server's answer for the model (see registerModel).
+    // disconnected or before the server's answer for the model (see mustHold).
     private readonly heldChanges = new ChangesByModel<T>();
 
-    // Changes waiting for SyncModel's 1 ms buffer to report them, so they go out together. A remote
-    // update does not overwrite them (see applyUpdate).
+    // Changes waiting for SyncModel's 1 ms buffer to report them. A remote update does not overwrite
+    // them (see applyToListed).
     private readonly changesToSend = new ChangesByModel<T>();
 
     private readonly confirmations = new Confirmations();
@@ -78,6 +79,8 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
 
     private disconnected = false;
 
+    // Arrow fields: channelRegistry stores them, and ownedElsewhere tells registrations apart by the
+    // identity of hasOwn.
     private readonly hasOwn = (id: string) => this.models.value.some(m => m.id === id && this.ownModels.has(m));
     private readonly guard = (end: string) => {
         this.guardWindow.add(end);
@@ -92,10 +95,6 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
         // initial data fetch
         // Repeated after every reconnect, since remote updates relayed meanwhile are lost. Applied to the
         // model with the same id, so nothing is duplicated.
-        //
-        // The server forgets an app's models when its last client leaves and on restart, so own models are
-        // asked for by id first (see askFor), and everything else once all are answered. Also on the first
-        // fetch: the answer for every model carries an own model's id too and would be taken for its answer.
         withColibri(colibri => {
             this.attach(colibri);
         });
@@ -120,8 +119,8 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
         }
     }
 
-    // Answers to askForEnd requests (see roundEnd, guardEnds, endWait). Every registration receives
-    // each one sent on this connection and acts only on the ids it waits for.
+    // Answers to askForEnd requests (see ReconnectRound, GuardWindow, Confirmations). Every registration
+    // receives each one sent on this connection and acts only on the ids it waits for.
     private onEndMarker(message: Message): void {
         if (message.command !== 'model::update') return;
         const id = (message.payload as { id?: unknown } | undefined)?.id;
@@ -148,8 +147,8 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
 
     // For an id deleted here a moment ago and registered again: the request lifts the server's delete,
     // and the full model follows at once since the server has nothing for the id. Until the bare-id
-    // answer, updates for the id are dropped (see onUpdate): a remote update sent before the server
-    // had the delete would be taken for the answer.
+    // answer, updates for the id are dropped (see DeletedHere.dropsAfreshUpdate): a remote update sent
+    // before the server had the delete would be taken for the answer.
     private sendAfresh(colibri: Colibri, model: T): void {
         colibri.sendMessage(this.name, 'model::request', { id: model.id });
         this.deletedHere.markAfresh(model.id);
@@ -160,6 +159,10 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
 
     // Requests every model once all own models have their answer, so that answer includes what was
     // sent in between (see guardFrom for what is sent after). Returns whether it asked.
+    //
+    // After a reconnect, own models go first (see askFor): the server forgets an app's models when its
+    // last client leaves and on restart. On the first fetch too: the answer for every model carries an
+    // own model's id and would be taken for its answer.
     private catchUpOnceAnswered(): boolean {
         const colibri = this.awaitedAnswers.takeCatchUp();
         if (!colibri) return false;
@@ -206,8 +209,7 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
 
     private onReconnected(colibri: Colibri): void {
         this.disconnected = false;
-        // Requests from the previous connection will not be answered. Changes sent for models still
-        // being confirmed may not have arrived, so they are held again and go out with the answer.
+        // Requests from the previous connection will not be answered.
         this.awaitedAnswers.clear();
         this.reconnectRound.clear();
         this.deletedHere.clearAfresh();
@@ -218,6 +220,8 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
         this.catchUpOnceAnswered();
     }
 
+    // Changes sent for models still being confirmed may not have arrived, so they are held again and go
+    // out with the answer.
     private holdUnconfirmed(): void {
         for (const id of this.confirmations.ids()) {
             const confirmation = this.confirmations.end(id);
@@ -226,6 +230,8 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
         }
     }
 
+    // Only an answered model can have sent changes into the dead connection, so only it joins the
+    // reconnect round.
     private askAgainForOwnModels(colibri: Colibri): void {
         for (const model of this.models.value) {
             if (!this.ownModels.has(model)) continue;
@@ -256,20 +262,20 @@ export class ModelSyncChannel<T extends SyncModel<T>> {
         this.applyUpdate(model, modelData);
     }
 
-    // Sends an update for an own model and records it for lostChanges and guardFrom.
+    // Sends an update for an own model and records it for KnownValues.lostChanges and guardFrom.
     private sendUpdate(colibri: Colibri, model: T, update: Partial<T>): void {
         colibri.sendMessage(this.name, 'model::update', update);
         this.knownValues.remember(model, update, lastHeardFrom(colibri) ?? Number.POSITIVE_INFINITY);
         this.guardWindow.keepOut(model, update);
     }
 
-    // Fields with a change SyncModel has not reported yet keep their value: the update predates the
-    // change, and applying it would make the report send the update's value instead.
     private applyUpdate(model: T | undefined, modelData: Partial<T>): void {
         if (model) this.applyToListed(model, modelData);
         else if (modelData.id) this.addRemoteModel(modelData.id, modelData);
     }
 
+    // Fields with a change SyncModel has not reported yet keep their value: the update predates the
+    // change, and applying it would make the report send the update's value instead.
     private applyToListed(model: T, modelData: Partial<T>): void {
         const unsent = this.changesToSend.peek(model);
         const update = withoutKeys(withoutChanges(modelData, model, unsent), this.guardWindow.keptOutOf(model));

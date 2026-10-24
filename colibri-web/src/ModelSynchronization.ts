@@ -4,13 +4,15 @@ import { warnIfMinified } from './modelSync/warnIfMinified';
 import type { SyncModel } from './SyncModel';
 
 interface ModelSyncRegistration<T> {
-    /** The channel to sync on. Recommended: the default, the lowercased class name, changes when minified. */
+    /** The channel to sync on. Defaults to the class name in lower case, which minifiers change, so always pass it. */
     name?: string;
     type: { new (id: string): T };
 }
 
+/** All models, emitting when one is added, changed or deleted, and a function that starts syncing a new model. */
 type ModelSync<T> = [Observable<T[]>, (model: T) => void];
 
+/** Syncs the models of a {@link SyncModel} class on one channel with the other clients. */
 export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyncRegistration<T>): ModelSync<T> => {
     const name = registration.name || registration.type.name.toLowerCase();
     if (!registration.name) warnIfMinified(registration.type.name, name);

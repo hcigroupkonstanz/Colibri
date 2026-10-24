@@ -17,9 +17,11 @@ export interface OwnModelAnswersOptions<T extends SyncModel<T>> {
     readonly confirmations: Confirmations;
     readonly knownValues: KnownValues<T>;
     readonly guardWindow: GuardWindow<T>;
+    // Read ModelSyncChannel's model list and own models when called.
     readonly listedModel: (id: string) => T | undefined;
     readonly isListed: (model: T) => boolean;
     readonly isOwn: (model: T) => boolean;
+    // ModelSyncChannel's methods of the same names, and askForEnd from ./askForEnd.
     readonly applyUpdate: (model: T | undefined, modelData: Partial<T>) => void;
     readonly sendUpdate: (colibri: Colibri, model: T, update: Partial<T>) => void;
     readonly askFor: (colibri: Colibri, model: T) => void;
@@ -28,6 +30,7 @@ export interface OwnModelAnswersOptions<T extends SyncModel<T>> {
     readonly askForEnd: (colibri: Colibri) => string;
 }
 
+/** Settles own models after their request. */
 export class OwnModelAnswers<T extends SyncModel<T>> {
     private readonly heldChanges: ChangesByModel<T>;
     private readonly awaitedAnswers: AwaitedAnswers<T>;
@@ -63,21 +66,12 @@ export class OwnModelAnswers<T extends SyncModel<T>> {
         this.askForEnd = options.askForEnd;
     }
 
-    // The first update for an own model after its request settles it. With fields, the server has the
-    // model (it stores an update before relaying it): applied as usual, except fields this client
-    // changed while waiting, which are sent on top. A bare id means the server has nothing: send the
-    // whole model. No model any more (deleted meanwhile): nothing to send.
+    // The first update for an own model after its request settles it, unless a reconnect round or a
+    // confirmation is running: then updates with fields are recorded, and endRound or endWait settles it.
     //
     // That update need not be the answer: the answer to the request for every model carries the id
     // too, and a remote update can arrive first. The real answer, made before the server had the
-    // changes sent meanwhile, would then revert them on this client only. So changes that replace
-    // server values are followed by another request for the model and an askForEnd request; later
-    // changes are held and the sent fields kept out of updates until its answer (see endWait).
-    // Otherwise guardFrom keeps the fields sent later out of updates until one more answer.
-    //
-    // After a reconnect the answer may also show a change sent before the outage that never arrived
-    // (see lostChanges), and is again indistinguishable from a remote update. One more request follows
-    // (see roundEnd), updates before its answer are checked, then the model is settled (see endRound).
+    // changes sent meanwhile, would then revert them on this client only.
     public takeAnswer(id: string, asker: Colibri, model: T | undefined, modelData: Partial<T>): void {
         if (model) this.awaitedAnswers.markAnswered(model);
 
@@ -112,6 +106,8 @@ export class OwnModelAnswers<T extends SyncModel<T>> {
         this.catchUpOnceAnswered();
     }
 
+    // A bare id means the server has nothing: send the whole model. No model any more (deleted
+    // meanwhile): nothing to send.
     private settleWithoutFields(id: string, asker: Colibri, model: T | undefined, modelData: Partial<T>): void {
         this.stopWaiting(id);
         if (model) {
@@ -123,6 +119,10 @@ export class OwnModelAnswers<T extends SyncModel<T>> {
         this.catchUpOnceAnswered();
     }
 
+    // After a reconnect the answer can show a change sent before the outage that never arrived (see
+    // KnownValues.lostChanges), and is indistinguishable from a remote update. Such fields keep their
+    // value; the model is settled by endRound once the askForEnd request sent after the reconnect
+    // requests is answered (see ReconnectRound).
     private checkAfterOutage(id: string, model: T, modelData: Partial<T>): void {
         const held = this.heldChanges.peek(model);
         const lost = this.reconnectRound.recordAnswer(
@@ -133,12 +133,19 @@ export class OwnModelAnswers<T extends SyncModel<T>> {
         this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), lost));
     }
 
+    // The sent fields that replaced server values stay out of updates until endWait judges what the updates showed.
     private checkWhileConfirming(id: string, model: T, modelData: Partial<T>): void {
         this.confirmations.recordShown(id, modelData);
         const held = this.heldChanges.peek(model);
         this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), this.confirmations.sentKeys(id)));
     }
 
+    // With fields, the server has the model (it stores an update before relaying it): applied as usual,
+    // except fields this client changed while waiting, which are sent on top. Changes that replace
+    // server values are followed by another request for the model and an askForEnd request; later
+    // changes are held and the sent fields kept out of updates until its answer (see endWait).
+    // Otherwise ModelSyncChannel.guardFrom keeps the fields sent later out of updates until one more
+    // answer.
     private settle(id: string, asker: Colibri, model: T, modelData: Partial<T>): void {
         this.awaitedAnswers.settle(id);
         const held = this.heldChanges.take(model);
@@ -160,8 +167,8 @@ export class OwnModelAnswers<T extends SyncModel<T>> {
         this.confirmations.end(id);
     }
 
-    // The answers to the reconnect requests are over (see takeAnswer): settles each own model with
-    // the values the updates showed.
+    // The answers to the reconnect requests are over (see checkAfterOutage): settles each own model
+    // with the values the updates showed.
     public endRound(): void {
         for (const [id, { shown, lost }] of this.reconnectRound.finish()) {
             const asker = this.awaitedAnswers.askerOf(id);
@@ -186,9 +193,9 @@ export class OwnModelAnswers<T extends SyncModel<T>> {
         this.catchUpOnceAnswered();
     }
 
-    // Sends the held changes (property names) and the lost fields (see lostChanges) with their current
-    // values, on top of what the server showed (`shown`). True if that replaces server values, in which
-    // case the model is asked for again (see takeAnswer).
+    // Sends the held changes (property names) and the lost fields (see KnownValues.lostChanges) with their
+    // current values, on top of what the server showed (`shown`). True if that replaces server values, in
+    // which case the model is asked for again and confirmed (see endWait).
     private sendOnTop(asker: Colibri, model: T, shown: Partial<T>, held: string[], lost: string[]): boolean {
         if (held.length === 0 && lost.length === 0) return false;
         const sent = fieldsOnTop(model, model.id, held, lost);
