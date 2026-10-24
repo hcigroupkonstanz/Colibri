@@ -39,14 +39,17 @@ export interface TcpClient {
     // The same as dropping and droppedSinceWarning, for replies past MAX_REPLY_BACKLOG_BYTES.
     droppingReplies: boolean;
     droppedRepliesSinceWarning: number;
-    // performance.now() of the last bytes received, or of the connection if none have been yet.
-    lastInboundAt: number;
-    // The size of the largest message over HEARTBEAT_EVERY_BYTES written to this client since it
-    // last showed it had read all such messages, 0 if there is none; and when the latest such
-    // message was written, on the clock heartbeats carry. It has read them all once it echoes a
-    // heartbeat from after that. See DEFAULT_IDLE_TIMEOUT_MILLIS.
-    unreadLargeBytes: number;
-    lastLargeWrittenAt: bigint;
+    // What the idle watch reads; see endIdleClients.
+    reading: {
+        // performance.now() of the last bytes received, or of the connection if none have been yet.
+        lastInboundAt: number;
+        // The size of the largest message over HEARTBEAT_EVERY_BYTES written to this client since it
+        // last showed it had read all such messages, 0 if there is none; and when the latest such
+        // message was written, on the clock heartbeats carry. It has read them all once it echoes a
+        // heartbeat from after that. See DEFAULT_IDLE_TIMEOUT_MILLIS.
+        unreadLargeBytes: number;
+        lastLargeWrittenAt: bigint;
+    };
     // Whether any bytes have been received from it yet; see acceptChunk.
     receivedAny: boolean;
     // Model updates over a limit, waiting for room; see HeldUpdates.
@@ -77,9 +80,11 @@ export const createTcpClient = function (id: string, socket: net.Socket, address
         replyBytesQueued: 0,
         droppingReplies: false,
         droppedRepliesSinceWarning: 0,
-        lastInboundAt: performance.now(),
-        unreadLargeBytes: 0,
-        lastLargeWrittenAt: 0n,
+        reading: {
+            lastInboundAt: performance.now(),
+            unreadLargeBytes: 0,
+            lastLargeWrittenAt: 0n,
+        },
         receivedAny: false,
         held: new HeldUpdates(),
         connectedAt: Date.now(),

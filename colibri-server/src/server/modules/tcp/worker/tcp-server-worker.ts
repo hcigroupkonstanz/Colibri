@@ -393,12 +393,12 @@ export class TCPServerWorker extends WorkerService {
 
         for (const client of [...this.clients.values(), ...this.waitingClients.values()]) {
             const allowance = this.idleAllowanceMillis(client);
-            if (client.lastInboundAt > now - this.idleTimeoutMillis - allowance) continue;
+            if (client.reading.lastInboundAt > now - this.idleTimeoutMillis - allowance) continue;
 
-            const seconds = Math.round((now - client.lastInboundAt) / 1000);
+            const seconds = Math.round((now - client.reading.lastInboundAt) / 1000);
             if (this.clients.has(client.id)) {
                 const reading = allowance > 0
-                    ? `, and ${Math.round(allowance / 1000)} s more for reading a ${describeSize(client.unreadLargeBytes)} message sent to it`
+                    ? `, and ${Math.round(allowance / 1000)} s more for reading a ${describeSize(client.reading.unreadLargeBytes)} message sent to it`
                     : '';
                 const tooSlow = allowance > 0 ? ', and so does a link too slow to read that message in that time' : '';
                 this.logWarning(
@@ -420,7 +420,7 @@ export class TCPServerWorker extends WorkerService {
     // rate the heartbeats already assume, but no more than MAX_IDLE_ALLOWANCE_TIMEOUTS. See
     // DEFAULT_IDLE_TIMEOUT_MILLIS.
     private idleAllowanceMillis(client: TcpClient): number {
-        return this.idleTimeoutMillis * Math.min(client.unreadLargeBytes / HEARTBEAT_EVERY_BYTES, MAX_IDLE_ALLOWANCE_TIMEOUTS);
+        return this.idleTimeoutMillis * Math.min(client.reading.unreadLargeBytes / HEARTBEAT_EVERY_BYTES, MAX_IDLE_ALLOWANCE_TIMEOUTS);
     }
 
     // Tolerates being called before start() (an 'm:stop' racing startup) and destroys live
@@ -494,8 +494,8 @@ export class TCPServerWorker extends WorkerService {
         // After the heartbeat just written ahead of it, which comes before it on the wire, so an
         // echo of that one does not count as the client having read it.
         if (packet.length > HEARTBEAT_EVERY_BYTES) {
-            client.unreadLargeBytes = Math.max(client.unreadLargeBytes, packet.length);
-            client.lastLargeWrittenAt = process.hrtime.bigint();
+            client.reading.unreadLargeBytes = Math.max(client.reading.unreadLargeBytes, packet.length);
+            client.reading.lastLargeWrittenAt = process.hrtime.bigint();
         }
         client.bytesSinceHeartbeat += packet.length;
         client.traffic.sent += 1;
@@ -666,7 +666,7 @@ export class TCPServerWorker extends WorkerService {
 
     // False if it closed the client: nothing in the chunk is read.
     private acceptChunk(client: TcpClient, data: Buffer, now: number): boolean {
-        client.lastInboundAt = now;
+        client.reading.lastInboundAt = now;
 
         // A TLS client on an unencrypted port. Its handshake would otherwise go into the frame
         // reader, which reads a length field of 790 bytes or more from it and waits, silently, for
@@ -721,7 +721,7 @@ export class TCPServerWorker extends WorkerService {
 
     private onHeartbeatFrame(client: TcpClient, frame: FrameOf<FrameType.Heartbeat>): void {
         // One written after the client's large messages: it has read them all.
-        if (frame.pingTimestamp > client.lastLargeWrittenAt) client.unreadLargeBytes = 0;
+        if (frame.pingTimestamp > client.reading.lastLargeWrittenAt) client.reading.unreadLargeBytes = 0;
         this.handlePong(client, frame.pingTimestamp);
     }
 
