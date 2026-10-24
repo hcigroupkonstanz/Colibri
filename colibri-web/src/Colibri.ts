@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io-client';
 import { connect } from 'socket.io-client';
 import { ColibriError, ProtocolMismatchError } from './ColibriError';
 import { colibriCreated, colibriDisconnected, colibriHeardFrom, colibriReconnected } from './lifecycle';
+import { OldServerDetector } from './OldServerDetector';
 import { RestStore } from './RestStore';
 import { pageHostname, resolveServer } from './serverAddress';
 
@@ -20,16 +21,6 @@ const PROTOCOL_REJECTED_COMMAND = 'protocol::rejected';
 const PROTOCOL_ACCEPTED_COMMAND = 'protocol::accepted';
 const LATENCY_COMMAND = 'latency';
 
-// How long to wait for `colibri`/`protocol::accepted` before concluding the server predates the
-// version check. A 2.0.0+ server sends it immediately on connect; the window only covers an
-// event-loop stall on a loaded server.
-//
-// Not inferred from the 100ms `latency` broadcast: 1.2.x and 1.3.x servers send it but speak v1.
-const OLD_SERVER_TIMEOUT_MS = 5000;
-
-// The protocol of every release before 2.0.0, none of which announce themselves.
-const OLD_SERVER_PROTOCOL_VERSION = '1';
-
 interface ProtocolRejection {
     reason?: string;
     serverVersion?: string;
@@ -39,7 +30,6 @@ interface ProtocolRejection {
 // The "dom" lib declares these as non-optional, but under plain Node (samples, e2e) they are
 // absent. Shadowed so the types say so.
 declare const window: Window | undefined;
-declare const document: Document | undefined;
 
 export interface Message {
     channel: string;
@@ -76,9 +66,13 @@ export class Colibri {
     public readonly port: number;
     private readonly restStore: RestStore;
 
-    private oldServerTimer: ReturnType<typeof setTimeout> | undefined;
-    // Once per instance, not per connection, so a reconnect does not repeat the warning.
-    private hasReportedOldServer = false;
+    private readonly oldServerDetector = new OldServerDetector(
+        PROTOCOL_VERSION,
+        () => this.socket.connected,
+        error => {
+            this.protocolMismatchSubject.next(error);
+        }
+    );
     // Once per instance, not once per `protocol::rejected` received.
     private hasReportedRefusal = false;
 
@@ -160,7 +154,7 @@ export class Colibri {
     private onSocketConnect() {
         console.debug(`Connected to colibri server on ${this.server}`);
         this.hasReportedOutage = false;
-        this.waitForServerHello();
+        this.oldServerDetector.start();
 
         // The server relays without replaying, so whatever it relayed while this client was away is
         // lost. Whoever has state to catch up on is told now. Socket.IO has already flushed what
@@ -195,61 +189,6 @@ export class Colibri {
         );
     }
 
-    /*
-     *  Detecting a server that predates the protocol version check.
-     *
-     *  Such a server neither refuses this client nor says what it speaks, so a current one
-     *  announces itself unprompted and the missing announcement is the signal. The timer only
-     *  observes; it does not gate message delivery.
-     */
-
-    private waitForServerHello() {
-        if (this.hasReportedOldServer) return;
-
-        clearTimeout(this.oldServerTimer);
-        this.oldServerTimer = setTimeout(() => {
-            this.onServerHelloMissing();
-        }, OLD_SERVER_TIMEOUT_MS);
-    }
-
-    private stopWaitingForServerHello() {
-        clearTimeout(this.oldServerTimer);
-        this.oldServerTimer = undefined;
-    }
-
-    private onServerHelloMissing() {
-        // A disconnected socket explains the silence by itself, and a reconnect re-arms this.
-        if (!this.socket.connected) return;
-
-        // A frozen or backgrounded tab stops draining the socket while timers keep running, so this
-        // can fire ahead of the queued announcement. Wait another window.
-        //
-        // `typeof` rather than `document?.`: under Node `document` is undeclared, which throws a
-        // ReferenceError that optional chaining does not catch.
-        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-            this.waitForServerHello();
-            return;
-        }
-
-        this.hasReportedOldServer = true;
-        this.stopWaitingForServerHello();
-
-        const error = new ProtocolMismatchError(
-            `The server did not identify itself within ${OLD_SERVER_TIMEOUT_MS / 1000}s, so it predates ` +
-                `colibri-server 2.0.0 and speaks protocol v1; this client speaks v${PROTOCOL_VERSION}.`,
-            // A protocol version, as in the refusal. Inferred, not received: every 2.0.0+ server
-            // announces itself, and everything older speaks v1.
-            OLD_SERVER_PROTOCOL_VERSION,
-            PROTOCOL_VERSION,
-            false
-        );
-
-        // Not disconnected: the Socket.IO envelope is the same in v1 and v2, so the connection works.
-        // Tearing it down over a suspicion would turn a warning into an outage.
-        console.warn(`Colibri: ${error.message} The connection still works; upgrade the server when you can.`);
-        this.protocolMismatchSubject.next(error);
-    }
-
     private onSocketAny(channel: string, msg: unknown) {
         colibriHeardFrom(this);
         const { command, payload } = msg as Pick<Message, 'command' | 'payload'>;
@@ -262,7 +201,7 @@ export class Colibri {
 
         // The server announcing itself; kept off `messages` likewise.
         if (channel === COLIBRI_CHANNEL && command === PROTOCOL_ACCEPTED_COMMAND) {
-            this.stopWaitingForServerHello();
+            this.oldServerDetector.stop();
             return;
         }
 
@@ -273,8 +212,7 @@ export class Colibri {
     // still give a usable error rather than a TypeError.
     private onProtocolRejected(rejection: ProtocolRejection | undefined) {
         // The server has said what is wrong; the old-server guess five seconds later would contradict it.
-        this.stopWaitingForServerHello();
-        this.hasReportedOldServer = true;
+        this.oldServerDetector.giveUp();
 
         // A mismatch cannot resolve itself; retrying only buries the log line that explains it.
         this.socket.io.reconnection(false);
