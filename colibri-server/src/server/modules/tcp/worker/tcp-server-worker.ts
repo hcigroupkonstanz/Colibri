@@ -12,6 +12,7 @@ import {
     COLIBRI_CHANNEL,
     FrameError,
     FrameType,
+    MAX_FRAME_LENGTH,
     PROTOCOL_REJECTED_COMMAND,
     PROTOCOL_VERSION,
     V1FramingError,
@@ -47,7 +48,7 @@ import { AddressThrottle } from './address-throttle.js';
 import { CLOSE_GRACE_MILLIS, endRefused } from './end-refused.js';
 import { KEEPALIVE_INITIAL_DELAY_MILLIS } from './keepalive.js';
 import { TLS_HANDSHAKE_TIMEOUT_MILLIS, TlsPort } from './tls-port.js';
-import { createTcpClient, maxBufferSize } from './tcp-client.js';
+import { createTcpClient } from './tcp-client.js';
 import type { Refusal, TcpClient } from './tcp-client.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from '../../net/addresses.js';
 import { RATE_WINDOW_MILLIS } from '../../limits/client-activity.js';
@@ -622,10 +623,10 @@ export class TCPServerWorker extends WorkerService {
                 channel: msg.channel,
                 command: msg.command,
                 payload: toBuffer(msg.payload),
-            }, maxBufferSize);
+            }, MAX_FRAME_LENGTH);
         } catch (err) {
             // An unrepresentable frame (channel/command over 64 KiB, or a body over
-            // maxBufferSize) is dropped as a single bad message. Emitting it anyway would
+            // MAX_FRAME_LENGTH) is dropped as a single bad message. Emitting it anyway would
             // produce a frame this server's own FrameReader would reject.
             this.logError(
                 `Dropping unencodable message (${msg.channel} / ${msg.command}): ${errorMessage(err)}`,
@@ -987,7 +988,7 @@ export class TCPServerWorker extends WorkerService {
                 channel: COLIBRI_CHANNEL,
                 command: PROTOCOL_REJECTED_COMMAND,
                 payload: Buffer.from(JSON.stringify(rejection), 'utf8'),
-            }, maxBufferSize);
+            }, MAX_FRAME_LENGTH);
         } catch {
             // Nothing useful to say if even the refusal cannot be encoded - the socket is
             // going away either way.

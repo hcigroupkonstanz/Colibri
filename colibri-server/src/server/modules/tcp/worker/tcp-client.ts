@@ -3,8 +3,6 @@ import { FrameReader, MAX_FRAME_LENGTH } from '../../protocol/protocol.js';
 import { HeldUpdates } from '../../limits/inbound-limits.js';
 import { TrafficMeter } from '../../limits/client-activity.js';
 
-export const maxBufferSize = MAX_FRAME_LENGTH;
-
 // Which limit kept a message from passing on at once.
 export type Refusal = 'rate' | 'backlog';
 
@@ -65,7 +63,7 @@ export const createTcpClient = function (id: string, socket: net.Socket, address
     return {
         id,
         socket,
-        reader: new FrameReader(maxBufferSize),
+        reader: new FrameReader(MAX_FRAME_LENGTH),
         address,
         app: '',
         name: '',

@@ -4,6 +4,7 @@ import { errorMessage } from '../../core/error-message.js';
 import {
     FrameReader,
     FrameType,
+    MAX_FRAME_LENGTH,
     TLS_HANDSHAKE_PREFIX_LENGTH,
     V1FramingError,
     looksLikeTlsHandshake,
@@ -14,7 +15,6 @@ import { AddressThrottle } from './address-throttle.js';
 import { endRefused } from './end-refused.js';
 import { KEEPALIVE_INITIAL_DELAY_MILLIS } from './keepalive.js';
 import { describeTlsFailure } from './socket-errors.js';
-import { maxBufferSize } from './tcp-client.js';
 
 // How long a connection to the TLS port has to send its first bytes, and then, separately, to
 // complete its TLS handshake. colibri-unity gives up on a connect after 5 s, handshake included.
@@ -172,7 +172,7 @@ export class TlsPort {
         let v1 = false;
         let who = '';
         try {
-            const handshake = new FrameReader(maxBufferSize).append(firstBytes).find(frame => frame.type === FrameType.Handshake);
+            const handshake = new FrameReader(MAX_FRAME_LENGTH).append(firstBytes).find(frame => frame.type === FrameType.Handshake);
             if (handshake) who = ` (Unity client '${handshake.name}', app '${handshake.app}')`;
         } catch (err) {
             v1 = err instanceof V1FramingError;
