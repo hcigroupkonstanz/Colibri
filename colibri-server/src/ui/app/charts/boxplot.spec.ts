@@ -59,7 +59,7 @@ describe('boxplot', () => {
                 .attr('transform', d => `translate(${(xScale(d.id) || 0) - boxWidth / 2}, 0)`)
                 .attr('class', 'plot')
                 .each(function () {
-                    d3.select(this).call(render);
+                    d3.select<SVGGElement, BoxplotStats>(this).call(render);
                 });
         };
 

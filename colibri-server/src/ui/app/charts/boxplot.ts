@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable prefer-const */
 import { max, min, quantile } from 'd3';
+import type { BaseType, Selection, Transition, ValueFn } from 'd3';
 import type { ScaleLinear } from 'd3-scale';
 import { scaleLinear } from 'd3-scale';
 
@@ -55,8 +54,36 @@ interface Orientation {
     x: string;
     y: string;
     h: string;
-    coor: (x: number, y: number) => number[];
+    coor: (x: number, y: number) => string;
     inversed: boolean;
+}
+
+type PlotSelection = Selection<SVGGElement, BoxplotStats, null, undefined>;
+type PlotTransition = Transition<SVGGElement, BoxplotStats, null, undefined>;
+type PlotContext = PlotSelection | PlotTransition;
+
+type AnyTransition = Transition<BaseType, unknown, null, undefined>;
+type PartSelection<GElement extends BaseType, Datum> = Selection<GElement, Datum, SVGGElement, BoxplotStats>;
+
+interface RenderContext<GElement extends BaseType, Datum> {
+    attr(name: string, value: string | number | ValueFn<GElement, Datum, string | number | boolean | null>): this;
+}
+
+interface PartContext<GElement extends BaseType, Datum> extends RenderContext<GElement, Datum> {
+    transition(transition: AnyTransition): PartContext<GElement, Datum>;
+    call(func: (ctx: RenderContext<GElement, Datum>) => void): this;
+    remove(): this;
+}
+
+type PointElement = SVGCircleElement | SVGLineElement;
+type PointContext = RenderContext<PointElement, Point>;
+type PointKey = (datum: number) => string;
+
+interface PointRenderer {
+    nodeName: 'circle' | 'line';
+    enter: (ctx: PointContext) => void;
+    update: (ctx: PointContext) => void;
+    exit: (ctx: PointContext) => void;
 }
 
 const orientationOf = function ({ vertical, scale }: BoxplotSettings): Orientation {
@@ -64,12 +91,12 @@ const orientationOf = function ({ vertical, scale }: BoxplotSettings): Orientati
         x: vertical ? 'y' : 'x',
         y: vertical ? 'x' : 'y',
         h: vertical ? 'width' : 'height',
-        coor: vertical ? (x: number, y: number) => [y, x] : (x: number, y: number) => [x, y],
+        coor: vertical ? (x: number, y: number) => [y, x].join(',') : (x: number, y: number) => [x, y].join(','),
         inversed: scale.range()[0] > scale.range()[1],
     };
 };
 
-const dotRenderer = function ({ scale, bandwidth, opacity, jitter }: BoxplotSettings, { x, y }: Orientation) {
+const dotRenderer = function ({ scale, bandwidth, opacity, jitter }: BoxplotSettings, { x, y }: Orientation): PointRenderer {
     const jitterer =
         jitter === 0
             ? 0
@@ -85,7 +112,7 @@ const dotRenderer = function ({ scale, bandwidth, opacity, jitter }: BoxplotSett
 
     return {
         nodeName: 'circle',
-        enter: function (ctx: any) {
+        enter: function (ctx: PointContext) {
             ctx
                 .attr('fill', 'currentColor')
                 .attr('stroke', 'none')
@@ -94,23 +121,23 @@ const dotRenderer = function ({ scale, bandwidth, opacity, jitter }: BoxplotSett
                 .attr(`c${x}`, (d: Point) => scale(d.value))
                 .attr(`c${y}`, jitterer);
         },
-        update: function (ctx: any) {
+        update: function (ctx: PointContext) {
             ctx
                 .attr('opacity', opacity)
                 .attr('r', (d: Point) => (d.farout ? r * 1.5 : r))
                 .attr(`c${x}`, (d: Point) => scale(d.value))
                 .attr(`c${y}`, jitterer);
         },
-        exit: function (context: any) {
+        exit: function (context: PointContext) {
             context.attr('opacity', 0).attr('r', 0);
         },
     };
 };
 
-const tickRenderer = function ({ scale, boxwidth, opacity }: BoxplotSettings, { x, y }: Orientation) {
+const tickRenderer = function ({ scale, boxwidth, opacity }: BoxplotSettings, { x, y }: Orientation): PointRenderer {
     return {
         nodeName: 'line',
-        enter: function (ctx: any) {
+        enter: function (ctx: PointContext) {
             ctx
                 .attr('stroke', 'currentColor')
                 .attr('opacity', 0)
@@ -119,7 +146,7 @@ const tickRenderer = function ({ scale, boxwidth, opacity }: BoxplotSettings, { 
                 .attr(`${y}1`, 0)
                 .attr(`${y}2`, 0);
         },
-        update: function (ctx: any) {
+        update: function (ctx: PointContext) {
             ctx
                 .attr('opacity', opacity)
                 .attr(`${x}1`, (d: Point) => scale(d.value))
@@ -127,21 +154,21 @@ const tickRenderer = function ({ scale, boxwidth, opacity }: BoxplotSettings, { 
                 .attr(`${y}1`, Math.min(-2, boxwidth * -0.25))
                 .attr(`${y}2`, Math.max(2, boxwidth * 0.25));
         },
-        exit: function (ctx: any) {
+        exit: function (ctx: PointContext) {
             ctx.attr('opacity', 0).attr(`${y}1`, 0).attr(`${y}2`, 0);
         },
     };
 };
 
-const pointRenderer = function (settings: BoxplotSettings, orientation: Orientation): any {
-    const renderers: any = {};
+const pointRenderer = function (settings: BoxplotSettings, orientation: Orientation): PointRenderer {
+    const renderers: Record<string, PointRenderer> = {};
     renderers[boxplotSymbolDot] = dotRenderer(settings, orientation);
     renderers[boxplotSymbolTick] = tickRenderer(settings, orientation);
     return renderers[settings.symbol];
 };
 
-const selectOrAppendGroup = function (selection: any, name: string, transform: string): any {
-    const group = selection.select(`g.${name}`);
+const selectOrAppendGroup = function (selection: PlotSelection, name: string, transform: string): PlotSelection {
+    const group = selection.select<SVGGElement>(`g.${name}`);
     if (group.empty())
         return selection
             .append('g')
@@ -150,8 +177,8 @@ const selectOrAppendGroup = function (selection: any, name: string, transform: s
     return group;
 };
 
-const enterWhiskers = function (gWhisker: any, whiskerPath: (d: Whisker) => string): any {
-    const whisker = gWhisker.selectAll('path').data((d: BoxplotStats) => d.whiskers);
+const enterWhiskers = function (gWhisker: PlotSelection, whiskerPath: (d: Whisker) => string): PartSelection<SVGPathElement, Whisker> {
+    const whisker = gWhisker.selectAll<SVGPathElement, Whisker>('path').data((d: BoxplotStats) => d.whiskers);
     return whisker
         .enter()
         .append('path')
@@ -162,8 +189,8 @@ const enterWhiskers = function (gWhisker: any, whiskerPath: (d: Whisker) => stri
         .merge(whisker);
 };
 
-const enterBoxes = function (gBox: any, { scale, boxwidth }: BoxplotSettings, { x, y, h, inversed }: Orientation): any {
-    const box = gBox.selectAll('line').data((d: BoxplotStats) => d.boxes);
+const enterBoxes = function (gBox: PlotSelection, { scale, boxwidth }: BoxplotSettings, { x, y, h, inversed }: Orientation): PartSelection<SVGLineElement, Box> {
+    const box = gBox.selectAll<SVGLineElement, Box>('line').data((d: BoxplotStats) => d.boxes);
     return box
         .enter()
         .append('line')
@@ -178,7 +205,7 @@ const enterBoxes = function (gBox: any, { scale, boxwidth }: BoxplotSettings, { 
         .merge(box);
 };
 
-const updateBoxes = function (box: any, { scale, boxwidth, opacity }: BoxplotSettings, { x, y, inversed }: Orientation): void {
+const updateBoxes = function (box: RenderContext<SVGLineElement, Box>, { scale, boxwidth, opacity }: BoxplotSettings, { x, y, inversed }: Orientation): void {
     box
         .attr('opacity', opacity)
         .attr('stroke-width', boxwidth)
@@ -188,7 +215,12 @@ const updateBoxes = function (box: any, { scale, boxwidth, opacity }: BoxplotSet
         .attr(`${y}2`, 0);
 };
 
-const enterPoints = function (gPoint: any, { showInnerDots }: BoxplotSettings, renderer: any, key: any): { point: any; pointExit: any } {
+const enterPoints = function (
+    gPoint: PlotSelection,
+    { showInnerDots }: BoxplotSettings,
+    renderer: PointRenderer,
+    key: PointKey | undefined
+): Record<'point' | 'pointExit', PartSelection<PointElement, Point>> {
     // Remove old symbols
     gPoint
         .selectAll('.point')
@@ -198,12 +230,12 @@ const enterPoints = function (gPoint: any, { showInnerDots }: BoxplotSettings, r
         .remove();
 
     const point = gPoint
-        .selectAll('.point')
+        .selectAll<PointElement, Point>('.point')
         .data(
             (d: BoxplotStats) => (showInnerDots ? d.points : d.points.filter((d2: Point) => d2.outlier)),
             key ? (d: Point) => key(d.datum) : undefined
         );
-    const pointExit = point.exit();
+    const pointExit = point.exit<Point>();
     return {
         point: point
             .enter()
@@ -217,34 +249,34 @@ const enterPoints = function (gPoint: any, { showInnerDots }: BoxplotSettings, r
     };
 };
 
-const drawBoxplot = function (ctx: any, settings: BoxplotSettings, key: any): void {
+const drawBoxplot = function (ctx: PlotContext, settings: BoxplotSettings, key: PointKey | undefined): void {
     const { scale, bandwidth, boxwidth, opacity } = settings;
     const orientation = orientationOf(settings);
     const { coor } = orientation;
     const renderer = pointRenderer(settings, orientation);
 
-    const selection = ctx.selection ? ctx.selection() : ctx;
+    const selection = (ctx.selection ? ctx.selection() : ctx) as PlotSelection;
     const whiskerPath = (d: Whisker) =>
         `M${coor(scale(d.start || 0), -0.5 * boxwidth)} l${coor(0, boxwidth)} ` +
         `m${coor(0, -0.5 * boxwidth)} L${coor(scale(d.end), 0)}`;
     const transform = `translate(${coor(0, bandwidth * 0.5)})`;
 
-    let gWhisker = selectOrAppendGroup(selection, 'whisker', transform);
-    let gBox = selectOrAppendGroup(selection, 'box', transform);
-    let gPoint = selectOrAppendGroup(selection, 'point', transform);
+    let gWhisker: PlotContext = selectOrAppendGroup(selection, 'whisker', transform);
+    let gBox: PlotContext = selectOrAppendGroup(selection, 'box', transform);
+    let gPoint: PlotContext = selectOrAppendGroup(selection, 'point', transform);
 
-    let whisker = enterWhiskers(gWhisker, whiskerPath);
-    let box = enterBoxes(gBox, settings, orientation);
-    let { point, pointExit } = enterPoints(gPoint, settings, renderer, key);
+    let whisker: PartContext<SVGPathElement, Whisker> = enterWhiskers(gWhisker, whiskerPath);
+    let box: PartContext<SVGLineElement, Box> = enterBoxes(gBox, settings, orientation);
+    let { point, pointExit }: Record<'point' | 'pointExit', PartContext<PointElement, Point>> = enterPoints(gPoint, settings, renderer, key);
 
     if (ctx !== selection) {
-        gWhisker = gWhisker.transition(ctx);
-        gBox = gBox.transition(ctx);
-        gPoint = gPoint.transition(ctx);
-        whisker = whisker.transition(ctx);
-        box = box.transition(ctx);
-        point = point.transition(ctx);
-        pointExit = pointExit.transition(ctx);
+        gWhisker = gWhisker.transition(ctx as unknown as AnyTransition);
+        gBox = gBox.transition(ctx as unknown as AnyTransition);
+        gPoint = gPoint.transition(ctx as unknown as AnyTransition);
+        whisker = whisker.transition(ctx as unknown as AnyTransition);
+        box = box.transition(ctx as unknown as AnyTransition);
+        point = point.transition(ctx as unknown as AnyTransition);
+        pointExit = pointExit.transition(ctx as unknown as AnyTransition);
     }
 
     gWhisker.attr('transform', transform);
@@ -267,9 +299,9 @@ export const boxplot = ({
     jitter = 0.2,
 }: BoxplotOptions = {}) => {
     const settings: BoxplotSettings = { vertical, scale, bandwidth, boxwidth, showInnerDots, symbol, opacity, jitter };
-    let key: any = undefined;
+    const key: PointKey | undefined = undefined;
 
-    const boxplot = (ctx: any) => {
+    const boxplot = (ctx: PlotContext) => {
         drawBoxplot(ctx, settings, key);
         return this;
     };

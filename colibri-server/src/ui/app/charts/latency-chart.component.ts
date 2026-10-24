@@ -293,7 +293,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                 // One plot at a time: boxplot() adds its groups only when the selection has none,
                 // so a plot added later would get none.
                 .each(function () {
-                    d3.select(this).call(draw);
+                    d3.select<SVGGElement, BoxplotStats>(this).call(draw);
                 });
         }
     }
