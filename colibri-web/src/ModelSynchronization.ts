@@ -2,9 +2,10 @@ import type { Observable } from 'rxjs';
 import { BehaviorSubject } from 'rxjs';
 import type { Message } from './Colibri';
 import { Colibri, RegisterChannel, SendMessage } from './Colibri';
-import { lastHeardFrom, onColibriDisconnected, onColibriReconnected, whenColibriCreated } from './lifecycle';
+import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './lifecycle';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
+import { withColibri } from './modelSync/withColibri';
 import type { SyncModel } from './SyncModel';
 
 interface ModelSyncMsg<T extends SyncModel<T>> extends Message {
@@ -19,14 +20,6 @@ interface ModelSyncRegistration<T> {
 }
 
 type ModelSync<T> = [Observable<T[]>, (model: T) => void];
-
-// Runs `action` now, or once `new Colibri()` has constructed the instance. SendMessage drops
-// messages sent before that, and a module-level RegisterModelSync usually runs first.
-const withColibri = (action: (colibri: Colibri) => void) => {
-    const colibri = Colibri.getInstance(false);
-    if (colibri) action(colibri);
-    else whenColibriCreated(action);
-};
 
 // A model::update with nothing but the id is the server's answer for a model it does not have.
 const isBare = (modelData: object) => Object.keys(modelData).every(key => key === 'id');
