@@ -6,6 +6,8 @@ All notable changes to `@hcikn/colibri`. Upgrading from Colibri 1: [Migration Gu
 
 ### Changed
 
+- The sources are reorganized into small modules, and the model sync code is in `src/modelSync/`. The public API
+  and behaviour do not change.
 - `package.json` declares `"sideEffects": false`, so bundlers can leave the package out when nothing from it is
   imported.
 
