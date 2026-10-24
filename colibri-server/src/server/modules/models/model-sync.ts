@@ -49,7 +49,7 @@ export class ModelSynchronization extends Service {
                 }
             }
         } catch (error) {
-            this.logError(`Failed to send initial state to client ${msg.origin.id}: ${error}`, false);
+            this.logError(`Failed to send initial state to client ${msg.origin.id}: ${String(error)}`, false);
         }
     }
 
@@ -127,7 +127,7 @@ export class ModelSynchronization extends Service {
             this.store.updateModel(msg.origin.app, msg.channel, payload as SyncModel);
             this.connectionPool.broadcast(msg);
         } catch (error) {
-            this.logError(`Failed to update model: ${error}`, false);
+            this.logError(`Failed to update model: ${String(error)}`, false);
         }
     }
 
@@ -147,7 +147,7 @@ export class ModelSynchronization extends Service {
                 this.logWarning('Received delete message without payload');
             }
         } catch (error) {
-            this.logError(`Failed to delete model: ${error}`, false);
+            this.logError(`Failed to delete model: ${String(error)}`, false);
         }
     }
 }

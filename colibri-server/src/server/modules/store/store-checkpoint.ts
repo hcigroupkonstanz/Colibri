@@ -39,7 +39,7 @@ export class StoreCheckpointer {
         this.worker.on('message', (message: { error?: string }) => {
             if (message.error !== undefined) onFailure(new Error(message.error), false);
         });
-        this.worker.on('error', err => onFailure(err, false));
+        this.worker.on('error', (err: Error) => onFailure(err, false));
         this.worker.on('exit', code => {
             this.exited = true;
             if (!this.stopping) onFailure(new Error(`the checkpoint worker exited with code ${code}`), true);

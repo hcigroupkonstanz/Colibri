@@ -69,7 +69,7 @@ export class StoreJsonImport {
         const entries: StoreEntry[] = [];
         let apps = 0;
         let unloadedReason: string | undefined;
-        for (const [ app, values ] of Object.entries(parsed)) {
+        for (const [ app, values ] of Object.entries(parsed as Record<string, unknown>)) {
             if (values === null || typeof values !== 'object' || Array.isArray(values)) {
                 unloadedReason ??= `expected an object of values for app '${app}'`;
                 this.callbacks.logError(`Ignoring app '${app}' in ${STORE_JSON_FILENAME}: expected an object of values`, false);

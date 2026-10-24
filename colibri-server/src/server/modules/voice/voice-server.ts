@@ -1,7 +1,6 @@
 import { CONNECTION_LINE } from '../core/log-message.js';
 import { Service } from '../core/service.js';
 import * as dgram from 'dgram';
-import type { AddressInfo } from 'net';
 import { isIPv6 } from 'net';
 import { readFileSync } from 'fs';
 import {
@@ -167,7 +166,7 @@ export class VoiceServer extends Service {
         this.udpSocket = dgram.createSocket(voiceSocketOptions(hostname));
         this.udpSocket.on('listening', () => {
             this.listening = true;
-            const address = this.udpSocket.address() as AddressInfo;
+            const address = this.udpSocket.address();
             this.logInfo(`Voice server listening on ${hostPort(address.address, address.port)}`);
             this.logInfo(`Voice server Sampling Rate: ${this.samplingRate} Hz`);
             if (this.recordingVoiceData) this.logWarning('Warning: Voice recording is enabled');

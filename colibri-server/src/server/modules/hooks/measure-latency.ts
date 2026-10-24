@@ -70,7 +70,7 @@ export class MeasureLatency extends Service {
                 this.batchedLatencies[m.origin.id]?.push(l);
             }
         } catch (e) {
-            this.logError('Error parsing latency message: ' + e, false);
+            this.logError('Error parsing latency message: ' + String(e), false);
         }
     }
 

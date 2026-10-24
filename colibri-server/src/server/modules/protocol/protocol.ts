@@ -260,7 +260,7 @@ export class FrameReader {
         return frames ?? [];
     }
 
-    private decodeFrame(type: number, bodyStart: number, bodyEnd: number): DecodedFrame {
+    private decodeFrame(type: FrameType, bodyStart: number, bodyEnd: number): DecodedFrame {
         switch (type) {
             case FrameType.Heartbeat: {
                 if (bodyEnd - bodyStart !== HEARTBEAT_BODY_SIZE) {
@@ -307,7 +307,7 @@ export class FrameReader {
             }
 
             default:
-                throw new FrameError(`Unknown frame type: ${type}`);
+                throw new FrameError(`Unknown frame type: ${String(type)}`);
         }
     }
 

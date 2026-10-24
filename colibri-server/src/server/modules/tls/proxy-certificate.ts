@@ -36,7 +36,7 @@ const parseProxyTlsEntry = function (entry: string): ProxyTlsAddress {
             + 'e.g. colibri.example.org or colibri.example.org:9212 (an IPv6 address in brackets, e.g. [2001:db8::1]:443)');
     }
     // Without a trailing dot: SNI may not carry one, and Go's TLS servers (Traefik, Caddy) refuse it.
-    return { host: host!.replace(/\.$/, ''), port };
+    return { host: host.replace(/\.$/, ''), port };
 };
 
 /**

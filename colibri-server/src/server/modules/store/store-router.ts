@@ -60,7 +60,7 @@ const getValue = function (callbacks: StoreRouterCallbacks): RequestHandler<Valu
     };
 };
 
-const putValue = function (quota: StoreQuota, callbacks: StoreRouterCallbacks): RequestHandler<ValueParams> {
+const putValue = function (quota: StoreQuota, callbacks: StoreRouterCallbacks): RequestHandler<ValueParams, unknown, unknown> {
     return (req, res) => {
         // Only a body in the store's media type is parsed. application/json, form data
         // and a body without a Content-Type are refused, rather than stored as whatever

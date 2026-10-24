@@ -58,7 +58,7 @@ export abstract class WorkerServiceProxy extends Service {
         this.terminating = false;
         this.threadWorker = new threads.Worker(path, { workerData: workerData });
 
-        this.threadWorker.on('error', err => {
+        this.threadWorker.on('error', (err: Error) => {
             this.logError(err.message + '\n' + err.stack, false);
         });
 

@@ -90,11 +90,11 @@ export interface ModelsSnapshot {
 interface SnapshotScope {
     store: DataStore;
     query: ModelsQuery;
-    matchesName(name: string): boolean;
-    inScope(app: string, channel: string): boolean;
+    matchesName: (name: string) => boolean;
+    inScope: (app: string, channel: string) => boolean;
     // The overview's entry for an app and channel, created on first use: the order of creation is the
     // order of `channels` in the snapshot.
-    summaryOf(app: string, channel: string): ChannelSummary;
+    summaryOf: (app: string, channel: string) => ChannelSummary;
 }
 
 const modelPass = function (scope: SnapshotScope, measures: ModelMeasures, performanceNow: number): { models: ModelRow[]; total: number } {
