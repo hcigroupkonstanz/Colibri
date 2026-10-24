@@ -1,4 +1,4 @@
-interface AfterOutage {
+export interface AfterOutage {
     shown: Map<string, unknown>;
     lost: Set<string>;
 }

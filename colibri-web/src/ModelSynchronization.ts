@@ -7,11 +7,13 @@ import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { AwaitedAnswers } from './modelSync/AwaitedAnswers';
 import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
+import type { Confirmation } from './modelSync/Confirmations';
 import { compareWithShown, Confirmations, judgeConfirmation } from './modelSync/Confirmations';
 import { DeletedHere } from './modelSync/DeletedHere';
 import { GuardWindow } from './modelSync/GuardWindow';
 import { KnownValues } from './modelSync/KnownValues';
 import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
+import type { AfterOutage } from './modelSync/ReconnectRound';
 import { ReconnectRound } from './modelSync/ReconnectRound';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
@@ -272,48 +274,64 @@ class ModelSyncChannel<T extends SyncModel<T>> {
         // detach() was called since the request: it takes updates like a non-own model and sends
         // nothing.
         if (model && !this.ownModels.has(model)) {
-            this.reconnectRound.delete(id);
-            this.awaitedAnswers.settle(id);
-            this.confirmations.end(id);
-            if (!isBare(modelData)) this.applyUpdate(model, modelData);
-            this.catchUpOnceAnswered();
+            this.settleDetached(id, model, modelData);
             return;
         }
 
         if (!model || isBare(modelData)) {
-            this.reconnectRound.delete(id);
-            this.awaitedAnswers.settle(id);
-            this.confirmations.end(id);
-            if (model) {
-                this.heldChanges.drop(model);
-                this.sendUpdate(asker, model, toJsonOf(model));
-            } else if (!isBare(modelData)) {
-                this.applyUpdate(model, modelData);
-            }
-            this.catchUpOnceAnswered();
+            this.settleWithoutFields(id, asker, model, modelData);
             return;
         }
 
         const afterOutage = this.reconnectRound.get(id);
         if (afterOutage) {
-            const held = this.heldChanges.peek(model);
-            for (const key of this.knownValues.lostChanges(model, modelData, held, this.reconnectRound.lastHeard()))
-                afterOutage.lost.add(key);
-            for (const [key, value] of Object.entries(modelData)) afterOutage.shown.set(key, value);
-            this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), afterOutage.lost));
+            this.checkAfterOutage(model, modelData, afterOutage);
             return;
         }
 
         const confirmation = this.confirmations.get(id);
         if (confirmation) {
-            for (const key of confirmation.sent.keys()) {
-                if (key in modelData) confirmation.shown.set(key, modelData[key as keyof T]);
-            }
-            const held = this.heldChanges.peek(model);
-            this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), confirmation.sent.keys()));
+            this.checkWhileConfirming(model, modelData, confirmation);
             return;
         }
 
+        this.settle(id, asker, model, modelData);
+    }
+
+    private settleDetached(id: string, model: T, modelData: Partial<T>): void {
+        this.stopWaiting(id);
+        if (!isBare(modelData)) this.applyUpdate(model, modelData);
+        this.catchUpOnceAnswered();
+    }
+
+    private settleWithoutFields(id: string, asker: Colibri, model: T | undefined, modelData: Partial<T>): void {
+        this.stopWaiting(id);
+        if (model) {
+            this.heldChanges.drop(model);
+            this.sendUpdate(asker, model, toJsonOf(model));
+        } else if (!isBare(modelData)) {
+            this.applyUpdate(model, modelData);
+        }
+        this.catchUpOnceAnswered();
+    }
+
+    private checkAfterOutage(model: T, modelData: Partial<T>, afterOutage: AfterOutage): void {
+        const held = this.heldChanges.peek(model);
+        for (const key of this.knownValues.lostChanges(model, modelData, held, this.reconnectRound.lastHeard()))
+            afterOutage.lost.add(key);
+        for (const [key, value] of Object.entries(modelData)) afterOutage.shown.set(key, value);
+        this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), afterOutage.lost));
+    }
+
+    private checkWhileConfirming(model: T, modelData: Partial<T>, confirmation: Confirmation): void {
+        for (const key of confirmation.sent.keys()) {
+            if (key in modelData) confirmation.shown.set(key, modelData[key as keyof T]);
+        }
+        const held = this.heldChanges.peek(model);
+        this.applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), confirmation.sent.keys()));
+    }
+
+    private settle(id: string, asker: Colibri, model: T, modelData: Partial<T>): void {
         this.awaitedAnswers.settle(id);
         const held = this.heldChanges.take(model);
         this.applyUpdate(model, withoutChanges(modelData, model, held));
@@ -326,6 +344,12 @@ class ModelSyncChannel<T extends SyncModel<T>> {
         if (!this.catchUpOnceAnswered()) this.guardFrom(asker);
         // Whichever of the two calls ran sent a request whose answer comes after this model's.
         this.guardWindow.markAnswerMayFollow(id);
+    }
+
+    private stopWaiting(id: string): void {
+        this.reconnectRound.delete(id);
+        this.awaitedAnswers.settle(id);
+        this.confirmations.end(id);
     }
 
     // The answers to the reconnect requests are over (see takeAnswer): settles each own model with

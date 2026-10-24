@@ -1,4 +1,4 @@
-interface Confirmation {
+export interface Confirmation {
     sent: Map<string, string>; // JSON of the fields sent that differ from what the server showed
     replaced: Map<string, string | undefined>; // the server's JSON for those fields, if it had one
     props: string[]; // property names of the held changes
