@@ -60,7 +60,7 @@ export abstract class WorkerService {
         }
     }
 
-    public constructor(private useWorkers: boolean) {
+    public constructor(private readonly useWorkers: boolean) {
         if (useWorkers) {
             threads.parentPort?.on('message', (msg: WorkerMessage) => {
                 this.parentMessages.next(msg);

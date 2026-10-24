@@ -54,11 +54,11 @@ export class TCPServerProxy
     private readonly clients = new Map<string, TcpNetworkClient>();
     // Mirrors the worker's clientsByApp, so broadcastToApp can tell there is no recipient without posting.
     private readonly clientIdsByApp = new AppIndex<string>();
-    private clientStream = new Subject<ReadonlyArray<NetworkClient>>();
-    private clientAddedStream = new Subject<TcpNetworkClient>();
-    private clientRemovedStream = new Subject<TcpNetworkClient>();
+    private readonly clientStream = new Subject<ReadonlyArray<NetworkClient>>();
+    private readonly clientAddedStream = new Subject<TcpNetworkClient>();
+    private readonly clientRemovedStream = new Subject<TcpNetworkClient>();
 
-    private messageStream = new Subject<NetworkMessage>();
+    private readonly messageStream = new Subject<NetworkMessage>();
 
     // clientMessage$ posted by the worker and not dispatched here yet. Shared memory, so the worker
     // can read it while the queue it measures is full (see InboundBacklog).

@@ -6,7 +6,7 @@ export class Broadcaster extends Service {
     public serviceName = 'Broadcaster';
     public groupName = 'colibri';
 
-    public constructor(private connectionPool: ConnectionPool) {
+    public constructor(private readonly connectionPool: ConnectionPool) {
         super();
 
         connectionPool.onMessage(msg => msg.command.startsWith('broadcast::'), this.broadcast.bind(this));

@@ -94,7 +94,7 @@ export class VoiceServer extends Service {
     });
     // The map voiceClients holds, by voiceClientKey.
     private readonly clients: Map<string, VoiceClient> = this.voiceClients.clients;
-    private disconnectTimeoutMillis = 2000;
+    private readonly disconnectTimeoutMillis = 2000;
     private disconnectCheckInterval!: NodeJS.Timeout;
 
     private readonly recorder: VoiceRecorder;
@@ -113,9 +113,9 @@ export class VoiceServer extends Service {
 
     // `unityClients`: TCPServerProxy. `trustProxy`: TRUSTED_PROXIES, whose voice is relayed unchecked.
     public constructor(
-        private samplingRate: number,
+        private readonly samplingRate: number,
         voiceRecordingPath: string,
-        private recordingVoiceData: boolean,
+        private readonly recordingVoiceData: boolean,
         unityClients: UnityClientSource,
         trustProxy: TrustProxy = trustNoProxy
     ) {

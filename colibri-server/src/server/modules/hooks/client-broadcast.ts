@@ -11,7 +11,7 @@ export class ClientBroadcast extends Service {
     public get serviceName(): string { return 'ClientBroadcast'; }
     public get groupName(): string { return 'hook'; }
 
-    public constructor(private pool: ConnectionPool) {
+    public constructor(private readonly pool: ConnectionPool) {
         super();
 
         pool.clientConnected$

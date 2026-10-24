@@ -8,7 +8,7 @@ export class ModelSynchronization extends Service {
     public serviceName = 'ModelSync';
     public groupName = 'colibri';
 
-    public constructor(private connectionPool: ConnectionPool, private store: DataStore) {
+    public constructor(private readonly connectionPool: ConnectionPool, private readonly store: DataStore) {
         super();
 
         connectionPool.onCommand('model::request', this.sendInitialState.bind(this));

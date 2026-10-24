@@ -74,7 +74,7 @@ export class WebLog extends Service {
     // Sum of the message lengths in logMessages, capped by MAX_LOG_CHARS.
     private logChars = 0;
 
-    public constructor(private socketio: SocketIOServer) {
+    public constructor(private readonly socketio: SocketIOServer) {
         super();
     }
 
