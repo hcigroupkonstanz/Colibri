@@ -10,6 +10,7 @@ import { AppIndex } from '../core/app-index.js';
 import type { ClientActivity } from '../limits/client-activity.js';
 import { Payload } from '../protocol/payload.js';
 import type { TlsCredentialSource } from '../tls/tls-certificate.js';
+import type { WorkerMessage } from '../core/worker/worker-message.js';
 import { WorkerServiceProxy } from '../core/worker/worker-service-proxy.js';
 import { ownBytes } from '../protocol/protocol.js';
 import { toBuffer } from '../protocol/to-buffer.js';
@@ -94,49 +95,55 @@ export class TCPServerProxy
         super();
         this.initWorker(TCP_SERVER_WORKER, { role: TCP_SERVER_WORKER_ROLE });
 
-        this.workerMessages$.subscribe((msg) => {
-            switch (msg.channel) {
-                case 'clientConnected$': {
-                    const connected = msg.content as unknown as TcpClientConnected;
-                    this.onClientConnected({
-                        id: connected.id,
-                        app: connected.app,
-                        name: connected.name,
-                        version: connected.version,
-                        address: connected.address,
-                        tls: connected.tls,
-                        tlsAtProxy: connected.tlsAtProxy,
-                        connectedAt: connected.connectedAt,
-                        metadata: {},
-                    });
-                    break;
-                }
+        this.workerMessages$.subscribe(msg => this.onWorkerMessage(msg));
+    }
 
-                case 'clientActivity$':
-                    this.onClientActivity(msg.content as unknown as TcpClientActivityReport);
-                    break;
+    private onWorkerMessage(msg: WorkerMessage): void {
+        switch (msg.channel) {
+            case 'clientConnected$':
+                this.onWorkerClientConnected(msg.content as unknown as TcpClientConnected);
+                break;
 
-                case 'clientDisconnected$':
-                    this.onClientDisconnected(msg.content.id as string);
-                    break;
+            case 'clientActivity$':
+                this.onClientActivity(msg.content as unknown as TcpClientActivityReport);
+                break;
 
-                case 'clientMessage$': {
-                    const wireMessage = msg.content as unknown as WireNetworkMessage;
-                    try {
-                        this.onClientMessage({
-                            channel: wireMessage.channel,
-                            command: wireMessage.command,
-                            payload: Payload.fromBytes(toBuffer(wireMessage.payload)),
-                            origin: wireMessage.origin ? this.clients.get(wireMessage.origin.id) : undefined,
-                        });
-                    } finally {
-                        // Also when a subscriber throws, or the count would stay up for good.
-                        Atomics.sub(this.inboundBacklog, 0, 1);
-                    }
-                    break;
-                }
-            }
+            case 'clientDisconnected$':
+                this.onClientDisconnected(msg.content.id as string);
+                break;
+
+            case 'clientMessage$':
+                this.onWorkerClientMessage(msg.content as unknown as WireNetworkMessage);
+                break;
+        }
+    }
+
+    private onWorkerClientConnected(connected: TcpClientConnected): void {
+        this.onClientConnected({
+            id: connected.id,
+            app: connected.app,
+            name: connected.name,
+            version: connected.version,
+            address: connected.address,
+            tls: connected.tls,
+            tlsAtProxy: connected.tlsAtProxy,
+            connectedAt: connected.connectedAt,
+            metadata: {},
         });
+    }
+
+    private onWorkerClientMessage(wireMessage: WireNetworkMessage): void {
+        try {
+            this.onClientMessage({
+                channel: wireMessage.channel,
+                command: wireMessage.command,
+                payload: Payload.fromBytes(toBuffer(wireMessage.payload)),
+                origin: wireMessage.origin ? this.clients.get(wireMessage.origin.id) : undefined,
+            });
+        } finally {
+            // Also when a subscriber throws, or the count would stay up for good.
+            Atomics.sub(this.inboundBacklog, 0, 1);
+        }
     }
 
     // `tls`: the port accepts only TLS connections, served with these credentials and each renewal.
