@@ -5,8 +5,9 @@ import { Subject } from 'rxjs';
 import type { ConnectionState, Reconnect } from '../connection/socketio.service';
 import type { ProxyTlsInfo, ServerSnapshot, TlsInfo } from '../connection/admin.service';
 import { SocketIOService } from '../connection/socketio.service';
-import type { Fact, Section } from './server.component';
-import { ServerComponent, serverSections } from './server.component';
+import type { Fact, Section } from './server-sections';
+import { serverSections } from './server-sections';
+import { ServerComponent } from './server.component';
 
 const DAY = 24 * 60 * 60 * 1000;
 

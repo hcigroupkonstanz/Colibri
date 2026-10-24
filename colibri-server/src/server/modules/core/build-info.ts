@@ -19,7 +19,7 @@ export interface BuildInfo {
 export const UNKNOWN_BUILD: BuildInfo = { commit: null, dirty: false, builtAt: null };
 
 // Hash digits shown in the log. Unique in this repository for a long time, and git takes them wherever
-// it takes a hash. The admin UI keeps its own copy (server.component.ts).
+// it takes a hash. The admin UI keeps its own copy (server-sections.ts).
 export const SHORT_COMMIT_LENGTH = 10;
 
 // 7 to 64 hex digits: a short hash as git prints it, up to a SHA-256 one.
