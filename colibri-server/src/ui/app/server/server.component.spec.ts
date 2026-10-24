@@ -3,9 +3,9 @@ import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import type { ConnectionState, Reconnect } from '../connection/socketio.service';
-import type { ServerSnapshot } from '../connection/admin.service';
+import type { ProxyTlsInfo, ServerSnapshot, TlsInfo } from '../connection/admin.service';
 import { SocketIOService } from '../connection/socketio.service';
-import type { Fact } from './server.component';
+import type { Fact, Section } from './server.component';
 import { ServerComponent, serverSections } from './server.component';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -286,6 +286,1058 @@ describe('serverSections', () => {
         s.settings = { ...s.settings, NEW_SETTING: 'x' };
         expect(fact(s, 'other', 'NEW_SETTING')?.value).toBe('x');
         expect(serverSections(snapshot(), String).some(x => x.id === 'other')).toBe(false);
+    });
+});
+
+// Pins every section and fact with all its fields, for snapshots that together reach each branch of serverSections and
+// certificateFacts.
+describe('serverSections, the complete output', () => {
+    const format = (time: number) => new Date(time).toISOString();
+    const sections = (s: ServerSnapshot) => serverSections(s, format);
+    const settings = (overrides: ServerSnapshot['settings']) => ({ ...snapshot().settings, ...overrides });
+    const certificate = (overrides: Partial<TlsInfo> = {}): TlsInfo => ({
+        names: 'colibri.example.org', issuer: 'Example CA', selfSigned: false, validFrom: 0, validTo: 200 * DAY, fingerprint256: 'AB:CD', ...overrides
+    });
+    const behindProxy = { TRUSTED_PROXIES: [ 'loopback' ], TCP_PROXY_PROTOCOL: true };
+
+    // Sections that several snapshots share.
+    const SERVER: Section = {
+        id: 'server', title: 'Server', facts: [
+            { label: 'Version', value: '2.0.0', mono: true },
+            { label: 'Commit', value: '3e2855e0c1', mono: true, title: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6\nBuilt 1970-04-10T00:00:00.000Z' },
+            { label: 'Protocol version', value: '2', mono: true },
+            { label: 'Node.js', value: 'v24.21.0', mono: true },
+            { label: 'Started', value: '1970-04-10T22:57:55.000Z' },
+            { label: 'Uptime', value: '1 h 2 min' }
+        ]
+    };
+
+    const COUNTS: Section = {
+        id: 'counts', title: 'Clients and data', facts: [
+            { label: 'Unity clients', value: '3', note: 'TCP', link: '/clients' },
+            { label: 'Web clients', value: '2', note: 'Socket.IO', link: '/clients' },
+            { label: 'Apps', value: '2', note: 'with clients connected' },
+            { label: 'Admin pages', value: '1', note: 'open, this one included' },
+            { label: 'Synced models', value: '1,234', note: 'in 3 channels of 2 apps', link: '/models' },
+            { label: 'Recently deleted models', value: '4', note: 'kept for 600 s', link: '/models' },
+            { label: 'REST store', value: '7 values', note: 'in 1 app, 1.5 KiB' }
+        ]
+    };
+
+    const NETWORK_PLAIN: Section = {
+        id: 'network', title: 'Network', facts: [
+            { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+            { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+            { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+            { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+            { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+            { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+            { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+            { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+            { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+        ]
+    };
+
+    const LIMITS: Section = {
+        id: 'limits', title: 'Load limits', facts: [
+            { label: 'Messages per client', value: '1,000 a second', variable: 'CLIENT_MESSAGE_RATE_LIMIT' },
+            { label: 'Burst', value: '2,000 messages', variable: 'CLIENT_MESSAGE_RATE_BURST' },
+            { label: 'TCP inbound backlog', value: '2,000 messages', variable: 'TCP_INBOUND_BACKLOG_LIMIT' },
+            { label: 'TCP idle timeout', value: '10 s', variable: 'TCP_IDLE_TIMEOUT_SECONDS' },
+            { label: 'App client warning', value: 'above 8 clients', variable: 'APP_CLIENT_WARNING_THRESHOLD' },
+            { label: 'Deleted models kept', value: '600 s', variable: 'MODEL_TOMBSTONE_SECONDS' },
+            { label: 'REST store values kept', value: '30 days after their last write', variable: 'STORE_EXPIRY_DAYS' },
+            { label: 'REST store size', value: 'Off', variable: 'STORE_MAX_MB', tone: 'off' }
+        ]
+    };
+
+    const VOICE: Section = {
+        id: 'voice', title: 'Voice', facts: [
+            { label: 'Voice server', value: 'On', tone: 'ok' },
+            { label: 'Recording', value: 'Off', variable: 'VOICE_RECORDING', tone: 'off' },
+            { label: 'Sampling rate', value: '48,000 Hz', variable: 'VOICE_SAMPLING_RATE' },
+            { label: 'Voice clients', value: '0' }
+        ]
+    };
+
+    const NETWORK_TLS: Section = {
+        id: 'network', title: 'Network', facts: [
+            { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTPS and WSS', mono: true },
+            { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'TLS', mono: true },
+            { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+            { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+            { label: 'TLS', value: 'On', variable: 'TLS_CERT, TLS_KEY', tone: 'ok' },
+            { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+            { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+            { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+            { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+        ]
+    };
+
+    const CERTIFICATE: Section = {
+        id: 'certificate', title: 'TLS certificate', facts: [
+            { label: 'Names', value: 'colibri.example.org', mono: true },
+            { label: 'Issuer', value: 'Example CA' },
+            { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+            { label: 'Valid until', value: '1970-07-20T00:00:00.000Z', note: 'in 100 days' },
+            { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+        ]
+    };
+
+    const NETWORK_PROXY_ADDRESSES: Section = {
+        id: 'network', title: 'Network', facts: [
+            { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+            { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+            { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+            { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+            { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+            { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+            { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+            { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+            { label: 'Proxy TLS addresses', value: 'colibri.example.org:443, colibri.example.org:9212', variable: 'PROXY_TLS_ADDRESSES', mono: true }
+        ]
+    };
+
+    const NETWORK_TLS_PROXY_ADDRESSES: Section = {
+        id: 'network', title: 'Network', facts: [
+            { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTPS and WSS', mono: true },
+            { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'TLS', mono: true },
+            { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+            { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+            { label: 'TLS', value: 'On', variable: 'TLS_CERT, TLS_KEY', tone: 'ok' },
+            { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+            { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+            { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+            { label: 'Proxy TLS addresses', value: 'colibri.example.org:443, colibri.example.org:9212', variable: 'PROXY_TLS_ADDRESSES', mono: true }
+        ]
+    };
+
+    const PROXY_CHECKING: Section = {
+        id: 'proxy-certificate-0', title: 'Proxy TLS certificate', facts: [
+            { label: 'Addresses', value: 'colibri.example.org:443, colibri.example.org:9212', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+            { label: 'Status', value: 'Checking', tone: 'off' }
+        ]
+    };
+
+    const PROXY_TRUSTED: Section = {
+        id: 'proxy-certificate-0', title: 'Proxy TLS certificate', facts: [
+            { label: 'Addresses', value: 'colibri.example.org:443, colibri.example.org:9212', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+            { label: 'Trusted', value: 'Yes', tone: 'ok' },
+            { label: 'Names', value: 'DNS:colibri.example.org', mono: true },
+            { label: 'Issuer', value: 'CN=R11, O=Let\'s Encrypt, C=US' },
+            { label: 'Valid from', value: '1970-04-01T00:00:00.000Z' },
+            { label: 'Valid until', value: '1970-05-31T00:00:00.000Z', note: 'in 50 days' },
+            { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true },
+            { label: 'Checked', value: '1970-04-10T00:00:00.000Z' }
+        ]
+    };
+
+    const VOICE_NOT_REPORTING: Section = {
+        id: 'voice', title: 'Voice', facts: [
+            { label: 'Voice server', value: 'Off', note: 'not listening', tone: 'off' },
+            { label: 'Recording', value: 'Off', variable: 'VOICE_RECORDING', tone: 'off' },
+            { label: 'Sampling rate', value: '0 Hz', variable: 'VOICE_SAMPLING_RATE' },
+            { label: 'Voice clients', value: '0' }
+        ]
+    };
+
+    describe('without TLS', () => {
+        it('with no proxy', () => {
+            expect(sections(snapshot())).toEqual([ SERVER, COUNTS, NETWORK_PLAIN, LIMITS, VOICE ]);
+        });
+
+        it('with IPv6 hosts and a base URL', () => {
+            const s = snapshot({ settings: settings({ WEBSERVER_HOST: '::', TCP_HOST: '2001:db8::1', VOICE_HOST: 'colibri.example.org', BASE_URL: '/colibri' }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '[::]:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        { label: 'TCP', value: '[2001:db8::1]:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+                        { label: 'Voice', value: 'colibri.example.org:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/colibri', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+                        { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+                        { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+                        { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('with trusted proxies and no PROXY protocol', () => {
+            const s = snapshot({ settings: settings({ TRUSTED_PROXIES: [ 'loopback', '10.0.0.0/8' ] }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+                        { label: 'Trusted proxies', value: 'loopback, 10.0.0.0/8', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+                        { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('with the PROXY protocol and no trusted proxies', () => {
+            const s = snapshot({ settings: settings({ TCP_PROXY_PROTOCOL: true }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+                        { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+                        { label: 'PROXY protocol on TCP', value: 'On', variable: 'TCP_PROXY_PROTOCOL', tone: 'ok' },
+                        { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+    });
+
+    describe('with TLS by this server', () => {
+        it('and a certificate valid for 100 more days', () => {
+            expect(sections(snapshot({ tls: certificate() }))).toEqual([ SERVER, COUNTS, NETWORK_TLS, CERTIFICATE, LIMITS, VOICE ]);
+        });
+
+        it('and a self-signed certificate valid for exactly 30 more days, which is no reason to warn', () => {
+            const s = snapshot({ tls: certificate({ selfSigned: true, issuer: 'CN=colibri-internal', validTo: 130 * DAY }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'CN=colibri-internal', note: 'self-signed' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-05-11T00:00:00.000Z', note: 'in 30 days' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and a certificate that expires in 29 days', () => {
+            expect(sections(snapshot({ tls: certificate({ validTo: 129 * DAY + DAY / 2 }) }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-05-10T12:00:00.000Z', note: 'expires in 29 days', tone: 'warn' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and a certificate that expires in 1 day', () => {
+            expect(sections(snapshot({ tls: certificate({ validTo: 101 * DAY }) }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-04-12T00:00:00.000Z', note: 'expires in 1 day', tone: 'warn' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and a certificate that expires today', () => {
+            expect(sections(snapshot({ tls: certificate({ validTo: 100 * DAY + DAY / 4 }) }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-04-11T06:00:00.000Z', note: 'expires today', tone: 'warn' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and a certificate that expired a day ago', () => {
+            expect(sections(snapshot({ tls: certificate({ validTo: 99 * DAY }) }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-04-10T00:00:00.000Z', note: 'expired', tone: 'err' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and a certificate that ends this very moment', () => {
+            expect(sections(snapshot({ tls: certificate({ validTo: 100 * DAY }) }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-04-11T00:00:00.000Z', note: 'expired', tone: 'err' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and a certificate that is not valid yet', () => {
+            expect(sections(snapshot({ tls: certificate({ validFrom: 102 * DAY }) }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-04-13T00:00:00.000Z', note: 'not yet valid', tone: 'err' },
+                        { label: 'Valid until', value: '1970-07-20T00:00:00.000Z', note: 'in 100 days' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and a certificate that is valid from this very moment', () => {
+            expect(sections(snapshot({ tls: certificate({ validFrom: 100 * DAY }) }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS,
+                {
+                    id: 'certificate', title: 'TLS certificate', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-04-11T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-07-20T00:00:00.000Z', note: 'in 100 days' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and TLS at a proxy as well, which a direct connection does not use', () => {
+            const s = snapshot({ tls: certificate(), tlsAtProxy: { web: true, tcp: true }, settings: settings({ ...behindProxy, TCP_TLS_AT_PROXY: true }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTPS and WSS', mono: true },
+                        { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'TLS', mono: true },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'On', variable: 'TLS_CERT, TLS_KEY', tone: 'ok' },
+                        { label: 'Trusted proxies', value: 'loopback', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'On', variable: 'TCP_PROXY_PROTOCOL', tone: 'ok' },
+                        { label: 'TCP TLS termination', value: 'Proxy', variable: 'TCP_TLS_AT_PROXY', tone: 'ok' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                CERTIFICATE, LIMITS, VOICE
+            ]);
+        });
+    });
+
+    describe('with TLS at a proxy', () => {
+        it('for the web port', () => {
+            expect(sections(snapshot({ tlsAtProxy: { web: true, tcp: false } }))).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        {
+                            label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS, TLS terminated by proxy', mono: true,
+                            title: 'TLS terminated by a trusted proxy (X-Forwarded-Proto: https from a connected web client or admin page)'
+                        },
+                        { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        {
+                            label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', note: 'terminated by proxy (HTTPS)', tone: 'off',
+                            title: 'TLS terminated by a trusted proxy (X-Forwarded-Proto: https from a connected web client or admin page)'
+                        },
+                        { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+                        { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+                        { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('for the TCP port, declared by TCP_TLS_AT_PROXY', () => {
+            const s = snapshot({ tlsAtProxy: { web: false, tcp: true }, settings: settings({ ...behindProxy, TCP_TLS_AT_PROXY: true }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        {
+                            label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'TLS terminated by proxy', mono: true,
+                            title: 'Declared by TCP_TLS_AT_PROXY; PROXY protocol v1 carries no TLS information'
+                        },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        {
+                            label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', note: 'terminated by proxy (TCP)', tone: 'off',
+                            title: 'Declared by TCP_TLS_AT_PROXY; PROXY protocol v1 carries no TLS information'
+                        },
+                        { label: 'Trusted proxies', value: 'loopback', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'On', variable: 'TCP_PROXY_PROTOCOL', tone: 'ok' },
+                        { label: 'TCP TLS termination', value: 'Proxy', variable: 'TCP_TLS_AT_PROXY', tone: 'ok' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('for the web and the TCP port', () => {
+            const s = snapshot({ tlsAtProxy: { web: true, tcp: true }, settings: settings({ ...behindProxy, TCP_TLS_AT_PROXY: true }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        {
+                            label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS, TLS terminated by proxy', mono: true,
+                            title: 'TLS terminated by a trusted proxy (X-Forwarded-Proto: https from a connected web client or admin page)'
+                        },
+                        {
+                            label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'TLS terminated by proxy', mono: true,
+                            title: 'Declared by TCP_TLS_AT_PROXY; PROXY protocol v1 carries no TLS information'
+                        },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        {
+                            label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', note: 'terminated by proxy (HTTPS, TCP)', tone: 'off',
+                            title: 'TLS terminated by a trusted proxy (X-Forwarded-Proto: https from a connected web client or admin page)\nDeclared by TCP_TLS_AT_PROXY; PROXY protocol v1 carries no TLS information'
+                        },
+                        { label: 'Trusted proxies', value: 'loopback', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'On', variable: 'TCP_PROXY_PROTOCOL', tone: 'ok' },
+                        { label: 'TCP TLS termination', value: 'Proxy', variable: 'TCP_TLS_AT_PROXY', tone: 'ok' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('for the TCP port, not declared, with TCP_TLS_AT_PROXY set to false', () => {
+            const s = snapshot({ settings: settings({ ...behindProxy, TCP_TLS_AT_PROXY: false }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        {
+                            label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted, proxy TLS undeclared', mono: true,
+                            title: 'Set TCP_TLS_AT_PROXY=true if the proxy terminates TLS on this port. Unity apps tick \'Server supports SSL/TLS?\' whenever the proxy port uses TLS'
+                        },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+                        { label: 'Trusted proxies', value: 'loopback', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'On', variable: 'TCP_PROXY_PROTOCOL', tone: 'ok' },
+                        { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('for the web port, with the TCP port not declared', () => {
+            const s = snapshot({ tlsAtProxy: { web: true, tcp: false }, settings: settings(behindProxy) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        {
+                            label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS, TLS terminated by proxy', mono: true,
+                            title: 'TLS terminated by a trusted proxy (X-Forwarded-Proto: https from a connected web client or admin page)'
+                        },
+                        {
+                            label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted, proxy TLS undeclared', mono: true,
+                            title: 'Set TCP_TLS_AT_PROXY=true if the proxy terminates TLS on this port. Unity apps tick \'Server supports SSL/TLS?\' whenever the proxy port uses TLS'
+                        },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        {
+                            label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', note: 'terminated by proxy (HTTPS)', tone: 'off',
+                            title: 'TLS terminated by a trusted proxy (X-Forwarded-Proto: https from a connected web client or admin page)'
+                        },
+                        { label: 'Trusted proxies', value: 'loopback', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'On', variable: 'TCP_PROXY_PROTOCOL', tone: 'ok' },
+                        { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('for the TCP port, declared without TCP_PROXY_PROTOCOL', () => {
+            const s = snapshot({ settings: settings({ TRUSTED_PROXIES: [ 'loopback' ], TCP_TLS_AT_PROXY: true }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        { label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+                        { label: 'Trusted proxies', value: 'loopback', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+                        {
+                            label: 'TCP TLS termination', value: 'Proxy', variable: 'TCP_TLS_AT_PROXY', note: 'needs TCP_PROXY_PROTOCOL', tone: 'warn',
+                            title: 'No effect without TCP_PROXY_PROTOCOL: Unity clients through the proxy are not identified'
+                        },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        // The fact follows what the server reports in tlsAtProxy.tcp, not the settings.
+        it('for the TCP port, declared and with the PROXY protocol, which the server reports as without effect', () => {
+            const s = snapshot({ settings: settings({ ...behindProxy, TCP_TLS_AT_PROXY: true }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS,
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '0.0.0.0:9211', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        {
+                            label: 'TCP', value: '0.0.0.0:9212', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted, proxy TLS undeclared', mono: true,
+                            title: 'Set TCP_TLS_AT_PROXY=true if the proxy terminates TLS on this port. Unity apps tick \'Server supports SSL/TLS?\' whenever the proxy port uses TLS'
+                        },
+                        { label: 'Voice', value: '0.0.0.0:9213', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '/', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+                        { label: 'Trusted proxies', value: 'loopback', variable: 'TRUSTED_PROXIES', mono: true },
+                        { label: 'PROXY protocol on TCP', value: 'On', variable: 'TCP_PROXY_PROTOCOL', tone: 'ok' },
+                        {
+                            label: 'TCP TLS termination', value: 'Proxy', variable: 'TCP_TLS_AT_PROXY', note: 'needs TCP_PROXY_PROTOCOL', tone: 'warn',
+                            title: 'No effect without TCP_PROXY_PROTOCOL: Unity clients through the proxy are not identified'
+                        },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+    });
+
+    describe('with PROXY_TLS_ADDRESSES', () => {
+        const addresses = [ 'colibri.example.org:443', 'colibri.example.org:9212' ];
+        const proxied = (proxyTls: ServerSnapshot['proxyTls'], overrides: Partial<ServerSnapshot> = {}) =>
+            snapshot({ proxyTls, settings: settings({ PROXY_TLS_ADDRESSES: addresses }), ...overrides });
+        const presented = (overrides: Partial<NonNullable<ProxyTlsInfo['certificate']>> = {}): NonNullable<ProxyTlsInfo['certificate']> => ({
+            ...certificate({ names: 'DNS:colibri.example.org', issuer: 'CN=R11, O=Let\'s Encrypt, C=US', validFrom: 90 * DAY, validTo: 150 * DAY }),
+            trusted: true, trustError: null, ...overrides
+        });
+        const checked = (address: string, result: Pick<ProxyTlsInfo, 'certificate' | 'error'>): ProxyTlsInfo =>
+            ({ addresses: [ address ], checkedAt: 99 * DAY, ...result });
+
+        it('before the first check has finished', () => {
+            expect(sections(proxied([]))).toEqual([ SERVER, COUNTS, NETWORK_PROXY_ADDRESSES, PROXY_CHECKING, LIMITS, VOICE ]);
+        });
+
+        it('and a trusted certificate that two addresses present', () => {
+            const s = proxied([ { addresses, checkedAt: 99 * DAY, certificate: presented(), error: null } ]);
+            expect(sections(s)).toEqual([ SERVER, COUNTS, NETWORK_PROXY_ADDRESSES, PROXY_TRUSTED, LIMITS, VOICE ]);
+        });
+
+        it('and certificates that clients would refuse', () => {
+            const s = proxied([
+                checked(addresses[0]!, { certificate: presented({ validTo: 105 * DAY, trusted: false, trustError: 'CERT_HAS_EXPIRED', fingerprint256: '01:01' }), error: null }),
+                checked(addresses[1]!, { certificate: presented({ trusted: false, fingerprint256: '02:02' }), error: null }),
+                checked('colibri.example.org:8443', { certificate: presented({ validTo: 100 * DAY, fingerprint256: '03:03' }), error: null }),
+                checked('colibri.example.org:8444', { certificate: presented({ validTo: 99 * DAY, trusted: false, trustError: 'CERT_HAS_EXPIRED', fingerprint256: '04:04' }), error: null })
+            ]);
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PROXY_ADDRESSES,
+                {
+                    id: 'proxy-certificate-0', title: 'Proxy TLS certificate', facts: [
+                        { label: 'Addresses', value: 'colibri.example.org:443', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+                        {
+                            label: 'Trusted', value: 'No', note: 'CERT_HAS_EXPIRED', tone: 'err',
+                            title: 'Clients that check certificates refuse it at this address: the reason is OpenSSL\'s or Node\'s, checked against Node\'s certificate authorities and the address\'s host name'
+                        },
+                        { label: 'Names', value: 'DNS:colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'CN=R11, O=Let\'s Encrypt, C=US' },
+                        { label: 'Valid from', value: '1970-04-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-04-16T00:00:00.000Z', note: 'expires in 5 days', tone: 'warn' },
+                        { label: 'SHA-256 fingerprint', value: '01:01', mono: true },
+                        { label: 'Checked', value: '1970-04-10T00:00:00.000Z' }
+                    ]
+                },
+                {
+                    id: 'proxy-certificate-1', title: 'Proxy TLS certificate', facts: [
+                        { label: 'Addresses', value: 'colibri.example.org:9212', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+                        {
+                            label: 'Trusted', value: 'No', note: 'refused', tone: 'err',
+                            title: 'Clients that check certificates refuse it at this address: the reason is OpenSSL\'s or Node\'s, checked against Node\'s certificate authorities and the address\'s host name'
+                        },
+                        { label: 'Names', value: 'DNS:colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'CN=R11, O=Let\'s Encrypt, C=US' },
+                        { label: 'Valid from', value: '1970-04-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-05-31T00:00:00.000Z', note: 'in 50 days' },
+                        { label: 'SHA-256 fingerprint', value: '02:02', mono: true },
+                        { label: 'Checked', value: '1970-04-10T00:00:00.000Z' }
+                    ]
+                },
+                {
+                    id: 'proxy-certificate-2', title: 'Proxy TLS certificate', facts: [
+                        { label: 'Addresses', value: 'colibri.example.org:8443', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+                        {
+                            label: 'Trusted', value: 'No', note: 'expired', tone: 'err',
+                            title: 'Clients that check certificates refuse it at this address: the reason is OpenSSL\'s or Node\'s, checked against Node\'s certificate authorities and the address\'s host name'
+                        },
+                        { label: 'Names', value: 'DNS:colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'CN=R11, O=Let\'s Encrypt, C=US' },
+                        { label: 'Valid from', value: '1970-04-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-04-11T00:00:00.000Z', note: 'expired', tone: 'err' },
+                        { label: 'SHA-256 fingerprint', value: '03:03', mono: true },
+                        { label: 'Checked', value: '1970-04-10T00:00:00.000Z' }
+                    ]
+                },
+                {
+                    id: 'proxy-certificate-3', title: 'Proxy TLS certificate', facts: [
+                        { label: 'Addresses', value: 'colibri.example.org:8444', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+                        {
+                            label: 'Trusted', value: 'No', note: 'expired', tone: 'err',
+                            title: 'Clients that check certificates refuse it at this address: the reason is OpenSSL\'s or Node\'s, checked against Node\'s certificate authorities and the address\'s host name'
+                        },
+                        { label: 'Names', value: 'DNS:colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'CN=R11, O=Let\'s Encrypt, C=US' },
+                        { label: 'Valid from', value: '1970-04-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-04-10T00:00:00.000Z', note: 'expired', tone: 'err' },
+                        { label: 'SHA-256 fingerprint', value: '04:04', mono: true },
+                        { label: 'Checked', value: '1970-04-10T00:00:00.000Z' }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and addresses that could not be reached', () => {
+            const s = proxied([
+                checked(addresses[0]!, { certificate: null, error: 'connect ECONNREFUSED 10.20.0.1:443' }),
+                checked(addresses[1]!, { certificate: null, error: null })
+            ]);
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PROXY_ADDRESSES,
+                {
+                    id: 'proxy-certificate-0', title: 'Proxy TLS certificate', facts: [
+                        { label: 'Addresses', value: 'colibri.example.org:443', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+                        { label: 'Connection', value: 'Failed', note: 'connect ECONNREFUSED 10.20.0.1:443', tone: 'err' },
+                        { label: 'Checked', value: '1970-04-10T00:00:00.000Z' }
+                    ]
+                },
+                {
+                    id: 'proxy-certificate-1', title: 'Proxy TLS certificate', facts: [
+                        { label: 'Addresses', value: 'colibri.example.org:9212', variable: 'PROXY_TLS_ADDRESSES', mono: true },
+                        { label: 'Connection', value: 'Failed', tone: 'err' },
+                        { label: 'Checked', value: '1970-04-10T00:00:00.000Z' }
+                    ]
+                },
+                LIMITS, VOICE
+            ]);
+        });
+
+        it('and the server\'s own certificate next to the proxy\'s', () => {
+            const own = certificate({ names: 'DNS:colibri-internal', selfSigned: true, issuer: 'CN=colibri-internal', fingerprint256: 'EF:01' });
+            const s = proxied([ { addresses, checkedAt: 99 * DAY, certificate: presented(), error: null } ], { tls: own });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_TLS_PROXY_ADDRESSES,
+                {
+                    id: 'certificate', title: 'TLS certificate (this server)', facts: [
+                        { label: 'Names', value: 'DNS:colibri-internal', mono: true },
+                        { label: 'Issuer', value: 'CN=colibri-internal', note: 'self-signed' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-07-20T00:00:00.000Z', note: 'in 100 days' },
+                        { label: 'SHA-256 fingerprint', value: 'EF:01', mono: true }
+                    ]
+                },
+                PROXY_TRUSTED, LIMITS, VOICE
+            ]);
+        });
+
+        it('and the server\'s own certificate while the first check is running', () => {
+            expect(sections(proxied([], { tls: certificate() }))).toEqual([
+                SERVER, COUNTS, NETWORK_TLS_PROXY_ADDRESSES,
+                {
+                    id: 'certificate', title: 'TLS certificate (this server)', facts: [
+                        { label: 'Names', value: 'colibri.example.org', mono: true },
+                        { label: 'Issuer', value: 'Example CA' },
+                        { label: 'Valid from', value: '1970-01-01T00:00:00.000Z' },
+                        { label: 'Valid until', value: '1970-07-20T00:00:00.000Z', note: 'in 100 days' },
+                        { label: 'SHA-256 fingerprint', value: 'AB:CD', mono: true }
+                    ]
+                },
+                PROXY_CHECKING, LIMITS, VOICE
+            ]);
+        });
+    });
+
+    describe('with the limits', () => {
+        it('all on', () => {
+            const s = snapshot({ settings: settings({ APP_CLIENT_WARNING_THRESHOLD: 1, STORE_EXPIRY_DAYS: 1, STORE_MAX_MB: 512 }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PLAIN,
+                {
+                    id: 'limits', title: 'Load limits', facts: [
+                        { label: 'Messages per client', value: '1,000 a second', variable: 'CLIENT_MESSAGE_RATE_LIMIT' },
+                        { label: 'Burst', value: '2,000 messages', variable: 'CLIENT_MESSAGE_RATE_BURST' },
+                        { label: 'TCP inbound backlog', value: '2,000 messages', variable: 'TCP_INBOUND_BACKLOG_LIMIT' },
+                        { label: 'TCP idle timeout', value: '10 s', variable: 'TCP_IDLE_TIMEOUT_SECONDS' },
+                        { label: 'App client warning', value: 'above 1 client', variable: 'APP_CLIENT_WARNING_THRESHOLD' },
+                        { label: 'Deleted models kept', value: '600 s', variable: 'MODEL_TOMBSTONE_SECONDS' },
+                        { label: 'REST store values kept', value: '1 day after their last write', variable: 'STORE_EXPIRY_DAYS' },
+                        { label: 'REST store size', value: '512 MiB', variable: 'STORE_MAX_MB' }
+                    ]
+                },
+                VOICE
+            ]);
+        });
+
+        it('all off, which leaves the burst off whatever it is set to', () => {
+            const s = snapshot({
+                settings: settings({
+                    CLIENT_MESSAGE_RATE_LIMIT: 0, TCP_INBOUND_BACKLOG_LIMIT: 0, TCP_IDLE_TIMEOUT_SECONDS: 0, APP_CLIENT_WARNING_THRESHOLD: 0,
+                    MODEL_TOMBSTONE_SECONDS: 0, STORE_EXPIRY_DAYS: 0, STORE_MAX_MB: 0
+                })
+            });
+            expect(sections(s)).toEqual([
+                SERVER,
+                {
+                    id: 'counts', title: 'Clients and data', facts: [
+                        { label: 'Unity clients', value: '3', note: 'TCP', link: '/clients' },
+                        { label: 'Web clients', value: '2', note: 'Socket.IO', link: '/clients' },
+                        { label: 'Apps', value: '2', note: 'with clients connected' },
+                        { label: 'Admin pages', value: '1', note: 'open, this one included' },
+                        { label: 'Synced models', value: '1,234', note: 'in 3 channels of 2 apps', link: '/models' },
+                        { label: 'Recently deleted models', value: '4', note: 'kept for 0 s', link: '/models' },
+                        { label: 'REST store', value: '7 values', note: 'in 1 app, 1.5 KiB' }
+                    ]
+                },
+                NETWORK_PLAIN,
+                {
+                    id: 'limits', title: 'Load limits', facts: [
+                        { label: 'Messages per client', value: 'Off', variable: 'CLIENT_MESSAGE_RATE_LIMIT', tone: 'off' },
+                        { label: 'Burst', value: 'Off', variable: 'CLIENT_MESSAGE_RATE_BURST', tone: 'off' },
+                        { label: 'TCP inbound backlog', value: 'Off', variable: 'TCP_INBOUND_BACKLOG_LIMIT', tone: 'off' },
+                        { label: 'TCP idle timeout', value: 'Off', variable: 'TCP_IDLE_TIMEOUT_SECONDS', tone: 'off' },
+                        { label: 'App client warning', value: 'Off', variable: 'APP_CLIENT_WARNING_THRESHOLD', tone: 'off' },
+                        { label: 'Deleted models kept', value: 'Off', variable: 'MODEL_TOMBSTONE_SECONDS', tone: 'off' },
+                        { label: 'REST store values kept', value: 'Off', variable: 'STORE_EXPIRY_DAYS', tone: 'off' },
+                        { label: 'REST store size', value: 'Off', variable: 'STORE_MAX_MB', tone: 'off' }
+                    ]
+                },
+                VOICE
+            ]);
+        });
+
+        it('with only the burst off', () => {
+            const s = snapshot({ settings: settings({ CLIENT_MESSAGE_RATE_BURST: 0 }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PLAIN,
+                {
+                    id: 'limits', title: 'Load limits', facts: [
+                        { label: 'Messages per client', value: '1,000 a second', variable: 'CLIENT_MESSAGE_RATE_LIMIT' },
+                        { label: 'Burst', value: 'Off', variable: 'CLIENT_MESSAGE_RATE_BURST', tone: 'off' },
+                        { label: 'TCP inbound backlog', value: '2,000 messages', variable: 'TCP_INBOUND_BACKLOG_LIMIT' },
+                        { label: 'TCP idle timeout', value: '10 s', variable: 'TCP_IDLE_TIMEOUT_SECONDS' },
+                        { label: 'App client warning', value: 'above 8 clients', variable: 'APP_CLIENT_WARNING_THRESHOLD' },
+                        { label: 'Deleted models kept', value: '600 s', variable: 'MODEL_TOMBSTONE_SECONDS' },
+                        { label: 'REST store values kept', value: '30 days after their last write', variable: 'STORE_EXPIRY_DAYS' },
+                        { label: 'REST store size', value: 'Off', variable: 'STORE_MAX_MB', tone: 'off' }
+                    ]
+                },
+                VOICE
+            ]);
+        });
+
+        it('that the server sends as text', () => {
+            const s = snapshot({
+                settings: settings({
+                    CLIENT_MESSAGE_RATE_LIMIT: 'fast', CLIENT_MESSAGE_RATE_BURST: 'bursty', TCP_INBOUND_BACKLOG_LIMIT: 'many', TCP_IDLE_TIMEOUT_SECONDS: 'soon',
+                    APP_CLIENT_WARNING_THRESHOLD: 'some', MODEL_TOMBSTONE_SECONDS: 'a while', STORE_EXPIRY_DAYS: 'later', STORE_MAX_MB: 'big'
+                })
+            });
+            expect(sections(s)).toEqual([
+                SERVER,
+                {
+                    id: 'counts', title: 'Clients and data', facts: [
+                        { label: 'Unity clients', value: '3', note: 'TCP', link: '/clients' },
+                        { label: 'Web clients', value: '2', note: 'Socket.IO', link: '/clients' },
+                        { label: 'Apps', value: '2', note: 'with clients connected' },
+                        { label: 'Admin pages', value: '1', note: 'open, this one included' },
+                        { label: 'Synced models', value: '1,234', note: 'in 3 channels of 2 apps', link: '/models' },
+                        { label: 'Recently deleted models', value: '4', note: 'kept for a while s', link: '/models' },
+                        { label: 'REST store', value: '7 values', note: 'in 1 app, 1.5 KiB' }
+                    ]
+                },
+                NETWORK_PLAIN,
+                {
+                    id: 'limits', title: 'Load limits', facts: [
+                        { label: 'Messages per client', value: 'fast', variable: 'CLIENT_MESSAGE_RATE_LIMIT' },
+                        { label: 'Burst', value: 'bursty', variable: 'CLIENT_MESSAGE_RATE_BURST' },
+                        { label: 'TCP inbound backlog', value: 'many', variable: 'TCP_INBOUND_BACKLOG_LIMIT' },
+                        { label: 'TCP idle timeout', value: 'soon', variable: 'TCP_IDLE_TIMEOUT_SECONDS' },
+                        { label: 'App client warning', value: 'some', variable: 'APP_CLIENT_WARNING_THRESHOLD' },
+                        { label: 'Deleted models kept', value: 'a while', variable: 'MODEL_TOMBSTONE_SECONDS' },
+                        { label: 'REST store values kept', value: 'later', variable: 'STORE_EXPIRY_DAYS' },
+                        { label: 'REST store size', value: 'big', variable: 'STORE_MAX_MB' }
+                    ]
+                },
+                VOICE
+            ]);
+        });
+
+        it('that a server without these settings does not send', () => {
+            const s = snapshot({ settings: {}, build: { commit: null, dirty: false, builtAt: null }, voice: null });
+            expect(sections(s)).toEqual([
+                {
+                    id: 'server', title: 'Server', facts: [
+                        { label: 'Version', value: '2.0.0', mono: true },
+                        { label: 'Commit', value: 'unknown', tone: 'off', title: 'Built without git information, e.g. a Docker build without COLIBRI_COMMIT' },
+                        { label: 'Protocol version', value: '2', mono: true },
+                        { label: 'Node.js', value: 'v24.21.0', mono: true },
+                        { label: 'Started', value: '1970-04-10T22:57:55.000Z' },
+                        { label: 'Uptime', value: '1 h 2 min' }
+                    ]
+                },
+                {
+                    id: 'counts', title: 'Clients and data', facts: [
+                        { label: 'Unity clients', value: '3', note: 'TCP', link: '/clients' },
+                        { label: 'Web clients', value: '2', note: 'Socket.IO', link: '/clients' },
+                        { label: 'Apps', value: '2', note: 'with clients connected' },
+                        { label: 'Admin pages', value: '1', note: 'open, this one included' },
+                        { label: 'Synced models', value: '1,234', note: 'in 3 channels of 2 apps', link: '/models' },
+                        { label: 'Recently deleted models', value: '4', note: 'kept for - s', link: '/models' },
+                        { label: 'REST store', value: '7 values', note: 'in 1 app, 1.5 KiB' }
+                    ]
+                },
+                {
+                    id: 'network', title: 'Network', facts: [
+                        { label: 'Web', value: '-:-', variable: 'WEBSERVER_HOST, WEBSERVER_PORT', note: 'HTTP and WS', mono: true },
+                        { label: 'TCP', value: '-:-', variable: 'TCP_HOST, TCP_PORT', note: 'unencrypted', mono: true },
+                        { label: 'Voice', value: '-:-', variable: 'VOICE_HOST, VOICE_PORT', note: 'UDP', mono: true },
+                        { label: 'Base URL', value: '-', variable: 'BASE_URL', mono: true },
+                        { label: 'TLS', value: 'Off', variable: 'TLS_CERT, TLS_KEY', tone: 'off' },
+                        { label: 'Trusted proxies', value: 'None', variable: 'TRUSTED_PROXIES', tone: 'off', mono: false },
+                        { label: 'PROXY protocol on TCP', value: 'Off', variable: 'TCP_PROXY_PROTOCOL', tone: 'off' },
+                        { label: 'TCP TLS termination', value: 'Not declared', variable: 'TCP_TLS_AT_PROXY', tone: 'off' },
+                        { label: 'Proxy TLS addresses', value: 'None', variable: 'PROXY_TLS_ADDRESSES', tone: 'off', mono: false }
+                    ]
+                },
+                {
+                    id: 'limits', title: 'Load limits', facts: [
+                        { label: 'Messages per client', value: '-', variable: 'CLIENT_MESSAGE_RATE_LIMIT' },
+                        { label: 'Burst', value: '-', variable: 'CLIENT_MESSAGE_RATE_BURST' },
+                        { label: 'TCP inbound backlog', value: '-', variable: 'TCP_INBOUND_BACKLOG_LIMIT' },
+                        { label: 'TCP idle timeout', value: '-', variable: 'TCP_IDLE_TIMEOUT_SECONDS' },
+                        { label: 'App client warning', value: '-', variable: 'APP_CLIENT_WARNING_THRESHOLD' },
+                        { label: 'Deleted models kept', value: '-', variable: 'MODEL_TOMBSTONE_SECONDS' },
+                        { label: 'REST store values kept', value: '-', variable: 'STORE_EXPIRY_DAYS' },
+                        { label: 'REST store size', value: '-', variable: 'STORE_MAX_MB' }
+                    ]
+                },
+                VOICE_NOT_REPORTING
+            ]);
+        });
+    });
+
+    describe('with the voice server', () => {
+        it('not listening', () => {
+            const s = snapshot({ voice: { listening: false, recording: true, samplingRate: 16000, clients: 0 } });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PLAIN, LIMITS,
+                {
+                    id: 'voice', title: 'Voice', facts: [
+                        { label: 'Voice server', value: 'Off', note: 'not listening', tone: 'off' },
+                        { label: 'Recording', value: 'On', variable: 'VOICE_RECORDING', tone: 'ok' },
+                        { label: 'Sampling rate', value: '16,000 Hz', variable: 'VOICE_SAMPLING_RATE' },
+                        { label: 'Voice clients', value: '0' }
+                    ]
+                }
+            ]);
+        });
+
+        it('listening, with clients', () => {
+            const s = snapshot({ voice: { listening: true, recording: true, samplingRate: 44100, clients: 12 } });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PLAIN, LIMITS,
+                {
+                    id: 'voice', title: 'Voice', facts: [
+                        { label: 'Voice server', value: 'On', tone: 'ok' },
+                        { label: 'Recording', value: 'On', variable: 'VOICE_RECORDING', tone: 'ok' },
+                        { label: 'Sampling rate', value: '44,100 Hz', variable: 'VOICE_SAMPLING_RATE' },
+                        { label: 'Voice clients', value: '12' }
+                    ]
+                }
+            ]);
+        });
+
+        it('not reporting, which leaves recording and the sampling rate to the settings', () => {
+            const s = snapshot({ voice: null, settings: settings({ VOICE_RECORDING: true, VOICE_SAMPLING_RATE: 44100 }) });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PLAIN, LIMITS,
+                {
+                    id: 'voice', title: 'Voice', facts: [
+                        { label: 'Voice server', value: 'Off', note: 'not listening', tone: 'off' },
+                        { label: 'Recording', value: 'On', variable: 'VOICE_RECORDING', tone: 'ok' },
+                        { label: 'Sampling rate', value: '44,100 Hz', variable: 'VOICE_SAMPLING_RATE' },
+                        { label: 'Voice clients', value: '0' }
+                    ]
+                }
+            ]);
+        });
+
+        it('not reporting, with a sampling rate that is no number', () => {
+            const s = snapshot({ voice: null, settings: settings({ VOICE_SAMPLING_RATE: 'high' }) });
+            expect(sections(s)).toEqual([ SERVER, COUNTS, NETWORK_PLAIN, LIMITS, VOICE_NOT_REPORTING ]);
+        });
+    });
+
+    describe('with the build, the counts and the other settings', () => {
+        it('built without git information, with a build time', () => {
+            const s = snapshot({ build: { commit: null, dirty: false, builtAt: 99 * DAY } });
+            expect(sections(s)).toEqual([
+                {
+                    id: 'server', title: 'Server', facts: [
+                        { label: 'Version', value: '2.0.0', mono: true },
+                        {
+                            label: 'Commit', value: 'unknown', tone: 'off',
+                            title: 'Built without git information, e.g. a Docker build without COLIBRI_COMMIT\nBuilt 1970-04-10T00:00:00.000Z'
+                        },
+                        { label: 'Protocol version', value: '2', mono: true },
+                        { label: 'Node.js', value: 'v24.21.0', mono: true },
+                        { label: 'Started', value: '1970-04-10T22:57:55.000Z' },
+                        { label: 'Uptime', value: '1 h 2 min' }
+                    ]
+                },
+                COUNTS, NETWORK_PLAIN, LIMITS, VOICE
+            ]);
+        });
+
+        it('built with uncommitted changes, without a build time', () => {
+            const s = snapshot({ build: { commit: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6', dirty: true, builtAt: null } });
+            expect(sections(s)).toEqual([
+                {
+                    id: 'server', title: 'Server', facts: [
+                        { label: 'Version', value: '2.0.0', mono: true },
+                        { label: 'Commit', value: '3e2855e0c1', note: 'uncommitted changes', mono: true, title: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6' },
+                        { label: 'Protocol version', value: '2', mono: true },
+                        { label: 'Node.js', value: 'v24.21.0', mono: true },
+                        { label: 'Started', value: '1970-04-10T22:57:55.000Z' },
+                        { label: 'Uptime', value: '1 h 2 min' }
+                    ]
+                },
+                COUNTS, NETWORK_PLAIN, LIMITS, VOICE
+            ]);
+        });
+
+        it('with nothing synced, stored or connected', () => {
+            const s = snapshot({
+                counts: {
+                    tcpClients: 0, webClients: 0, adminPages: 0, apps: 0, models: 0, modelApps: 0, modelChannels: 0,
+                    deletedModels: 0, storeApps: 0, storeKeys: 0, storeBytes: 0
+                }
+            });
+            expect(sections(s)).toEqual([
+                SERVER,
+                {
+                    id: 'counts', title: 'Clients and data', facts: [
+                        { label: 'Unity clients', value: '0', note: 'TCP', link: '/clients' },
+                        { label: 'Web clients', value: '0', note: 'Socket.IO', link: '/clients' },
+                        { label: 'Apps', value: '0', note: 'with clients connected' },
+                        { label: 'Admin pages', value: '0', note: 'open, this one included' },
+                        { label: 'Synced models', value: '0', note: 'in 0 channels of 0 apps', link: '/models' },
+                        { label: 'Recently deleted models', value: '0', note: 'kept for 600 s', link: '/models' },
+                        { label: 'REST store', value: '0 values', note: 'in 0 apps, 0 B' }
+                    ]
+                },
+                NETWORK_PLAIN, LIMITS, VOICE
+            ]);
+        });
+
+        it('with one channel, one app, one value and nothing deleted', () => {
+            const s = snapshot({
+                counts: {
+                    tcpClients: 1, webClients: 0, adminPages: 1, apps: 1, models: 1, modelApps: 1, modelChannels: 1,
+                    deletedModels: 0, storeApps: 1, storeKeys: 1, storeBytes: 0
+                }
+            });
+            expect(sections(s)).toEqual([
+                SERVER,
+                {
+                    id: 'counts', title: 'Clients and data', facts: [
+                        { label: 'Unity clients', value: '1', note: 'TCP', link: '/clients' },
+                        { label: 'Web clients', value: '0', note: 'Socket.IO', link: '/clients' },
+                        { label: 'Apps', value: '1', note: 'with clients connected' },
+                        { label: 'Admin pages', value: '1', note: 'open, this one included' },
+                        { label: 'Synced models', value: '1', note: 'in 1 channel of 1 app', link: '/models' },
+                        { label: 'Recently deleted models', value: '0', note: 'kept for 600 s', link: '/models' },
+                        { label: 'REST store', value: '1 value', note: 'in 1 app, 0 B' }
+                    ]
+                },
+                NETWORK_PLAIN, LIMITS, VOICE
+            ]);
+        });
+
+        it('with settings it does not know, in order', () => {
+            const s = snapshot({
+                settings: settings({
+                    ZETA: 'x', ALPHA: true, MID_LIST: [ 'a', 'b' ], EMPTY_LIST: [], COUNT: 5, BLANK: '', SWITCH: false
+                })
+            });
+            expect(sections(s)).toEqual([
+                SERVER, COUNTS, NETWORK_PLAIN, LIMITS, VOICE,
+                {
+                    id: 'other', title: 'Other settings', facts: [
+                        { label: 'ALPHA', value: 'on', mono: true },
+                        { label: 'BLANK', value: '', mono: true },
+                        { label: 'COUNT', value: '5', mono: true },
+                        { label: 'EMPTY_LIST', value: 'none', mono: true },
+                        { label: 'MID_LIST', value: 'a, b', mono: true },
+                        { label: 'SWITCH', value: 'off', mono: true },
+                        { label: 'ZETA', value: 'x', mono: true }
+                    ]
+                }
+            ]);
+        });
     });
 });
 
