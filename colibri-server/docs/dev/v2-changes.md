@@ -7,6 +7,10 @@ Everything that changed in colibri-server from `1.3.1` to `2.0.0`. To upgrade a 
 Colibri 1.x, start with [MIGRATION.md](../../../MIGRATION.md), which covers all three components;
 this is the server's full detail.
 
+**Note:** paths and names in this document are those of 2.0. In 2.1 the modules moved into feature folders and
+large classes were split. The layout is described in
+[conventions.md](conventions.md#modules-and-files), the change in the [CHANGELOG](../../CHANGELOG.md).
+
 ---
 
 ## 2.0.0 (unreleased)
@@ -704,7 +708,8 @@ The endpoints are documented under [REST store](protocol.md#rest-store).
 ### Deprecations (kept, not deleted)
 
 - Added `@deprecated` JSDoc to `modules/core/serializable.ts`, `modules/core/error-handler.ts`,
-  `modules/core/redirect-console.ts`, and `DataStore.addModel`/`DataStore.clear`.
+  `modules/core/redirect-console.ts`, and `DataStore.addModel`/`DataStore.clear`. The three modules were removed in
+  2.1.
 
 ### Tests added
 
