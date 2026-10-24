@@ -3,7 +3,7 @@ export interface FormattedJson {
     truncated: boolean;
 }
 
-// What long arrays (samples, vertices) mostly hold.
+// Long arrays (samples, vertices) mostly hold scalars.
 const isScalar = function (value: unknown): boolean {
     return typeof value === 'number' || typeof value === 'boolean' || value === null;
 };
@@ -64,8 +64,8 @@ class JsonWriter {
         const separator = ',' + this.newline(depth + 1);
         for (let i = 0; i < item.length;) {
             const before = i > 0 ? separator : this.newline(depth + 1);
-            // A run of scalars goes through one JSON.stringify call, which is faster than element
-            // by element, one per line. Their text holds no comma, so replacing commas is safe.
+            // A run of scalars goes through one JSON.stringify call, faster than writing element by
+            // element. Scalar text has no comma of its own, so replacing all commas is safe.
             let end = i;
             while (end < item.length && end - i < SCALAR_RUN && isScalar(item[end])) end++;
             if (end > i) {

@@ -12,7 +12,6 @@ export const LATENCY_HISTORY_MILLIS = 122_000;
 // medians, at most 123 each.
 export const MAX_LATENCY_HISTORY_SAMPLES = 200_000;
 
-// Two decimals: a round trip to 0.01 ms.
 const round2 = function (value: number): number {
     return Math.round(value * 100) / 100;
 };

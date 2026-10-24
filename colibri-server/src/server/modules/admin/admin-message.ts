@@ -7,8 +7,8 @@ import { fieldsOf } from './topics/query-fields.js';
 export const ADMIN_TOPICS = ['server', 'clients', 'models', 'model', 'latency'] as const;
 export type AdminTopic = typeof ADMIN_TOPICS[number];
 
-// Topics a page asks for once and cannot subscribe to. The latency history is up to
-// MAX_LATENCY_HISTORY_SAMPLES samples, and colibri::latency brings the new ones every second.
+// Request only: the latency history is up to MAX_LATENCY_HISTORY_SAMPLES samples, and
+// colibri::latency brings the new ones every second.
 const REQUEST_ONLY_TOPICS: ReadonlySet<AdminTopic> = new Set([ 'latency' ]);
 
 const isTopic = function (value: unknown): value is AdminTopic {

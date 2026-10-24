@@ -7,17 +7,14 @@ import { latencySamples } from './latency-samples.js';
 import { median } from './median.js';
 import { clip, truncatedFlag } from './name-length.js';
 
-// Clients the client list holds at most.
 export const MAX_CLIENT_ROWS = 1000;
 
-// How far back a client's latency samples count towards its latency.
 const LATENCY_WINDOW_MILLIS = 1000;
 
-// How far back a client row's rate history goes: the 120 s the admin UI's throughput chart shows,
-// and the 2 s it slides. A client keeps RATE_HISTORY_LENGTH rates, at least a second apart.
+// The 120 s the admin UI's throughput chart shows, plus the 2 s it slides. A client keeps
+// RATE_HISTORY_LENGTH rates, at least a second apart.
 export const RATE_HISTORY_SECONDS = 122;
 
-// One decimal: a rate or a latency, without the noise of the last digits.
 const round1 = function (value: number | null): number | null {
     return value === null ? null : Math.round(value * 10) / 10;
 };
@@ -29,13 +26,11 @@ export interface ClientRow {
     transport: 'tcp' | 'web';
     // The protocol version it announced.
     version: string;
-    // Whether its connection to this server is encrypted. Behind a proxy that ends TLS, that is
-    // the proxy's connection.
+    // Whether its connection to this server is encrypted; behind a proxy that ends TLS, the proxy's.
     tls: boolean;
-    // Whether it reached a trusted proxy over TLS: for a web client as the proxy reported in
-    // X-Forwarded-Proto (see forwardedTls), for a TCP client as TCP_TLS_AT_PROXY says of every one
-    // that came through the proxy. nginx's PROXY protocol header, version 1, does not say, and the
-    // TLS details a version 2 header can carry are skipped.
+    // Whether it reached a trusted proxy over TLS. Web: the proxy's X-Forwarded-Proto (see
+    // forwardedTls). TCP: TCP_TLS_AT_PROXY for every client through the proxy, since nginx's PROXY
+    // protocol v1 header does not say and the TLS details of a v2 header are skipped.
     tlsAtProxy: boolean;
     // Its own address, behind a trusted proxy the one the proxy named.
     address: string;
@@ -48,8 +43,8 @@ export interface ClientRow {
     out: number | null;
     limit: LoadLimit | null;
     held: number;
-    // Only in the answer to a request and the first answer to a subscribe: its rates in each of the
-    // RATE_HISTORY_SECONDS seconds before `at`, oldest first, as [in, out]; see rateHistory.
+    // Only in the answer to a request and the first answer to a subscribe: [in, out] per second over
+    // the RATE_HISTORY_SECONDS before `at`, oldest first (see rateHistory).
     history?: [number, number][];
     truncated?: true;
 }
@@ -62,7 +57,6 @@ export interface ClientsSnapshot {
     adminPages: number;
 }
 
-// What the client list needs of the two transports.
 export interface ClientSources {
     tcpClients: ReadonlyArray<TcpNetworkClient>;
     tcpActivity: ReadonlyMap<string, ClientActivity>;
@@ -76,9 +70,9 @@ export const recentLatency = function (client: NetworkClient, now: number): numb
     return recent.length === 0 ? null : median(recent);
 };
 
-// The client's rates (see TrafficMeter.history) as a page open in each of the RATE_HISTORY_SECONDS
-// seconds before `now` would have been sent them: the latest sampled by then, one a second, oldest
-// first. It starts at the first second with one.
+// The client's TrafficMeter.history as one [in, out] pair per second, oldest first: for each of the
+// RATE_HISTORY_SECONDS before `now`, the latest sample taken by then. Seconds before the first
+// sample are left out.
 export const rateHistory = function (samples: ReadonlyArray<RateSample>, now: number): [number, number][] {
     const history: [number, number][] = [];
     let i = samples.length - 1;

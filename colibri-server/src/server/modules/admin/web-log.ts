@@ -38,8 +38,8 @@ interface LogPreferences {
     request: number | null;
 }
 
-// Merge key, computable from a LogMessage or a WebMessage. App and client are part of it: clients
-// of two apps on one host share a name (their IP address) and a line need not name its client.
+// Merge key. App and client are part of it: clients of two apps on one host share a name (their IP
+// address) and a line need not name its client.
 const messageKey = function (msg: { level: number; group: string; message: string; metadata: Metadata }): string {
     return JSON.stringify([ msg.level, msg.group, msg.message, msg.metadata.clientApp ?? null, msg.metadata.clientId ?? null ]);
 };
@@ -47,7 +47,7 @@ const messageKey = function (msg: { level: number; group: string; message: strin
 const KNOWN_LEVELS: ReadonlySet<number> = new Set([ LogLevel.Error, LogLevel.Warn, LogLevel.Info, LogLevel.Debug ]);
 
 // requestLog comes from any client of any app, so each field is used only if it has the expected
-// type, else its default (no filter, all levels, no broadcast traffic, connection lines shown).
+// type, else its default.
 const parseLogPreferences = function (body: unknown): LogPreferences {
     const fields = (body !== null && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
     return {
@@ -152,8 +152,8 @@ export class WebLog extends Service {
             this.pushMessage(key, webMsg);
         }
 
-        // The history above is kept regardless (a client may request it later); no payload is built
-        // unless some admin UI receives the line.
+        // The history is kept regardless (a client may request it later); no payload is built unless
+        // some admin UI receives the line.
         const clients: SocketIoClient[] = [];
         for (const client of this.socketio.currentClients) {
             if (client.app !== ADMIN_APP) continue;
@@ -169,7 +169,7 @@ export class WebLog extends Service {
 
         if (clients.length === 0) return;
 
-        // Snapshot: webMsg is mutated in place on its next repeat and Payload.fromValue() keeps the object as given.
+        // Copied: webMsg is mutated in place on its next repeat, and Payload.fromValue() keeps the object as given.
         this.socketio.broadcast({
             channel: 'colibri::log',
             command: 'message',
@@ -203,7 +203,7 @@ export class WebLog extends Service {
 
     // Broadcast traffic is logged at Debug but governed only by showBroadcastTraffic, never by levels,
     // so Debug can be watched without it and vice versa. Connection lines have their own switch.
-    // Without preferences (no requestLog yet): every line but broadcast traffic.
+    // Without preferences (no requestLog yet) every line but broadcast traffic is visible.
     private isVisibleToClient(level: number, metadata: Metadata, preferences: LogPreferences | undefined): boolean {
         if (metadata['broadcastTraffic'] === true) {
             return preferences?.showBroadcastTraffic === true;

@@ -20,8 +20,9 @@ export class MeasureLatency extends Service {
         super();
 
         // Send out latency message
-        // TCP clients are pinged by the worker's heartbeat frame (TCPServerWorker.handleHeartbeat,
-        // InboundHandler.handlePong); a second ping here would double their idle packets. This only reaches Socket.IO clients.
+        // Socket.IO clients only: TCP clients are pinged by the worker's heartbeat frame
+        // (TCPServerWorker.handleHeartbeat, InboundHandler.handlePong), and a second ping would
+        // double their idle packets.
         setInterval(() => this.sendPing(frontendConnection), 100);
 
         // receive latency
@@ -45,11 +46,11 @@ export class MeasureLatency extends Service {
 
         try {
             const ping = m.payload?.asValue<number | string>();
-            // No timestamp, nothing to measure.
             if (ping === undefined || ping === null || ping === '') return;
 
-            // Timestamps can exceed MAX_SAFE_INTEGER and then arrive as a rounded number; truncate it, BigInt() throws on a fraction.
-            // Reject anything else; BigInt() of a huge digit string blocks the main thread.
+            // A timestamp can exceed MAX_SAFE_INTEGER and then arrive as a rounded number: truncate it,
+            // BigInt() throws on a fraction. Anything else is rejected: BigInt() of a huge digit string
+            // blocks the main thread.
             if (typeof ping === 'number' ? !Number.isFinite(ping) : typeof ping !== 'string' || !/^\d{1,20}$/.test(ping)) return;
             const pingNanos = typeof ping === 'number' ? BigInt(Math.trunc(ping)) : BigInt(ping);
             const now = hrtime.bigint();

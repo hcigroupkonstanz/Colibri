@@ -25,19 +25,15 @@ import { modelsSnapshot } from './topics/models-snapshot.js';
 import type { ServerSettings, VoiceStatus } from './topics/server-snapshot.js';
 import { serverSnapshot } from './topics/server-snapshot.js';
 
-// The channel the admin UI's pages ask for read-only server data on, and get it on. See
-// docs/dev/protocol.md, Admin UI channel.
+// See docs/dev/protocol.md, Admin UI channel.
 export const ADMIN_CHANNEL = 'colibri::admin';
 
-// How often a subscribed topic is sent again.
 export const ADMIN_REFRESH_MILLIS = 1000;
 
-// How many request and subscribe messages one page may send: far more than any page clicking
-// through its views does. One past it is ignored. A snapshot can cost a pass over the whole model
-// store, so this keeps a script in a loop from having the server do that without end.
+// Rate limit per page for request and subscribe; a message past it is ignored. A snapshot can cost
+// a pass over the whole model store.
 export const ADMIN_REQUEST_LIMIT: RateLimit = { messagesPerSecond: 10, burst: 20 };
 
-// What AdminData reads. All of it read only: nothing in here is ever called to change anything.
 export interface AdminSources {
     store: DataStore;
     socketio: SocketIOServer;
@@ -60,7 +56,7 @@ interface Subscription {
     query: Query;
     // Equal for two pages asking for the same thing, which then share one snapshot.
     key: string;
-    // The request number of the request or subscribe, echoed in every snapshot it is sent.
+    // The page's request number, echoed in every snapshot sent for it.
     request: number | null;
 }
 
@@ -75,8 +71,8 @@ interface AdminPage {
     subscriptions: Map<AdminTopic, Subscription>;
 }
 
-// Whether the page's connection is still sending what it was sent before, as it is for a page that
-// stopped reading: engine.io keeps whatever else it is given meanwhile in memory, until it can send.
+// Whether the page's transport is still sending earlier packets, as for a page that stopped reading:
+// engine.io keeps whatever else it is given in memory until then.
 const isBackedUp = function (page: AdminPage): boolean {
     return !page.client.socket.conn.transport.writable;
 };
@@ -84,13 +80,11 @@ const isBackedUp = function (page: AdminPage): boolean {
 /**
  * Answers the admin UI's pages with read-only snapshots of the server: its settings and counts, the
  * connected clients and their traffic and latency, and the synchronized models. A page asks for a
- * topic once ('request') or for as long as it shows it ('subscribe', until 'unsubscribe' or it
- * disconnects; the latency history only once); a subscribed topic is sent again every
- * ADMIN_REFRESH_MILLIS. Nothing is computed, and nothing asked of the TCP worker, while no page has
- * subscribed. Only clients of the app 'colibri' are answered.
+ * topic once ('request') or for as long as it shows it ('subscribe'); a subscribed topic is sent
+ * again every ADMIN_REFRESH_MILLIS. Only clients of the app 'colibri' are answered.
  *
- * Every snapshot is bounded in size, however much the store holds: a page of models, not the store;
- * a model's JSON up to a limit; names cut to a length.
+ * Every snapshot is bounded in size however much the store holds: a page of models, a model's JSON
+ * up to a limit, names cut to a length.
  *
  * Read only by design: Colibri has no authentication, so whatever a page can do through this
  * channel, anyone who can reach the server can do.
@@ -100,10 +94,10 @@ export class AdminData extends Service {
     public get groupName(): string { return 'web'; }
 
     private readonly pages = new Map<string, AdminPage>();
-    // One for every snapshot and page: what it measures a second is bounded for all of them.
+    // Shared by all snapshots and pages, so its measuring budget covers them together.
     private readonly measures = new ModelMeasures();
     private refreshTimer: NodeJS.Timeout | undefined;
-    // Set while a refresh waits for the TCP worker, so that a slow answer does not stack them up.
+    // Set while a refresh waits for the TCP worker, so a slow answer does not stack refreshes.
     private refreshing = false;
 
     public constructor(private readonly sources: AdminSources) {
@@ -116,8 +110,7 @@ export class AdminData extends Service {
         this.sources.socketio.messages$
             .pipe(filter(msg => msg.channel === ADMIN_CHANNEL))
             .subscribe(msg => {
-                // Nothing a client sends may escape from here: RxJS rethrows it asynchronously,
-                // where it is an uncaught exception and main.ts shuts the server down.
+                // An exception escaping a subscriber is uncaught and main.ts shuts the server down.
                 try {
                     this.handleMessage(msg);
                 } catch (err) {
@@ -134,7 +127,6 @@ export class AdminData extends Service {
         this.pages.clear();
     }
 
-    // How many topics the pages have subscribed to, all together.
     public get subscriptionCount(): number {
         let count = 0;
         for (const page of this.pages.values()) count += page.subscriptions.size;
@@ -184,12 +176,10 @@ export class AdminData extends Service {
         if (this.pages.delete(id)) this.updateRefreshTimer();
     }
 
-    // Runs only while some page has subscribed to something.
     private updateRefreshTimer(): void {
         const needed = this.subscriptionCount > 0;
         if (needed && !this.refreshTimer) {
             this.refreshTimer = setInterval(() => void this.refresh(), ADMIN_REFRESH_MILLIS);
-            // Never the reason the process stays alive.
             this.refreshTimer.unref();
         } else if (!needed && this.refreshTimer) {
             clearInterval(this.refreshTimer);
@@ -214,11 +204,9 @@ export class AdminData extends Service {
         }
     }
 
-    // Builds each snapshot once for all the pages that asked for the same thing, and sends it to
-    // those still connected. A refresh skips the pages that have not taken the previous one yet:
-    // they would only pile up, and the next refresh replaces it anyway. Anything but a refresh is a
-    // page's first snapshot, whose client rows carry their rate history. Never rejects: its callers
-    // do not wait for it.
+    // Builds each snapshot once for all pages that asked for the same thing. A refresh skips backed-up
+    // pages: the next refresh replaces what they missed. Anything but a refresh is a page's first
+    // snapshot, whose client rows carry their rate history. Never rejects: callers do not await it.
     private async send(due: Due[], refresh = false): Promise<void> {
         try {
             if (refresh) due = due.filter(item => !isBackedUp(item.page));

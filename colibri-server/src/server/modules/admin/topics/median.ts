@@ -1,4 +1,4 @@
-// Sorts the values.
+// Sorts `values` in place.
 export const median = function (values: number[]): number {
     values.sort((a, b) => a - b);
     const middle = values.length >> 1;

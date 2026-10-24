@@ -1,8 +1,8 @@
 import { MAX_NAME_LENGTH } from './name-length.js';
 
-// A name a query asks for, cut to one character more than MAX_NAME_LENGTH, so that what a snapshot
-// sends back of the query stays small. No row shows a name that long in full, so a page cannot have
-// taken one from a row, and a longer name cut to it matches nothing.
+// Cut to one character past MAX_NAME_LENGTH, so the query a snapshot echoes stays small. Rows never
+// show a name that long in full, so a page cannot have taken one from a row, and a longer name cut
+// to this matches nothing.
 export const queryName = function (fields: Record<string, unknown>, name: string): string {
     return stringField(fields, name).slice(0, MAX_NAME_LENGTH + 1);
 };

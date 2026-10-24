@@ -60,8 +60,8 @@ export const protocolRejection = function (clientVersion: string): ProtocolRejec
 
 // Sent to every Socket.IO client that was not refused, right on connect. A server that predates
 // the version check refuses no one and announces nothing, so a client treats the absence of this
-// message as an out-of-date server. It is not inferred from existing traffic: the 100 ms `latency`
-// broadcast dates from colibri-server 1.2.0, so 1.2.x and 1.3.x would pass as current.
+// message as an out-of-date server. Existing traffic cannot tell: the 100 ms `latency` broadcast
+// dates from colibri-server 1.2.0, so 1.2.x and 1.3.x would pass as current.
 // TCP clients need none: a pre-2.0.0 server already fails on the framing.
 export const PROTOCOL_ACCEPTED_COMMAND = 'protocol::accepted';
 
@@ -307,6 +307,8 @@ export class FrameReader {
             }
 
             default:
+                // `type` is the raw byte from the wire, so any value 0..255 reaches here although the
+                // parameter is typed FrameType.
                 throw new FrameError(`Unknown frame type: ${String(type)}`);
         }
     }

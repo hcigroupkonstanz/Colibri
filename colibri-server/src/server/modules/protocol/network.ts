@@ -32,8 +32,8 @@ export abstract class NetworkServer {
 
     // Optional fast path for broadcasting to one app. A transport that groups clients (Socket.IO rooms)
     // encodes the packet once per group; without it ConnectionPool falls back to broadcast().
-    // Implementations must return before touching message.payload when the app has no recipient:
-    // resolving a payload across transports costs a JSON parse or stringify, and every client
-    // connect/disconnect broadcasts to app 'colibri', whose clients in practice sit on one transport.
+    // Must return before touching message.payload when the app has no recipient: resolving a payload
+    // across transports costs a JSON parse or stringify, and every client connect/disconnect
+    // broadcasts to app 'colibri', whose clients in practice sit on one transport.
     public broadcastToApp?(message: NetworkMessage, app: string, exceptClientId?: string): void;
 }

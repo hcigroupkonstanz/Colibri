@@ -5,13 +5,11 @@ import { clip, truncatedFlag } from './name-length.js';
 import { fieldsOf, integerField, queryName, stringField } from './query-fields.js';
 import { wallClock } from './wall-clock.js';
 
-// Models a page of the model list holds by default, and at most.
 export const DEFAULT_MODELS_LIMIT = 50;
 export const MAX_MODELS_LIMIT = 200;
-// Channels the model list's overview lists at most, and recently deleted ids.
+// At most this many channels in the overview and deleted ids in the list.
 export const MAX_CHANNELS = 500;
 export const MAX_DELETED = 100;
-// How long a model list filter may be.
 export const MAX_FILTER_LENGTH = 200;
 
 export interface ModelsQuery {
@@ -71,12 +69,12 @@ export interface DeletedRow {
 export interface ModelsSnapshot {
     at: number;
     query: ModelsQuery;
-    // Every app and channel holding models or tombstones, in the order they were first written to,
-    // the first MAX_CHANNELS of channelsTotal.
+    // Every app and channel holding models or tombstones: those with models in store order, then
+    // those with only tombstones. The first MAX_CHANNELS of channelsTotal.
     channels: ChannelSummary[];
     channelsTotal: number;
-    // The models matching the query from `offset` on, at most `limit`, in store order: by app and
-    // channel as above, then in the order the models were created. `total` match the query.
+    // The models matching the query from `offset` on, at most `limit`, in store order (by app and
+    // channel as above, then in creation order). `total` is how many match.
     models: ModelRow[];
     total: number;
     // The ids matching the query deleted within tombstoneSeconds, the newest first, at most
@@ -127,7 +125,7 @@ const modelPass = function (scope: SnapshotScope, measures: ModelMeasures, perfo
 
 const tombstonePass = function (scope: SnapshotScope, now: number, performanceNow: number): { deleted: DeletedRow[]; deletedTotal: number } {
     const { store, matchesName, inScope, summaryOf } = scope;
-    // Each app's come oldest first: its newest MAX_DELETED are candidates for the newest overall.
+    // liveTombstones comes oldest first per app: each app's newest MAX_DELETED are the candidates.
     const candidates: [string, Readonly<Tombstone>][] = [];
     let deletedTotal = 0;
     for (const app of store.tombstoneApps()) {
@@ -141,7 +139,7 @@ const tombstonePass = function (scope: SnapshotScope, now: number, performanceNo
             newest.push([app, tombstone]);
             if (newest.length > 2 * MAX_DELETED) newest = newest.slice(-MAX_DELETED);
         }
-        // Newest first, which a sort keeps for ids deleted in the same millisecond.
+        // Newest first, which the stable sort below keeps for ids deleted in the same millisecond.
         candidates.push(...newest.slice(-MAX_DELETED).reverse());
     }
     const deleted: DeletedRow[] = candidates

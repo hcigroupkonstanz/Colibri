@@ -1,17 +1,12 @@
-// Size and indented JSON of models for the admin UI snapshots. Measuring costs main thread time in
-// proportion to the model, so it is budgeted per second for all pages together; formatting stops at
-// a fixed length.
 import type { ModelEntry } from '../models/data-store.js';
 import { formatJson } from './format-json.js';
 import type { FormattedJson } from './format-json.js';
 
-// Bytes measured per second for all pages together, about 20 ms of main thread. The bucket holds at
-// most one second's worth.
+// About 20 ms of main thread a second. The bucket holds at most one second's worth.
 export const MODEL_BYTES_PER_SECOND = 2 * 1024 * 1024;
 
-// How long the old size of a changed model is shown before it is measured again, so a model that
-// changes every frame is not measured on every refresh. Measuring costs about 10 ms a MiB, so large
-// models wait longer.
+// A changed model keeps its old size this long before it is measured again, so one that changes
+// every frame is not measured on every refresh. Large models (about 10 ms a MiB) wait longer.
 export const MODEL_SIZE_REFRESH_MILLIS = 10_000;
 export const LARGE_MODEL_BYTES = 1024 * 1024;
 export const LARGE_MODEL_SIZE_REFRESH_MILLIS = 60_000;
@@ -34,8 +29,9 @@ interface Formatted extends FormattedJson {
 }
 
 /**
- * Measures and formats models for the admin UI snapshots. The measuring budget is per instance, so
- * all pages share one. What it caches lives here, not in the store.
+ * Measures and formats models for the admin UI snapshots. Measuring costs main thread time in
+ * proportion to the model, so the budget is per instance and all pages share one. What it caches
+ * lives here, not in the store.
  */
 export class ModelMeasures {
     private readonly sizes = new WeakMap<Readonly<ModelEntry>, Size>();

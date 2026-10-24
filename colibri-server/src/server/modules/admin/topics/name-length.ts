@@ -1,9 +1,7 @@
-// How much of an app, channel, model id or client name a snapshot carries. A longer one is cut, and
-// its row says so. Ids and channels are that short in practice; this only bounds what an odd client
-// can make a snapshot carry.
+// Longest app, channel, model id or client name a snapshot carries. A longer one is cut and its row
+// flagged truncated; this bounds what an odd client can make a snapshot carry.
 export const MAX_NAME_LENGTH = 512;
 
-// The text, cut to MAX_NAME_LENGTH.
 export const clip = function (text: string): string {
     return text.length > MAX_NAME_LENGTH ? text.slice(0, MAX_NAME_LENGTH) : text;
 };

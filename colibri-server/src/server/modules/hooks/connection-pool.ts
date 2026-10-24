@@ -7,22 +7,19 @@ import type { NetworkClient, NetworkMessage, NetworkServer } from '../protocol/n
 
 export type MessageHandler = (message: NetworkMessage) => void;
 
-// Past this many clients in one app, the pool warns that the app may be shared by accident, e.g.
-// separate projects that all kept the same default App Name. A typical app has a handful of devices
-// plus a browser or two.
+// Past this many clients in one app, the pool warns that projects may share it by accident, e.g. by
+// keeping the default App Name. A typical app has a handful of devices plus a browser or two.
 export const DEFAULT_APP_CLIENT_WARNING_THRESHOLD = 8;
 
-// Colibri's own channels: 'colibri' (latency pings and echoes, protocol messages) and 'colibri::*' (client
-// list, log requests that WebLog takes straight off the Socket.IO server). Never reported as unhandled.
 const COLIBRI_CHANNEL = 'colibri';
 const COLIBRI_CHANNEL_PREFIX = 'colibri::';
 
-// Bound on the distinct (app, channel, command) combinations warned about as unhandled, so a client
-// that invents a new command per message cannot grow the memory or the log without limit.
+// Bound on the (app, channel, command) combinations warned about as unhandled, so a client that
+// invents a command per message cannot grow the memory or the log without limit.
 export const MAX_UNHANDLED_COMMAND_WARNINGS = 1000;
 
-// A channel or command can be up to 65535 bytes (MAX_FIELD_LENGTH). Only this much is kept or logged;
-// names that only differ after it count as one.
+// A channel or command can be up to 65535 bytes (MAX_FIELD_LENGTH). Only this much is kept or
+// logged; names that differ only after it count as one.
 const MAX_NAME_IN_WARNING = 200;
 
 export const abbreviate = function (name: string): string {
@@ -54,8 +51,7 @@ export class ConnectionPool extends Service {
     // another app (TCP re-handshake), and the object it replaces has to leave its app's Set.
     private readonly clientById = new Map<string, NetworkClient>();
 
-    // The constructor's single merge() subscription dispatches into these. handlersByCommand routes an
-    // exact command by lookup; wildcardHandlers covers channel filters and command prefixes.
+    // handlersByCommand: exact command, by lookup. wildcardHandlers: channel filters and command prefixes.
     private readonly handlersByCommand = new Map<string, MessageHandler[]>();
     private readonly wildcardHandlers: WildcardHandler[] = [];
 
@@ -103,7 +99,8 @@ export class ConnectionPool extends Service {
         merge(...servers.map(c => c.messages$)).subscribe(message => this.dispatch(message));
     }
 
-    // Exact-command dispatch, e.g. 'model::update', the busiest message in an object-sync server.
+    // By exact command, looked up instead of tested per message: 'model::update' is the busiest message
+    // of an object-sync server.
     public onCommand(command: string, handler: MessageHandler): void {
         let handlers = this.handlersByCommand.get(command);
         if (!handlers) {
@@ -140,10 +137,9 @@ export class ConnectionPool extends Service {
         }
     }
 
-    // Handlers run on input from the network. A throw out of the merge() subscription reaches the
-    // uncaughtException handler and shuts the server down, so each handler is contained: a malformed
-    // message fails one handler, not the others or later messages.
-    // The payload stays out of the log line: it can be megabytes.
+    // Handlers run on network input. A throw out of the merge() subscription is uncaught and shuts the
+    // server down, so each handler is contained: a malformed message fails one handler, not the
+    // others or later messages.
     private runHandler(handler: MessageHandler, message: NetworkMessage): void {
         try {
             handler(message);
@@ -164,6 +160,7 @@ export class ConnectionPool extends Service {
         return true;
     }
 
+    // The payload stays out of the line: it can be megabytes.
     private logHandlerError(message: NetworkMessage, err: unknown): void {
         const origin = message.origin ? `client ${message.origin.id} ('${message.origin.name}', app '${message.origin.app}')` : 'an unknown client';
         this.logError(

@@ -68,7 +68,6 @@ export interface ServerSnapshot {
     // Seconds.
     uptime: number;
     settings: ServerSettings;
-    // The certificate's names (its subject alternative names, or its subject), issuer and validity.
     tls: TlsSnapshot | null;
     // The certificates the proxy presents at PROXY_TLS_ADDRESSES, one entry per certificate with the
     // addresses that presented it, and one per address that could not be checked. Empty until the
@@ -79,11 +78,10 @@ export interface ServerSnapshot {
         certificate: (TlsSnapshot & { trusted: boolean; trustError: string | null }) | null;
         error: string | null;
     }> | null;
-    // TLS that ends at a trusted proxy in front of this server, which sees only the proxy's own
-    // connections and knows of it only from the proxy or the operator. `web`: a web client or admin
-    // page connected now, the one asking included, reached the proxy over TLS (see
-    // ClientRow.tlsAtProxy). `tcp`: TCP_TLS_AT_PROXY applies, so every Unity client through the
-    // proxy counts as TLS at the proxy, connected now or not.
+    // TLS that ends at a trusted proxy, which this server only sees as the proxy's connections.
+    // `web`: a web client or admin page connected now, the one asking included, reached the proxy
+    // over TLS (see ClientRow.tlsAtProxy). `tcp`: TCP_TLS_AT_PROXY applies, so every Unity client
+    // through the proxy counts as TLS at the proxy, connected now or not.
     tlsAtProxy: { web: boolean; tcp: boolean };
     voice: VoiceStatus | null;
     counts: {
