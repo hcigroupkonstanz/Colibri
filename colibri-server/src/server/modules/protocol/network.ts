@@ -18,7 +18,7 @@ export interface NetworkClient {
 
 // How a transport treats a message for a client that is falling behind.
 // 'relay' (default): traffic between clients, where only the latest counts; dropped for a recipient
-// too far behind (TCPServerWorker.writeToClient).
+// too far behind (ClientWriter.writeToClient).
 // 'reply': the server's answer to one client's own request (model::request). Nothing resends it, so it
 // is queued instead; only a separate backlog limit drops it.
 export type Delivery = 'relay' | 'reply';

@@ -33,7 +33,7 @@ export interface TcpClient {
         droppedSinceWarning: number;
         // Bytes of messages written to this client since its last heartbeat; see HEARTBEAT_EVERY_BYTES.
         bytesSinceHeartbeat: number;
-        // Heartbeats handed to the socket that it has not flushed to the kernel yet; see handleHeartbeat.
+        // Heartbeats handed to the socket that it has not flushed to the kernel yet; see ClientWriter.writeTickHeartbeat.
         heartbeatsQueued: number;
         // Bytes of replies handed to the socket that it has not flushed to the kernel yet; see
         // MAX_REPLY_BACKLOG_BYTES. Taken off writableLength before it is compared with highWaterMark.

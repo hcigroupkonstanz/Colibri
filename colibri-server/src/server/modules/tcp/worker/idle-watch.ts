@@ -9,7 +9,7 @@ import type { TcpClient } from './tcp-client.js';
 // heartbeat from its receive thread, so even a main thread busy loading a scene keeps it talking.
 //
 // That holds only as long as the client finds heartbeats in what it reads, also while it is still
-// reading a backlog: see HEARTBEAT_EVERY_BYTES and TCPServerWorker.writeHeartbeat.
+// reading a backlog: see HEARTBEAT_EVERY_BYTES and ClientWriter.writeHeartbeat.
 //
 // A message larger than HEARTBEAT_EVERY_BYTES has no heartbeat inside it, though, so a client
 // reading one can echo nothing until it is through: a 4 MiB broadcast takes about 21 s over a link
