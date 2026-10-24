@@ -23,35 +23,16 @@ import {
     protocolRejection,
 } from '../../protocol/protocol.js';
 import type { DecodedFrame } from '../../protocol/protocol.js';
-import type {
-    HeldUpdate,
-    Limited,
-    RateLimit,
-} from '../../limits/inbound-limits.js';
-import {
-    DEFAULT_RATE_LIMIT,
-    EPISODE_QUIET_MILLIS,
-    InboundBacklog,
-    InboundRateLimiter,
-    LIMITED_TRAFFIC,
-    LimitEpisode,
-    MODEL_UPDATE_COMMAND,
-    asModelUpdate,
-    describeEpisode,
-    isLimitable,
-    lostUpdatesNote,
-    rateLimitEndWarning,
-    rateLimitStartWarning,
-    warnsAtEnd,
-} from '../../limits/inbound-limits.js';
+import { isLimitable } from '../../limits/inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
 import { ClientWriter } from './client-writer.js';
 import { CLOSE_GRACE_MILLIS } from './end-refused.js';
 import { IdleWatch } from './idle-watch.js';
+import { InboundGate } from './inbound-gate.js';
 import { KEEPALIVE_INITIAL_DELAY_MILLIS } from './keepalive.js';
 import { TlsPort } from './tls-port.js';
 import { createTcpClient } from './tcp-client.js';
-import type { Refusal, TcpClient } from './tcp-client.js';
+import type { TcpClient } from './tcp-client.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from '../../net/addresses.js';
 import { RATE_WINDOW_MILLIS } from '../../limits/client-activity.js';
 import { toBuffer } from '../../protocol/to-buffer.js';
@@ -71,12 +52,6 @@ export const TCP_SERVER_WORKER = fileURLToPath(import.meta.url);
 
 // A channel or command may be up to 64 KiB; a log line names only this much of one.
 const abbreviateName = (name: string): string => (name.length > 200 ? `${name.slice(0, 200)}...` : name);
-
-// How many TCP messages may be waiting for the main thread before the worker starts holding back
-// model updates and dropping broadcasts (see isLimitable). At the main thread's saturation point on
-// a 4-core test machine (about 15k model::update/s) 2000 is roughly 130 ms of work: well clear of a
-// normal burst, and short enough that what does get through is not seconds old.
-export const DEFAULT_INBOUND_BACKLOG_LIMIT = 2000;
 
 type FrameOf<T extends FrameType> = Extract<DecodedFrame, { type: T }>;
 
@@ -108,18 +83,13 @@ export class TCPServerWorker extends WorkerService {
 
     private heartbeatInterval: NodeJS.Timeout | undefined;
 
-    private inboundBacklog = new InboundBacklog(undefined, DEFAULT_INBOUND_BACKLOG_LIMIT);
-    // Logged once when the backlog has been overflowing for EPISODE_WARNING_MILLIS and once when it
-    // has drained, however much is held back or dropped in between - not per message, which under
-    // overload would itself be thousands of posts a second to the thread that is already behind. A
-    // shorter episode is summed up in a single debug line.
-    private readonly backlogEpisode = new LimitEpisode();
-    // Clients with updates held back, for the tick to pass on as room frees up.
-    private readonly clientsHolding = new Set<TcpClient>();
-
-    // The backstop for one runaway client, which on its own can push the main thread into the
-    // backlog limit above and so slow every other client's updates down too.
-    private rateLimiter = this.createRateLimiter(DEFAULT_RATE_LIMIT);
+    // Every client message for the main thread's hooks is posted through it; configure() sets its
+    // limits.
+    private readonly inboundGate = new InboundGate({
+        postMessage: (channel, content) => this.postMessage(channel, content),
+        logDebug: (msg) => this.logDebug(msg),
+        logWarning: (msg) => this.logWarning(msg),
+    });
 
     // Ends the clients that have gone quiet; configure() sets its timeout.
     private readonly idleWatch = new IdleWatch({
@@ -207,11 +177,7 @@ export class TCPServerWorker extends WorkerService {
     }
 
     public configure(options: TcpServerOptions): void {
-        this.inboundBacklog = new InboundBacklog(
-            options.inboundBacklog,
-            options.inboundBacklogLimit ?? DEFAULT_INBOUND_BACKLOG_LIMIT
-        );
-        this.rateLimiter = this.createRateLimiter(options.rateLimit ?? DEFAULT_RATE_LIMIT);
+        this.inboundGate.configure(options);
         this.idleWatch.configure(options);
         this.tlsPort.configure(options.tls);
         this.proxyProtocolGate.configure(options);
@@ -220,18 +186,6 @@ export class TCPServerWorker extends WorkerService {
     // Switches the TLS port to a renewed certificate; TlsPort.useTlsCredentials has the details.
     public useTlsCredentials(credentials: TcpTlsCredentials): void {
         this.tlsPort.useTlsCredentials(credentials);
-    }
-
-    private createRateLimiter(limit: RateLimit): InboundRateLimiter<TcpClient> {
-        const describe = (client: TcpClient) => `Unity client '${client.name}' (${client.id}, app '${client.app}', ${client.address})`;
-        return new InboundRateLimiter<TcpClient>(limit, {
-            started: (client) => this.logWarning(rateLimitStartWarning(describe(client), limit)),
-            ended: (client, summary, left) => {
-                const text = rateLimitEndWarning(describe(client), summary, left);
-                if (warnsAtEnd(summary)) this.logWarning(text);
-                else this.logDebug(text);
-            },
-        });
     }
 
     public start(port: number, host: string): void {
@@ -258,23 +212,7 @@ export class TCPServerWorker extends WorkerService {
         this.handleHeartbeat();
 
         const now = performance.now();
-        this.drainAllHeld(now);
-        this.rateLimiter.sweep(now);
-
-        const backlogSummary = this.backlogEpisode.endIfQuiet(now);
-        if (backlogSummary?.warned) {
-            this.logWarning(
-                `The main thread has caught up with TCP messages again; ${describeEpisode(backlogSummary)} while it was behind.` +
-                    lostUpdatesNote(backlogSummary)
-            );
-        } else if (backlogSummary) {
-            const text =
-                `The main thread was briefly ${this.inboundBacklog.limit} TCP messages behind (TCP_INBOUND_BACKLOG_LIMIT) and has ` +
-                `caught up; ${describeEpisode(backlogSummary)} while it was behind.` +
-                lostUpdatesNote(backlogSummary);
-            if (warnsAtEnd(backlogSummary)) this.logWarning(text);
-            else this.logDebug(text);
-        }
+        this.inboundGate.tick(now);
 
         this.idleWatch.tick(now, this.clients, this.waitingClients);
 
@@ -296,22 +234,13 @@ export class TCPServerWorker extends WorkerService {
                 id: client.id,
                 in: client.traffic.receivedPerSecond,
                 out: client.traffic.sentPerSecond,
-                limit: this.limitOf(client, now),
-                held: client.held.size,
+                limit: this.inboundGate.limitOf(client, now),
+                held: this.inboundGate.heldSize(client),
                 ...(history ? { history: client.traffic.history(now, wallNow) } : {}),
             });
         }
         const report: TcpClientActivityReport = { request, clients };
         this.postMessage('clientActivity$', report as unknown as { [key: string]: unknown });
-    }
-
-    // The limit holding the client's updates back now: the one that last refused one of its
-    // messages, as long as it still has updates held back or was refused within the last
-    // EPISODE_QUIET_MILLIS (a client that only sends broadcasts never has anything held).
-    private limitOf(client: TcpClient, now: number): Refusal | null {
-        if (!client.limitedBy) return null;
-        if (client.held.size > 0 || now - client.limitedAt < EPISODE_QUIET_MILLIS) return client.limitedBy;
-        return null;
     }
 
     // Tolerates being called before start() (an 'm:stop' racing startup) and destroys live
@@ -479,7 +408,7 @@ export class TCPServerWorker extends WorkerService {
     private onHandshakeFrame(client: TcpClient, frame: FrameOf<FrameType.Handshake>): void {
         // A re-handshake can move the client to another app; what it sent in the old
         // one has to reach the main thread while it is still in the old one.
-        this.releaseHeld(client);
+        this.inboundGate.releaseHeld(client);
         try {
             this.assignApp(client, frame.app, frame.name, frame.version);
         } catch (err) {
@@ -522,10 +451,10 @@ export class TCPServerWorker extends WorkerService {
             // Nothing may overtake what the client sent before it, so whatever of its
             // updates is held back goes first - a model::delete must not arrive ahead
             // of an update to the same object and have that update bring it back.
-            this.releaseHeld(client);
-            this.postClientMessage(client, frame.channel, frame.command, frame.payload);
+            this.inboundGate.releaseHeld(client);
+            this.inboundGate.postClientMessage(client, frame.channel, frame.command, frame.payload);
         } else {
-            this.acceptLimitable(client, frame.channel, frame.command, frame.payload, now);
+            this.inboundGate.acceptLimitable(client, frame.channel, frame.command, frame.payload, now);
         }
         return true;
     }
@@ -670,158 +599,7 @@ export class TCPServerWorker extends WorkerService {
 
         // ownBytes: a Buffer.from() this small is a view into the 64 KiB Buffer pool, and
         // postMessage would clone all of it - ten times a second per client.
-        this.postClientMessage(client, COLIBRI_CHANNEL, 'latency', ownBytes(Buffer.from(pingTimestamp.toString(), 'utf8')));
-    }
-
-    // Every message for the main thread's hooks goes through here, so each one is counted in the
-    // backlog that TCPServerProxy counts back down once it has been dispatched.
-    private postClientMessage(client: TcpClient, channel: string, command: string, payload: Buffer): void {
-        this.inboundBacklog.posted();
-        this.postMessage('clientMessage$', {
-            channel,
-            command,
-            payload,
-            origin: {
-                id: client.id,
-                app: client.app,
-                name: client.name,
-                version: client.version,
-                metadata: {},
-            },
-        });
-    }
-
-    // A model::update or broadcast::* (see isLimitable). It passes straight on if neither limit is
-    // in the way and none of this client's updates are being held back - that is every message,
-    // as long as the server keeps up. Otherwise an update is held back and merged with the
-    // client's other updates to the same object, and a broadcast is dropped.
-    //
-    // Past the backlog limit the main thread is further behind than it can make up while clients
-    // keep sending at this rate, and every further message would only sit in the queue - in
-    // memory, getting older. Holding updates back here, where each object's pile up into one,
-    // is what keeps both bounded without losing any field's latest value.
-    private acceptLimitable(client: TcpClient, channel: string, command: string, payload: Buffer, now: number): void {
-        // Held updates go first, so this message cannot overtake them; if they cannot all go,
-        // neither can it.
-        const refusedBy = this.drainHeld(client, now) ?? this.admit(client, now);
-        if (!refusedBy) {
-            this.postClientMessage(client, channel, command, payload);
-            return;
-        }
-
-        // A broadcast is dropped; see hold() for an update.
-        const limited = command === MODEL_UPDATE_COMMAND ? this.hold(client, channel, payload) : 'dropped';
-        this.recordLimited(client, refusedBy, limited, now);
-    }
-
-    // Which limit, if any, keeps a client from passing on one more limitable message now. The
-    // backlog first, so a token is only spent on a message that then goes on: a token taken for
-    // one held back by the backlog, and another when it finally goes, would have had a client at a
-    // legitimate 720 updates a second over its own limit of 1000 whenever the server is behind.
-    private admit(client: TcpClient, now: number): Refusal | undefined {
-        if (this.inboundBacklog.full) return 'backlog';
-        if (!this.rateLimiter.take(client, now)) return 'rate';
-        return undefined;
-    }
-
-    // Holds a model update back. It is dropped if the server could not apply it anyway (not a JSON
-    // object with a string id, which ModelSynchronization refuses), and lost if it is for one object
-    // too many (see Limited).
-    private hold(client: TcpClient, channel: string, payload: Buffer): Limited {
-        let model;
-        try {
-            model = asModelUpdate(JSON.parse(payload.toString('utf8')));
-        } catch {
-            return 'dropped';
-        }
-        if (!model) return 'dropped';
-        if (!client.held.hold(channel, model)) return 'lost';
-
-        this.clientsHolding.add(client);
-        return 'held';
-    }
-
-    // Passes on as many of the client's held updates as the limits allow, oldest first. Returns
-    // the limit that stopped it, or undefined once nothing is held any more.
-    private drainHeld(client: TcpClient, now: number): Refusal | undefined {
-        // The case for every message while the server keeps up.
-        if (client.held.size === 0) return undefined;
-
-        while (client.held.size > 0) {
-            // The backlog first, so a full one does not cost the client a token.
-            if (this.inboundBacklog.full) return 'backlog';
-            if (!this.rateLimiter.take(client, now)) return 'rate';
-            this.postHeld(client, client.held.shift()!);
-        }
-        this.clientsHolding.delete(client);
-        return undefined;
-    }
-
-    // Every held update, regardless of the limits: before something from the same client that
-    // must not overtake them, and when it leaves. There are at most MAX_HELD_OBJECTS of them.
-    private releaseHeld(client: TcpClient): void {
-        if (client.held.size === 0) return;
-
-        for (const update of client.held.takeAll()) this.postHeld(client, update);
-        this.clientsHolding.delete(client);
-    }
-
-    // The tick's share-out of whatever room there is: one update per holding client per round,
-    // so under a sustained overload every client's objects keep moving, instead of the first
-    // clients in line taking all of it.
-    private drainAllHeld(now: number): void {
-        let progressed = true;
-        while (progressed && this.clientsHolding.size > 0) {
-            progressed = false;
-            for (const client of this.clientsHolding) {
-                if (this.inboundBacklog.full) return;
-                if (!this.rateLimiter.take(client, now)) continue;
-
-                const update = client.held.shift();
-                if (update) {
-                    this.postHeld(client, update);
-                    progressed = true;
-                }
-                if (client.held.size === 0) this.clientsHolding.delete(client);
-            }
-        }
-    }
-
-    private postHeld(client: TcpClient, update: HeldUpdate): void {
-        // asModelUpdate keeps the nesting that overflows JSON.stringify out of `held`. Should
-        // anything else make it throw, one update is lost, not the worker and every Unity client
-        // on it.
-        let json: string;
-        try {
-            json = JSON.stringify(update.model);
-        } catch (err) {
-            this.logWarning(
-                `Dropped a held model::update for '${update.model.id}' on channel '${update.channel}' from client ${client.id}: ` +
-                    `it could not be written out again (${errorMessage(err)})`
-            );
-            return;
-        }
-        this.postClientMessage(client, update.channel, MODEL_UPDATE_COMMAND, ownBytes(Buffer.from(json, 'utf8')));
-    }
-
-    private recordLimited(client: TcpClient, refusedBy: Refusal, limited: Limited, now: number): void {
-        client.limitedBy = refusedBy;
-        client.limitedAt = now;
-        if (refusedBy === 'rate') {
-            this.rateLimiter.record(client, now, limited);
-            return;
-        }
-
-        if (this.backlogEpisode.record(now, limited)) {
-            // The limit rather than a fresh read of the counter, which the main thread may have
-            // counted down a little since `full` read it - "1998 behind, limit 2000" just confuses.
-            this.logWarning(
-                `The main thread has kept falling ${this.inboundBacklog.limit} TCP messages behind (TCP_INBOUND_BACKLOG_LIMIT) for a ` +
-                    'second now: the server is taking in more than it can process. Until it catches up, for every Unity client ' +
-                    `${LIMITED_TRAFFIC}, ` +
-                    'so synced objects move less smoothly. Fewer synced objects, a lower sync rate or fewer clients per app reduce the load.'
-            );
-        }
+        this.inboundGate.postClientMessage(client, COLIBRI_CHANNEL, 'latency', ownBytes(Buffer.from(pingTimestamp.toString(), 'utf8')));
     }
 
     private handleSocketError(client: TcpClient, error: Error): void {
@@ -855,8 +633,7 @@ export class TCPServerWorker extends WorkerService {
         this.removeFromAppIndex(client);
         // Ahead of clientDisconnected$, so the main thread still knows whose they are: the last
         // state a client sent is applied even if it was held back when it left.
-        this.releaseHeld(client);
-        this.rateLimiter.forget(client);
+        this.inboundGate.clientLeft(client);
         this.postMessage('clientDisconnected$', { id: client.id });
     }
 
