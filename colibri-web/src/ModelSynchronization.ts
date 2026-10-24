@@ -4,6 +4,7 @@ import type { Message } from './Colibri';
 import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './lifecycle';
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
+import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
 import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
@@ -85,17 +86,11 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
     // Property names of changes to own models that are held back instead of sent: made while
     // disconnected or before the server's answer for the model (see registerModel).
-    const heldChanges = new WeakMap<T, Set<string>>();
+    const heldChanges = new ChangesByModel<T>();
 
     // Changes waiting for SyncModel's 1 ms buffer to report them, so they go out together. A remote
     // update does not overwrite them (see applyUpdate).
-    const changesToSend = new WeakMap<T, Set<string>>();
-
-    const noteChangeToSend = (model: T, change: string) => {
-        const toSend = changesToSend.get(model);
-        if (toSend) toSend.add(change);
-        else changesToSend.set(model, new Set([change]));
-    };
+    const changesToSend = new ChangesByModel<T>();
 
     // Own models asked for again after sending their held changes (see sendOnTop), until the answers
     // to that are over (see endWait).
@@ -179,7 +174,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         colibri.sendMessage(name, 'model::request', { id: model.id });
         afresh.set(model.id, Date.now());
         answered.add(model);
-        releaseHeldChanges(model);
+        heldChanges.take(model);
         sendUpdate(colibri, model, toJsonOf(model));
     };
 
@@ -260,7 +255,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             for (const id of [...confirming.keys()]) {
                 const confirmation = endConfirmation(id);
                 const model = models.value.find(m => m.id === id);
-                if (confirmation && model && ownModels.has(model)) holdChanges(model, confirmation.props);
+                if (confirmation && model && ownModels.has(model)) heldChanges.add(model, confirmation.props);
             }
             catchingUpThrough = colibri;
             for (const model of models.value) {
@@ -355,7 +350,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             awaitingAnswer.delete(id);
             endConfirmation(id);
             if (model) {
-                heldChanges.delete(model);
+                heldChanges.drop(model);
                 sendUpdate(asker, model, toJsonOf(model));
             } else if (!isBare(modelData)) {
                 applyUpdate(model, modelData);
@@ -366,7 +361,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
         const afterOutage = askedAfterOutage.get(id);
         if (afterOutage) {
-            const held = [...(heldChanges.get(model) ?? [])];
+            const held = heldChanges.peek(model);
             for (const key of lostChanges(model, modelData, held)) afterOutage.lost.add(key);
             for (const [key, value] of Object.entries(modelData)) afterOutage.shown.set(key, value);
             applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), afterOutage.lost));
@@ -378,13 +373,13 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             for (const key of confirmation.sent.keys()) {
                 if (key in modelData) confirmation.shown.set(key, modelData[key as keyof T]);
             }
-            const held = [...(heldChanges.get(model) ?? [])];
+            const held = heldChanges.peek(model);
             applyUpdate(model, withoutKeys(withoutChanges(modelData, model, held), confirmation.sent.keys()));
             return;
         }
 
         awaitingAnswer.delete(id);
-        const held = releaseHeldChanges(model);
+        const held = heldChanges.take(model);
         applyUpdate(model, withoutChanges(modelData, model, held));
         // Deleted by a subscriber while the list emitted: nothing more to send.
         if (!models.value.includes(model)) {
@@ -413,7 +408,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             awaitingAnswer.delete(id);
             // detach() was called since: it sends nothing.
             if (!ownModels.has(model)) continue;
-            const held = releaseHeldChanges(model);
+            const held = heldChanges.take(model);
             // Remember what the server still holds for the lost fields, stamped now: should the value sent
             // again below be lost too, the next outage's answer is judged against it, however long ago the
             // change was made.
@@ -464,7 +459,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         if (!confirmation || !asker || !model) return;
 
         awaitingAnswer.delete(id);
-        const held = releaseHeldChanges(model);
+        const held = heldChanges.take(model);
         const theirs: Record<string, unknown> = { id };
         const again: string[] = [];
         for (const [key, json] of confirmation.sent) {
@@ -553,7 +548,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // change, and applying it would make the report send the update's value instead.
     const applyUpdate = (model: T | undefined, modelData: Partial<T>) => {
         if (model) {
-            const unsent = [...(changesToSend.get(model) ?? [])];
+            const unsent = changesToSend.peek(model);
             const update = withoutKeys(withoutChanges(modelData, model, unsent), keptOutOf(model));
             if (ownModels.has(model)) remember(model, update);
 
@@ -568,10 +563,10 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             });
 
             newModel.modelChanges.subscribe(change => {
-                noteChangeToSend(newModel, change);
+                changesToSend.add(newModel, [change]);
             });
             newModel.modelChanges$.subscribe(changes => {
-                changesToSend.delete(newModel);
+                changesToSend.drop(newModel);
                 const update = toJsonOf(newModel, changes);
                 SendMessage(name, 'model::update', update);
                 keepOut(newModel, update);
@@ -581,18 +576,6 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             updateOf(newModel, modelData);
             models.next([...models.value, newModel]);
         }
-    };
-
-    const holdChanges = (model: T, changes: string[]) => {
-        const held = heldChanges.get(model);
-        if (held) for (const change of changes) held.add(change);
-        else heldChanges.set(model, new Set(changes));
-    };
-
-    const releaseHeldChanges = (model: T): string[] => {
-        const held = [...(heldChanges.get(model) ?? [])];
-        heldChanges.delete(model);
-        return held;
     };
 
     const onDelete = (id: string) => {
@@ -614,7 +597,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
 
     // Takes a deleted model out of the list and out of everything that waits for it.
     const forget = (id: string, model: T | undefined) => {
-        if (model) heldChanges.delete(model);
+        if (model) heldChanges.drop(model);
         askedAfterOutage.delete(id);
         models.next(models.value.filter(m => m.id !== id));
 
@@ -657,16 +640,15 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         // request, and to a server that forgot the model they would become all of it.
         const mustHold = () => !Colibri.getInstance(false) || disconnected || awaitingAnswer.has(model.id);
         model.modelChanges.subscribe(change => {
-            if (mustHold()) holdChanges(model, [change]);
-            else noteChangeToSend(model, change);
+            if (mustHold()) heldChanges.add(model, [change]);
+            else changesToSend.add(model, [change]);
         });
         model.modelChanges$.subscribe({
             next: () => {
-                const changes = [...(changesToSend.get(model) ?? [])];
-                changesToSend.delete(model);
+                const changes = changesToSend.take(model);
                 if (changes.length > 0) {
                     const colibri = Colibri.getInstance(false);
-                    if (!colibri || mustHold()) holdChanges(model, changes);
+                    if (!colibri || mustHold()) heldChanges.add(model, changes);
                     else sendUpdate(colibri, model, toJsonOf(model, changes));
                 }
 
@@ -678,8 +660,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             // nor the whole model after a reconnect.
             complete: () => {
                 ownModels.delete(model);
-                heldChanges.delete(model);
-                changesToSend.delete(model);
+                heldChanges.drop(model);
+                changesToSend.drop(model);
             }
         });
 
