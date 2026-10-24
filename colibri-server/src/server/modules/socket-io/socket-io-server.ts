@@ -22,27 +22,15 @@ import {
     protocolAcceptance,
     protocolRejection,
 } from '../protocol/protocol.js';
-import type {
-    HeldUpdate,
-    RateLimit,
-} from '../limits/inbound-limits.js';
-import {
-    DEFAULT_RATE_LIMIT,
-    HeldUpdates,
-    InboundRateLimiter,
-    MODEL_UPDATE_COMMAND,
-    asModelUpdate,
-    isLimitable,
-    rateLimitEndWarning,
-    rateLimitStartWarning,
-    warnsAtEnd,
-} from '../limits/inbound-limits.js';
+import type { RateLimit } from '../limits/inbound-limits.js';
+import { DEFAULT_RATE_LIMIT, isLimitable } from '../limits/inbound-limits.js';
 import type { TrustProxy } from '../net/trusted-proxies.js';
 import { forwardedClientAddress, forwardedTls, trustNoProxy } from '../net/trusted-proxies.js';
 import { normalizeAddress } from '../net/addresses.js';
 import type { ClientActivity } from '../limits/client-activity.js';
 import type { WebTraffic } from './web-traffic-counter.js';
 import { WebTrafficCounter } from './web-traffic-counter.js';
+import { WebInboundGate } from './web-inbound-gate.js';
 import { aboutClient } from './about-client.js';
 
 // How often held-back updates are passed on as a limited client's tokens refill, and finished
@@ -90,10 +78,11 @@ export class SocketIOServer extends Service implements NetworkServer {
     private readonly clientDisconnectedStream = new Subject<SocketIoClient>();
     private readonly messageStream = new Subject<NetworkMessage>();
 
-    // The same per-client backstop as the TCP worker's, against a web client's runaway send loop,
-    // with the same treatment of what is over it: updates held back and merged, broadcasts dropped.
-    private rateLimiter = this.createRateLimiter(DEFAULT_RATE_LIMIT);
-    private readonly heldUpdates = new Map<SocketIoClient, HeldUpdates>();
+    private readonly inboundGate = new WebInboundGate({
+        emit: (msg) => this.messageStream.next(msg),
+        logDebug: (msg, metadata) => this.logDebug(msg, metadata),
+        logWarning: (msg, metadata) => this.logWarning(msg, metadata),
+    });
     private rateLimitSweep: NodeJS.Timeout | undefined;
     private trustProxy: TrustProxy = trustNoProxy;
 
@@ -104,7 +93,7 @@ export class SocketIOServer extends Service implements NetworkServer {
     });
 
     public start(server: HttpServer, options: SocketIoServerOptions = {}): void {
-        this.rateLimiter = this.createRateLimiter(options.rateLimit ?? DEFAULT_RATE_LIMIT);
+        this.inboundGate.configure(options.rateLimit ?? DEFAULT_RATE_LIMIT);
         this.trustProxy = options.trustProxy ?? trustNoProxy;
         // Never the reason the process stays alive.
         this.rateLimitSweep = setInterval(() => this.sweepRateLimit(performance.now()), RATE_LIMIT_SWEEP_MILLIS);
@@ -135,81 +124,8 @@ export class SocketIOServer extends Service implements NetworkServer {
         this.logInfo('Stopped SocketIO server');
     }
 
-    private createRateLimiter(limit: RateLimit): InboundRateLimiter<SocketIoClient> {
-        const describe = (client: SocketIoClient) => `Web client ${client.id} (app '${client.app}', ${client.name})`;
-        return new InboundRateLimiter<SocketIoClient>(limit, {
-            started: (client) => this.logWarning(rateLimitStartWarning(describe(client), limit), aboutClient(client)),
-            ended: (client, summary, left) => {
-                const text = rateLimitEndWarning(describe(client), summary, left);
-                if (warnsAtEnd(summary)) this.logWarning(text, aboutClient(client));
-                else this.logDebug(text, aboutClient(client));
-            },
-        });
-    }
-
-    // A model::update or broadcast::* (see isLimitable) from a client: on at once while it is
-    // under its rate limit and has nothing held back, otherwise an update is held back and merged
-    // per object (see HeldUpdates) and a broadcast dropped. Mirrors TCPServerWorker, minus the
-    // backlog limit: a Socket.IO message is handled as it is read, so there is no queue to bound.
-    private acceptLimitable(msg: NetworkMessage & { origin: SocketIoClient }, value: unknown, now: number): void {
-        const client = msg.origin;
-        if (this.drainHeld(client, now) && this.rateLimiter.take(client, now)) {
-            this.messageStream.next(msg);
-            return;
-        }
-
-        // A broadcast, or an update the server could not apply anyway, is dropped; an update for one
-        // object too many is lost (see Limited).
-        const model = msg.command === MODEL_UPDATE_COMMAND ? asModelUpdate(value) : undefined;
-        if (!model) {
-            this.rateLimiter.record(client, now, 'dropped');
-            return;
-        }
-
-        let held = this.heldUpdates.get(client);
-        if (!held) {
-            held = new HeldUpdates();
-            this.heldUpdates.set(client, held);
-        }
-        this.rateLimiter.record(client, now, held.hold(msg.channel, model) ? 'held' : 'lost');
-    }
-
-    // Passes on as many of the client's held updates as its rate limit allows, oldest first.
-    // True once nothing is held any more.
-    private drainHeld(client: SocketIoClient, now: number): boolean {
-        const held = this.heldUpdates.get(client);
-        if (!held) return true;
-
-        while (held.size > 0) {
-            if (!this.rateLimiter.take(client, now)) return false;
-            this.emitHeld(client, held.shift()!);
-        }
-        this.heldUpdates.delete(client);
-        return true;
-    }
-
-    // Every held update regardless of the limit: before something from the same client that must
-    // not overtake them, and when it leaves.
-    private releaseHeld(client: SocketIoClient): void {
-        const held = this.heldUpdates.get(client);
-        if (!held) return;
-
-        this.heldUpdates.delete(client);
-        for (const update of held.takeAll()) this.emitHeld(client, update);
-    }
-
-    private emitHeld(client: SocketIoClient, update: HeldUpdate): void {
-        this.messageStream.next({
-            origin: client,
-            channel: update.channel,
-            command: MODEL_UPDATE_COMMAND,
-            payload: Payload.fromValue(update.model),
-        });
-    }
-
     private sweepRateLimit(now: number): void {
-        for (const client of Array.from(this.heldUpdates.keys())) this.drainHeld(client, now);
-        this.rateLimiter.sweep(now);
+        this.inboundGate.sweep(now);
         this.trafficCounter.sample(this.clients, now);
     }
 
@@ -218,11 +134,11 @@ export class SocketIOServer extends Service implements NetworkServer {
     // fall behind on.
     public activityOf(client: SocketIoClient, history = false): ClientActivity {
         const meter = this.trafficCounter.meterOf(client.id);
-        const held = this.heldUpdates.get(client)?.size ?? 0;
+        const held = this.inboundGate.heldSize(client);
         return {
             in: meter?.receivedPerSecond ?? null,
             out: meter?.sentPerSecond ?? null,
-            limit: held > 0 || this.rateLimiter.isLimited(client) ? 'rate' : null,
+            limit: held > 0 || this.inboundGate.isLimited(client) ? 'rate' : null,
             held,
             ...(history ? { history: meter?.history(performance.now()) ?? [] } : {}),
         };
@@ -440,11 +356,11 @@ export class SocketIOServer extends Service implements NetworkServer {
                 payload: Payload.fromValue(body.payload)
             };
             if (isLimitable(channel, body.command)) {
-                this.acceptLimitable(msg, body.payload, performance.now());
+                this.inboundGate.acceptLimitable(msg, body.payload, performance.now());
             } else {
                 // Held-back updates first: a model::delete must not arrive ahead of an update
                 // to the same object and have that update bring it back.
-                this.releaseHeld(client);
+                this.inboundGate.releaseHeld(client);
                 this.messageStream.next(msg);
             }
         });
@@ -477,8 +393,7 @@ export class SocketIOServer extends Service implements NetworkServer {
             this.removeFromAppIndex(rc);
             // Before clientDisconnected$: the last state a client sent is applied even if it was
             // held back when it left.
-            this.releaseHeld(rc);
-            this.rateLimiter.forget(rc);
+            this.inboundGate.clientLeft(rc);
             this.trafficCounter.forget(rc.id);
             if (rc.app !== ADMIN_APP) { // ignore colibri web interface clients
                 this.logDebug(`Colibri client '${rc.name}' (${rc.id}) disconnected`, { ...aboutClient(rc), ...CONNECTION_LINE });
