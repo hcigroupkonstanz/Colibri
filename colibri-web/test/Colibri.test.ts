@@ -6,25 +6,30 @@ vi.mock('socket.io-client', () => ({
 
 import { firstValueFrom, type Observable } from 'rxjs';
 import { connect } from 'socket.io-client';
-import { Sync } from '../src/Broadcasting';
-import {
-    Colibri,
-    DeleteRestApi,
-    GetRestApi,
-    type Message,
-    PROTOCOL_VERSION,
-    PutRestApi,
-    RegisterChannel,
-    RegisterOnce,
-    SendMessage,
-    UnregisterChannel
-} from '../src/Colibri';
-import { ColibriError, ProtocolMismatchError } from '../src/ColibriError';
-import { RegisterModelSync } from '../src/ModelSynchronization';
+import type * as BroadcastingModule from '../src/Broadcasting';
+import { type Message, PROTOCOL_VERSION } from '../src/Colibri';
+import type * as ColibriModule from '../src/Colibri';
+import type * as ColibriErrorModule from '../src/ColibriError';
+import type * as ModelSynchronizationModule from '../src/ModelSynchronization';
 import { SyncModel } from '../src/SyncModel';
 import { Synced } from '../src/Synced';
 
 const connectMock = connect as unknown as Mock;
+
+let Sync: typeof BroadcastingModule.Sync;
+let Colibri: typeof ColibriModule.Colibri;
+type Colibri = ColibriModule.Colibri;
+let DeleteRestApi: typeof ColibriModule.DeleteRestApi;
+let GetRestApi: typeof ColibriModule.GetRestApi;
+let PutRestApi: typeof ColibriModule.PutRestApi;
+let RegisterChannel: typeof ColibriModule.RegisterChannel;
+let RegisterOnce: typeof ColibriModule.RegisterOnce;
+let SendMessage: typeof ColibriModule.SendMessage;
+let UnregisterChannel: typeof ColibriModule.UnregisterChannel;
+let ColibriError: typeof ColibriErrorModule.ColibriError;
+let ProtocolMismatchError: typeof ColibriErrorModule.ProtocolMismatchError;
+type ProtocolMismatchError = ColibriErrorModule.ProtocolMismatchError;
+let RegisterModelSync: typeof ModelSynchronizationModule.RegisterModelSync;
 
 type SocketHandler = (...args: unknown[]) => void;
 
@@ -68,7 +73,13 @@ function getHandler(mock: ReturnType<typeof makeFakeSocket>['on'], event: string
 
 let fakeSocket: ReturnType<typeof makeFakeSocket>;
 
-beforeEach(() => {
+beforeEach(async () => {
+    vi.resetModules();
+    ({ Sync } = await import('../src/Broadcasting'));
+    ({ Colibri, DeleteRestApi, GetRestApi, PutRestApi, RegisterChannel, RegisterOnce, SendMessage, UnregisterChannel } =
+        await import('../src/Colibri'));
+    ({ ColibriError, ProtocolMismatchError } = await import('../src/ColibriError'));
+    ({ RegisterModelSync } = await import('../src/ModelSynchronization'));
     vi.clearAllMocks();
     fakeSocket = makeFakeSocket();
     connectMock.mockReturnValue(fakeSocket);
@@ -77,6 +88,7 @@ beforeEach(() => {
 afterEach(() => {
     // Colibri.instance is a private static that must not leak between tests.
     (Colibri as unknown as { instance: Colibri | null }).instance = null;
+    fakeSocket.connected = false;
     vi.unstubAllGlobals();
 });
 
@@ -2141,8 +2153,6 @@ describe('keeping a change made after registerModel', () => {
     // The server read the request for the id after the delete, so its answer is the bare id, which
     // was listed as a model with no fields that no other client has.
     it("does not list the bare answer that comes after another client's update and delete", async () => {
-        // On a channel of its own: a RegisterModelSync left from another test, with an own 'p1' on
-        // 'reg', would take that answer as its own and drop it.
         const { models$ } = await registeredLate('reg-deleted');
         endOfAnswers();
         deliver('reg-deleted', { command: 'model::update', payload: { id: 'p1', b: 'theirs' } });
