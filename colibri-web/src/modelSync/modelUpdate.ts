@@ -19,3 +19,16 @@ export const withoutChanges = <T extends SyncModel<T>>(
     const changed = new Set(Object.keys(toJsonOf(model, changes)).filter(key => key !== 'id'));
     return Object.fromEntries(Object.entries(modelData).filter(([key]) => !changed.has(key))) as Partial<T>;
 };
+
+export const fieldsOnTop = <T extends SyncModel<T>>(
+    model: T,
+    id: string,
+    held: string[],
+    keys: string[]
+): Record<string, unknown> => {
+    // toJson() with no properties named is all of them.
+    const current = toJsonOf(model) as Record<string, unknown>;
+    const fields: Record<string, unknown> = held.length > 0 ? toJsonOf(model, held) : { id };
+    for (const key of keys) fields[key] = current[key];
+    return fields;
+};

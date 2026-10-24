@@ -5,7 +5,7 @@ import { Colibri, RegisterChannel, SendMessage } from './Colibri';
 import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './lifecycle';
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
-import { isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
+import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
 import { withColibri } from './modelSync/withColibri';
@@ -429,10 +429,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // case the model is asked for again (see takeAnswer).
     const sendOnTop = (id: string, asker: Colibri, model: T, shown: Partial<T>, held: string[], lost: string[]) => {
         if (held.length === 0 && lost.length === 0) return false;
-        // toJson() with no properties named is all of them.
-        const current = toJsonOf(model) as Record<string, unknown>;
-        const sent: Record<string, unknown> = held.length > 0 ? toJsonOf(model, held) : { id };
-        for (const key of lost) sent[key] = current[key];
+        const sent = fieldsOnTop(model, id, held, lost);
         sendUpdate(asker, model, sent as Partial<T>);
 
         // An undefined field is not sent, so no update shows it.
@@ -480,9 +477,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         }
         applyUpdate(model, withoutChanges(theirs as Partial<T>, model, held));
 
-        const current = toJsonOf(model) as Record<string, unknown>;
-        const update: Record<string, unknown> = held.length > 0 ? toJsonOf(model, held) : { id };
-        for (const key of again) update[key] = current[key];
+        const update = fieldsOnTop(model, id, held, again);
         // detach() was called since: it sends nothing.
         if (ownModels.has(model) && Object.keys(update).length > 1) sendUpdate(asker, model, update as Partial<T>);
         catchUpOnceAnswered();
