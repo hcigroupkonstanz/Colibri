@@ -12,6 +12,7 @@ import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import type { NetworkClient, NetworkMessage, NetworkServer } from '../protocol/network.js';
 import { abbreviate } from '../hooks/connection-pool.js';
+import { ADMIN_APP } from '../admin/admin-app.js';
 import {
     COLIBRI_CHANNEL,
     MAX_FIELD_LENGTH,
@@ -348,7 +349,7 @@ export class SocketIOServer extends Service implements NetworkServer {
         const client = this.clientFromHandshake(socket, peer);
         if (this.refuse(client)) return;
 
-        if (client.app !== 'colibri') { // ignore colibri web interface clients
+        if (client.app !== ADMIN_APP) { // ignore colibri web interface clients
             // One line: a Socket.IO client names its app as it connects, unlike a TCP client, so
             // "waiting for app name" followed by the app, as the TCP server logs it, was noise.
             const through = client.name === peer ? '' : ` through ${peer}`;
@@ -527,7 +528,7 @@ export class SocketIOServer extends Service implements NetworkServer {
             this.releaseHeld(rc);
             this.rateLimiter.forget(rc);
             this.traffic.delete(rc.id);
-            if (rc.app !== 'colibri') { // ignore colibri web interface clients
+            if (rc.app !== ADMIN_APP) { // ignore colibri web interface clients
                 this.logDebug(`Colibri client '${rc.name}' (${rc.id}) disconnected`, { ...aboutClient(rc), ...CONNECTION_LINE });
             }
             this.clientDisconnectedStream.next(rc);

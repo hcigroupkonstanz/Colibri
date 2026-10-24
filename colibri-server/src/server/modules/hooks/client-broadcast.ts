@@ -1,5 +1,6 @@
 import { Payload } from '../protocol/payload.js';
 import { Service } from '../core/service.js';
+import { ADMIN_APP } from '../admin/admin-app.js';
 import type { ConnectionPool } from './connection-pool.js';
 import type { NetworkClient, NetworkMessage } from '../protocol/network.js';
 
@@ -36,10 +37,10 @@ export class ClientBroadcast extends Service {
         };
 
         // ignore frontend clients
-        if (client.app && client.app !== 'colibri') {
+        if (client.app && client.app !== ADMIN_APP) {
             this.pool.broadcast(msg, client.app);
             // broadcast to frontend
-            this.pool.broadcast(msg, 'colibri');
+            this.pool.broadcast(msg, ADMIN_APP);
         }
     }
 
@@ -54,8 +55,8 @@ export class ClientBroadcast extends Service {
         const clients = this.pool.currentClients
             .filter(c => {
                 // send all clients to frontend
-                if (origin.app === 'colibri')
-                    return c.app !== 'colibri';
+                if (origin.app === ADMIN_APP)
+                    return c.app !== ADMIN_APP;
                 // send only clients of the same app to other clients
                 return c.app === origin.app;
             })

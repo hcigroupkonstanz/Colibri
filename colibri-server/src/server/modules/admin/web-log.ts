@@ -3,13 +3,13 @@ import { CONNECTION_METADATA_KEY, LogLevel } from '../core/log-message.js';
 import { Payload } from '../protocol/payload.js';
 import { errorMessage } from '../core/error-message.js';
 import { RingBuffer } from '../core/ring-buffer.js';
+import { ADMIN_APP } from './admin-app.js';
 import { Service } from '../core/service.js';
 import type { NetworkMessage } from '../protocol/network.js';
 import type { SocketIoClient, SocketIOServer } from '../socket-io/socket-io-server.js';
 import { filter } from 'rxjs';
 import { randomUUID } from 'crypto';
 
-const LOGGING_APP = 'colibri';
 const MAX_LOG_SIZE = 20000;
 // Caps the history by size as well as count: a client's RemoteLogger sends whatever it logs.
 export const MAX_LOG_CHARS = 8 * 1024 * 1024;
@@ -156,7 +156,7 @@ export class WebLog extends Service {
         // unless some admin UI receives the line.
         const clients: SocketIoClient[] = [];
         for (const client of this.socketio.currentClients) {
-            if (client.app !== LOGGING_APP) continue;
+            if (client.app !== ADMIN_APP) continue;
 
             const clientFilter = client.metadata['log::filter'];
             if (clientFilter && clientFilter !== log.metadata.clientApp) continue;
