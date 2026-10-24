@@ -53,7 +53,7 @@ export interface TcpClient {
         unreadLargeBytes: number;
         lastLargeWrittenAt: bigint;
     };
-    // Whether any bytes have been received from it yet; see acceptChunk.
+    // Whether any bytes have been received from it yet; see InboundHandler.acceptChunk.
     receivedAny: boolean;
     // Model updates over a limit, waiting for room; see HeldUpdates.
     held: HeldUpdates;

@@ -138,7 +138,7 @@ interface WorkerInternals {
     clients: Map<string, { id: string; app: string; socket: net.Socket }>;
     waitingClients: Map<string, { id: string; socket: net.Socket }>;
     clientsByApp: AppIndex<{ id: string }>;
-    v1WarnedAt: { size: number };
+    inboundHandler: { v1WarnedAt: { size: number } };
     stop(): void;
 }
 
@@ -496,7 +496,7 @@ describe('TCPServerWorker', () => {
             }
 
             expect(v1Warnings()).toHaveLength(3000);
-            expect(internals.v1WarnedAt.size).toBeLessThanOrEqual(1024);
+            expect(internals.inboundHandler.v1WarnedAt.size).toBeLessThanOrEqual(1024);
         });
 
         it('still reports other garbage as an invalid frame', () => {

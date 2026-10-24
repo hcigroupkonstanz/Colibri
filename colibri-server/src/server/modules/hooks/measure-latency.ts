@@ -21,7 +21,7 @@ export class MeasureLatency extends Service {
 
         // Send out latency message
         // TCP clients are pinged by the worker's heartbeat frame (TCPServerWorker.handleHeartbeat,
-        // handlePong); a second ping here would double their idle packets. This only reaches Socket.IO clients.
+        // InboundHandler.handlePong); a second ping here would double their idle packets. This only reaches Socket.IO clients.
         setInterval(() => this.sendPing(frontendConnection), 100);
 
         // receive latency
