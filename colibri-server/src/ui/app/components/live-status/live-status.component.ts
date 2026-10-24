@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { SocketIOService } from '../../services';
+import { SocketIOService } from '../../services/socketio.service';
 
 const LABELS = { connected: 'Live', connecting: 'Connecting', reconnecting: 'Offline' } as const;
 

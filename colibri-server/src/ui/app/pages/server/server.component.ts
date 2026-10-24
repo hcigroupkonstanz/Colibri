@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import type { BuildInfo, ServerSnapshot, SettingValue, TlsInfo } from '../../services';
-import { AdminService } from '../../services';
+import type { BuildInfo, ServerSnapshot, SettingValue, TlsInfo } from '../../services/admin.service';
+import { AdminService } from '../../services/admin.service';
 import { LiveStatusComponent } from '../../components/live-status/live-status.component';
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
 import { bytes, count, duration } from '../../format';

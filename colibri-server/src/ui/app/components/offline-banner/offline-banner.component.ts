@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { SocketIOService } from '../../services';
+import { SocketIOService } from '../../services/socketio.service';
 
 @Component({
     selector: 'app-offline-banner',

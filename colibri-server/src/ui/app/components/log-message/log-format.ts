@@ -1,4 +1,4 @@
-import type { LogMessage } from '../../services';
+import type { LogMessage } from '../../services/log.service';
 
 export const LEVEL_TAGS: ReadonlyArray<string> = [ 'ERR', 'WRN', 'INF', 'DBG' ];
 

@@ -6,8 +6,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import type { ModelRow, ModelSnapshot, ModelsSnapshot } from '../../services';
-import { AdminService } from '../../services';
+import type { ModelRow, ModelSnapshot, ModelsSnapshot } from '../../services/admin.service';
+import { AdminService } from '../../services/admin.service';
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
 import { bytes, count, download, duration, fileNamePart } from '../../format';
 

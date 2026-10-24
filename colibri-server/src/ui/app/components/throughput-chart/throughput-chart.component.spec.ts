@@ -1,5 +1,5 @@
 import type * as d3 from 'd3';
-import type { ClientRow, ClientsSnapshot } from '../../services';
+import type { ClientRow, ClientsSnapshot } from '../../services/admin.service';
 import type { Sample, StackRow } from './throughput-chart.component';
 import { addSample, edgeShown, historySamples, latestTotal, stackInput, withHistory } from './throughput-chart.component';
 

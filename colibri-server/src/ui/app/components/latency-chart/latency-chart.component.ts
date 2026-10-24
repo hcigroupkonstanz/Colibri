@@ -1,7 +1,7 @@
 import type { AfterViewInit, ElementRef, OnDestroy } from '@angular/core';
 import { ChangeDetectionStrategy, Component, Injector, computed, effect, inject, input, signal, viewChild } from '@angular/core';
-import type { ColibriClient } from '../../services';
-import { ClientService } from '../../services';
+import type { ColibriClient } from '../../services/client.service';
+import { ClientService } from '../../services/client.service';
 import * as d3 from 'd3';
 import type { BoxplotStats } from './boxplot';
 import { boxplot, boxplotStats, boxplotSymbolDot } from './boxplot';

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { DatePipe } from '@angular/common';
-import { SocketIOService } from '../../services';
+import { SocketIOService } from '../../services/socketio.service';
 
 const LABELS = {
     connecting: 'Connecting',

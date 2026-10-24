@@ -1,8 +1,9 @@
 import type { AfterViewInit, ElementRef, OnDestroy } from '@angular/core';
 import { ChangeDetectionStrategy, Component, HostListener, Injector, afterNextRender, afterRenderEffect, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import type { LogMessage } from '../../services';
-import { LOG_LEVELS, LogService, SocketIOService } from '../../services';
+import type { LogMessage } from '../../services/log.service';
+import { LOG_LEVELS, LogService } from '../../services/log.service';
+import { SocketIOService } from '../../services/socketio.service';
 import { LogMessageComponent } from '../../components/log-message/log-message.component';
 import type { LogNav, NavStep } from '../../components/log-toolbar/log-toolbar.component';
 import { LogToolbarComponent, PHONE } from '../../components/log-toolbar/log-toolbar.component';

@@ -6,7 +6,8 @@ import type { MenuItem } from 'primeng/api';
 import { MenuModule } from 'primeng/menu';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
-import { ClientService, LOG_LEVELS, LogService } from '../../services';
+import { ClientService } from '../../services/client.service';
+import { LOG_LEVELS, LogService } from '../../services/log.service';
 import { LEVEL_TAGS } from '../log-message/log-format';
 
 /** Typing pause before a search runs, in ms. */

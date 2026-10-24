@@ -3,8 +3,9 @@ import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Subject } from 'rxjs';
-import type { ConnectionState, ModelRow, Reconnect } from '../../services';
-import { SocketIOService } from '../../services';
+import type { ConnectionState, Reconnect } from '../../services/socketio.service';
+import type { ModelRow } from '../../services/admin.service';
+import { SocketIOService } from '../../services/socketio.service';
 import { DELETED_SHOWN, HIGHLIGHT_LIMIT, MODELS_PAGE_SIZE, ModelsComponent, jsonParts } from './models.component';
 
 const model = (id: string, overrides: Partial<ModelRow> = {}): ModelRow => ({

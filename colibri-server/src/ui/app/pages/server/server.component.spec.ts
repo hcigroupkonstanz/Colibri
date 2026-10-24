@@ -2,8 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
-import type { ConnectionState, Reconnect, ServerSnapshot } from '../../services';
-import { SocketIOService } from '../../services';
+import type { ConnectionState, Reconnect } from '../../services/socketio.service';
+import type { ServerSnapshot } from '../../services/admin.service';
+import { SocketIOService } from '../../services/socketio.service';
 import type { Fact } from './server.component';
 import { ServerComponent, serverSections } from './server.component';
 
