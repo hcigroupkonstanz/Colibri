@@ -88,7 +88,9 @@ interface VoiceServerInternals {
         rejections: Map<string, unknown>;
         pruneReports(nowMillis: number): void;
     };
-    savingRecordings: Promise<void> | undefined;
+    recorder: {
+        savingRecordings: Promise<void> | undefined;
+    };
     checkClientsDisconnected(): Promise<void>;
 }
 
@@ -1388,7 +1390,7 @@ describe('VoiceServer recordings', () => {
     it('waits for a save the disconnect check started before it saves the rest', async () => {
         await talk(3, someSamples(480, 3));
         let release!: () => void;
-        internals.savingRecordings = new Promise<void>(resolve => release = resolve);
+        internals.recorder.savingRecordings = new Promise<void>(resolve => release = resolve);
 
         let stopped = false;
         const stopping = server.stop().then(() => stopped = true);

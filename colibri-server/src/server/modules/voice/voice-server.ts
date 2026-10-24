@@ -1,14 +1,10 @@
 import { CONNECTION_LINE } from '../core/log-message.js';
-import { errorMessage } from '../core/error-message.js';
 import { Service } from '../core/service.js';
 import * as dgram from 'dgram';
 import type { AddressInfo } from 'net';
 import { isIPv6 } from 'net';
 import { readFileSync } from 'fs';
-import { mkdir, writeFile } from 'fs/promises';
-import * as path from 'path';
 import {
-    VOICE_HEADER_LENGTH,
     VoiceCodec,
     readVoiceHeader,
 } from './voice-packet.js';
@@ -19,9 +15,10 @@ import { hostPort, ipv4OnlyWarning, normalizeAddress } from '../net/addresses.js
 import type { UnityClientSource } from './unity-client-addresses.js';
 import { UnityClientAddresses } from './unity-client-addresses.js';
 import { REPORT_INTERVAL_MILLIS, VoiceReports } from './voice-reports.js';
+import { VoiceRecorder } from './voice-recorder.js';
 import { formatAppId } from './format-app-id.js';
 import { voiceClientKey } from './voice-client-key.js';
-import { GrowableInt16Buffer, littleEndianBytes, wavHeader } from './wav.js';
+import { GrowableInt16Buffer } from './wav.js';
 
 interface VoiceClient {
     ip: string;
@@ -139,10 +136,8 @@ export class VoiceServer extends Service {
     // packet (received at up to ~50 packets/s/client).
     private appClients: Map<number, VoiceClient[]> | undefined;
 
-    // The recordings checkClientsDisconnected is saving, while it is. Guards it against
-    // overlapping fs work when a save outlives its tick (see the comment there), and lets
-    // stop() wait for it.
-    private savingRecordings: Promise<void> | undefined;
+    // Holds the recordings and saves them. Logs through this service, so under its name.
+    private readonly recorder: VoiceRecorder;
 
     // Throttles the reports of dropped and unrelayable packets and of socket errors; pruned every
     // disconnect-check tick. Logs through this service, so under its name.
@@ -160,19 +155,20 @@ export class VoiceServer extends Service {
     private readonly unityClients: UnityClientAddresses;
     // The voice clients let in for the Unity clients of each app at each address, by groupKey.
     private readonly groups = new Map<string, VoiceClientGroup>();
-    // The recordings of voice clients dropped (see dropVoiceClient), for the next disconnect check,
-    // or stop(), to save.
-    private droppedRecordings: VoiceClient[] = [];
 
     // `unityClients`: TCPServerProxy. `trustProxy`: TRUSTED_PROXIES, whose voice is relayed unchecked.
     public constructor(
         private samplingRate: number,
-        private voiceRecordingPath: string,
+        voiceRecordingPath: string,
         private recordingVoiceData: boolean,
         unityClients: UnityClientSource,
         private trustProxy: TrustProxy = trustNoProxy
     ) {
         super();
+        this.recorder = new VoiceRecorder(samplingRate, voiceRecordingPath, {
+            logInfo: (msg) => this.logInfo(msg),
+            logError: (msg, printStacktrace) => this.logError(msg, printStacktrace),
+        });
         this.unityClients = new UnityClientAddresses(unityClients);
         this.unityClients.left$.subscribe(({ address, appId }) => this.onUnityClientsLeft(address, appId));
     }
@@ -272,7 +268,7 @@ export class VoiceServer extends Service {
         voiceClient.lastHeartbeat = nowMillis;
 
         this.relay(message, voiceClient, appId, nowMillis);
-        if (codec === VoiceCodec.PCM && this.recordingVoiceData) this.record(message, voiceClient);
+        if (codec === VoiceCodec.PCM && this.recordingVoiceData) this.recorder.record(message, voiceClient);
     }
 
     // The voice client `remote` sends as, added or moved to the app of `header` first if it is new or
@@ -336,13 +332,6 @@ export class VoiceServer extends Service {
         }
     }
 
-    private record(message: Buffer, client: VoiceClient): void {
-        // i + 2 <= length: an odd trailing byte is dropped rather than over-read.
-        for (let i = VOICE_HEADER_LENGTH; i <= message.length - 2; i += 2) {
-            client.recordingData.push(message.readInt16LE(i));
-        }
-    }
-
     private closeSocket(): void {
         // Throws if the socket is closed already.
         try {
@@ -365,19 +354,13 @@ export class VoiceServer extends Service {
 
         // A save the last disconnect check started may still be writing. Waiting for it keeps
         // the two from writing at once; the clients it is saving are no longer in the map.
-        await this.savingRecordings;
+        await this.recorder.saving;
 
-        const pendingRecordings = this.droppedRecordings.concat(Array.from(this.clients.values()).filter(client => client.recordingData.length > 0));
-        this.droppedRecordings = [];
+        const pendingRecordings = this.recorder.takeRecordings(this.clients.values());
         this.clients.clear();
         this.groups.clear();
         this.appClients = undefined;
-        if (pendingRecordings.length === 0) return;
-
-        this.logInfo(`Saving ${pendingRecordings.length} voice recording(s) still in progress before stopping`);
-        for (const client of pendingRecordings) {
-            await this.saveRecording(client);
-        }
+        await this.recorder.saveBeforeStopping(pendingRecordings);
     }
 
     // Whether a packet from `address` for the app `appId` may be relayed, and its sender be relayed
@@ -467,7 +450,7 @@ export class VoiceServer extends Service {
         this.leaveGroup(client);
         this.appClients = undefined;
         this.logDebug(`Voice client ${voiceClientKey(client.ip, client.port)} disconnected ID: ${client.userId}` + (why ? `: ${why}` : ''), CONNECTION_LINE);
-        if (client.recordingData.length > 0) this.droppedRecordings.push(client);
+        this.recorder.queueRecording(client);
     }
 
     // Counts `client` against the Unity clients of its app at `address` (see admit).
@@ -505,11 +488,11 @@ export class VoiceServer extends Service {
     }
 
     // setInterval never awaits this, so the timed-out clients are collected and removed
-    // before anything is awaited. Deleting only after `await saveRecording(...)` meant a
-    // save slower than the 1s tick let the next tick find the same client still registered
-    // and write the same recording to the same filename a second time.
+    // before anything is awaited. Deleting only after `await VoiceRecorder.saveDropped()`
+    // meant a save slower than the 1s tick let the next tick find the same client still
+    // registered and write the same recording to the same filename a second time.
     private async checkClientsDisconnected(): Promise<void> {
-        if (this.savingRecordings) return;
+        if (this.recorder.saving) return;
 
         const now = Date.now();
         for (const client of this.clients.values()) {
@@ -518,46 +501,6 @@ export class VoiceServer extends Service {
         }
         this.trimGroups(now);
 
-        // Those just timed out or trimmed, and those dropped since the last check for another
-        // reason (see dropVoiceClient's callers).
-        const pendingRecordings = this.droppedRecordings;
-        this.droppedRecordings = [];
-        if (pendingRecordings.length === 0) return;
-
-        const saving = (async () => {
-            for (const client of pendingRecordings) {
-                await this.saveRecording(client);
-            }
-        })();
-        this.savingRecordings = saving;
-        try {
-            await saving;
-        } finally {
-            this.savingRecordings = undefined;
-        }
-    }
-
-    // Never throws: a failed save is logged. Nothing here re-encodes the samples on the main
-    // thread (see wavHeader): writeFile hands their bytes to the file system in chunks.
-    //
-    // The app and the source port are in the file name because the start time and the voice id
-    // alone do not tell recordings apart: two apps may use the same voice id, and after a
-    // restart or a dropped network every client registers again within the same few ms. Two
-    // recordings with the same name used to overwrite each other without a word.
-    private async saveRecording(client: VoiceClient): Promise<void> {
-        const samples = client.recordingData.toTypedArray();
-        const dateString = client.recordingStartDate.toISOString().replace(/:/g, '_');
-        const filename = path.join(this.voiceRecordingPath,
-            `rec_${dateString}_app_${formatAppId(client.appId)}_ID_${client.userId}_port_${client.port}.wav`);
-        const seconds = (samples.length / this.samplingRate).toFixed(1);
-        try {
-            await mkdir(this.voiceRecordingPath, { recursive: true });
-            await writeFile(filename, [ wavHeader(this.samplingRate, samples.byteLength), littleEndianBytes(samples) ]);
-            this.logInfo(`Voice recording of client ID ${client.userId} (${voiceClientKey(client.ip, client.port)}, ${seconds} s) saved to ${filename}`);
-        } catch (err) {
-            // An fs error names the file itself.
-            this.logError(`Failed to save the voice recording of client ID ${client.userId} (${voiceClientKey(client.ip, client.port)}, ${seconds} s): `
-                + `${errorMessage(err)}`, false);
-        }
+        await this.recorder.saveDropped();
     }
 }
