@@ -10,9 +10,9 @@ const LABELS = { connected: 'Live', connecting: 'Connecting', reconnecting: 'Off
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LiveStatusComponent {
-    private socketio = inject(SocketIOService);
+    private readonly socketio = inject(SocketIOService);
 
-    connected = computed(() => this.socketio.state() === 'connected');
-    label = computed(() => LABELS[this.socketio.state()]);
-    title = computed(() => this.connected() ? 'Updated every second' : 'Not updated until the connection is back');
+    protected readonly connected = computed(() => this.socketio.state() === 'connected');
+    protected readonly label = computed(() => LABELS[this.socketio.state()]);
+    protected readonly title = computed(() => this.connected() ? 'Updated every second' : 'Not updated until the connection is back');
 }

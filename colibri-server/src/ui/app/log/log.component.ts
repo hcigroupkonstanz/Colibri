@@ -45,41 +45,41 @@ interface EmptyState {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LogComponent implements AfterViewInit, OnDestroy {
-    log = inject(LogService);
-    private socketio = inject(SocketIOService);
-    private injector = inject(Injector);
+    private readonly log = inject(LogService);
+    private readonly socketio = inject(SocketIOService);
+    private readonly injector = inject(Injector);
 
-    private scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
-    private toolbar = viewChild.required(LogToolbarComponent);
+    private readonly scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
+    private readonly toolbar = viewChild.required(LogToolbarComponent);
 
-    following = signal(true);
+    public readonly following = signal(true);
 
     // Snapshot taken on pause. New lines, repeats moving to the end and eviction of the oldest
     // would shift the lines being read.
-    private frozen = signal<ReadonlyArray<LogMessage> | null>(null);
-    private frozenIds = computed(() => new Set(this.frozen()?.map(line => line.id)));
+    private readonly frozen = signal<ReadonlyArray<LogMessage> | null>(null);
+    private readonly frozenIds = computed(() => new Set(this.frozen()?.map(line => line.id)));
     private readonly pageSize = screenPageSize();
-    private limit = signal(this.pageSize);
+    private readonly limit = signal(this.pageSize);
 
-    search = computed(() => this.log.search().toLowerCase());
+    protected readonly search = computed(() => this.log.search().toLowerCase());
 
-    matches = computed(() => {
+    public readonly matches = computed(() => {
         const lines = this.frozen() ?? this.log.messages();
         const search = this.search();
         return search ? lines.filter(line => matchesSearch(line, search)) : lines;
     });
 
-    rows = computed(() => {
+    public readonly rows = computed(() => {
         const matches = this.matches();
         const limit = this.limit();
         return matches.length > limit ? matches.slice(-limit) : matches;
     });
 
-    hidden = computed(() => this.matches().length - this.rows().length);
-    olderStep = computed(() => Math.min(this.pageSize, this.hidden()));
+    protected readonly hidden = computed(() => this.matches().length - this.rows().length);
+    protected readonly olderStep = computed(() => Math.min(this.pageSize, this.hidden()));
 
     /** Lines that arrived since pausing; repeats of lines in the snapshot and reconnect rows do not count. */
-    newLines = computed(() => {
+    public readonly newLines = computed(() => {
         if (!this.frozen()) return 0;
         const shown = this.frozenIds();
         let count = 0;
@@ -90,18 +90,18 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     });
 
     /** Id of the error or warning that Previous and Next went to last. */
-    current = signal<string | null>(null);
+    public readonly current = signal<string | null>(null);
 
     /** Ids of the errors and warnings among the matches, oldest first. */
-    private problems = computed(() => this.matches().filter(isProblem).map(line => line.id));
+    private readonly problems = computed(() => this.matches().filter(isProblem).map(line => line.id));
 
     /** Ids of the errors created since the page was opened, oldest first. */
-    private newErrors = computed(() => {
+    private readonly newErrors = computed(() => {
         const openedAt = this.log.openedAt();
         return this.matches().filter(line => !line.reconnect && line.level === 0 && line.created >= openedAt).map(line => line.id);
     });
 
-    nav = computed<LogNav>(() => {
+    public readonly nav = computed<LogNav>(() => {
         const problems = this.problems();
         const current = this.current();
         const position = current === null ? -1 : problems.indexOf(current);
@@ -114,7 +114,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     });
 
     /** Ids of the rows that start a new day; the template puts a date header above them. */
-    dayStarts = computed(() => {
+    protected readonly dayStarts = computed(() => {
         const starts = new Set<string>();
         let previous = '';
         for (const row of this.rows()) {
@@ -125,7 +125,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         return starts;
     });
 
-    empty = computed<EmptyState | null>(() => {
+    public readonly empty = computed<EmptyState | null>(() => {
         if (this.rows().length > 0) return null;
         if (this.socketio.state() === 'connecting') return { text: 'Connecting to the server…' };
         if (this.log.loading()) return { text: 'Loading the log…' };
@@ -141,7 +141,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     private lastHeight = 0;
     private resizeObserver: ResizeObserver | undefined;
 
-    constructor() {
+    public constructor() {
         afterNextRender(() => {
             // By now location.search and location.hash are this page's, not the previous page's.
             this.log.openPage();
@@ -166,7 +166,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         });
     }
 
-    ngAfterViewInit(): void {
+    public ngAfterViewInit(): void {
         // A new height (rotated phone, filters opening) would leave the end out of view.
         this.resizeObserver = new ResizeObserver(() => {
             if (this.following()) this.scrollToEnd();
@@ -180,7 +180,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         el.addEventListener('touchmove', this.onTouchMove, { passive: true });
     }
 
-    ngOnDestroy(): void {
+    public ngOnDestroy(): void {
         this.log.closePage();
         this.resizeObserver?.disconnect();
         const el = this.scroller().nativeElement;
@@ -189,13 +189,13 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         el.removeEventListener('touchmove', this.onTouchMove);
     }
 
-    pause(): void {
+    public pause(): void {
         if (!this.following()) return;
         this.frozen.set(this.log.messages());
         this.following.set(false);
     }
 
-    follow(): void {
+    public follow(): void {
         this.frozen.set(null);
         this.limit.set(this.pageSize);
         this.current.set(null);
@@ -207,7 +207,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
      * first error since the page was opened. Without a current one among the matches, Next takes the
      * first at or below the top of the view and Previous the last at or above its end.
      */
-    navigate(step: NavStep): void {
+    public navigate(step: NavStep): void {
         if (step === 'first-error') {
             const [ id ] = this.newErrors();
             if (id !== undefined) this.goTo(id);
@@ -277,7 +277,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     // error. Host listener, so only with focus in the log or its toolbar: single-character
     // shortcuts anywhere on the page would clash with other keys and speech input (WCAG 2.1.4).
     @HostListener('keydown', [ '$event' ])
-    onKey(event: KeyboardEvent): void {
+    protected onKey(event: KeyboardEvent): void {
         if (event.ctrlKey || event.metaKey || event.altKey || typing(event)) return;
         if (event.key === '/') {
             event.preventDefault();
@@ -291,7 +291,7 @@ export class LogComponent implements AfterViewInit, OnDestroy {
     }
 
     /** Saves the loaded lines that match the filters and the search as a file. */
-    download(format: 'text' | 'json'): void {
+    public download(format: 'text' | 'json'): void {
         const search = this.search();
         const lines = this.log.messages().filter(line => !line.reconnect && (!search || matchesSearch(line, search)));
         const stamp = new Date();
@@ -320,13 +320,13 @@ export class LogComponent implements AfterViewInit, OnDestroy {
         download(`${name}.txt`, [ ...header, ...lines.map(textLine) ].join('\n') + '\n', 'text/plain');
     }
 
-    showOlder(): void {
+    public showOlder(): void {
         this.limit.update(limit => limit + this.pageSize);
     }
 
     // Scrolling up pauses (wheel, touch, keys and scroll bar alike); back at the end it follows again.
     // An unchanged scrollHeight tells a user scroll from the list resizing under the scroll position.
-    onScroll(): void {
+    protected onScroll(): void {
         const el = this.scroller().nativeElement;
         const sameContent = el.scrollHeight === this.lastHeight;
         const atEnd = el.scrollHeight - el.scrollTop - el.clientHeight <= END_SLACK;
@@ -343,32 +343,32 @@ export class LogComponent implements AfterViewInit, OnDestroy {
 
     // Wheel and touch pause before the first scroll event; on a busy stream the next batch would
     // otherwise scroll back to the end first.
-    private onWheel = (event: WheelEvent): void => {
+    private readonly onWheel = (event: WheelEvent): void => {
         const el = this.scroller().nativeElement;
         if (event.deltaY < 0 && el.scrollHeight > el.clientHeight) this.pause();
     };
 
     private touchY = 0;
 
-    private onTouchStart = (event: TouchEvent): void => {
+    private readonly onTouchStart = (event: TouchEvent): void => {
         this.touchY = event.touches[0]?.clientY ?? 0;
     };
 
     // A finger moving down scrolls the log up.
-    private onTouchMove = (event: TouchEvent): void => {
+    private readonly onTouchMove = (event: TouchEvent): void => {
         const el = this.scroller().nativeElement;
         const y = event.touches[0]?.clientY ?? 0;
         if (y > this.touchY + 8 && el.scrollHeight > el.clientHeight) this.pause();
     };
 
     // A mouse press (primary button) on a line starts reading, selecting or opening it.
-    onPointerDown(event: PointerEvent): void {
+    protected onPointerDown(event: PointerEvent): void {
         if (event.pointerType === 'mouse' && event.button === 0 && onLine(event)) this.pause();
     }
 
     // Opening a line or showing older lines pauses, so the view stays put. onLine() leaves out the
     // empty state's buttons.
-    onClick(event: MouseEvent): void {
+    protected onClick(event: MouseEvent): void {
         if (!onLine(event)) return;
         this.pause();
 

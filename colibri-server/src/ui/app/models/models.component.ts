@@ -88,28 +88,28 @@ interface ChannelOption {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ModelsComponent implements OnDestroy {
-    private admin = inject(AdminService);
-    private route = inject(ActivatedRoute);
-    private router = inject(Router);
-    private host = inject<ElementRef<HTMLElement>>(ElementRef);
-    private injector = inject(Injector);
+    private readonly admin = inject(AdminService);
+    private readonly route = inject(ActivatedRoute);
+    private readonly router = inject(Router);
+    private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+    private readonly injector = inject(Injector);
 
-    private params = toSignal(this.route.queryParamMap, { requireSync: true });
-    app = computed(() => this.params().get('app') ?? '');
-    channel = computed(() => this.params().get('channel') ?? '');
-    filter = computed(() => this.params().get('q') ?? '');
-    page = computed(() => Math.max(1, Math.trunc(Number(this.params().get('page') ?? '1')) || 1));
+    private readonly params = toSignal(this.route.queryParamMap, { requireSync: true });
+    protected readonly app = computed(() => this.params().get('app') ?? '');
+    protected readonly channel = computed(() => this.params().get('channel') ?? '');
+    protected readonly filter = computed(() => this.params().get('q') ?? '');
+    public readonly page = computed(() => Math.max(1, Math.trunc(Number(this.params().get('page') ?? '1')) || 1));
     /** Whether the list and the open model are updated every second. */
-    live = computed(() => this.params().get('live') === '1');
+    protected readonly live = computed(() => this.params().get('live') === '1');
 
     /** The open model, from the URL. Its app and channel default to the list's. */
-    open = computed<ModelKey | null>(() => {
+    protected readonly open = computed<ModelKey | null>(() => {
         const id = this.params().get('model');
         if (id === null) return null;
         return { app: this.params().get('modelApp') ?? this.app(), channel: this.params().get('modelChannel') ?? this.channel(), id };
     }, { equal: sameKey });
 
-    list = this.admin.feed<ModelsSnapshot>('models', {
+    protected readonly list = this.admin.feed<ModelsSnapshot>('models', {
         query: () => ({
             app: this.app(),
             channel: this.channel(),
@@ -120,7 +120,7 @@ export class ModelsComponent implements OnDestroy {
         live: () => this.live()
     });
 
-    detail = this.admin.feed<ModelSnapshot>('model', {
+    private readonly detail = this.admin.feed<ModelSnapshot>('model', {
         query: () => {
             const open = this.open();
             return open ? { app: open.app, channel: open.channel, id: open.id } : null;
@@ -129,7 +129,7 @@ export class ModelsComponent implements OnDestroy {
     });
 
     /** Every app with models or deleted ids, and the one filtered to. */
-    appOptions = computed<AppOption[]>(() => {
+    protected readonly appOptions = computed<AppOption[]>(() => {
         const apps = new Map<string, AppOption>();
         for (const summary of this.list.data()?.channels ?? []) {
             const app = apps.get(summary.app) ?? { name: summary.app, models: 0, deleted: 0 };
@@ -143,7 +143,7 @@ export class ModelsComponent implements OnDestroy {
     });
 
     /** The channels of the app, or of every app. */
-    channelOptions = computed<ChannelOption[]>(() => {
+    protected readonly channelOptions = computed<ChannelOption[]>(() => {
         const app = this.app();
         const channels = new Map<string, number>();
         for (const summary of this.list.data()?.channels ?? []) {
@@ -158,11 +158,11 @@ export class ModelsComponent implements OnDestroy {
     });
 
     /** Whether the list shows one channel, so its rows need not say which. */
-    oneChannel = computed(() => this.app() !== '' && this.channel() !== '');
+    protected readonly oneChannel = computed(() => this.app() !== '' && this.channel() !== '');
 
-    filtered = computed(() => this.app() !== '' || this.channel() !== '' || this.filter() !== '');
+    protected readonly filtered = computed(() => this.app() !== '' || this.channel() !== '' || this.filter() !== '');
 
-    summary = computed(() => {
+    public readonly summary = computed(() => {
         const data = this.list.data();
         if (!data) return '';
         const all = data.channels.reduce((sum, summary) => sum + summary.models, 0);
@@ -173,7 +173,7 @@ export class ModelsComponent implements OnDestroy {
     });
 
     /** 51-100 of 1,234. */
-    range = computed(() => {
+    protected readonly range = computed(() => {
         const data = this.list.data();
         if (!data || data.total === 0) return '';
         const first = data.query.offset + 1;
@@ -181,9 +181,9 @@ export class ModelsComponent implements OnDestroy {
         return `${count(first)}-${count(last)} of ${count(data.total)}`;
     });
 
-    pages = computed(() => Math.max(1, Math.ceil((this.list.data()?.total ?? 0) / MODELS_PAGE_SIZE)));
+    public readonly pages = computed(() => Math.max(1, Math.ceil((this.list.data()?.total ?? 0) / MODELS_PAGE_SIZE)));
 
-    rows = computed(() => {
+    public readonly rows = computed(() => {
         const data = this.list.data();
         if (!data) return [];
         const open = this.open();
@@ -196,24 +196,24 @@ export class ModelsComponent implements OnDestroy {
         }));
     });
 
-    deleted = computed(() => {
+    public readonly deleted = computed(() => {
         const data = this.list.data();
         if (!data) return [];
         return data.deleted.map(row => ({ ...row, key: rowKey(row), age: duration((data.at - row.deletedAt) / 1000) }));
     });
 
-    readonly DELETED_SHOWN = DELETED_SHOWN;
+    protected readonly DELETED_SHOWN = DELETED_SHOWN;
     /** Whether every deleted id the server sent is shown, not only the newest. */
-    allDeleted = signal(false);
-    deletedShown = computed(() => this.allDeleted() ? this.deleted() : this.deleted().slice(0, DELETED_SHOWN));
+    protected readonly allDeleted = signal(false);
+    protected readonly deletedShown = computed(() => this.allDeleted() ? this.deleted() : this.deleted().slice(0, DELETED_SHOWN));
 
     /** Whether the page asked for is past the end, after models were deleted or the filter changed. */
-    pastEnd = computed(() => {
+    protected readonly pastEnd = computed(() => {
         const data = this.list.data();
         return data !== null && data.total > 0 && data.models.length === 0;
     });
 
-    empty = computed(() => {
+    public readonly empty = computed(() => {
         const data = this.list.data();
         if (!data) return 'Loading the models…';
         if (this.pastEnd()) return `Page ${this.page()} is past the end.`;
@@ -224,29 +224,29 @@ export class ModelsComponent implements OnDestroy {
     });
 
     /** The detail's snapshot, once it is for the open model: the feed keeps the last answer until the next. */
-    model = computed(() => {
+    protected readonly model = computed(() => {
         const data = this.detail.data();
         const open = this.open();
         return data && open && data.app === open.app && data.channel === open.channel && data.id === open.id ? data : null;
     });
 
-    private json = computed(() => this.model()?.json ?? '');
-    jsonParts = computed(() => jsonParts(this.json()));
+    private readonly json = computed(() => this.model()?.json ?? '');
+    protected readonly jsonParts = computed(() => jsonParts(this.json()));
 
-    modelAge = computed(() => {
+    public readonly modelAge = computed(() => {
         const model = this.model();
         if (!model) return '';
         const time = model.found ? model.updatedAt : model.deletedAt;
         return time === undefined ? '' : duration((model.at - time) / 1000);
     });
 
-    size = bytes;
+    protected readonly size = bytes;
 
     /** What the filter field shows: what is typed, until it is sent. */
-    filterText = signal('');
+    protected readonly filterText = signal('');
     private filterTimer: ReturnType<typeof setTimeout> | undefined;
 
-    constructor() {
+    public constructor() {
         effect(() => {
             const filter = this.filter();
             untracked(() => {
@@ -279,55 +279,55 @@ export class ModelsComponent implements OnDestroy {
         }
     }
 
-    ngOnDestroy(): void {
+    public ngOnDestroy(): void {
         clearTimeout(this.filterTimer);
     }
 
-    setApp(app: string): void {
+    protected setApp(app: string): void {
         void this.navigate({ app: app || null, channel: null, page: null });
     }
 
-    setChannel(channel: string): void {
+    protected setChannel(channel: string): void {
         void this.navigate({ channel: channel || null, page: null });
     }
 
-    onFilter(value: string): void {
+    protected onFilter(value: string): void {
         this.filterText.set(value);
         clearTimeout(this.filterTimer);
         this.filterTimer = setTimeout(() => void this.navigate({ q: value.trim() || null, page: null }), FILTER_DELAY);
     }
 
-    clearFilter(): void {
+    protected clearFilter(): void {
         clearTimeout(this.filterTimer);
         this.filterText.set('');
         void this.navigate({ q: null, page: null });
     }
 
-    setPage(page: number): Promise<boolean> {
+    public setPage(page: number): Promise<boolean> {
         return this.navigate({ page: page > 1 ? `${page}` : null });
     }
 
-    setLive(live: boolean): void {
+    protected setLive(live: boolean): void {
         void this.navigate({ live: live ? '1' : null });
     }
 
-    refresh(): void {
+    protected refresh(): void {
         this.list.refresh();
         if (this.open()) this.detail.refresh();
     }
 
     /** The address of a model's detail, with the list as it is. */
-    modelParams(model: ModelKey): Record<string, string> {
+    protected modelParams(model: ModelKey): Record<string, string> {
         return { model: model.id, modelApp: model.app, modelChannel: model.channel };
     }
 
-    openModel(model: ModelRow): void {
+    protected openModel(model: ModelRow): void {
         if (model.truncated) return;
         void this.router.navigate([], { relativeTo: this.route, queryParams: this.modelParams(model), queryParamsHandling: 'merge' });
     }
 
     @HostListener('document:keydown.escape', [ '$event' ])
-    close(event?: Event): void {
+    protected close(event?: Event): void {
         if (!this.open()) return;
         // Escape in the filter or a select belongs to that control, so the model stays open.
         if (event?.target instanceof Element && event.target.closest('input[type="search"], [role="combobox"], [role="listbox"]')) return;
@@ -335,7 +335,7 @@ export class ModelsComponent implements OnDestroy {
     }
 
     /** Saves the model as .json, or as -partial.txt if the server cut it short: that is not valid JSON. */
-    downloadModel(): void {
+    public downloadModel(): void {
         const model = this.model();
         if (!model?.json) return;
         const name = `${fileNamePart(model.app)}-${fileNamePart(model.channel)}-${fileNamePart(model.id)}`;

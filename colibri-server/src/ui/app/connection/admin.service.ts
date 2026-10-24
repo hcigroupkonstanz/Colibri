@@ -212,19 +212,19 @@ export interface AdminFeed<T extends Snapshot> {
 }
 
 class Feed<T extends Snapshot> implements AdminFeed<T> {
-    readonly data = signal<T | null>(null);
-    readonly loading = signal(false);
+    public readonly data = signal<T | null>(null);
+    public readonly loading = signal(false);
 
     /** The latest request sent: answers to earlier ones are dropped. */
-    latest = 0;
-    query: AdminQuery | null = null;
-    live = false;
+    public latest = 0;
+    public query: AdminQuery | null = null;
+    public live = false;
     /** Whether the server holds a subscription for it. */
-    subscribed = false;
+    public subscribed = false;
 
-    constructor(readonly topic: AdminTopic, private readonly service: AdminService) {}
+    public constructor(public readonly topic: AdminTopic, private readonly service: AdminService) {}
 
-    refresh(): void {
+    public refresh(): void {
         this.service.ask(this);
     }
 }
@@ -244,7 +244,7 @@ export class AdminService {
     private readonly feeds = new Map<AdminTopic, Feed<Snapshot>>();
     private lastRequest = 0;
 
-    constructor() {
+    public constructor() {
         this.socketio.listen(ADMIN_CHANNEL).subscribe(msg => {
             const feed = this.feeds.get(msg.command as AdminTopic);
             const payload = msg.payload as Snapshot | undefined;
@@ -265,7 +265,7 @@ export class AdminService {
      * A topic for as long as the calling component lives. Call it where inject() works, such as a
      * field initializer.
      */
-    feed<T extends Snapshot>(topic: AdminTopic, options: FeedOptions = {}): AdminFeed<T> {
+    public feed<T extends Snapshot>(topic: AdminTopic, options: FeedOptions = {}): AdminFeed<T> {
         const feed = new Feed<T>(topic, this);
         // The server keeps one subscription per topic and page: one the previous page left is
         // replaced by this feed's, or ended if this one asks only once.
@@ -287,7 +287,7 @@ export class AdminService {
     }
 
     /** @internal Sends a feed's question, with a new request number. */
-    ask(feed: Feed<Snapshot>): void {
+    public ask(feed: Feed<Snapshot>): void {
         if (this.feeds.get(feed.topic) !== feed) return;
 
         if (feed.query === null) {

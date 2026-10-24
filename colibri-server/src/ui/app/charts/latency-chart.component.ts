@@ -89,25 +89,25 @@ interface Line {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LatencyChartComponent implements AfterViewInit, OnDestroy {
-    private clientService = inject(ClientService);
-    private injector = inject(Injector);
+    private readonly clientService = inject(ClientService);
+    private readonly injector = inject(Injector);
 
-    private latencyChart = viewChild.required<ElementRef<HTMLDivElement>>('latencyChart');
+    private readonly latencyChart = viewChild.required<ElementRef<HTMLDivElement>>('latencyChart');
 
     /** The app whose clients it shows, or '' for all. */
-    app = input('');
+    public readonly app = input('');
 
-    clients = computed(() => {
+    private readonly clients = computed(() => {
         const app = this.app();
         const clients = this.clientService.clients();
         return app ? clients.filter(client => client.app === app) : clients;
     });
 
     /** Why the boxes are missing, when there are clients that would have one. */
-    boxesHidden = signal<'narrow' | 'count' | null>(null);
+    public readonly boxesHidden = signal<'narrow' | 'count' | null>(null);
 
     /** What the chart says instead of an empty plot. */
-    message = computed(() => {
+    protected readonly message = computed(() => {
         const clients = this.clients();
         if (clients.length === 0) return this.app() ? `No clients of ${this.app()} connected.` : 'No clients connected.';
         if (clients.every(client => client.latency.length === 0)) return 'Collecting latency samples…';
@@ -128,7 +128,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
 
     private lineX: d3.ScaleTime<number, number, never> = d3.scaleTime();
 
-    ngAfterViewInit(): void {
+    public ngAfterViewInit(): void {
         this.initChart();
         this.measure();
         this.updateChart();
@@ -154,7 +154,7 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
         this.resizeObserver.observe(this.latencyChart().nativeElement);
     }
 
-    ngOnDestroy(): void {
+    public ngOnDestroy(): void {
         if (this.intervalTimer !== null) {
             window.clearInterval(this.intervalTimer);
         }

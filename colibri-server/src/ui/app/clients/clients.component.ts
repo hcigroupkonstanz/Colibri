@@ -166,26 +166,26 @@ const toClientView = function (client: ClientRow, at: number, slot: number | und
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ClientsComponent {
-    private admin = inject(AdminService);
-    private clientService = inject(ClientService);
-    private route = inject(ActivatedRoute);
-    private router = inject(Router);
-    private host = inject<ElementRef<HTMLElement>>(ElementRef);
+    private readonly admin = inject(AdminService);
+    private readonly clientService = inject(ClientService);
+    private readonly route = inject(ActivatedRoute);
+    private readonly router = inject(Router);
+    private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
-    columns = COLUMNS;
+    protected readonly columns = COLUMNS;
 
-    feed = this.admin.feed<ClientsSnapshot>('clients');
+    protected readonly feed = this.admin.feed<ClientsSnapshot>('clients');
 
-    private params = toSignal(this.route.queryParamMap, { requireSync: true });
-    app = computed(() => this.params().get('app') ?? '');
-    sort = computed(() => parseSort(this.params().get('sort')));
+    private readonly params = toSignal(this.route.queryParamMap, { requireSync: true });
+    protected readonly app = computed(() => this.params().get('app') ?? '');
+    private readonly sort = computed(() => parseSort(this.params().get('sort')));
     /** The client a link from the log points at. */
-    marked = computed(() => this.params().get('client'));
+    protected readonly marked = computed(() => this.params().get('client'));
     /** What the throughput chart counts: the messages the clients sent, or those sent to them. */
-    direction = computed<Direction>(() => this.params().get('throughput') === 'out' ? 'out' : 'in');
+    public readonly direction = computed<Direction>(() => this.params().get('throughput') === 'out' ? 'out' : 'in');
 
     /** Apps with a connected client. The filtered app stays in the list at 0, so the select can show it. */
-    appOptions = computed(() => {
+    public readonly appOptions = computed(() => {
         const counts = new Map<string, number>();
         for (const client of this.feed.data()?.clients ?? []) counts.set(client.app, (counts.get(client.app) ?? 0) + 1);
         const app = this.app();
@@ -194,7 +194,7 @@ export class ClientsComponent {
     });
 
     /** Phone sort choices: one per column, in the direction its first header click gives. */
-    sortOptions = [
+    protected readonly sortOptions = [
         { value: '', label: 'By app' },
         { value: 'name', label: 'By name' },
         { value: 'transport', label: 'By transport' },
@@ -210,9 +210,9 @@ export class ClientsComponent {
      * Row order while the mouse is over the table. Sorted by a live value, the rows would reshuffle
      * on nearly every refresh and move the one under the pointer before its Log link is clicked.
      */
-    private heldOrder = signal<ReadonlyArray<string> | null>(null);
+    private readonly heldOrder = signal<ReadonlyArray<string> | null>(null);
 
-    rows = computed<ClientView[]>(() => {
+    public readonly rows = computed<ClientView[]>(() => {
         const snapshot = this.feed.data();
         if (!snapshot) return [];
         const app = this.app();
@@ -231,7 +231,7 @@ export class ClientsComponent {
     });
 
     /** The count line above the table. It says so when the server has cut the client list short. */
-    summary = computed(() => {
+    public readonly summary = computed(() => {
         const snapshot = this.feed.data();
         if (!snapshot) return '';
         const shown = this.rows();
@@ -243,35 +243,35 @@ export class ClientsComponent {
         return parts.join(', ');
     });
 
-    adminPages = computed(() => this.feed.data()?.adminPages ?? 0);
+    protected readonly adminPages = computed(() => this.feed.data()?.adminPages ?? 0);
 
     // Matched by template reference (#throughput), so a test's stand-in answers too.
-    private throughputChart = viewChild<ThroughputChartComponent>('throughput');
+    private readonly throughputChart = viewChild<ThroughputChartComponent>('throughput');
 
     /**
      * The hint beside the Throughput title. Its total is the chart's, which keeps a client's last
      * rate for a second the server has none, so the total does not dip.
      */
-    throughputHint = computed(() => {
+    public readonly throughputHint = computed(() => {
         const what = this.direction() === 'in' ? 'Messages per second each client sent' : 'Messages per second sent to each client';
         const total = this.throughputChart()?.total() ?? null;
         return `${what}, stacked, over the last 120 s${total === null ? '' : `; total now ${decimal(total)}`}`;
     });
 
-    empty = computed(() => {
+    public readonly empty = computed(() => {
         if (!this.feed.data()) return 'Loading the clients…';
         return this.app() ? `No clients of ${this.app()} connected.` : 'No clients connected.';
     });
 
     /** The phone sort list's value, mirroring the sort in the URL. */
-    sortChoice = computed(() => {
+    protected readonly sortChoice = computed(() => {
         const sort = this.sort();
         return sort ? `${sort.descending ? '-' : ''}${sort.key}` : '';
     });
 
-    private scrolledTo = signal<string | null>(null);
+    private readonly scrolledTo = signal<string | null>(null);
 
-    constructor() {
+    public constructor() {
         // Scrolls the linked row into view once: scrolledTo stops it from scrolling on every refresh.
         afterRenderEffect(() => {
             const id = this.marked();
@@ -283,20 +283,20 @@ export class ClientsComponent {
     }
 
     /** Freezes the row order while a mouse is over the table. Touch and pen input do not. */
-    holdOrder(event: PointerEvent): void {
+    public holdOrder(event: PointerEvent): void {
         if (event.pointerType === 'mouse') this.heldOrder.set(this.rows().map(row => row.id));
     }
 
-    releaseOrder(): void {
+    public releaseOrder(): void {
         this.heldOrder.set(null);
     }
 
-    setApp(app: string): Promise<boolean> {
+    protected setApp(app: string): Promise<boolean> {
         return this.navigate({ app: app || null, client: null });
     }
 
     /** The first click sorts A to Z, or largest first for numbers and the limit column. The second reverses. */
-    sortBy(key: SortKey): Promise<boolean> {
+    public sortBy(key: SortKey): Promise<boolean> {
         const column = COLUMNS.find(c => c.key === key)!;
         const current = this.sort();
         const firstDescending = column.num === true || key === 'limit';
@@ -306,15 +306,15 @@ export class ClientsComponent {
         return this.navigate({ sort: isDefault ? null : `${descending ? '-' : ''}${key}` });
     }
 
-    setDirection(direction: Direction): Promise<boolean> {
+    public setDirection(direction: Direction): Promise<boolean> {
         return this.navigate({ throughput: direction === 'out' ? 'out' : null });
     }
 
-    setSort(value: string | null): Promise<boolean> {
+    protected setSort(value: string | null): Promise<boolean> {
         return this.navigate({ sort: value || null });
     }
 
-    ariaSort(key: SortKey): 'ascending' | 'descending' | null {
+    protected ariaSort(key: SortKey): 'ascending' | 'descending' | null {
         const sort = this.sort() ?? { key: 'app', descending: false };
         if (sort.key !== key) return null;
         return sort.descending ? 'descending' : 'ascending';

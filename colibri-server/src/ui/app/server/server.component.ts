@@ -16,12 +16,12 @@ import { serverSections } from './server-sections';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ServerComponent {
-    private admin = inject(AdminService);
-    private datePipe = inject(DatePipe);
+    private readonly admin = inject(AdminService);
+    private readonly datePipe = inject(DatePipe);
 
-    feed = this.admin.feed<ServerSnapshot>('server');
+    private readonly feed = this.admin.feed<ServerSnapshot>('server');
 
-    sections = computed(() => {
+    protected readonly sections = computed(() => {
         const snapshot = this.feed.data();
         return snapshot ? serverSections(snapshot, time => this.datePipe.transform(time, 'yyyy-MM-dd HH:mm:ss') ?? '') : [];
     });

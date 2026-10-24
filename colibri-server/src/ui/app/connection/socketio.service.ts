@@ -18,10 +18,10 @@ export interface Reconnect {
     providedIn: 'root'
 })
 export class SocketIOService {
-    private zone = inject(NgZone);
+    private readonly zone = inject(NgZone);
 
-    private socket: io.Socket<any, any>;
-    private listeners: { [name: string]: Subject<any> } = {};
+    private readonly socket: io.Socket<any, any>;
+    private readonly listeners: { [name: string]: Subject<any> } = {};
     // Throttled empty zone.run() that triggers change detection after socket events.
     // Only needed while zone.js change detection is active.
     private readonly changeTrigger$ = new Subject<void>();
@@ -40,7 +40,7 @@ export class SocketIOService {
      */
     public readonly reconnected$ = this.reconnectSource.asObservable();
 
-    constructor() {
+    public constructor() {
         // Keep in step with PROTOCOL_VERSION (src/server/modules/protocol/protocol.ts). The
         // server only warns on a mismatch from the admin UI, but it does so on every connect.
         this.socket = io.connect('', { query: { app: 'colibri', version: '2' } });

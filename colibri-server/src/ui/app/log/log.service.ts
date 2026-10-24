@@ -228,7 +228,7 @@ export class LogService {
     // may match the previous filters, and the history has every line matching the current ones.
     private awaiting: number | null = null;
 
-    constructor() {
+    public constructor() {
         this.socketio
             .listen('colibri::log')
             .subscribe(msg => this.receiveLog(msg));

@@ -33,15 +33,15 @@ const client = (overrides: Partial<ClientRow>): ClientRow => ({
 // The chart has tests of its own; its d3 transitions do not belong in these.
 @Component({ selector: 'app-latency-chart', template: '' })
 class LatencyChartStub {
-    app = input('');
+    public readonly app = input('');
 }
 
 @Component({ selector: 'app-throughput-chart', template: '' })
 class ThroughputChartStub {
-    snapshot = input<unknown>(null);
-    app = input('');
-    direction = input('in');
-    total = signal<number | null>(null);
+    public readonly snapshot = input<unknown>(null);
+    public readonly app = input('');
+    public readonly direction = input('in');
+    public readonly total = signal<number | null>(null);
 }
 
 describe('ClientsComponent', () => {

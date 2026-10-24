@@ -18,21 +18,21 @@ const LABELS = {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RootComponent {
-    private socketio = inject(SocketIOService);
-    private datePipe = inject(DatePipe);
+    private readonly socketio = inject(SocketIOService);
+    private readonly datePipe = inject(DatePipe);
 
-    tabs = [
+    protected readonly tabs = [
         { label: 'Log', path: '/log' },
         { label: 'Clients', path: '/clients' },
         { label: 'Models', path: '/models' },
         { label: 'Server', path: '/server' },
     ];
 
-    state = this.socketio.state;
+    protected readonly state = this.socketio.state;
 
-    statusLabel = computed(() => LABELS[this.state()]);
+    protected readonly statusLabel = computed(() => LABELS[this.state()]);
 
-    statusTitle = computed(() => {
+    protected readonly statusTitle = computed(() => {
         const lostAt = this.socketio.lostAt();
         return lostAt === null
             ? `${this.statusLabel()} to the server`

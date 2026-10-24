@@ -33,8 +33,8 @@ import { SocketIOService } from '../connection/socketio.service';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class OfflineBannerComponent {
-    private socketio = inject(SocketIOService);
+    private readonly socketio = inject(SocketIOService);
 
     /** Epoch ms when the connection was lost; null unless it is reconnecting. */
-    lostAt = computed(() => this.socketio.state() === 'reconnecting' ? this.socketio.lostAt() : null);
+    protected readonly lostAt = computed(() => this.socketio.state() === 'reconnecting' ? this.socketio.lostAt() : null);
 }

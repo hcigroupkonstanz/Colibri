@@ -46,7 +46,7 @@ export class ClientService {
     /** Per client, the `at` of its history: live samples before it are already in the history. */
     private readonly historyAt = new Map<string, number>();
 
-    constructor() {
+    public constructor() {
         this.socketio
             .listen('colibri::latency')
             .subscribe(msg => this.addLatency(msg.payload));

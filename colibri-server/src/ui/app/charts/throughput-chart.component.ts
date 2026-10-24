@@ -137,26 +137,26 @@ let clipIds = 0;
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
-    private clientService = inject(ClientService);
-    private injector = inject(Injector);
+    private readonly clientService = inject(ClientService);
+    private readonly injector = inject(Injector);
 
-    private chart = viewChild.required<ElementRef<HTMLDivElement>>('throughputChart');
+    private readonly chart = viewChild.required<ElementRef<HTMLDivElement>>('throughputChart');
 
     /** The latest clients snapshot of the page. */
-    snapshot = input<ClientsSnapshot | null>(null);
+    public readonly snapshot = input<ClientsSnapshot | null>(null);
     /** The app whose clients it shows, or '' for all. */
-    app = input('');
-    direction = input<Direction>('in');
+    public readonly app = input('');
+    public readonly direction = input<Direction>('in');
 
-    private samples = signal<ReadonlyArray<Sample>>([]);
+    private readonly samples = signal<ReadonlyArray<Sample>>([]);
 
-    private stack = computed(() => stackInput(this.samples(), this.direction(), this.app()));
+    private readonly stack = computed(() => stackInput(this.samples(), this.direction(), this.app()));
 
     /** The messages per second of the clients shown, now: the top of the chart's right edge. */
-    total = computed(() => latestTotal(this.stack().rows));
+    public readonly total = computed(() => latestTotal(this.stack().rows));
 
     /** What the chart says instead of an empty plot. */
-    message = computed(() => {
+    protected readonly message = computed(() => {
         const snapshot = this.snapshot();
         const app = this.app();
         if (snapshot && !snapshot.clients.some(client => !app || client.app === app)) {
@@ -166,7 +166,7 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
         return null;
     });
 
-    label = computed(() => this.direction() === 'in'
+    protected readonly label = computed(() => this.direction() === 'in'
         ? 'Messages per second each connected client sent, stacked, over the last 120 seconds'
         : 'Messages per second sent to each connected client, stacked, over the last 120 seconds');
 
@@ -183,7 +183,7 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
 
     private x: d3.ScaleTime<number, number, never> = d3.scaleTime();
 
-    constructor() {
+    public constructor() {
         // Each snapshot once, with each client's colour as it was then, so a client that left keeps it.
         // The first snapshot of a subscription, after the page opens or reconnects, brings the rates
         // of the seconds before it.
@@ -210,7 +210,7 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
         });
     }
 
-    ngAfterViewInit(): void {
+    public ngAfterViewInit(): void {
         this.initChart();
         this.measure();
         this.updateChart();
@@ -236,7 +236,7 @@ export class ThroughputChartComponent implements AfterViewInit, OnDestroy {
         this.resizeObserver.observe(this.chart().nativeElement);
     }
 
-    ngOnDestroy(): void {
+    public ngOnDestroy(): void {
         if (this.intervalTimer !== null) {
             window.clearInterval(this.intervalTimer);
         }
