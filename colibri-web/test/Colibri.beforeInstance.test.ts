@@ -6,29 +6,17 @@ vi.mock('socket.io-client', () => ({
 }));
 
 import { connect } from 'socket.io-client';
-import type * as BroadcastingModule from '../src/Broadcasting';
-import type * as ColibriModule from '../src/Colibri';
-import type * as ModelSynchronizationModule from '../src/ModelSynchronization';
+import { Sync } from '../src/Broadcasting';
+import { Colibri, RegisterChannel, RegisterOnce, UnregisterChannel } from '../src/Colibri';
+import { RegisterModelSync } from '../src/ModelSynchronization';
 import { type FakeSocket, makeFakeSocket } from './support/fakeSocket';
 import { Widget, deliver, latest, nextTask } from './support/modelSyncHelpers';
 
 const connectMock = connect as unknown as Mock;
 
-let Sync: typeof BroadcastingModule.Sync;
-let Colibri: typeof ColibriModule.Colibri;
-type Colibri = ColibriModule.Colibri;
-let RegisterChannel: typeof ColibriModule.RegisterChannel;
-let RegisterOnce: typeof ColibriModule.RegisterOnce;
-let UnregisterChannel: typeof ColibriModule.UnregisterChannel;
-let RegisterModelSync: typeof ModelSynchronizationModule.RegisterModelSync;
-
 let fakeSocket: FakeSocket;
 
-beforeEach(async () => {
-    vi.resetModules();
-    ({ Sync } = await import('../src/Broadcasting'));
-    ({ Colibri, RegisterChannel, RegisterOnce, UnregisterChannel } = await import('../src/Colibri'));
-    ({ RegisterModelSync } = await import('../src/ModelSynchronization'));
+beforeEach(() => {
     vi.clearAllMocks();
     fakeSocket = makeFakeSocket();
     connectMock.mockReturnValue(fakeSocket);

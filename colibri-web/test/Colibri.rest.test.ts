@@ -6,20 +6,14 @@ vi.mock('socket.io-client', () => ({
 }));
 
 import { connect } from 'socket.io-client';
-import { PROTOCOL_VERSION } from '../src/Colibri';
-import type * as ColibriModule from '../src/Colibri';
+import { Colibri, PROTOCOL_VERSION } from '../src/Colibri';
 import { type FakeSocket, makeFakeSocket } from './support/fakeSocket';
 
 const connectMock = connect as unknown as Mock;
 
-let Colibri: typeof ColibriModule.Colibri;
-type Colibri = ColibriModule.Colibri;
-
 let fakeSocket: FakeSocket;
 
-beforeEach(async () => {
-    vi.resetModules();
-    ({ Colibri } = await import('../src/Colibri'));
+beforeEach(() => {
     vi.clearAllMocks();
     fakeSocket = makeFakeSocket();
     connectMock.mockReturnValue(fakeSocket);

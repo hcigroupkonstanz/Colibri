@@ -5,31 +5,25 @@ vi.mock('socket.io-client', () => ({
 }));
 
 import { connect } from 'socket.io-client';
-import { PROTOCOL_VERSION } from '../src/Colibri';
-import type * as ColibriModule from '../src/Colibri';
-import type * as ColibriErrorModule from '../src/ColibriError';
+import {
+    Colibri,
+    DeleteRestApi,
+    GetRestApi,
+    PROTOCOL_VERSION,
+    PutRestApi,
+    RegisterChannel,
+    RegisterOnce,
+    SendMessage,
+    UnregisterChannel
+} from '../src/Colibri';
+import { ColibriError } from '../src/ColibriError';
 import { type FakeSocket, getHandler, makeFakeSocket } from './support/fakeSocket';
 
 const connectMock = connect as unknown as Mock;
 
-let Colibri: typeof ColibriModule.Colibri;
-type Colibri = ColibriModule.Colibri;
-let DeleteRestApi: typeof ColibriModule.DeleteRestApi;
-let GetRestApi: typeof ColibriModule.GetRestApi;
-let PutRestApi: typeof ColibriModule.PutRestApi;
-let RegisterChannel: typeof ColibriModule.RegisterChannel;
-let RegisterOnce: typeof ColibriModule.RegisterOnce;
-let SendMessage: typeof ColibriModule.SendMessage;
-let UnregisterChannel: typeof ColibriModule.UnregisterChannel;
-let ColibriError: typeof ColibriErrorModule.ColibriError;
-
 let fakeSocket: FakeSocket;
 
-beforeEach(async () => {
-    vi.resetModules();
-    ({ Colibri, DeleteRestApi, GetRestApi, PutRestApi, RegisterChannel, RegisterOnce, SendMessage, UnregisterChannel } =
-        await import('../src/Colibri'));
-    ({ ColibriError } = await import('../src/ColibriError'));
+beforeEach(() => {
     vi.clearAllMocks();
     fakeSocket = makeFakeSocket();
     connectMock.mockReturnValue(fakeSocket);

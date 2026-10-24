@@ -6,9 +6,8 @@ vi.mock('socket.io-client', () => ({
 }));
 
 import { connect } from 'socket.io-client';
-import type * as ColibriModule from '../src/Colibri';
-import type { Message } from '../src/Colibri';
-import type * as ModelSynchronizationModule from '../src/ModelSynchronization';
+import { Colibri, type Message } from '../src/Colibri';
+import { RegisterModelSync } from '../src/ModelSynchronization';
 import { SyncModel } from '../src/SyncModel';
 import { Synced } from '../src/Synced';
 import { type FakeSocket, makeFakeSocket } from './support/fakeSocket';
@@ -16,16 +15,9 @@ import { deliver, endOfAnswers, endRequest, everything, latest, nextTask } from 
 
 const connectMock = connect as unknown as Mock;
 
-let Colibri: typeof ColibriModule.Colibri;
-type Colibri = ColibriModule.Colibri;
-let RegisterModelSync: typeof ModelSynchronizationModule.RegisterModelSync;
-
 let fakeSocket: FakeSocket;
 
-beforeEach(async () => {
-    vi.resetModules();
-    ({ Colibri } = await import('../src/Colibri'));
-    ({ RegisterModelSync } = await import('../src/ModelSynchronization'));
+beforeEach(() => {
     vi.clearAllMocks();
     fakeSocket = makeFakeSocket();
     connectMock.mockReturnValue(fakeSocket);

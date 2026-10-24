@@ -6,9 +6,8 @@ vi.mock('socket.io-client', () => ({
 }));
 
 import { connect } from 'socket.io-client';
-import type * as ColibriModule from '../src/Colibri';
-import type { Message } from '../src/Colibri';
-import type * as ModelSynchronizationModule from '../src/ModelSynchronization';
+import { Colibri, type Message } from '../src/Colibri';
+import { RegisterModelSync } from '../src/ModelSynchronization';
 import { SyncModel } from '../src/SyncModel';
 import { Synced } from '../src/Synced';
 import { type FakeSocket, getAnyHandler, makeFakeSocket } from './support/fakeSocket';
@@ -16,16 +15,9 @@ import { Widget, deliver, endOfAnswers, latest } from './support/modelSyncHelper
 
 const connectMock = connect as unknown as Mock;
 
-let Colibri: typeof ColibriModule.Colibri;
-type Colibri = ColibriModule.Colibri;
-let RegisterModelSync: typeof ModelSynchronizationModule.RegisterModelSync;
-
 let fakeSocket: FakeSocket;
 
-beforeEach(async () => {
-    vi.resetModules();
-    ({ Colibri } = await import('../src/Colibri'));
-    ({ RegisterModelSync } = await import('../src/ModelSynchronization'));
+beforeEach(() => {
     vi.clearAllMocks();
     fakeSocket = makeFakeSocket();
     connectMock.mockReturnValue(fakeSocket);
@@ -95,15 +87,15 @@ describe('deleting a model for every client', () => {
 
     it('deletes a model another client created', () => {
         new Colibri('app', 'localhost', 9211);
-        const [models$] = RegisterModelSync({ name: 'del', type: Widget });
+        const [models$] = RegisterModelSync({ name: 'del-theirs', type: Widget });
         connectSocket();
-        deliver(fakeSocket, 'del', { command: 'model::update', payload: { id: 'r1', label: 'theirs' } });
+        deliver(fakeSocket, 'del-theirs', { command: 'model::update', payload: { id: 'r1', label: 'theirs' } });
         const [theirs] = latest(models$);
         fakeSocket.emit.mockClear();
 
         theirs.delete();
 
-        expect(sent('model::delete')).toEqual([['del', { id: 'r1' }]]);
+        expect(sent('model::delete')).toEqual([['del-theirs', { id: 'r1' }]]);
         expect(latest(models$)).toEqual([]);
     });
 
