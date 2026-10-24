@@ -6,6 +6,7 @@ import { lastHeardFrom, onColibriDisconnected, onColibriReconnected } from './li
 import { askForEnd, END_CHANNEL } from './modelSync/askForEnd';
 import { ChangesByModel } from './modelSync/ChangesByModel';
 import { guardChannel, joinChannel, ownedElsewhere } from './modelSync/channelRegistry';
+import { DeletedHere } from './modelSync/DeletedHere';
 import { fieldsOnTop, isBare, withoutChanges, withoutKeys } from './modelSync/modelUpdate';
 import { detachOf, toJsonOf, updateOf } from './modelSync/syncModelMethods';
 import { warnIfMinified } from './modelSync/warnIfMinified';
@@ -31,41 +32,13 @@ type ModelSync<T> = [Observable<T[]>, (model: T) => void];
 const KNOWN_VALUES_KEPT = 8;
 const KNOWN_VALUES_MS = 10_000;
 
-// How long updates for an id deleted here are ignored, as in colibri-unity's LocallyDeletedModels:
-// a remote update relayed before the server had the delete can still arrive after it. Later ones
-// are ignored by the server (MODEL_TOMBSTONE_SECONDS).
-const DELETED_HERE_MS = 60_000;
-
-// Fallback for sendAfresh: how long updates for the id are dropped if the bare-id answer never comes.
-const AFRESH_ANSWER_MS = 10_000;
-
 export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyncRegistration<T>): ModelSync<T> => {
     const name = registration.name || registration.type.name.toLowerCase();
     if (!registration.name) warnIfMinified(registration.type.name, name);
 
     const models = new BehaviorSubject<T[]>([]);
 
-    // Ids deleted here and when (see DELETED_HERE_MS), oldest first.
-    const deletedHere = new Map<string, number>();
-    const rememberDeletedHere = (id: string) => {
-        const now = Date.now();
-        for (const [old, at] of deletedHere) {
-            if (now - at < DELETED_HERE_MS) break;
-            deletedHere.delete(old);
-        }
-        deletedHere.delete(id);
-        deletedHere.set(id, now);
-    };
-    // Ids deleted here and registered again, and when (see sendAfresh).
-    const afresh = new Map<string, number>();
-
-    const recentlyDeletedHere = (id: string) => {
-        const at = deletedHere.get(id);
-        if (at === undefined) return false;
-        if (Date.now() - at < DELETED_HERE_MS) return true;
-        deletedHere.delete(id);
-        return false;
-    };
+    const deletedHere = new DeletedHere(() => Date.now());
 
     // Models passed to registerModel, as opposed to ones created from remote updates. Only these are
     // asked for by id and sent in full.
@@ -172,7 +145,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // had the delete would be taken for the answer.
     const sendAfresh = (colibri: Colibri, model: T) => {
         colibri.sendMessage(name, 'model::request', { id: model.id });
-        afresh.set(model.id, Date.now());
+        deletedHere.markAfresh(model.id);
         answered.add(model);
         heldChanges.take(model);
         sendUpdate(colibri, model, toJsonOf(model));
@@ -240,9 +213,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             // already dead (Socket.IO loses what it sends until its ping timeout). Sent again, as colibri-unity
             // does; Socket.IO holds it until the reconnect. A delete that did arrive arrives twice, harmlessly.
             const since = (lastHeardFrom(colibri) ?? Date.now()) - 1000;
-            for (const [id, at] of deletedHere) {
-                if (at >= since) colibri.sendMessage(name, 'model::delete', { id });
-            }
+            for (const id of deletedHere.idsSince(since)) colibri.sendMessage(name, 'model::delete', { id });
         });
         onColibriReconnected(colibri, () => {
             disconnected = false;
@@ -251,7 +222,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             awaitingAnswer.clear();
             deletedWhileAwaited.clear();
             askedAfterOutage.clear();
-            afresh.clear();
+            deletedHere.clearAfresh();
             for (const id of [...confirming.keys()]) {
                 const confirmation = endConfirmation(id);
                 const model = models.value.find(m => m.id === id);
@@ -295,14 +266,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     const onUpdate = (modelData: Partial<T>) => {
         const model = models.value.find(m => m.id === modelData.id);
         const id = modelData.id;
-        const afreshSince = id === undefined ? undefined : afresh.get(id);
-        if (id !== undefined && afreshSince !== undefined) {
-            // Until the bare-id answer, updates are ones sent before the server had the delete (see
-            // sendAfresh).
-            const waiting = Date.now() - afreshSince < AFRESH_ANSWER_MS;
-            if (isBare(modelData) || !waiting) afresh.delete(id);
-            if (isBare(modelData) || waiting) return;
-        }
+        if (deletedHere.dropsAfreshUpdate(id, isBare(modelData))) return;
         if (id !== undefined && deletedWhileAwaited.delete(id) && !model && isBare(modelData)) return;
         const asker = id === undefined ? undefined : awaitingAnswer.get(id);
         if (id !== undefined && asker) {
@@ -556,7 +520,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
             updateOf(model, update);
             models.next([...models.value]);
         } else if (modelData.id) {
-            if (recentlyDeletedHere(modelData.id)) return;
+            if (deletedHere.recently(modelData.id)) return;
             const newModel = new registration.type(modelData.id);
             newModel.deletions.subscribe(() => {
                 deleteHere(newModel);
@@ -588,7 +552,7 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
     // instance listed for its id: a model replaced by registerModel no longer stands for it.
     const deleteHere = (model: T) => {
         if (models.value.find(m => m.id === model.id) !== model) return;
-        rememberDeletedHere(model.id);
+        deletedHere.remember(model.id);
         forget(model.id, model);
         withColibri(colibri => {
             colibri.sendMessage(name, 'model::delete', { id: model.id });
@@ -668,8 +632,8 @@ export const RegisterModelSync = <T extends SyncModel<T>>(registration: ModelSyn
         model.deletions.subscribe(() => {
             deleteHere(model);
         });
-        const reused = recentlyDeletedHere(model.id);
-        deletedHere.delete(model.id);
+        const reused = deletedHere.recently(model.id);
+        deletedHere.forget(model.id);
         ownModels.add(model);
         if (listed) {
             endConfirmation(model.id);
