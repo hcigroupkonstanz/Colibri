@@ -514,24 +514,30 @@ class ModelSyncChannel<T extends SyncModel<T>> {
     public registerModel(model: T): void {
         const listed = this.models.value.find(m => m.id === model.id);
         if (listed === model) return;
+        this.warnIfReplacing(model, listed);
+
+        this.wireOwnModel(model);
+        const reused = this.deletedHere.recently(model.id);
+        this.deletedHere.forget(model.id);
+        this.ownModels.add(model);
+        this.listOwnModel(model, listed);
+        this.askOnceConnected(model, reused);
+    }
+
+    private warnIfReplacing(model: T, listed: T | undefined): void {
         if (listed && this.ownModels.has(listed)) {
             console.warn(
                 `Colibri: registerModel was given a second model with the id '${model.id}' on channel ` +
                     `'${this.name}'. It replaces the first one, which no longer syncs.`
             );
         }
+    }
 
+    private wireOwnModel(model: T): void {
         // Hold-back is decided when the change is made, not when SyncModel reports it 1 ms later: an answer
         // arriving in between would be applied over it.
-        //
-        // Held until the server has answered for the model, then sent on top of what it has: changes made
-        // before `new Colibri()`, or after a reconnect but before the answer, would otherwise be undone by it.
-        // Also changes made while disconnected: Socket.IO sends them on reconnect ahead of the model's
-        // request, and to a server that forgot the model they would become all of it.
-        const mustHold = () =>
-            !Colibri.getInstance(false) || this.disconnected || this.awaitedAnswers.isAwaited(model.id);
         model.modelChanges.subscribe(change => {
-            if (mustHold()) this.heldChanges.add(model, [change]);
+            if (this.mustHold(model)) this.heldChanges.add(model, [change]);
             else this.changesToSend.add(model, [change]);
         });
         model.modelChanges$.subscribe({
@@ -539,7 +545,7 @@ class ModelSyncChannel<T extends SyncModel<T>> {
                 const changes = this.changesToSend.take(model);
                 if (changes.length > 0) {
                     const colibri = Colibri.getInstance(false);
-                    if (!colibri || mustHold()) this.heldChanges.add(model, changes);
+                    if (!colibri || this.mustHold(model)) this.heldChanges.add(model, changes);
                     else this.sendUpdate(colibri, model, toJsonOf(model, changes));
                 }
 
@@ -559,9 +565,17 @@ class ModelSyncChannel<T extends SyncModel<T>> {
         model.deletions.subscribe(() => {
             this.deleteHere(model);
         });
-        const reused = this.deletedHere.recently(model.id);
-        this.deletedHere.forget(model.id);
-        this.ownModels.add(model);
+    }
+
+    // Held until the server has answered for the model, then sent on top of what it has: changes made
+    // before `new Colibri()`, or after a reconnect but before the answer, would otherwise be undone by it.
+    // Also changes made while disconnected: Socket.IO sends them on reconnect ahead of the model's
+    // request, and to a server that forgot the model they would become all of it.
+    private mustHold(model: T): boolean {
+        return !Colibri.getInstance(false) || this.disconnected || this.awaitedAnswers.isAwaited(model.id);
+    }
+
+    private listOwnModel(model: T, listed: T | undefined): void {
         if (listed) {
             this.confirmations.end(model.id);
             this.reconnectRound.delete(model.id);
@@ -570,7 +584,9 @@ class ModelSyncChannel<T extends SyncModel<T>> {
         } else {
             this.models.next([...this.models.value, model]);
         }
+    }
 
+    private askOnceConnected(model: T, reused: boolean): void {
         // While disconnected, the reconnect asks for it.
         withColibri(colibri => {
             if (this.disconnected || !this.ownModels.has(model)) return;
