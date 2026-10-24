@@ -47,6 +47,7 @@ import {
 } from '../../limits/inbound-limits.js';
 import { AddressThrottle } from './address-throttle.js';
 import { CLOSE_GRACE_MILLIS, endRefused } from './end-refused.js';
+import { KEEPALIVE_INITIAL_DELAY_MILLIS } from './keepalive.js';
 import { createTcpClient, maxBufferSize } from './tcp-client.js';
 import type { Refusal, TcpClient } from './tcp-client.js';
 import { fellBackToIPv4, hostPort, ipv4OnlyWarning, listenHost, normalizeAddress } from '../../net/addresses.js';
@@ -146,9 +147,6 @@ export const HEARTBEAT_EVERY_BYTES = 64 * 1024;
 // that long, so the idle check is skipped for that one tick: by the next, whatever the clients sent
 // during the stall has been read.
 const TICK_STALL_MILLIS = 2000;
-
-// When the kernel starts probing a socket with nothing in flight; see handleConnection.
-const KEEPALIVE_INITIAL_DELAY_MILLIS = 5000;
 
 // How long a connection to the TLS port has to send its first bytes, and then, separately, to
 // complete its TLS handshake. colibri-unity gives up on a connect after 5 s, handshake included.
