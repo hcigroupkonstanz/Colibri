@@ -39,7 +39,7 @@ export interface TcpClient {
     // The same as dropping and droppedSinceWarning, for replies past MAX_REPLY_BACKLOG_BYTES.
     droppingReplies: boolean;
     droppedRepliesSinceWarning: number;
-    // What the idle watch reads; see endIdleClients.
+    // What the idle watch reads; see IdleWatch.endIdleClients.
     reading: {
         // performance.now() of the last bytes received, or of the connection if none have been yet.
         lastInboundAt: number;
