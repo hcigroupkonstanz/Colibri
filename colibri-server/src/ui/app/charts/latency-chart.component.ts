@@ -273,7 +273,8 @@ export class LatencyChartComponent implements AfterViewInit, OnDestroy {
                 color: line.color
             }));
 
-            const draw = boxplot(true, yScale, boxWidth, boxWidth, false, boxplotSymbolDot, 0.5, 0.5);
+            const draw = boxplot({ vertical: true, scale: yScale, bandwidth: boxWidth, boxwidth: boxWidth,
+                showInnerDots: false, symbol: boxplotSymbolDot, opacity: 0.5, jitter: 0.5 });
             this.boxplotSvg
                 .selectAll<SVGGElement, BoxplotStats & { id: string; color: string }>('g.plot')
                 .data(boxplotData, d => d.id)

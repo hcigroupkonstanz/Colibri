@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable prefer-const */
 import { max, min, quantile } from 'd3';
+import type { ScaleLinear } from 'd3-scale';
 import { scaleLinear } from 'd3-scale';
 
 // Adapted from https://github.com/akngs/d3-boxplot/blob/main/src/boxplot.js
@@ -37,7 +38,18 @@ export interface Point {
     farout: boolean;
 }
 
-export const boxplot = (
+interface BoxplotOptions {
+    vertical?: boolean;
+    scale?: ScaleLinear<number, number>;
+    bandwidth?: number;
+    boxwidth?: number;
+    showInnerDots?: boolean;
+    symbol?: string;
+    opacity?: number;
+    jitter?: number;
+}
+
+export const boxplot = ({
     vertical = false,
     scale = scaleLinear(),
     bandwidth = 20,
@@ -46,7 +58,7 @@ export const boxplot = (
     symbol = boxplotSymbolDot,
     opacity = 0.8,
     jitter = 0.2,
-) => {
+}: BoxplotOptions = {}) => {
     let key: any = undefined;
 
     const boxplot = (ctx: any) => {

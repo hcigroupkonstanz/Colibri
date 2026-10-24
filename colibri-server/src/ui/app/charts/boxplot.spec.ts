@@ -52,7 +52,7 @@ describe('boxplot', () => {
             const yScale = d3.scaleLinear().domain([ Math.max(maxLatency, 10), 0 ]).range([ 0, plotHeight ]).nice();
             const plots: Plot[] = ids.map(id => ({ ...boxplotStats(latencies[id]), id }));
 
-            const render = boxplot(true, yScale, boxWidth, boxWidth, false, boxplotSymbolDot, 0.5, 0.5);
+            const render = boxplot({ vertical: true, scale: yScale, bandwidth: boxWidth, boxwidth: boxWidth, showInnerDots: false, symbol: boxplotSymbolDot, opacity: 0.5, jitter: 0.5 });
             svg.selectAll<SVGGElement, Plot>('g.plot')
                 .data(plots, d => d.id)
                 .join('g')
@@ -169,7 +169,7 @@ describe('boxplot', () => {
 
         it('draws horizontally, all points as dots, by default', () => {
             const svg = d3.create('svg');
-            group(svg).call(boxplot(false, scale()));
+            group(svg).call(boxplot({ scale: scale() }));
             expect(markup(svg)).toBe(`<svg>
 <g>
 <g class="whisker" transform="translate(0,10)">
@@ -199,7 +199,7 @@ describe('boxplot', () => {
         it('draws ticks instead of dots, and redraws them with the new points', () => {
             const svg = d3.create('svg');
             const g = group(svg);
-            const render = boxplot(false, scale(), 20, 20, true, boxplotSymbolTick, 0.8, 0);
+            const render = boxplot({ scale: scale(), symbol: boxplotSymbolTick, jitter: 0 });
             g.call(render);
             expect(markup(svg)).toBe(`<svg>
 <g>
@@ -256,7 +256,7 @@ describe('boxplot', () => {
         it('draws dots without jitter, and on a scale that runs backwards', () => {
             const svg = d3.create('svg');
             const backwards = d3.scaleLinear().domain([ 0, 100 ]).range([ 260, 0 ]);
-            group(svg).call(boxplot(true, backwards, 24, 24, true, boxplotSymbolDot, 0.5, 0));
+            group(svg).call(boxplot({ vertical: true, scale: backwards, bandwidth: 24, boxwidth: 24, opacity: 0.5, jitter: 0 }));
             expect(markup(svg)).toBe(`<svg>
 <g>
 <g class="whisker" transform="translate(12,0)">
@@ -285,7 +285,7 @@ describe('boxplot', () => {
 
         it('moves to the new points over a transition', async () => {
             const svg = d3.create('svg');
-            const render = boxplot(false, scale(), 20, 20, true, boxplotSymbolDot, 0.8, 0.2);
+            const render = boxplot({ scale: scale() });
             const g = group(svg);
             g.transition().duration(1000).call(render);
             await environment.settle(svg.node()!);
