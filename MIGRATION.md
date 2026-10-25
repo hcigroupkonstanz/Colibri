@@ -215,3 +215,7 @@ Where you meant that, e.g. when a component unmounts, call `detach()` instead.
 3. **Files moved.** The package now has the folders `Runtime/` and `Editor/`, e.g. the prefabs are in
    `Packages/Colibri/Runtime/Prefabs/`. GUIDs are unchanged, so references in scenes and prefabs keep working. Update
    only paths written in code, e.g. in editor scripts or `AssetDatabase` lookups.
+4. **Installed from the `.unitypackage`: delete `Assets/Colibri` before you import the 2.1 package.** Importing over an
+   existing install may leave the moved files at their 2.0 paths, which breaks the Editor compile.
+   `Assets/Resources/ColibriConfig.asset` is outside that folder and stays, and references in scenes and prefabs
+   reconnect after the import because GUIDs are unchanged. Package Manager installs need nothing.
