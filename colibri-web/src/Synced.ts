@@ -1,4 +1,4 @@
-import { SyncModel } from './SyncModel';
+import type { SyncModel } from './SyncModel';
 
 /**
  *  This decorator can be attached to any `accessor` member of a SyncModel.

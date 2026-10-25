@@ -90,7 +90,7 @@ describe('WebServer over HTTP', () => {
         return { status: response.status, text: await response.text() };
     };
 
-    // Colibri.ts: setRestObject PUTs JSON.stringify(data) in the store's media type, and
+    // RestStore.ts: setRestObject PUTs JSON.stringify(data) in the store's media type, and
     // getRestObject returns response.json().
     const webPut = (key: string, data: unknown) => fetch(storeUrl('WebApp', key), {
         method: 'PUT',
