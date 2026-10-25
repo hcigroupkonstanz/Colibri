@@ -7,8 +7,8 @@ namespace HCIKonstanz.Colibri.Communication
     [Obsolete("Becomes internal in Colibri 3.0, as only Colibri's voice components use it.")]
     public class Resampler
     {
-        public int SourceRate { get; private set; }
-        public int TargetRate { get; private set; }
+        public int sourceRate { get; private set; }
+        public int targetRate { get; private set; }
 
         // Null if either rate is zero or less; ResampleStream then returns an empty array. VoiceReceiver
         // passes AudioSettings.outputSampleRate as the target, which can be zero without an audio device.
@@ -17,8 +17,8 @@ namespace HCIKonstanz.Colibri.Communication
 
         public Resampler(int sourceRate, int targetRate)
         {
-            SourceRate = sourceRate;
-            TargetRate = targetRate;
+            this.sourceRate = sourceRate;
+            this.targetRate = targetRate;
             if (sourceRate > 0 && targetRate > 0)
                 _resampler = new StreamingResampler(sourceRate, targetRate);
         }
