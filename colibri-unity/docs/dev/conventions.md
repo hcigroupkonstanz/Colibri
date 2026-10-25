@@ -27,6 +27,7 @@ Checked by the metrics report. Exceeding one needs a reason in review.
 - Humble Object: a `MonoBehaviour` holds the Unity lifecycle and the Unity API calls.
 - Logic goes into `internal sealed` plain C# classes. Pass time, sending and similar dependencies in, so EditMode tests reach it.
 - `internal` by default, `public` only for user API.
+- Public API is removed or made internal only in a major release. In a minor release it gets `[Obsolete]` naming the release that removes it, and the package suppresses CS0618 where it still uses it.
 - `InternalsVisibleTo` only for the test assemblies and the package's Editor assembly.
 - Internal and private types are `sealed` or `static`, unless derived from.
 
