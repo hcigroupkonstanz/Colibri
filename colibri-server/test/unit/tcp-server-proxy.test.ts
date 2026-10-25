@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Subject, config as rxjsConfig } from 'rxjs';
-import { TlsCredentials } from '../../src/server/modules/core/tls-files.js';
-import { TCPServerProxy } from '../../src/server/modules/networking/tcp-server-proxy.js';
-import { WorkerServiceProxy } from '../../src/server/modules/core/worker-service-proxy.js';
-import { WorkerMessage } from '../../src/server/modules/core/worker-message.js';
-import { ConnectionPool, NetworkClient } from '../../src/server/modules/command-hooks/connection-pool.js';
-import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
-import { ModelSynchronization } from '../../src/server/modules/command-hooks/model-sync.js';
-import { Payload } from '../../src/server/modules/core/payload.js';
+import type { TlsCredentials } from '../../src/server/modules/tls/tls-files.js';
+import { TCPServerProxy } from '../../src/server/modules/tcp/tcp-server-proxy.js';
+import { WorkerServiceProxy } from '../../src/server/modules/core/worker/worker-service-proxy.js';
+import type { WorkerMessage } from '../../src/server/modules/core/worker/worker-message.js';
+import { ConnectionPool } from '../../src/server/modules/hooks/connection-pool.js';
+import type { NetworkClient } from '../../src/server/modules/protocol/network.js';
+import { DataStore } from '../../src/server/modules/models/data-store.js';
+import { ModelSynchronization } from '../../src/server/modules/models/model-sync.js';
+import { Payload } from '../../src/server/modules/protocol/payload.js';
 
 // The proxy's only link to the worker thread is the message channel, so these tests stand in for
 // the thread by pushing what TCPServerWorker would post. No thread is started: under vitest the

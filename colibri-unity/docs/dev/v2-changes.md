@@ -94,7 +94,7 @@ rationale, migration steps, and what the Editor verification did and did not cov
 
 - New `Assets/Colibri/Networking/Protocol/`: `FrameCodec`, `FrameReader`, `DecodedFrame`,
   `FrameType`, `FrameException`. Pure C# with no `UnityEngine` dependency, so it is directly
-  unit-testable, and a mirror of `colibri-server/src/server/modules/networking/protocol.ts`:
+  unit-testable, and a mirror of `colibri-server/src/server/modules/protocol/protocol.ts`:
 
   ```
   [u32 LE totalLength][u8 type][body]      totalLength = 1 (type) + body.length

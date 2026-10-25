@@ -3,8 +3,8 @@ import { mkdtemp, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import type { Worker } from 'worker_threads';
-import { StoreCheckpointer } from '../../src/server/modules/web/store-checkpoint.js';
-import { StoreDatabase } from '../../src/server/modules/web/store-database.js';
+import { StoreCheckpointer } from '../../src/server/modules/store/store-checkpoint.js';
+import { StoreDatabase } from '../../src/server/modules/store/store-database.js';
 
 describe('StoreCheckpointer', () => {
     const cleanup: Array<() => Promise<void> | void> = [];

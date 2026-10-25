@@ -7,6 +7,10 @@ Everything that changed in colibri-server from `1.3.1` to `2.0.0`. To upgrade a 
 Colibri 1.x, start with [MIGRATION.md](../../../MIGRATION.md), which covers all three components;
 this is the server's full detail.
 
+**Note:** paths and names in this document are those of 2.0. In 2.1 the modules moved into feature folders and
+large classes were split. The layout is described in
+[conventions.md](conventions.md#modules-and-files), the change in the [CHANGELOG](../../CHANGELOG.md).
+
 ---
 
 ## 2.0.0 (unreleased)
@@ -46,7 +50,7 @@ this is the server's full detail.
 ### Protocol version checking
 
 - **Both transports check the protocol version.** `PROTOCOL_VERSION` in
-  [`protocol.ts`](../../src/server/modules/networking/protocol.ts) is the single source of truth
+  [`protocol.ts`](../../src/server/modules/protocol/protocol.ts) is the single source of truth
   for the TCP handshake and the Socket.IO query. Until now the version was parsed, stored and
   logged, but compared against nothing, so a client built against the wrong protocol reconnected
   forever against a server that said nothing unusual.
@@ -280,7 +284,7 @@ this is the server's full detail.
 
 ### Hot-path performance
 
-- **`Payload` abstraction** (`modules/core/payload.ts`): holds whichever representation (string or
+- **`Payload` abstraction** (`modules/protocol/payload.ts`): holds whichever representation (string or
   parsed value) arrived and memoizes the other on first access, replacing the double
   `JSON.stringify`/`JSON.parse` round trip on every cross-transport message. Both `FIXME: terrible
   workaround` blocks in `socket-io-server.ts` are gone; web→web and TCP→TCP relaying now does zero
@@ -704,7 +708,8 @@ The endpoints are documented under [REST store](protocol.md#rest-store).
 ### Deprecations (kept, not deleted)
 
 - Added `@deprecated` JSDoc to `modules/core/serializable.ts`, `modules/core/error-handler.ts`,
-  `modules/core/redirect-console.ts`, and `DataStore.addModel`/`DataStore.clear`.
+  `modules/core/redirect-console.ts`, and `DataStore.addModel`/`DataStore.clear`. The three modules were removed in
+  2.1.
 
 ### Tests added
 

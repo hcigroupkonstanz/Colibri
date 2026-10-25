@@ -25,8 +25,8 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
-import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../src/server/modules/web/voice-packet.js';
+} from '../src/server/modules/protocol/protocol.js';
+import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../src/server/modules/voice/voice-packet.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -54,7 +54,7 @@ const versionLiterals: VersionLiteral[] = [
         pattern: /const string CLIENT_VERSION\s*=\s*"([^"]*)"/g,
     },
     {
-        file: 'colibri-server/src/ui/app/services/socketio.service.ts',
+        file: 'colibri-server/src/ui/app/connection/socketio.service.ts',
         pattern: /query:\s*\{\s*app:\s*'colibri',\s*version:\s*'([^']*)'\s*\}/g,
     },
 ];

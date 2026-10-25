@@ -5,8 +5,8 @@
 @import '@fontsource/roboto/700.css';
 @import '@fontsource/fira-mono/400.css';
 
-// The palette every page uses: Nord, with text colours checked for at least 4.5:1 against the
-// backgrounds they appear on.
+// The palette every page uses: Nord, with text colours at 4.5:1 or more on the backgrounds they
+// appear on.
 :root {
     color-scheme: dark;
 
@@ -86,7 +86,7 @@ button {
     user-select: none;
 }
 
-// An app's name in its colour (--app, from appColor()), on the log and the statistics page alike.
+// An app's name in its colour (--app, from appColor() in log-format.ts), on the log and Clients pages.
 .app-chip {
     display: inline-block;
     padding: 0 6px;

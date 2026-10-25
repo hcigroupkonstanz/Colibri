@@ -1,0 +1,104 @@
+:host {
+    display: block;
+}
+
+// As many columns of at least 420px as fit, up to three, the cards filling each from the top.
+// Narrower columns break the variable names under the values mid-word.
+.cards {
+    columns: 3 420px;
+    column-gap: 16px;
+
+    .card {
+        break-inside: avoid;
+        margin-bottom: 16px;
+    }
+}
+
+.card-head app-live-status {
+    margin-left: auto;
+}
+
+.facts {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: 10px 16px;
+    margin: 0;
+    font-size: 13px;
+}
+
+.fact {
+    display: contents;
+}
+
+dt {
+    color: var(--text-muted);
+}
+
+dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+
+    // the variable that sets it, under the value
+    code {
+        display: block;
+        margin-top: 1px;
+        color: var(--text-muted);
+        font: 11px/15px var(--mono);
+    }
+}
+
+.value {
+    color: var(--text-strong);
+
+    &.mono {
+        font-size: 12.5px;
+    }
+
+    &.ok {
+        color: var(--ok);
+    }
+
+    &.warn {
+        color: var(--warn);
+    }
+
+    &.err {
+        color: var(--err);
+    }
+
+    &.off {
+        color: var(--text-muted);
+    }
+
+    a {
+        color: var(--accent);
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+}
+
+// after the value, or under it as a whole where it does not fit
+.note {
+    margin-left: 6px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+@media (max-width: 599.98px) {
+    .cards .card {
+        margin-bottom: 12px;
+    }
+
+    // a label over its value: two columns left too little of either
+    .facts {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px;
+    }
+
+    dd {
+        margin-bottom: 8px;
+    }
+}

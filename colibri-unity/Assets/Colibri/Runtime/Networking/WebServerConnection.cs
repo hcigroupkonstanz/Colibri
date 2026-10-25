@@ -24,7 +24,7 @@ namespace HCIKonstanz.Colibri.Networking
     [DefaultExecutionOrder(-100)]
     public class WebServerConnection : SingletonBehaviour<WebServerConnection>
     {
-        // Must equal PROTOCOL_VERSION in colibri-server (src/server/modules/networking/protocol.ts) and in
+        // Must equal PROTOCOL_VERSION in colibri-server (src/server/modules/protocol/protocol.ts) and in
         // colibri-web (src/Colibri.ts); the server's `npm run test:vectors` checks all three.
         private const string CLIENT_VERSION = "2";
 

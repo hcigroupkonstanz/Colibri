@@ -1,38 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fileURLToPath } from 'url';
-import { DataStore } from '../../src/server/modules/command-hooks/data-store.js';
+import { DataStore } from '../../src/server/modules/models/data-store.js';
 import { RingBuffer } from '../../src/server/modules/core/ring-buffer.js';
 import { UNKNOWN_BUILD } from '../../src/server/modules/core/build-info.js';
-import { CertificateInfo } from '../../src/server/modules/core/tls-files.js';
+import type { CertificateInfo } from '../../src/server/modules/tls/tls-files.js';
 import { readServerVersion } from '../../src/server/modules/core/server-version.js';
-import { ClientActivity } from '../../src/server/modules/networking/client-activity.js';
-import { PROTOCOL_VERSION } from '../../src/server/modules/networking/protocol.js';
-import { SocketIoClient } from '../../src/server/modules/networking/socket-io-server.js';
-import { TcpNetworkClient } from '../../src/server/modules/networking/tcp-server-proxy.js';
-import {
-    DEFAULT_MODELS_LIMIT,
-    LATENCY_HISTORY_MILLIS,
-    MAX_CHANNELS,
-    MAX_CLIENT_ROWS,
-    MAX_DELETED,
-    MAX_FILTER_LENGTH,
-    MAX_LATENCY_HISTORY_SAMPLES,
-    MAX_MODELS_LIMIT,
-    MAX_MODEL_JSON_LENGTH,
-    MAX_NAME_LENGTH,
-    RATE_HISTORY_SECONDS,
-    ServerSources,
-    clientsSnapshot,
-    latencySnapshot,
-    modelSnapshot,
-    modelsSnapshot,
-    parseModelQuery,
-    parseModelsQuery,
-    rateHistory,
-    recentLatency,
-    serverSnapshot,
-} from '../../src/server/modules/web/admin-topics.js';
-import { MODEL_SIZE_REFRESH_MILLIS, ModelMeasures } from '../../src/server/modules/web/model-measures.js';
+import type { ClientActivity } from '../../src/server/modules/limits/client-activity.js';
+import { PROTOCOL_VERSION } from '../../src/server/modules/protocol/protocol.js';
+import type { SocketIoClient } from '../../src/server/modules/socket-io/socket-io-server.js';
+import type { TcpNetworkClient } from '../../src/server/modules/tcp/tcp-server-proxy.js';
+import { clientsSnapshot, MAX_CLIENT_ROWS, RATE_HISTORY_SECONDS, rateHistory, recentLatency } from '../../src/server/modules/admin/topics/clients-snapshot.js';
+import { LATENCY_HISTORY_MILLIS, latencySnapshot, MAX_LATENCY_HISTORY_SAMPLES } from '../../src/server/modules/admin/topics/latency-snapshot.js';
+import { MAX_MODEL_JSON_LENGTH, MODEL_SIZE_REFRESH_MILLIS, ModelMeasures } from '../../src/server/modules/admin/model-measures.js';
+import { modelSnapshot, parseModelQuery } from '../../src/server/modules/admin/topics/model-snapshot.js';
+import { DEFAULT_MODELS_LIMIT, MAX_CHANNELS, MAX_DELETED, MAX_FILTER_LENGTH, MAX_MODELS_LIMIT, modelsSnapshot, parseModelsQuery } from '../../src/server/modules/admin/topics/models-snapshot.js';
+import { MAX_NAME_LENGTH } from '../../src/server/modules/admin/topics/name-length.js';
+import type { ServerSources } from '../../src/server/modules/admin/topics/server-snapshot.js';
+import { serverSnapshot } from '../../src/server/modules/admin/topics/server-snapshot.js';
 
 const query = (fields: Record<string, unknown> = {}) => parseModelsQuery(fields);
 

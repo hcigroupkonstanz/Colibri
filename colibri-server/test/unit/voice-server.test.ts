@@ -3,16 +3,21 @@ import * as dgram from 'dgram';
 import { once } from 'events';
 import { existsSync, readFileSync } from 'fs';
 import { mkdir, mkdtemp, readdir, readFile, rm } from 'fs/promises';
-import { AddressInfo } from 'net';
+import type { AddressInfo } from 'net';
 import { networkInterfaces, tmpdir } from 'os';
 import * as path from 'path';
-import { Subject, Subscription } from 'rxjs';
+import type { Subscription } from 'rxjs';
+import { Subject } from 'rxjs';
 import wavefile from 'wavefile';
-import { VoiceServer, ipv6SocketsTakeIPv4, voiceSocketOptions, wavHeader } from '../../src/server/modules/web/voice-server.js';
-import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../../src/server/modules/web/voice-packet.js';
-import { UnityClient, UnityClientSource } from '../../src/server/modules/web/unity-client-addresses.js';
-import { ConsoleLog, LogLevel, LogMessage, Service } from '../../src/server/modules/core/index.js';
-import { compileTrustedProxies } from '../../src/server/modules/networking/trusted-proxies.js';
+import { VoiceServer, ipv6SocketsTakeIPv4, voiceSocketOptions } from '../../src/server/modules/voice/voice-server.js';
+import { wavHeader } from '../../src/server/modules/voice/wav.js';
+import { VoiceCodec, encodeVoicePacket, voiceAppId } from '../../src/server/modules/voice/voice-packet.js';
+import type { UnityClient, UnityClientSource } from '../../src/server/modules/voice/unity-client-addresses.js';
+import { ConsoleLog } from '../../src/server/modules/core/console-log.js';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
+import { Service } from '../../src/server/modules/core/service.js';
+import { compileTrustedProxies } from '../../src/server/modules/net/trusted-proxies.js';
 
 const { WaveFile } = wavefile;
 
@@ -78,10 +83,14 @@ const pcmPacket = function (userId: number, sequence: number, samples: number[],
 interface VoiceServerInternals {
     udpSocket: dgram.Socket;
     clients: Map<string, unknown>;
-    reportedAt: Map<string, number>;
-    rejections: Map<string, unknown>;
-    savingRecordings: Promise<void> | undefined;
-    pruneReports(nowMillis: number): void;
+    reports: {
+        reportedAt: Map<string, number>;
+        rejections: Map<string, unknown>;
+        pruneReports(nowMillis: number): void;
+    };
+    recorder: {
+        savingRecordings: Promise<void> | undefined;
+    };
     checkClientsDisconnected(): Promise<void>;
 }
 
@@ -220,8 +229,8 @@ describe('VoiceServer', () => {
         expect(malformedReports()).toHaveLength(2);
 
         // Once the interval has passed, the same source is reported again.
-        internals.pruneReports(Date.now() + 10000);
-        expect(internals.reportedAt.size).toBe(0);
+        internals.reports.pruneReports(Date.now() + 10000);
+        expect(internals.reports.reportedAt.size).toBe(0);
         await send(a, [ 1, 2 ]);
         await roundTrip(a, b, 1);
         expect(malformedReports()).toHaveLength(3);
@@ -310,7 +319,7 @@ describe('VoiceServer', () => {
             internals.udpSocket.emit('message', Buffer.from([ 1, 2 ]), { address: '10.0.0.1', port: 1024 + i, family: 'IPv4', size: 2 });
         }
 
-        expect(internals.reportedAt.size).toBeLessThanOrEqual(100);
+        expect(internals.reports.reportedAt.size).toBeLessThanOrEqual(100);
         expect(malformedReports().length).toBeLessThanOrEqual(100);
         expect(internals.clients.size).toBe(0);
     });
@@ -468,7 +477,7 @@ describe('VoiceServer', () => {
             expect(message).toContain('not reported for 10s');
 
             // Once the interval has passed, it is reported again.
-            internals.pruneReports(Date.now() + 10000);
+            internals.reports.pruneReports(Date.now() + 10000);
             await send(a, v1Packet(1, VoiceCodec.PCM, [ 1, 2 ]));
             await roundTrip(a, b, 1);
             expect(v1Reports()).toHaveLength(2);
@@ -730,7 +739,7 @@ describe('VoiceServer', () => {
                     + `clients already${debugTail}`, { connection: true } ],
             ]);
             // Each forgot its first dropped packet once it was let in.
-            expect(internals.rejections.size).toBe(0);
+            expect(internals.reports.rejections.size).toBe(0);
 
             // Dropped again once its Unity clients have left, it gets the 3 s anew.
             unity.disconnectApp('lab');
@@ -784,29 +793,29 @@ describe('VoiceServer', () => {
                     for (let i = 0; i < 5000; i++) deliver(internals.udpSocket, '198.51.100.7', 1024 + i, voicePacket(9, sequence, [], LAB));
                 };
                 flood(0);
-                expect(internals.rejections.size).toBe(100);
+                expect(internals.reports.rejections.size).toBe(100);
                 expect(firstDrops()).toHaveLength(100);
                 at(3000);
                 flood(1);
-                expect(internals.rejections.size).toBe(100);
+                expect(internals.reports.rejections.size).toBe(100);
                 expect(ignoredReports()).toHaveLength(100);
                 expect(ignoredReports()[0]!.message).toContain(`from ${source(0)} `);
 
                 // One goes on, the others stop. Theirs are forgotten 10 s after their last.
                 at(12999);
                 deliver(internals.udpSocket, '198.51.100.7', 1024, voicePacket(9, 2, [], LAB));
-                internals.pruneReports(Date.now());
-                expect(internals.rejections.size).toBe(100);
+                internals.reports.pruneReports(Date.now());
+                expect(internals.reports.rejections.size).toBe(100);
                 at(13000);
-                internals.pruneReports(Date.now());
-                expect([ ...internals.rejections.keys() ]).toEqual([ source(0) ]);
+                internals.reports.pruneReports(Date.now());
+                expect([ ...internals.reports.rejections.keys() ]).toEqual([ source(0) ]);
 
                 // The one that went on keeps its time, and is reported again 10 s after the last time.
                 deliver(internals.udpSocket, '198.51.100.7', 1024, voicePacket(9, 3, [], LAB));
                 expect(ignoredReports()).toHaveLength(101);
                 // A new one gets a slot again, and its 3 s.
                 deliver(internals.udpSocket, '198.51.100.7', 1024 + 4999, voicePacket(9, 3, [], LAB));
-                expect([ ...internals.rejections.keys() ]).toEqual([ source(0), source(4999) ]);
+                expect([ ...internals.reports.rejections.keys() ]).toEqual([ source(0), source(4999) ]);
                 expect(ignoredReports()).toHaveLength(101);
             });
         });
@@ -1381,7 +1390,7 @@ describe('VoiceServer recordings', () => {
     it('waits for a save the disconnect check started before it saves the rest', async () => {
         await talk(3, someSamples(480, 3));
         let release!: () => void;
-        internals.savingRecordings = new Promise<void>(resolve => release = resolve);
+        internals.recorder.savingRecordings = new Promise<void>(resolve => release = resolve);
 
         let stopped = false;
         const stopping = server.stop().then(() => stopped = true);

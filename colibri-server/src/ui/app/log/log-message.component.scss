@@ -1,0 +1,266 @@
+:host {
+    display: block;
+}
+
+// One grid per row with fixed columns, so that time, level, source and message line up from row
+// to row, and a long message wraps under itself instead of under the time. The message column is
+// as wide as its text, up to the room there is: a repeat count follows a short line right after
+// its text, not at the far edge of a wide screen.
+.row {
+    display: grid;
+    grid-template-columns: 12ch 2.25rem var(--source-width, 13rem) minmax(0, max-content) auto;
+    grid-template-areas: 'time level source message count';
+    column-gap: 12px;
+    align-items: start;
+
+    padding: 2px 16px 2px 13px;
+    border-left: 3px solid transparent;
+
+    font: 13px/20px var(--mono);
+    color: var(--text);
+    cursor: default;
+
+    &:hover {
+        background: rgba(76, 86, 106, 0.25);
+    }
+
+    // before the levels, so that an open error or warning keeps its tint
+    &.open {
+        background: var(--surface-1);
+    }
+
+    // where Previous and Next went: the outline replaces the time's own focus ring
+    &.current {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+
+        .time:focus-visible {
+            outline: none;
+        }
+    }
+
+    &.level-0 {
+        border-left-color: var(--err-mark);
+        background: var(--err-row);
+
+        .message {
+            color: var(--err);
+        }
+
+        .level {
+            color: var(--bg);
+            background: var(--err);
+        }
+    }
+
+    &.level-1 {
+        border-left-color: var(--warn);
+        background: var(--warn-row);
+
+        .level {
+            color: var(--bg);
+            background: var(--warn);
+        }
+    }
+
+    &.level-2 .level {
+        color: var(--info);
+    }
+
+    &.level-3 {
+        .level,
+        .message {
+            color: var(--debug);
+        }
+    }
+}
+
+.time {
+    grid-area: time;
+    padding: 0;
+    border: 0;
+    background: none;
+
+    color: var(--text-muted);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.level {
+    grid-area: level;
+    // holds its visually hidden name, which would otherwise make the page around the log scroll
+    position: relative;
+    margin-top: 2px;
+
+    font: 700 10.5px/16px var(--sans);
+    letter-spacing: 0.04em;
+    text-align: center;
+    border-radius: 3px;
+}
+
+.source {
+    grid-area: source;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: 20px;
+
+    font: 12px/20px var(--sans);
+    color: var(--text-muted);
+    white-space: nowrap;
+
+    > * {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+.app-chip,
+.client,
+.server {
+    flex: 0 1 auto;
+}
+
+.client.id {
+    font-family: var(--mono);
+}
+
+.message {
+    grid-area: message;
+    min-width: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+
+    &.clamped {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        overflow: hidden;
+    }
+
+    // Not in a level colour: a yellow match would read as a WRN badge. The text is at 5:1 or more
+    // on every row background.
+    mark {
+        color: var(--text-strong);
+        background: color-mix(in srgb, var(--accent) 30%, transparent);
+        box-shadow: inset 0 -2px var(--accent);
+        border-radius: 2px;
+    }
+}
+
+.count {
+    grid-area: count;
+    justify-self: start;
+    margin-top: 1px;
+    padding: 0 6px;
+
+    color: var(--text);
+    background: var(--surface-2);
+    font: 500 11px/18px var(--sans);
+    font-variant-numeric: tabular-nums;
+    border-radius: 9px;
+}
+
+// one label and value a line, the labels in a column of their own
+.details {
+    grid-column: message / -1;
+    // sized by the columns, not the other way round: its width would move the count when opened
+    contain: inline-size;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 2px 12px;
+    margin: 6px 0 4px;
+
+    font: 12px/18px var(--sans);
+    color: var(--text);
+    cursor: text;
+
+    div {
+        display: contents;
+    }
+
+    dt {
+        color: var(--text-muted);
+    }
+
+    dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .muted {
+        margin-left: 6px;
+        color: var(--text-muted);
+    }
+
+    .link {
+        margin-left: 10px;
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+}
+
+.gap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+
+    color: var(--warn);
+    font: 12px/16px var(--sans);
+
+    .rule {
+        flex: 1;
+        height: 1px;
+        background: var(--surface-3);
+    }
+}
+
+@media (max-width: 1199.98px) {
+    .row {
+        --source-width: 10rem;
+    }
+}
+
+// Phones: time, level, source and count on one line, the message under them at full width.
+@media (max-width: 699.98px) {
+    .row {
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        grid-template-areas:
+            'time level source count'
+            'message message message message';
+        column-gap: 8px;
+        row-gap: 2px;
+
+        padding: 6px 12px 6px 9px;
+        border-bottom: 1px solid rgba(76, 86, 106, 0.35);
+
+        font-size: 12.5px;
+        line-height: 18px;
+    }
+
+    .level {
+        margin-top: 1px;
+        padding: 0 4px;
+    }
+
+    .source {
+        height: 18px;
+        line-height: 18px;
+    }
+
+    .message.clamped {
+        -webkit-line-clamp: 4;
+        line-clamp: 4;
+    }
+
+    .details {
+        grid-column: 1 / -1;
+    }
+}

@@ -2,6 +2,14 @@
 
 All notable changes to the Colibri server. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
+## [2.1.0] - Unreleased
+
+### Changed
+
+- The server and admin UI sources are reorganized into small modules grouped by feature. Behaviour does not change.
+- The startup log line `Worker <path> online` shows the TCP worker's new path, which ends in
+  `modules/tcp/worker/tcp-server-worker.js` instead of `modules/networking/tcp-server-worker.js`.
+
 ## [2.0.0] - Unreleased
 
 Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log names each of them.

@@ -1,12 +1,10 @@
 import { bench, describe } from 'vitest';
-import { Subject, Observable } from 'rxjs';
-import { Payload } from '../src/server/modules/core/payload.js';
-import {
-    ConnectionPool,
-    NetworkClient,
-    NetworkMessage,
-    NetworkServer
-} from '../src/server/modules/command-hooks/connection-pool.js';
+import type { Observable } from 'rxjs';
+import { Subject } from 'rxjs';
+import { Payload } from '../src/server/modules/protocol/payload.js';
+import { ConnectionPool } from '../src/server/modules/hooks/connection-pool.js';
+import { NetworkServer } from '../src/server/modules/protocol/network.js';
+import type { NetworkClient, NetworkMessage } from '../src/server/modules/protocol/network.js';
 
 // Minimal stub server: enough surface for ConnectionPool, no sockets involved.
 class FakeNetworkServer extends NetworkServer {

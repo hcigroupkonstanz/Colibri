@@ -5,27 +5,34 @@ import * as net from 'net';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import * as tls from 'tls';
-import { TCPServerWorker, TcpServerOptions } from '../../src/server/modules/networking/tcp-server-worker.js';
-import {
+import type * as workerThreads from 'worker_threads';
+import type { TcpServerOptions } from '../../src/server/modules/tcp/worker-messages.js';
+import { TCPServerWorker } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
+import type {
     DecodedFrame,
+} from '../../src/server/modules/protocol/protocol.js';
+import {
     FrameReader,
     FrameType,
     PROTOCOL_VERSION,
     encodeHandshakeFrame,
-} from '../../src/server/modules/networking/protocol.js';
+} from '../../src/server/modules/protocol/protocol.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
-import { TestCertificate, createTestCertificate } from '../tls-test-certificate.js';
+import type { TestCertificate } from '../tls-test-certificate.js';
+import { createTestCertificate } from '../tls-test-certificate.js';
 
 // See tcp-server-worker.test.ts: inert as a worker, so that it can run in the test's own thread.
 vi.mock('worker_threads', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('worker_threads')>();
+    const actual = await importOriginal<typeof workerThreads>();
     return { ...actual, isMainThread: true, parentPort: null, workerData: null };
 });
 
 interface WorkerInternals {
     server: net.Server | undefined;
-    proxyHeaderTimeoutMillis: number;
-    proxyHeaderSockets: Set<net.Socket>;
+    proxyProtocolGate: {
+        proxyHeaderTimeoutMillis: number;
+        proxyHeaderSockets: Set<net.Socket>;
+    };
     handleParentMessage(msg: { channel: string; content: Record<string, unknown> }): void;
     postMessage(channel: string, content: Record<string, unknown>): void;
 }
@@ -269,7 +276,7 @@ describe('TCPServerWorker with TCP_PROXY_PROTOCOL', () => {
         });
 
         it('is refused when the header does not arrive in time', async () => {
-            internals.proxyHeaderTimeoutMillis = 200;
+            internals.proxyProtocolGate.proxyHeaderTimeoutMillis = 200;
             const peer = await connect();
             peer.send(v1('198.51.100.7').subarray(0, 20));
 
@@ -281,16 +288,16 @@ describe('TCPServerWorker with TCP_PROXY_PROTOCOL', () => {
         it('leaves nothing behind, and is ended on stop', async () => {
             const gone = await connect();
             gone.send(v1('198.51.100.7').subarray(0, 10));
-            await eventually(() => internals.proxyHeaderSockets.size === 1);
+            await eventually(() => internals.proxyProtocolGate.proxyHeaderSockets.size === 1);
             gone.socket.destroy();
-            await eventually(() => internals.proxyHeaderSockets.size === 0);
+            await eventually(() => internals.proxyProtocolGate.proxyHeaderSockets.size === 0);
 
             const waiting = await connect();
-            await eventually(() => internals.proxyHeaderSockets.size === 1);
+            await eventually(() => internals.proxyProtocolGate.proxyHeaderSockets.size === 1);
             worker.stop();
 
             await waiting.closed;
-            expect(internals.proxyHeaderSockets.size).toBe(0);
+            expect(internals.proxyProtocolGate.proxyHeaderSockets.size).toBe(0);
         });
     });
 
@@ -392,7 +399,7 @@ describe('TCPServerWorker with TCP_PROXY_PROTOCOL', () => {
         });
 
         it('is disconnected quietly when it sends nothing in time', async () => {
-            internals.proxyHeaderTimeoutMillis = 200;
+            internals.proxyProtocolGate.proxyHeaderTimeoutMillis = 200;
             const peer = await connect();
 
             await peer.closed;
@@ -415,7 +422,7 @@ describe('TCPServerWorker with TCP_PROXY_PROTOCOL', () => {
 
             expect(newClientLines().every(l => l.endsWith('connected from 127.0.0.1, waiting for app name'))).toBe(true);
             expect(logs(LogLevel.Error)).toContainEqual(expect.stringMatching(/^Invalid frame from client .+: Invalid frame length: 1481593424$/));
-            expect(internals.proxyHeaderSockets.size).toBe(0);
+            expect(internals.proxyProtocolGate.proxyHeaderSockets.size).toBe(0);
         });
     });
 

@@ -13,7 +13,7 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 import { connectProbe, parseProbeArgs, probeErrorHint } from './tcp-probe-connection.js';
 
 const options = parseProbeArgs(process.argv.slice(2));

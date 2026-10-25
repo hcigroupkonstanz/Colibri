@@ -6,7 +6,7 @@ namespace HCIKonstanz.Colibri.Networking.Protocol
 {
     /// <summary>
     /// Encoder for the v3 TCP wire protocol, specified in <c>colibri-server/docs/dev/protocol.md</c>
-    /// and <c>colibri-server/src/server/modules/networking/protocol.ts</c>:
+    /// and <c>colibri-server/src/server/modules/protocol/protocol.ts</c>:
     /// <code>
     /// [u32 LE totalLength][u8 type][body]      totalLength = 1 (type) + body.length
     ///   0x00 heartbeat   [u64 LE pingTimestamp]

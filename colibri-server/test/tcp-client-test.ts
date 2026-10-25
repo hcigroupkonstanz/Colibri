@@ -14,17 +14,19 @@
 // With TLS on the server: `npm run test:tcpclient -- --tls`, plus --insecure for a self-signed
 // certificate, and --host <name> for another server than this one; see tcp-probe-connection.ts.
 import { Config } from '../src/server/configuration.js';
+import type {
+    ProtocolRejection,
+} from '../src/server/modules/protocol/protocol.js';
 import {
     COLIBRI_CHANNEL,
     FrameReader,
     FrameType,
     PROTOCOL_REJECTED_COMMAND,
     PROTOCOL_VERSION,
-    ProtocolRejection,
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 import { PLAIN_PROBE_CLOSED_HINT, connectProbe, parseProbeArgs, probeErrorHint } from './tcp-probe-connection.js';
 
 const EXIT_REFUSED = 2;

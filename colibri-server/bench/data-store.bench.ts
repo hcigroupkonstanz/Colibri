@@ -1,5 +1,5 @@
 import { bench, describe } from 'vitest';
-import { DataStore } from '../src/server/modules/command-hooks/data-store.js';
+import { DataStore } from '../src/server/modules/models/data-store.js';
 
 // DataStore now nests app -> channel -> model id as Maps (Phase 1 item 13), replacing the
 // array + Array.find/Array.filter storage the Phase 0 numbers were measured against. Sized

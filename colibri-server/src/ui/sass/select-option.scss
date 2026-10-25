@@ -1,0 +1,14 @@
+// Shared by the Clients and Models pages for their p-select items.
+
+@mixin option {
+    .option {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        width: 100%;
+
+        .muted {
+            font-size: 12px;
+        }
+    }
+}
