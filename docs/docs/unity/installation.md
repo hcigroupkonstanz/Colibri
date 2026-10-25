@@ -33,10 +33,10 @@ https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibr
 ### Pinning a version
 
 To install a specific version, append the tag of a [release](https://github.com/hcigroupkonstanz/Colibri/releases)
-to the URL, e.g. `#v2.0.0`:
+to the URL, e.g. `#v2.1.0`:
 
 ```
-https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibri#v2.0.0
+https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibri#v2.1.0
 ```
 
 The Package Manager records the installed commit either way. Colibri changes only when you update it in the

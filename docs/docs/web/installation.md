@@ -93,10 +93,10 @@ Without the Git history, for example in a downloaded ZIP of the repository, thes
 `.git can't be found`. You can ignore it.
 
 `npm pack` writes the file `hcikn-colibri-<version>.tgz`, with the version from `package.json`, such as
-`hcikn-colibri-2.0.0.tgz`. To use it:
+`hcikn-colibri-2.1.0.tgz`. To use it:
 
 1. Copy the file into your project.
-2. Run `npm install ./hcikn-colibri-2.0.0.tgz` (yarn: `yarn add ./hcikn-colibri-2.0.0.tgz`).
+2. Run `npm install ./hcikn-colibri-2.1.0.tgz` (yarn: `yarn add ./hcikn-colibri-2.1.0.tgz`).
 3. Commit the file to your repository. Your `package.json` refers to it by its path.
 
 ## Plain JavaScript

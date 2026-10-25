@@ -27,7 +27,7 @@ them as described under [Unity](#unity).
 
 ## Server
 
-1. **Docker:** use the new image and pin its version, e.g. `image: hcikn/colibri:2.0.0`. Without a version, the
+1. **Docker:** use the new image and pin its version, e.g. `image: hcikn/colibri:2.1.0`. Without a version, the
    next pull can switch a server between Colibri 1 and 2 unnoticed.
 2. **Ports:** change the port mappings, firewall rules and reverse proxy to 9211, 9212 and 9213/udp. To keep the old
    ports instead, publish them on the new container ports, e.g. `"9011:9211"`, or set `WEBSERVER_PORT`, `TCP_PORT`

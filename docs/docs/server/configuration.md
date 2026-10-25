@@ -17,7 +17,7 @@ Every setting is an environment variable.
 ```yaml
 services:
     colibri:
-        image: hcikn/colibri:2.0.0
+        image: hcikn/colibri:2.1.0
         environment:
             CONSOLE_LOG_LEVEL: debug
             TCP_IDLE_TIMEOUT_SECONDS: 30
