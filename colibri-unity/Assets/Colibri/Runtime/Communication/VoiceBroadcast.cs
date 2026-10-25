@@ -7,6 +7,8 @@ using UnityEngine.Android;
 #endif
 using HCIKonstanz.Colibri.Setup;
 
+#pragma warning disable CS0618 // [Obsolete] on the audio types is meant for user code
+
 namespace HCIKonstanz.Colibri.Communication
 {
     public class VoiceBroadcast : MonoBehaviour

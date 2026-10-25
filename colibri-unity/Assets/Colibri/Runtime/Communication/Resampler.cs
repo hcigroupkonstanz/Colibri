@@ -3,7 +3,9 @@ using HCIKonstanz.Colibri.Networking.Protocol;
 
 namespace HCIKonstanz.Colibri.Communication
 {
-    internal sealed class Resampler
+    /// <summary>Converts a stream of float samples from one sampling rate to another, one chunk at a time.</summary>
+    [Obsolete("Becomes internal in Colibri 3.0, as only Colibri's voice components use it.")]
+    public class Resampler
     {
         public int SourceRate { get; private set; }
         public int TargetRate { get; private set; }

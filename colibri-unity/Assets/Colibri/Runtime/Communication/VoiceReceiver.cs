@@ -5,6 +5,8 @@ using HCIKonstanz.Colibri.Networking.Protocol;
 using HCIKonstanz.Colibri.Setup;
 using UnityEngine;
 
+#pragma warning disable CS0618 // [Obsolete] on the audio types is meant for user code
+
 namespace HCIKonstanz.Colibri.Communication
 {
     [RequireComponent(typeof(AudioSource))]

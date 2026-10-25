@@ -3,7 +3,9 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Communication.Codecs
 {
-    internal sealed class OpusDecoder
+    /// <summary>Decodes Opus packets into 16-bit PCM frames; Destroy frees the native decoder.</summary>
+    [Obsolete("Becomes internal in Colibri 3.0, as only Colibri's voice components use it.")]
+    public class OpusDecoder
     {
         public int SamplingRate { get; private set; }
         public int Channels { get; private set; }

@@ -1,9 +1,11 @@
+using System;
 using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Communication
 {
     /// <summary>Converts audio samples between 16-bit PCM, float and byte arrays, and applies volume.</summary>
-    internal static class SamplingUtility
+    [Obsolete("Becomes internal in Colibri 3.0, as only Colibri's voice components use it.")]
+    public static class SamplingUtility
     {
         /// <summary>Duplicates each mono sample into a left and a right sample, giving an interleaved stereo array of twice the length.</summary>
         public static float[] ConvertToStereo(float[] samples)

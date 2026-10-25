@@ -7,7 +7,9 @@ using UnityEngine;
 
 namespace HCIKonstanz.Colibri.Communication.Codecs
 {
-    internal static class Opus
+    /// <summary>P/Invoke bindings for libopus on Windows, Linux and Android; on other platforms every call logs an error and fails.</summary>
+    [Obsolete("Becomes internal in Colibri 3.0, as only Colibri's voice components use it.")]
+    public static class Opus
     {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN || UNITY_STANDALONE_LINUX || UNITY_EDITOR_LINUX || UNITY_ANDROID
         #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
