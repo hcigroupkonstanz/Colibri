@@ -72,7 +72,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void SyncedMemberNamesAreTheSameOnATurkishSystem()
         {
-            var names = SyncBehaviour<InventoryItem>.SyncedNames.OrderBy(n => n, StringComparer.Ordinal).ToArray();
+            var names = SyncMembers<InventoryItem>.SyncedNames.OrderBy(n => n, StringComparer.Ordinal).ToArray();
 
             Assert.That(names, Is.EqualTo(new[] { "isvisible", "itemindex" }));
         }
@@ -109,7 +109,7 @@ namespace HCIKonstanz.Colibri.Tests
         {
             LogAssert.Expect(LogType.Error, new Regex(@"^Colibri: cannot synchronize 'IdMemberModel\.ID': 'id' is the name of the model's own Id"));
 
-            var names = SyncBehaviour<IdMemberModel>.SyncedNames.ToArray();
+            var names = SyncMembers<IdMemberModel>.SyncedNames.ToArray();
 
             Assert.That(names, Is.EqualTo(new[] { "score" }));
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using HCIKonstanz.Colibri.Communication.Codecs;
 using HCIKonstanz.Colibri.Networking;
 using NUnit.Framework;
 

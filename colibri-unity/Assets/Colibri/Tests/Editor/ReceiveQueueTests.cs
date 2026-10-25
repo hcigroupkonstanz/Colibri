@@ -255,11 +255,11 @@ namespace HCIKonstanz.Colibri.Tests
         {
             using (var ended = new CancellationTokenSource())
             {
-                _connection.EnqueueReceived(Objects, "model::update", new JObject { { "id", "X" }, { "count", 1 } }, ended.Token);
+                _connection.ReceiveQueue.EnqueueReceived(Objects, "model::update", new JObject { { "id", "X" }, { "count", 1 } }, ended.Token);
                 ended.Cancel();
 
                 Receive(Objects, "model::update", new JObject { { "id", "X" }, { "count", 3 } });
-                _connection.EnqueueReceived(Objects, "model::update", new JObject { { "id", "X" }, { "count", 2 } }, ended.Token);
+                _connection.ReceiveQueue.EnqueueReceived(Objects, "model::update", new JObject { { "id", "X" }, { "count", 2 } }, ended.Token);
 
                 _connection.DeliverReceivedMessages();
             }
@@ -281,7 +281,7 @@ namespace HCIKonstanz.Colibri.Tests
         private void Receive(string channel, string command, JToken payload, List<string> expected = null)
         {
             expected?.Add($"{channel} {command} {payload.ToString(Formatting.None)}");
-            _connection.EnqueueReceived(channel, command, payload);
+            _connection.ReceiveQueue.EnqueueReceived(channel, command, payload, CancellationToken.None);
         }
 
         /// <summary>1000 broadcasts: from the next message on, the queue folds.</summary>

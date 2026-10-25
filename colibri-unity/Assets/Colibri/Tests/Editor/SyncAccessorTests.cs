@@ -64,7 +64,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void APropertyIsReadAndWritten()
         {
             var model = Add<AccessorModel>();
-            SyncBehaviour<AccessorModel>.CreateReflectionAccessors<Vector3>(
+            SyncMembers<AccessorModel>.CreateReflectionAccessors<Vector3>(
                 typeof(AccessorModel).GetProperty("Where", AnyInstanceMember), out var get, out var set);
 
             model.Where = new Vector3(1f, 2f, 3f);
@@ -78,7 +78,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void APrivatePropertyIsReadAndWritten()
         {
             var model = Add<AccessorModel>();
-            SyncBehaviour<AccessorModel>.CreateReflectionAccessors<Quaternion>(
+            SyncMembers<AccessorModel>.CreateReflectionAccessors<Quaternion>(
                 typeof(AccessorModel).GetProperty("Turn", AnyInstanceMember), out var get, out var set);
 
             var turn = Quaternion.Euler(0f, 90f, 0f);
@@ -97,7 +97,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void APropertyIsCalledDirectlyRatherThanThroughAWrapper()
         {
-            SyncBehaviour<AccessorModel>.CreateReflectionAccessors<Vector3>(
+            SyncMembers<AccessorModel>.CreateReflectionAccessors<Vector3>(
                 typeof(AccessorModel).GetProperty("Where", AnyInstanceMember), out var get, out var set);
 
             Assert.That(get.Method.Name, Is.EqualTo("get_Where"));
@@ -108,7 +108,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void APrivateValueTypeFieldIsReadAndWritten()
         {
             var model = Add<AccessorModel>();
-            SyncBehaviour<AccessorModel>.CreateReflectionAccessors<int>(
+            SyncMembers<AccessorModel>.CreateReflectionAccessors<int>(
                 typeof(AccessorModel).GetField("_count", AnyInstanceMember), out var get, out var set);
 
             model.Count = 7;
@@ -122,7 +122,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void AReferenceTypeFieldIsReadAndWrittenIncludingNull()
         {
             var model = Add<AccessorModel>();
-            SyncBehaviour<AccessorModel>.CreateReflectionAccessors<string>(
+            SyncMembers<AccessorModel>.CreateReflectionAccessors<string>(
                 typeof(AccessorModel).GetField("Label", AnyInstanceMember), out var get, out var set);
 
             model.Label = "hello";
@@ -142,7 +142,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void APropertyDeclaredOnAGenericBaseClassIsReadAndWritten()
         {
             var sync = Add<SyncTransform>();
-            SyncBehaviour<SyncTransform>.CreateReflectionAccessors<Vector3>(
+            SyncMembers<SyncTransform>.CreateReflectionAccessors<Vector3>(
                 typeof(SyncTransform).GetProperty("Scale", AnyInstanceMember), out var get, out var set);
 
             sync.transform.localScale = new Vector3(2f, 2f, 2f);
@@ -156,7 +156,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void SyncTransformsActiveFlagIsReadAndWritten()
         {
             var sync = Add<SyncTransform>();
-            SyncBehaviour<SyncTransform>.CreateReflectionAccessors<bool>(
+            SyncMembers<SyncTransform>.CreateReflectionAccessors<bool>(
                 typeof(SyncTransform).GetProperty("Active", AnyInstanceMember), out var get, out var set);
 
             Assert.That(get(sync), Is.True);

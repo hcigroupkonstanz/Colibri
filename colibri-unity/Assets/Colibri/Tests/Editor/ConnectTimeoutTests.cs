@@ -36,7 +36,7 @@ namespace HCIKonstanz.Colibri.Tests
 
             var clock = Stopwatch.StartNew();
             var e = Assert.Throws<TimeoutException>(() =>
-                Wait(WebServerConnection.ConnectAsync(socket, IPAddress.Loopback, port, 300, CancellationToken.None)));
+                Wait(ConnectRace.ConnectAsync(socket, IPAddress.Loopback, port, 300, CancellationToken.None)));
             clock.Stop();
 
             Assert.That(clock.ElapsedMilliseconds, Is.GreaterThanOrEqualTo(250).And.LessThan(5000),
@@ -56,7 +56,7 @@ namespace HCIKonstanz.Colibri.Tests
             using (var cancel = new CancellationTokenSource())
             {
                 var clock = Stopwatch.StartNew();
-                var attempt = WebServerConnection.ConnectAsync(socket, IPAddress.Loopback, port, 60000, cancel.Token);
+                var attempt = ConnectRace.ConnectAsync(socket, IPAddress.Loopback, port, 60000, cancel.Token);
                 cancel.CancelAfter(100);
 
                 Assert.Catch<OperationCanceledException>(() => Wait(attempt));
@@ -75,7 +75,7 @@ namespace HCIKonstanz.Colibri.Tests
             var socket = NewSocket();
 
             var clock = Stopwatch.StartNew();
-            var attempt = WebServerConnection.ConnectAsync(socket, IPAddress.Loopback, port, 10000, CancellationToken.None);
+            var attempt = ConnectRace.ConnectAsync(socket, IPAddress.Loopback, port, 10000, CancellationToken.None);
             Thread.Sleep(100);
             socket.Close();
 
@@ -95,7 +95,7 @@ namespace HCIKonstanz.Colibri.Tests
             var neverCompletes = new TaskCompletionSource<bool>().Task;
 
             var clock = Stopwatch.StartNew();
-            var attempt = WebServerConnection.WaitForConnectAsync(socket, neverCompletes, "127.0.0.1", 9212, 10000, CancellationToken.None);
+            var attempt = ConnectRace.WaitForConnectAsync(socket, neverCompletes, "127.0.0.1", 9212, 10000, CancellationToken.None);
             Thread.Sleep(100);
             socket.Close();
 
@@ -111,7 +111,7 @@ namespace HCIKonstanz.Colibri.Tests
             try
             {
                 var socket = NewSocket();
-                Wait(WebServerConnection.ConnectAsync(socket, IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port, 5000, CancellationToken.None));
+                Wait(ConnectRace.ConnectAsync(socket, IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port, 5000, CancellationToken.None));
 
                 Assert.That(socket.Connected, Is.True);
             }
@@ -133,7 +133,7 @@ namespace HCIKonstanz.Colibri.Tests
             var socket = NewSocket();
             var clock = Stopwatch.StartNew();
             var e = Assert.Throws<SocketException>(() =>
-                Wait(WebServerConnection.ConnectAsync(socket, IPAddress.Loopback, closedPort, 30000, CancellationToken.None)));
+                Wait(ConnectRace.ConnectAsync(socket, IPAddress.Loopback, closedPort, 30000, CancellationToken.None)));
 
             Assert.That(e.SocketErrorCode, Is.EqualTo(SocketError.ConnectionRefused));
             Assert.That(clock.ElapsedMilliseconds, Is.LessThan(5000));

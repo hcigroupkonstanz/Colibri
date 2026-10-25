@@ -231,8 +231,8 @@ namespace HCIKonstanz.Colibri.Tests
             => _disposables.Add(Wait(Opening(host, server.Port, check, 5000, CancellationToken.None)).Stream);
 
         /// <summary>Opens a session, keeping every socket it tries to close it afterwards.</summary>
-        private Task<WebServerConnection.Session> Opening(string host, int port, ServerCertificateCheck check, int timeoutMs, CancellationToken token)
-            => WebServerConnection.OpenSessionAsync(host, port, check, timeoutMs, Attempting, token);
+        private Task<ServerSession> Opening(string host, int port, ServerCertificateCheck check, int timeoutMs, CancellationToken token)
+            => ServerConnector.OpenSessionAsync(host, port, check, timeoutMs, Attempting, token);
 
         private void Attempting(Socket socket)
         {

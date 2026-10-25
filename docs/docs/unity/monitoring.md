@@ -23,7 +23,7 @@ In the Unity Editor, *Window → Colibri Status → Open Server Web UI* opens th
 ## Client log
 
 To see a client's Unity console log on the monitoring page, add the `[RemoteLogger]` prefab from
-`Packages/Colibri/Prefabs/` to the scene. This needs no code. The log then appears on the page's *Log* tab, with the
+`Packages/Colibri/Runtime/Prefabs/` to the scene. This needs no code. The log then appears on the page's *Log* tab, with the
 app name and device name of each client.
 
 ![The Log tab of the monitoring page](/img/unity/admin-log.png)

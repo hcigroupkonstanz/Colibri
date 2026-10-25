@@ -246,12 +246,12 @@ namespace HCIKonstanz.Colibri.Tests
             => new JObject { { "id", model.Id }, { "label", label }, { "count", count } };
 
         /// <summary>
-        /// The answer to the request sent after all the others (see Sync.ReconnectRound): the
+        /// The answer to the request sent after all the others (see ReconnectRound): the
         /// answers to the requests made again are all in.
         /// </summary>
         private static void EndOfAnswers()
         {
-            var marker = Sync.ReconnectRoundEndMarker;
+            var marker = Sync.ReconnectRounds.CurrentEndMarker;
             Assert.That(marker, Is.Not.Null, "Precondition: the answers to a reconnect's requests are still coming in");
             Sync.OnServerMessage(Sync.ReconnectRoundChannel, "model::update", new JObject { { "id", marker } });
         }
@@ -393,7 +393,7 @@ namespace HCIKonstanz.Colibri.Tests
             {
                 var time = 199 + x / 30.0;
                 if (time <= 200)
-                    WebServerConnection.Instance.StampLiveness();
+                    WebServerConnection.Instance.Liveness.Stamp();
                 sync.transform.position = new Vector3(x, 0, 0);
                 Poll(sync);
                 Assert.That(sync.TakeDueUpdate(time, interval: 0, heardAt: Sync.LastHeardAt(time)), Is.Not.Null,
@@ -402,7 +402,7 @@ namespace HCIKonstanz.Colibri.Tests
             Sync.OnDisconnected(now: 202);
 
             // Accepted at 203, and moved on in that frame; the requests go out in the next.
-            WebServerConnection.Instance.StampLiveness();
+            WebServerConnection.Instance.Liveness.Stamp();
             sync.transform.position = new Vector3(61, 0, 0);
             Poll(sync);
             Assert.That(sync.TakeDueUpdate(203, interval: 0, heardAt: Sync.LastHeardAt(203)), Is.Not.Null,
@@ -696,12 +696,12 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var model = SpawnModelThatSent("before");
             Sync.RequestModelsAgain(disconnectedAt: 101);
-            var earlier = Sync.ReconnectRoundEndMarker;
+            var earlier = Sync.ReconnectRounds.CurrentEndMarker;
 
             Change(model, "lost at the drop", 102);
             Sync.RequestModelsAgain(disconnectedAt: 104);
             Sync.OnServerMessage(Sync.ReconnectRoundChannel, "model::update", new JObject { { "id", earlier } });
-            Assert.That(Sync.ReconnectRoundEndMarker, Is.Not.Null.And.Not.EqualTo(earlier));
+            Assert.That(Sync.ReconnectRounds.CurrentEndMarker, Is.Not.Null.And.Not.EqualTo(earlier));
 
             model.OnModelUpdate(Answer(model, "before"));
 
@@ -770,11 +770,11 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var destroyed = SpawnModelThatSent("before");
             Sync.RequestModelsAgain(disconnectedAt: 103);
-            var lostWithTheLink = Sync.ReconnectRoundEndMarker;
+            var lostWithTheLink = Sync.ReconnectRounds.CurrentEndMarker;
             Sync.RemoveModelUpdateListener(destroyed.Channel, destroyed.OnModelUpdate);
 
             Sync.RequestModelsAgain(disconnectedAt: 110);
-            Assert.That(Sync.ReconnectRoundEndMarker, Is.Not.EqualTo(lostWithTheLink), "The round whose answers were lost with the link is still open");
+            Assert.That(Sync.ReconnectRounds.CurrentEndMarker, Is.Not.EqualTo(lostWithTheLink), "The round whose answers were lost with the link is still open");
             EndOfAnswers();
 
             var model = SpawnModel();
@@ -993,7 +993,7 @@ namespace HCIKonstanz.Colibri.Tests
         /// </summary>
         private static void EndOfAnswersFor<T>(SyncBehaviour<T> model) where T : SyncBehaviour<T>
         {
-            var marker = model.RoundEndMarker;
+            var marker = model.Resync.RoundEndMarker;
             Assert.That(marker, Is.Not.Null, "Precondition: the object keeps changes made before its first answer");
             Sync.OnServerMessage(Sync.ReconnectRoundChannel, "model::update", new JObject { { "id", marker } });
         }
@@ -1082,7 +1082,7 @@ namespace HCIKonstanz.Colibri.Tests
             Assert.That(model.Label, Is.EqualTo("theirs"));
             Assert.That(model.Count, Is.EqualTo(5));
             Assert.That(Sent(model), Is.Null, "A value the object registered with went out over the server's");
-            Assert.That(model.RoundEndMarker, Is.Null, "Nothing was kept, and nothing needs asking for");
+            Assert.That(model.Resync.RoundEndMarker, Is.Null, "Nothing was kept, and nothing needs asking for");
         }
 
         /// <summary>A member changed and set back before the answer holds what it registered with.</summary>
@@ -1152,7 +1152,7 @@ namespace HCIKonstanz.Colibri.Tests
             model.Label = "mine";
             Poll(model);
             model.OnModelUpdate(Answer(model, "theirs", 5));
-            Assert.That(model.RoundEndMarker, Is.EqualTo(Sync.ReconnectRoundEndMarker), "The object opened a round of its own inside the round after the reconnect");
+            Assert.That(model.Resync.RoundEndMarker, Is.EqualTo(Sync.ReconnectRounds.CurrentEndMarker), "The object opened a round of its own inside the round after the reconnect");
             var sent = SentAt(model, 104);
             model.OnModelUpdate(Answer(model, "theirs", 5));
             EndOfAnswers();
@@ -1593,9 +1593,9 @@ namespace HCIKonstanz.Colibri.Tests
         private sealed class ConnectionStatusSet : System.IDisposable
         {
             public void To(ConnectionStatus status)
-                => Assert.That(WebServerConnection.Instance.TrySetStatus(status, CancellationToken.None), Is.True);
+                => Assert.That(WebServerConnection.Instance.State.TrySetStatus(status, CancellationToken.None), Is.True);
 
-            public void Dispose() => WebServerConnection.Instance.TrySetStatus(ConnectionStatus.Disconnected, CancellationToken.None);
+            public void Dispose() => WebServerConnection.Instance.State.TrySetStatus(ConnectionStatus.Disconnected, CancellationToken.None);
         }
 
         /// <summary>While the client connects, the body waits for the server's state.</summary>

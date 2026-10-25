@@ -49,7 +49,7 @@ namespace HCIKonstanz.Colibri.Tests
         [TearDown]
         public void DestroyConnection()
         {
-            _connection.CloseOutbox();
+            _connection.Outbox.CloseOutbox();
 
             foreach (var disposable in _disposables)
                 disposable.Dispose();
@@ -85,20 +85,20 @@ namespace HCIKonstanz.Colibri.Tests
             _disposables.Add(goneSocket);
 
             // Never connected, so it gets a stream that refuses every write.
-            var goneSession = new WebServerConnection.Session(goneSocket, new System.IO.MemoryStream(Array.Empty<byte>(), false));
+            var goneSession = new ServerSession(goneSocket, new System.IO.MemoryStream(Array.Empty<byte>(), false));
 
-            _connection.SendLock.Wait();
+            _connection.FrameWriter.SendLock.Wait();
             try
             {
-                _connection.OpenOutbox(goneSession, session.Token);
+                _connection.Outbox.OpenOutbox(goneSession, session.Token);
                 _connection.SendCommand(Channel, "model::update", new JObject { { "id", "X" }, { "label", "b" } });
 
-                _connection.CloseOutbox();
+                _connection.Outbox.CloseOutbox();
                 session.Cancel();
             }
             finally
             {
-                _connection.SendLock.Release();
+                _connection.FrameWriter.SendLock.Release();
             }
 
             // Outage 2.
@@ -223,7 +223,7 @@ namespace HCIKonstanz.Colibri.Tests
             var session = OpenSession();
 
             // A write that does not complete: the first message is on its way, the rest pile up.
-            _connection.SendLock.Wait();
+            _connection.FrameWriter.SendLock.Wait();
             try
             {
                 _connection.SendCommand(Channel, "broadcast::int", 0);
@@ -234,7 +234,7 @@ namespace HCIKonstanz.Colibri.Tests
             }
             finally
             {
-                _connection.SendLock.Release();
+                _connection.FrameWriter.SendLock.Release();
             }
 
             var sent = Receive(session, 10000).Select(frame => int.Parse(Encoding.UTF8.GetString(frame.Payload))).ToArray();
@@ -262,11 +262,11 @@ namespace HCIKonstanz.Colibri.Tests
         public void AnEndedLoopLeavesTheNextSessionConnectedAndItsOutboxOpen()
         {
             var server = OpenSession();
-            Assert.That(_connection.TrySetStatus(ConnectionStatus.Connected, CancellationToken.None), Is.True);
+            Assert.That(_connection.State.TrySetStatus(ConnectionStatus.Connected, CancellationToken.None), Is.True);
 
             var ended = EndedLoop();
-            _connection.CloseOutbox(ended);
-            Assert.That(_connection.TrySetStatus(ConnectionStatus.Disconnected, ended), Is.False);
+            _connection.Outbox.CloseOutbox(ended);
+            Assert.That(_connection.State.TrySetStatus(ConnectionStatus.Disconnected, ended), Is.False);
 
             Assert.That(_connection.Status, Is.EqualTo(ConnectionStatus.Connected));
             _connection.SendCommand(Channel, "broadcast::int", 1);
@@ -298,7 +298,7 @@ namespace HCIKonstanz.Colibri.Tests
                 listener.Stop();
             }
 
-            _connection.OpenOutbox(WebServerConnection.Session.Plain(endedClient), EndedLoop());
+            _connection.Outbox.OpenOutbox(ServerSession.Plain(endedClient), EndedLoop());
             _connection.SendCommand(Channel, "broadcast::int", 1);
 
             Assert.That(endedServer.Poll(300 * 1000, SelectMode.SelectRead), Is.False, "A message went out on the ended loop's session");
@@ -379,7 +379,7 @@ namespace HCIKonstanz.Colibri.Tests
 
             var session = new CancellationTokenSource();
             _disposables.Add(session);
-            _connection.OpenOutbox(WebServerConnection.Session.Plain(client), session.Token);
+            _connection.Outbox.OpenOutbox(ServerSession.Plain(client), session.Token);
             return server;
         }
 

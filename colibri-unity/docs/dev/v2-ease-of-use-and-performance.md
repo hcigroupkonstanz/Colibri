@@ -4,6 +4,11 @@ Companion to [`v2-changes.md`](v2-changes.md), covering the last pass over colib
 the depth a change log cannot carry: what changed, why, how the replacements work, and what the
 Editor verification showed, including the two numbers that were only ever argued before it.
 
+**Note:** paths and member names in this document are those of 2.0. In 2.1 the package moved to `Runtime/` and
+`Editor/` and several classes were split. The layout is described in
+[conventions.md](conventions.md#package-layout), the move in the [CHANGELOG](../../CHANGELOG.md) and in
+[MIGRATION.md](../../../MIGRATION.md#unity-package-20-to-21).
+
 Two goals, and they turned out not to conflict:
 
 1. **A developer with some C# and little Unity experience should get a prototype running in the
@@ -858,7 +863,7 @@ Two constraints shaped the implementation:
   `[WebServerConnection]` to the open scene outside Play mode. The window uses
   `FindFirstObjectByType` and renders a hint when nothing is running.
 - **Release builds pay nothing.** The traffic ring buffer and the calls that fill it are behind
-  `#if UNITY_EDITOR || DEVELOPMENT_BUILD`, and `RecordTraffic` carries `[Conditional("UNITY_EDITOR")]`
+  `#if UNITY_EDITOR || DEVELOPMENT_BUILD`, and `TrafficLog.Record` carries `[Conditional("UNITY_EDITOR")]`
   plus `[Conditional("DEVELOPMENT_BUILD")]`, so the call sites are removed by the compiler rather
   than merely doing nothing.
 

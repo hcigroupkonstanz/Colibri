@@ -236,7 +236,7 @@ namespace HCIKonstanz.Colibri.E2E
             // Cleared by the frame itself, while the session is still open.
             Assert.That(Connection.SuspectedProtocolMismatch, Is.Null,
                 "The suspicion outlived the first frame the server sent");
-            Assert.That(Connection.ConsecutiveEarlyFrameFailures, Is.Zero);
+            Assert.That(Connection.Diagnostics.ConsecutiveEarlyFrameFailures, Is.Zero);
 
             // Then the session ends the hard way - a reset, which the client sees as a
             // SocketException - and the server goes back to hanging up.
@@ -244,7 +244,7 @@ namespace HCIKonstanz.Colibri.E2E
             _scriptedServer.ResetConnections();
 
             // Counted from zero again: two in a row is not yet a suspicion...
-            yield return E2EServer.WaitUntil(() => Connection.ConsecutiveEarlyFrameFailures == 2,
+            yield return E2EServer.WaitUntil(() => Connection.Diagnostics.ConsecutiveEarlyFrameFailures == 2,
                 "The sessions after the reset were not counted", 10f);
             Assert.That(Connection.SuspectedProtocolMismatch, Is.Null,
                 "Two failures after a session that decoded frames were counted as more than two");
@@ -252,7 +252,7 @@ namespace HCIKonstanz.Colibri.E2E
             // ...and the third is.
             yield return E2EServer.WaitUntil(() => Connection.SuspectedProtocolMismatch != null,
                 "The third session in a row without a frame did not raise the suspicion again", 10f);
-            Assert.That(Connection.ConsecutiveEarlyFrameFailures, Is.EqualTo(3));
+            Assert.That(Connection.Diagnostics.ConsecutiveEarlyFrameFailures, Is.EqualTo(3));
         }
 
         /// <summary>
@@ -290,7 +290,7 @@ namespace HCIKonstanz.Colibri.E2E
 
             Assert.That(connection.SuspectedProtocolMismatch, Is.Null,
                 "Sessions on which nothing was received before the watchdog ended them were reported as a suspected protocol mismatch");
-            Assert.That(connection.ConsecutiveEarlyFrameFailures, Is.Zero);
+            Assert.That(connection.Diagnostics.ConsecutiveEarlyFrameFailures, Is.Zero);
             Assert.That(silenceWarnings, Is.EqualTo(1),
                 "Three silent sessions in a row should be named as such, once");
             Assert.That(failures, Is.Zero,
@@ -310,7 +310,7 @@ namespace HCIKonstanz.Colibri.E2E
             _scriptedServer = FakeColibriServer.Start(FakeColibriServer.Behaviour.HangUpAfterHandshake);
             var connection = ConnectionTo(_scriptedServer.Port);
 
-            yield return E2EServer.WaitUntil(() => connection.ConsecutiveEarlyFrameFailures == 2,
+            yield return E2EServer.WaitUntil(() => connection.Diagnostics.ConsecutiveEarlyFrameFailures == 2,
                 "Two sessions that ended without a frame were not counted", 10f);
 
             // The third session is silent, and the watchdog ends it.
@@ -319,7 +319,7 @@ namespace HCIKonstanz.Colibri.E2E
                 "The client did not try again after two sessions that ended without a frame", 10f);
             _scriptedServer.Mode = FakeColibriServer.Behaviour.HangUpAfterHandshake;
 
-            yield return E2EServer.WaitUntil(() => connection.ConsecutiveEarlyFrameFailures == 1,
+            yield return E2EServer.WaitUntil(() => connection.Diagnostics.ConsecutiveEarlyFrameFailures == 1,
                 "The session after the silent one was not counted from one again", 15f);
             Assert.That(connection.SuspectedProtocolMismatch, Is.Null,
                 "A silent session was counted as a third session that ended without a frame");
@@ -406,7 +406,7 @@ namespace HCIKonstanz.Colibri.E2E
 
             // Nothing was accepted, so this says nothing about protocol versions.
             Assert.That(Connection.SuspectedProtocolMismatch, Is.Null);
-            Assert.That(Connection.ConsecutiveEarlyFrameFailures, Is.Zero);
+            Assert.That(Connection.Diagnostics.ConsecutiveEarlyFrameFailures, Is.Zero);
         }
 
 
