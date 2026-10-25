@@ -206,8 +206,12 @@ Where you meant that, e.g. when a component unmounts, call `detach()` instead.
 1. **`Codec` and `VoicePacket` are in a namespace.** If your code uses them, add
    `using HCIKonstanz.Colibri.Communication.Codecs;` for `Codec` and `using HCIKonstanz.Colibri.Networking;` for
    `VoicePacket`. Before, both were in the global namespace.
-2. **Seven types are internal.** `Resampler`, `SamplingUtility`, `Opus`, `OpusEncoder`, `OpusDecoder`, `OpusError`
-   and `OpusApplication` are no longer available to your code.
+2. **Seven audio types are in a namespace and obsolete.** If your code uses them, add
+   `using HCIKonstanz.Colibri.Communication.Codecs;` for `Opus`, `OpusEncoder`, `OpusDecoder`, `OpusError` and
+   `OpusApplication`, and `using HCIKonstanz.Colibri.Communication;` for `Resampler` and `SamplingUtility`. Before,
+   all were in the global namespace. They are marked `[Obsolete]`, so using them gives warning CS0618, and they
+   become internal in Colibri 3.0 without a public replacement. `SamplingUtility` is a static class now:
+   `new SamplingUtility()` and deriving from it no longer compile.
 3. **Files moved.** The package now has the folders `Runtime/` and `Editor/`, e.g. the prefabs are in
    `Packages/Colibri/Runtime/Prefabs/`. GUIDs are unchanged, so references in scenes and prefabs keep working. Update
    only paths written in code, e.g. in editor scripts or `AssetDatabase` lookups.

@@ -8,11 +8,18 @@ All notable changes to Colibri for Unity. Upgrading from Colibri 1: [Migration G
 
 - **Breaking:** `Codec` is in the namespace `HCIKonstanz.Colibri.Communication.Codecs` and `VoicePacket` in
   `HCIKonstanz.Colibri.Networking`. Before, both were in the global namespace.
-- **Breaking:** `Resampler`, `SamplingUtility`, `Opus`, `OpusEncoder`, `OpusDecoder`, `OpusError` and
-  `OpusApplication` are internal.
+- **Breaking:** `Opus`, `OpusEncoder`, `OpusDecoder`, `OpusError` and `OpusApplication` are in the namespace
+  `HCIKonstanz.Colibri.Communication.Codecs`, `Resampler` and `SamplingUtility` in
+  `HCIKonstanz.Colibri.Communication`. Before, all were in the global namespace. Code that uses them needs a `using`.
+- **Breaking:** `SamplingUtility` is a static class. `new SamplingUtility()` and deriving from it no longer compile.
 - The package follows Unity's layout with `Runtime/` and `Editor/`. The editor windows and the `SyncTransform`
   inspector are the assembly `HCIKonstanz.Colibri.Editor`. Files moved, e.g. the prefabs are now in
   `Packages/Colibri/Runtime/Prefabs/`. GUIDs are unchanged, so references in scenes and prefabs keep working.
+
+### Deprecated
+
+- `Resampler`, `SamplingUtility`, `Opus`, `OpusEncoder`, `OpusDecoder`, `OpusError` and `OpusApplication` are
+  obsolete (warning CS0618) and become internal in Colibri 3.0. Only the voice components need them.
 
 ### Fixed
 
