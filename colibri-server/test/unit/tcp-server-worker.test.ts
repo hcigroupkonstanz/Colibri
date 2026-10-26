@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import type * as net from 'net';
-import { HEARTBEAT_EVERY_BYTES, MAX_REPLY_BACKLOG_BYTES, TCPServerWorker, TcpServerOptions, WireNetworkMessage } from '../../src/server/modules/networking/tcp-server-worker.js';
-import { MAX_HELD_OBJECTS } from '../../src/server/modules/networking/inbound-limits.js';
-import { FrameReader, FrameType, MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeHandshakeFrame, encodeHeartbeatFrame, encodeMessageFrame } from '../../src/server/modules/networking/protocol.js';
+import type * as workerThreads from 'worker_threads';
+import type { TcpServerOptions, WireNetworkMessage } from '../../src/server/modules/tcp/worker-messages.js';
+import { HEARTBEAT_EVERY_BYTES } from '../../src/server/modules/tcp/worker/heartbeat-every-bytes.js';
+import { MAX_REPLY_BACKLOG_BYTES } from '../../src/server/modules/tcp/worker/client-writer.js';
+import { TCPServerWorker } from '../../src/server/modules/tcp/worker/tcp-server-worker.js';
+import { MAX_HELD_OBJECTS } from '../../src/server/modules/limits/inbound-limits.js';
+import { FrameReader, FrameType, MAX_FRAME_LENGTH, PROTOCOL_VERSION, encodeHandshakeFrame, encodeHeartbeatFrame, encodeMessageFrame } from '../../src/server/modules/protocol/protocol.js';
+import type { AppIndex } from '../../src/server/modules/core/app-index.js';
 import { LogLevel } from '../../src/server/modules/core/log-message.js';
 
 // Vitest runs suites inside worker threads, so the real `parentPort` here is the test
@@ -11,7 +16,7 @@ import { LogLevel } from '../../src/server/modules/core/log-message.js';
 // try to start a second server. Pretending to be the main thread makes both inert - the
 // worker's outgoing messages are captured by spying on postMessage instead.
 vi.mock('worker_threads', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('worker_threads')>();
+    const actual = await importOriginal<typeof workerThreads>();
     return { ...actual, isMainThread: true, parentPort: null, workerData: null };
 });
 
@@ -132,8 +137,8 @@ interface WorkerInternals {
     postMessage(channel: string, content: Record<string, unknown>): void;
     clients: Map<string, { id: string; app: string; socket: net.Socket }>;
     waitingClients: Map<string, { id: string; socket: net.Socket }>;
-    clientsByApp: Map<string, Set<{ id: string }>>;
-    v1WarnedAt: { size: number };
+    clientsByApp: AppIndex<{ id: string }>;
+    inboundHandler: { v1WarnedAt: { size: number } };
     stop(): void;
 }
 
@@ -491,7 +496,7 @@ describe('TCPServerWorker', () => {
             }
 
             expect(v1Warnings()).toHaveLength(3000);
-            expect(internals.v1WarnedAt.size).toBeLessThanOrEqual(1024);
+            expect(internals.inboundHandler.v1WarnedAt.size).toBeLessThanOrEqual(1024);
         });
 
         it('still reports other garbage as an invalid frame', () => {

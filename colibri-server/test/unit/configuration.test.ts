@@ -3,7 +3,8 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { TestCertificate, createTestCertificate, encryptTestKey } from '../tls-test-certificate.js';
+import type { TestCertificate } from '../tls-test-certificate.js';
+import { createTestCertificate, encryptTestKey } from '../tls-test-certificate.js';
 
 // configuration.ts resolves its paths against its own directory: src/server here,
 // dist/server in a build.

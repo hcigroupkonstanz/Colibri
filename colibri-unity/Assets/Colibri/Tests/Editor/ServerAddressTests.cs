@@ -48,7 +48,7 @@ namespace HCIKonstanz.Colibri.Tests
         [TestCase("[2001:db8::1]", "2001:db8::1")]
         public void AnIPAddressIsTakenAsItIs(string host, string expected)
         {
-            Assert.That(WebServerConnection.TryParseAddress(host, out var address), Is.True);
+            Assert.That(AddressResolver.TryParseAddress(host, out var address), Is.True);
             Assert.That(address, Is.EqualTo(IPAddress.Parse(expected)));
         }
 
@@ -63,14 +63,14 @@ namespace HCIKonstanz.Colibri.Tests
         [TestCase(null)]
         public void AnythingElseIsNot(string host)
         {
-            Assert.That(WebServerConnection.TryParseAddress(host, out var address), Is.False);
+            Assert.That(AddressResolver.TryParseAddress(host, out var address), Is.False);
             Assert.That(address, Is.Null);
         }
 
         [Test]
         public void AnIPAddressIsNotLookedUp()
         {
-            var resolving = WebServerConnection.ResolveAsync("[::1]", 5000, CancellationToken.None);
+            var resolving = AddressResolver.ResolveAsync("[::1]", 5000, CancellationToken.None);
 
             Assert.That(resolving.IsCompleted, Is.True);
             Assert.That(resolving.Result, Is.EqualTo(new[] { IPAddress.IPv6Loopback }));
@@ -80,7 +80,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void LocalhostResolvesToLoopbackAddresses()
         {
-            var addresses = Wait(WebServerConnection.ResolveAsync("localhost", 5000, CancellationToken.None));
+            var addresses = Wait(AddressResolver.ResolveAsync("localhost", 5000, CancellationToken.None));
 
             Assert.That(addresses, Is.Not.Empty);
             Assert.That(addresses.All(IPAddress.IsLoopback), Is.True, string.Join(", ", addresses));
@@ -102,8 +102,8 @@ namespace HCIKonstanz.Colibri.Tests
             var v6 = IPAddress.Parse("2001:db8::1");
             var v4 = IPAddress.Parse("192.0.2.1");
 
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v6, v4 }), Is.EqualTo(new[] { v4, v6 }));
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v4, v6 }), Is.EqualTo(new[] { v4, v6 }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v6, v4 }), Is.EqualTo(new[] { v4, v6 }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v4, v6 }), Is.EqualTo(new[] { v4, v6 }));
         }
 
         [Test]
@@ -114,8 +114,8 @@ namespace HCIKonstanz.Colibri.Tests
             var v4a = IPAddress.Parse("192.0.2.1");
             var v4b = IPAddress.Parse("192.0.2.2");
 
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v6a, v4a, v6b, v4b }), Is.EqualTo(new[] { v4a, v4b, v6a, v6b }));
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v4b, v6b, v4a, v6a }), Is.EqualTo(new[] { v4b, v4a, v6b, v6a }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v6a, v4a, v6b, v4b }), Is.EqualTo(new[] { v4a, v4b, v6a, v6b }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v4b, v6b, v4a, v6a }), Is.EqualTo(new[] { v4b, v4a, v6b, v6a }));
         }
 
         /// <summary>A name with only IPv6 addresses still connects over IPv6, as voice then goes to IPv6 too.</summary>
@@ -125,7 +125,7 @@ namespace HCIKonstanz.Colibri.Tests
             var v6a = IPAddress.Parse("2001:db8::1");
             var v6b = IPAddress.Parse("2001:db8::2");
 
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v6b, v6a }), Is.EqualTo(new[] { v6b, v6a }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v6b, v6a }), Is.EqualTo(new[] { v6b, v6a }));
         }
 
         /// <summary>A resolver may hand out an address once per socket type; trying it again gains nothing.</summary>
@@ -135,7 +135,7 @@ namespace HCIKonstanz.Colibri.Tests
             var v6 = IPAddress.Parse("2001:db8::1");
             var v4 = IPAddress.Parse("192.0.2.1");
 
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v6, v6, v4, v6, v4 }), Is.EqualTo(new[] { v4, v6 }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v6, v6, v4, v6, v4 }), Is.EqualTo(new[] { v4, v6 }));
         }
 
         [Test]
@@ -143,7 +143,7 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var v4 = IPAddress.Parse("192.0.2.1");
 
-            var addresses = WebServerConnection.AddressesToTry(new[] { v4.MapToIPv6() });
+            var addresses = AddressResolver.AddressesToTry(new[] { v4.MapToIPv6() });
 
             Assert.That(addresses, Is.EqualTo(new[] { v4 }));
             Assert.That(addresses[0].AddressFamily, Is.EqualTo(AddressFamily.InterNetwork));
@@ -161,8 +161,8 @@ namespace HCIKonstanz.Colibri.Tests
             var v4a = IPAddress.Parse("192.0.2.1");
             var v4b = IPAddress.Parse("192.0.2.2");
 
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v6a, v4a.MapToIPv6(), v6b, v4b }), Is.EqualTo(new[] { v4a, v4b, v6a, v6b }));
-            Assert.That(WebServerConnection.AddressesToTry(new[] { v6a, v4a.MapToIPv6(), v4a }), Is.EqualTo(new[] { v4a, v6a }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v6a, v4a.MapToIPv6(), v6b, v4b }), Is.EqualTo(new[] { v4a, v4b, v6a, v6b }));
+            Assert.That(AddressResolver.AddressesToTry(new[] { v6a, v4a.MapToIPv6(), v4a }), Is.EqualTo(new[] { v4a, v6a }));
         }
 
 
@@ -177,7 +177,7 @@ namespace HCIKonstanz.Colibri.Tests
 
             var clock = Stopwatch.StartNew();
             var e = Assert.Throws<TimeoutException>(() =>
-                Wait(WebServerConnection.WaitForLookupAsync(neverCompletes, "colibri.example.org", 300, CancellationToken.None)));
+                Wait(AddressResolver.WaitForLookupAsync(neverCompletes, "colibri.example.org", 300, CancellationToken.None)));
 
             Assert.That(clock.ElapsedMilliseconds, Is.GreaterThanOrEqualTo(250).And.LessThan(5000));
             Assert.That(e.Message, Is.EqualTo("colibri.example.org could not be resolved within 0.3 s"));
@@ -191,7 +191,7 @@ namespace HCIKonstanz.Colibri.Tests
             using (var cancel = new CancellationTokenSource())
             {
                 var clock = Stopwatch.StartNew();
-                var lookup = WebServerConnection.WaitForLookupAsync(neverCompletes, "colibri.example.org", 60000, cancel.Token);
+                var lookup = AddressResolver.WaitForLookupAsync(neverCompletes, "colibri.example.org", 60000, cancel.Token);
                 cancel.CancelAfter(100);
 
                 Assert.Catch<OperationCanceledException>(() => Wait(lookup));
@@ -203,7 +203,7 @@ namespace HCIKonstanz.Colibri.Tests
         public void ALookupThatFindsNothingFailsAsHostNotFound()
         {
             var e = Assert.Throws<SocketException>(() =>
-                Wait(WebServerConnection.WaitForLookupAsync(Task.FromResult(new IPAddress[0]), "colibri.example.org", 5000, CancellationToken.None)));
+                Wait(AddressResolver.WaitForLookupAsync(Task.FromResult(new IPAddress[0]), "colibri.example.org", 5000, CancellationToken.None)));
 
             Assert.That(e.SocketErrorCode, Is.EqualTo(SocketError.HostNotFound));
         }
@@ -216,22 +216,22 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void EachAddressGetsAnEqualShareOfTheTimeLeft()
         {
-            Assert.That(WebServerConnection.AttemptTimeoutMs(5000, 2, false), Is.EqualTo(2500));
-            Assert.That(WebServerConnection.AttemptTimeoutMs(4500, 3, false), Is.EqualTo(1500));
+            Assert.That(AddressResolver.AttemptTimeoutMs(5000, 2, false), Is.EqualTo(2500));
+            Assert.That(AddressResolver.AttemptTimeoutMs(4500, 3, false), Is.EqualTo(1500));
         }
 
         [Test]
         public void TheLastAddressGetsAllTheTimeLeft()
         {
-            Assert.That(WebServerConnection.AttemptTimeoutMs(2400, 1, false), Is.EqualTo(2400));
-            Assert.That(WebServerConnection.AttemptTimeoutMs(2400, 1, true), Is.EqualTo(2400));
+            Assert.That(AddressResolver.AttemptTimeoutMs(2400, 1, false), Is.EqualTo(2400));
+            Assert.That(AddressResolver.AttemptTimeoutMs(2400, 1, true), Is.EqualTo(2400));
         }
 
         [Test]
         public void ManyAddressesGetASecondEachButNeverMoreThanIsLeft()
         {
-            Assert.That(WebServerConnection.AttemptTimeoutMs(5000, 8, false), Is.EqualTo(1000));
-            Assert.That(WebServerConnection.AttemptTimeoutMs(600, 3, false), Is.EqualTo(600));
+            Assert.That(AddressResolver.AttemptTimeoutMs(5000, 8, false), Is.EqualTo(1000));
+            Assert.That(AddressResolver.AttemptTimeoutMs(600, 3, false), Is.EqualTo(600));
         }
 
         /// <summary>
@@ -241,7 +241,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void ALoopbackAddressWithOthersAfterItGetsAQuarterOfASecond()
         {
-            Assert.That(WebServerConnection.AttemptTimeoutMs(5000, 2, true), Is.EqualTo(250));
+            Assert.That(AddressResolver.AttemptTimeoutMs(5000, 2, true), Is.EqualTo(250));
         }
 
 
@@ -263,7 +263,7 @@ namespace HCIKonstanz.Colibri.Tests
                 $@"^Colibri: no connection to 127\.0\.0\.1:{port} (\(ConnectionRefused\)|within [0-9.]+ s), trying \[::1\]:{port}$"));
 
             var clock = Stopwatch.StartNew();
-            var (socket, address) = Wait(WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback, IPAddress.IPv6Loopback },
+            var (socket, address) = Wait(ConnectRace.ConnectAnyAsync(new[] { IPAddress.Loopback, IPAddress.IPv6Loopback },
                 "localhost", port, 5000, 5000, Attempting, CancellationToken.None));
 
             Assert.That(clock.ElapsedMilliseconds, Is.LessThan(2000), "The refused address held up the attempt");
@@ -287,7 +287,7 @@ namespace HCIKonstanz.Colibri.Tests
             RequireIPv6();
             var port = ClosedPort();
 
-            var e = Assert.Throws<SocketException>(() => Wait(WebServerConnection.ConnectAnyAsync(
+            var e = Assert.Throws<SocketException>(() => Wait(ConnectRace.ConnectAnyAsync(
                 new[] { IPAddress.Loopback, IPAddress.IPv6Loopback }, "localhost", port, 5000, 5000, Attempting, CancellationToken.None)));
 
             Assert.That(e.SocketErrorCode, Is.EqualTo(SocketError.ConnectionRefused));
@@ -313,7 +313,7 @@ namespace HCIKonstanz.Colibri.Tests
 
             LogAssert.Expect(LogType.Log, $"Colibri: no connection to 127.0.0.1:{port} within 0.25 s, trying [::1]:{port}");
 
-            var e = Assert.Throws<SocketException>(() => Wait(WebServerConnection.ConnectAnyAsync(
+            var e = Assert.Throws<SocketException>(() => Wait(ConnectRace.ConnectAnyAsync(
                 new[] { IPAddress.Loopback, IPAddress.IPv6Loopback }, "localhost", port, 5000, 5000, Attempting, CancellationToken.None)));
 
             Assert.That(e.SocketErrorCode, Is.EqualTo(SocketError.ConnectionRefused));
@@ -335,7 +335,7 @@ namespace HCIKonstanz.Colibri.Tests
             LogAssert.Expect(LogType.Log, new Regex(
                 $@"^Colibri: no connection to 127\.0\.0\.1:{port} (\(ConnectionRefused\)|within [0-9.]+ s), trying \[fe80::1\]:{port}$"));
 
-            var e = Assert.Catch(() => Wait(WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback, IPAddress.Parse("fe80::1") },
+            var e = Assert.Catch(() => Wait(ConnectRace.ConnectAnyAsync(new[] { IPAddress.Loopback, IPAddress.Parse("fe80::1") },
                 "colibri.example.org", port, 3000, 3000, Attempting, CancellationToken.None)));
 
             Assert.That(e is TimeoutException || (e is SocketException refused && refused.SocketErrorCode == SocketError.ConnectionRefused),
@@ -359,7 +359,7 @@ namespace HCIKonstanz.Colibri.Tests
             LogAssert.Expect(LogType.Log, $"Colibri: no connection to 127.0.0.1:{unanswered} within 0.25 s, trying 127.0.0.2:{unanswered}");
 
             var clock = Stopwatch.StartNew();
-            var (_, address) = Wait(WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback, other },
+            var (_, address) = Wait(ConnectRace.ConnectAnyAsync(new[] { IPAddress.Loopback, other },
                 "colibri.example.org", unanswered, 3000, 3000, Attempting, CancellationToken.None));
 
             Assert.That(address, Is.EqualTo(other));
@@ -386,7 +386,7 @@ namespace HCIKonstanz.Colibri.Tests
             };
 
             var clock = Stopwatch.StartNew();
-            Assert.Throws<TimeoutException>(() => Wait(WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback, unrouted },
+            Assert.Throws<TimeoutException>(() => Wait(ConnectRace.ConnectAnyAsync(new[] { IPAddress.Loopback, unrouted },
                 "colibri.example.org", unanswered, 1500, 5000, hasRoute, Attempting, CancellationToken.None)));
 
             Assert.That(clock.ElapsedMilliseconds, Is.GreaterThanOrEqualTo(1400), "The address before the one without a route did not get the whole time");
@@ -400,7 +400,7 @@ namespace HCIKonstanz.Colibri.Tests
             var unanswered = UnansweredPort();
 
             var clock = Stopwatch.StartNew();
-            var e = Assert.Throws<TimeoutException>(() => Wait(WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback },
+            var e = Assert.Throws<TimeoutException>(() => Wait(ConnectRace.ConnectAnyAsync(new[] { IPAddress.Loopback },
                 "colibri.example.org", unanswered, 600, 5000, Attempting, CancellationToken.None)));
 
             Assert.That(clock.ElapsedMilliseconds, Is.GreaterThanOrEqualTo(500).And.LessThan(5000));
@@ -417,7 +417,7 @@ namespace HCIKonstanz.Colibri.Tests
             using (var cancel = new CancellationTokenSource())
             {
                 var clock = Stopwatch.StartNew();
-                var attempt = WebServerConnection.ConnectAnyAsync(new[] { IPAddress.Loopback }, "colibri.example.org", unanswered,
+                var attempt = ConnectRace.ConnectAnyAsync(new[] { IPAddress.Loopback }, "colibri.example.org", unanswered,
                     60000, 60000, Attempting, cancel.Token);
                 cancel.CancelAfter(100);
 
@@ -438,7 +438,7 @@ namespace HCIKonstanz.Colibri.Tests
             RequireIPv6();
             var port = Port(Listen(IPAddress.IPv6Loopback));
 
-            var session = Wait(WebServerConnection.OpenSessionAsync("[::1]", port, null, 5000, Attempting, CancellationToken.None));
+            var session = Wait(ServerConnector.OpenSessionAsync("[::1]", port, null, 5000, Attempting, CancellationToken.None));
             _disposables.Add(session.Stream);
 
             Assert.That(session.Socket.AddressFamily, Is.EqualTo(AddressFamily.InterNetworkV6));
@@ -455,7 +455,7 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var port = Port(Listen(IPAddress.Loopback));
 
-            var session = Wait(WebServerConnection.OpenSessionAsync("localhost", port, null, 5000, Attempting, CancellationToken.None));
+            var session = Wait(ServerConnector.OpenSessionAsync("localhost", port, null, 5000, Attempting, CancellationToken.None));
             _disposables.Add(session.Stream);
 
             Assert.That(session.Address, Is.EqualTo(IPAddress.Loopback));
@@ -475,7 +475,7 @@ namespace HCIKonstanz.Colibri.Tests
             var port = Port(Listen(IPAddress.IPv6Loopback));
             Listen(IPAddress.Loopback, port);
 
-            var session = Wait(WebServerConnection.OpenSessionAsync("localhost", port, null, 5000, Attempting, CancellationToken.None));
+            var session = Wait(ServerConnector.OpenSessionAsync("localhost", port, null, 5000, Attempting, CancellationToken.None));
             _disposables.Add(session.Stream);
 
             Assert.That(session.Address, Is.EqualTo(IPAddress.Loopback));

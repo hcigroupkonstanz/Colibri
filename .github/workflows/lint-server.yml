@@ -11,7 +11,7 @@ on:
       - "colibri-unity/Assets/Colibri/Tests/Editor/ProtocolVectorTests.cs"
       # So is every client's copy of the protocol version (see versionLiterals in
       # colibri-server/test/emit-protocol-vectors.ts), so bumping one alone fails here.
-      - "colibri-unity/Assets/Colibri/Networking/**"
+      - "colibri-unity/Assets/Colibri/Runtime/Networking/**"
       - "colibri-web/src/Colibri.ts"
   pull_request:
     paths:
@@ -22,7 +22,7 @@ on:
       - "colibri-unity/Assets/Colibri/Tests/Editor/ProtocolVectorTests.cs"
       # So is every client's copy of the protocol version (see versionLiterals in
       # colibri-server/test/emit-protocol-vectors.ts), so bumping one alone fails here.
-      - "colibri-unity/Assets/Colibri/Networking/**"
+      - "colibri-unity/Assets/Colibri/Runtime/Networking/**"
       - "colibri-web/src/Colibri.ts"
 
 jobs:

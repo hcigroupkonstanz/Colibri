@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { config, Subject } from 'rxjs';
-import { MAX_LOG_CHARS, WebLog } from '../../src/server/modules/web/web-log.js';
-import { SocketIoClient, SocketIOServer } from '../../src/server/modules/networking/socket-io-server.js';
-import { NetworkMessage } from '../../src/server/modules/command-hooks/connection-pool.js';
-import { Payload, Service } from '../../src/server/modules/core/index.js';
+import { MAX_LOG_CHARS, WebLog } from '../../src/server/modules/admin/web-log.js';
+import type { SocketIoClient, SocketIOServer } from '../../src/server/modules/socket-io/socket-io-server.js';
+import type { NetworkMessage } from '../../src/server/modules/protocol/network.js';
+import { Payload } from '../../src/server/modules/protocol/payload.js';
+import { Service } from '../../src/server/modules/core/service.js';
 
 class FakeSocketIOServer {
     public messagesSource = new Subject<NetworkMessage>();

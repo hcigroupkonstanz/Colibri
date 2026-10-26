@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RATE_HISTORY_LENGTH, RATE_WINDOW_MILLIS, TrafficMeter } from '../../src/server/modules/networking/client-activity.js';
+import { RATE_HISTORY_LENGTH, RATE_WINDOW_MILLIS, TrafficMeter } from '../../src/server/modules/limits/client-activity.js';
 
 describe('TrafficMeter', () => {
     it('turns counts into rates once a window has passed', () => {

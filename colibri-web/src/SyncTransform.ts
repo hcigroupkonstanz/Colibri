@@ -22,19 +22,19 @@ export type Quaternion = [number, number, number, number];
 export class SyncTransform extends SyncModel<SyncTransform> {
     /** Unity's `activeSelf`. `false` hides the object on the Unity clients. */
     @Synced()
-    accessor active = true;
+    public accessor active = true;
 
     /** World position, or local position with *Use Local Transform* ticked. */
     @Synced()
-    accessor position: Vector3 = [0, 0, 0];
+    public accessor position: Vector3 = [0, 0, 0];
 
     /** World rotation, or local rotation with *Use Local Transform* ticked. */
     @Synced()
-    accessor rotation: Quaternion = [0, 0, 0, 1];
+    public accessor rotation: Quaternion = [0, 0, 0, 1];
 
     /** Local scale. */
     @Synced()
-    accessor scale: Vector3 = [1, 1, 1];
+    public accessor scale: Vector3 = [1, 1, 1];
 
     /**
      * Id of the Unity client that simulates the object's physics (`PhysicsAuthority`). Declared so a
@@ -42,7 +42,7 @@ export class SyncTransform extends SyncModel<SyncTransform> {
      * authority away from that client.
      */
     @Synced()
-    accessor physicsId = '';
+    public accessor physicsId = '';
 }
 
 /**

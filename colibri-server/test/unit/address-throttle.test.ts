@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AddressThrottle } from '../../src/server/modules/networking/address-throttle.js';
+import { AddressThrottle } from '../../src/server/modules/tcp/worker/address-throttle.js';
 
 describe('AddressThrottle', () => {
     it('lets a warning about an address through once per interval', () => {

@@ -1,0 +1,94 @@
+import type { Observable } from 'rxjs';
+import { Subject } from 'rxjs';
+import { normalizeAddress } from '../net/addresses.js';
+import { voiceAppId } from './voice-packet.js';
+
+// What the voice server reads of a Unity (TCP) client; TCPServerProxy's clients fit.
+export interface UnityClient {
+    readonly app: string;
+    // Behind a proxy, the one its PROXY protocol header named.
+    readonly address: string;
+}
+
+// TCPServerProxy, as far as the voice server is concerned.
+export interface UnityClientSource {
+    readonly currentClients: ReadonlyArray<UnityClient>;
+    readonly clientConnected$: Observable<UnityClient>;
+    readonly clientDisconnected$: Observable<UnityClient>;
+}
+
+// A Unity client of the app `appId` has left `address`.
+export interface UnityClientLeft {
+    address: string;
+    appId: number;
+}
+
+/**
+ * The addresses the Unity clients of each app are connected from, by voice app id. Voice is relayed
+ * only from these (see VoiceAdmission.admit): a UDP source address is all a voice packet can be checked
+ * by, and anyone can compute an app's id from its name.
+ */
+export class UnityClientAddresses {
+    // Address (see normalizeAddress) -> app id -> how many Unity clients of that app are connected
+    // from it. Two lookups per check however many clients there are: every packet from a sender not
+    // let in yet is checked, and a flood of forged ones makes that thousands a second.
+    private readonly apps = new Map<string, Map<number, number>>();
+    private readonly leftStream = new Subject<UnityClientLeft>();
+
+    public constructor(source: UnityClientSource) {
+        for (const client of source.currentClients) this.add(client);
+        source.clientConnected$.subscribe(client => this.add(client));
+        source.clientDisconnected$.subscribe(client => this.remove(client));
+    }
+
+    // Each time a Unity client of an app leaves an address, unless another is back in its place at
+    // once (see remove). count() then says how many are left there.
+    public get left$(): Observable<UnityClientLeft> {
+        return this.leftStream.asObservable();
+    }
+
+    // Whether a Unity client of the app `appId` is connected from `address`, which has to be normalized.
+    public has(address: string, appId: number): boolean {
+        return this.apps.get(address)?.has(appId) === true;
+    }
+
+    // How many Unity clients of the app `appId` are connected from `address`, which has to be normalized.
+    public count(address: string, appId: number): number {
+        return this.apps.get(address)?.get(appId) ?? 0;
+    }
+
+    private add(client: UnityClient): void {
+        const address = normalizeAddress(client.address);
+        const appId = voiceAppId(client.app);
+        let counts = this.apps.get(address);
+        if (!counts) {
+            counts = new Map();
+            this.apps.set(address, counts);
+        }
+        counts.set(appId, (counts.get(appId) ?? 0) + 1);
+    }
+
+    private remove(client: UnityClient): void {
+        const address = normalizeAddress(client.address);
+        const appId = voiceAppId(client.app);
+        const counts = this.apps.get(address);
+        const count = counts?.get(appId);
+        if (!counts || count === undefined) return;
+
+        const left = count - 1;
+        if (left > 0) {
+            counts.set(appId, left);
+        } else {
+            counts.delete(appId);
+            if (counts.size === 0) this.apps.delete(address);
+        }
+
+        // A client that handshakes again on its connection is reported gone, then connected, in a row
+        // (TCPServerProxy.onClientConnected). Reported after a microtask, and only if fewer are left by
+        // then, so one that stays in its app keeps its voice and recording. The microtask still runs
+        // before the next voice packet is handled.
+        queueMicrotask(() => {
+            if (this.count(address, appId) <= left) this.leftStream.next({ address, appId });
+        });
+    }
+}

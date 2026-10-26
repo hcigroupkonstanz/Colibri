@@ -33,10 +33,10 @@ https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibr
 ### Pinning a version
 
 To install a specific version, append the tag of a [release](https://github.com/hcigroupkonstanz/Colibri/releases)
-to the URL, e.g. `#v2.0.0`:
+to the URL, e.g. `#v2.1.0`:
 
 ```
-https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibri#v2.0.0
+https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibri#v2.1.0
 ```
 
 The Package Manager records the installed commit either way. Colibri changes only when you update it in the
@@ -76,7 +76,7 @@ are part of your project and your builds.
 With the `.unitypackage`, the samples are already in `Assets/Samples/Colibri/<version>/`.
 
 The `[RemoteLogger]` and `[SyncTransformManager]` prefabs are part of the package, not of the samples. Drag them
-from `Packages/Colibri/Prefabs/` in the Project window into your scene.
+from `Packages/Colibri/Runtime/Prefabs/` in the Project window into your scene.
 
 ### TextMeshPro resources
 

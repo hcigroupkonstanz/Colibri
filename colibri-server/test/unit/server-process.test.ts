@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Subscription } from 'rxjs';
-import { ConsoleLog, LogLevel, LogMessage, ServerProcess, Service, ShutdownStep } from '../../src/server/modules/core/index.js';
+import type { Subscription } from 'rxjs';
+import { ConsoleLog } from '../../src/server/modules/core/console-log.js';
+import type { LogMessage } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
+import type { ShutdownStep } from '../../src/server/modules/core/server-process.js';
+import { ServerProcess } from '../../src/server/modules/core/server-process.js';
+import { Service } from '../../src/server/modules/core/service.js';
 
 describe('ServerProcess', () => {
     let logs: LogMessage[];

@@ -1,5 +1,6 @@
 import { format } from 'util';
-import { BuildInfo, describeBuild } from './build-info.js';
+import type { BuildInfo } from './build-info.js';
+import { describeBuild } from './build-info.js';
 import { Service } from './service.js';
 
 export interface ShutdownStep {

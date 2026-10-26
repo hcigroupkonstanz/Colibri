@@ -1,6 +1,6 @@
 {
     "name": "@hcikn/colibri",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Communication Library for Research Prototyping - Allows object synchronization, networking, and voice chat with little to no code required",
     "type": "module",
     "main": "./dist/index.cjs",
@@ -61,6 +61,7 @@
     "files": [
         "/dist"
     ],
+    "sideEffects": false,
     "publishConfig": {
         "access": "public"
     },

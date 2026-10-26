@@ -51,7 +51,7 @@ The server is available as the Docker image [`hcikn/colibri`](https://hub.docker
 ```yaml
 services:
     colibri:
-        image: hcikn/colibri:2.0.0
+        image: hcikn/colibri:2.1.0
         restart: unless-stopped
         container_name: colibri
         # Limits the log size
@@ -185,7 +185,7 @@ The server runs until you press Ctrl+C. It saves its data in `colibri-server/dat
 
 ### Docker
 
-The compose file names an exact version of the image, for example `hcikn/colibri:2.0.0`. To update, change the
+The compose file names an exact version of the image, for example `hcikn/colibri:2.1.0`. To update, change the
 version in the compose file and run:
 
 ```sh

@@ -225,8 +225,8 @@ namespace HCIKonstanz.Colibri.E2E
         [UnityTest]
         public IEnumerator TrafficEntriesAgeOutOfTheRecentMessagesLog()
         {
-            var retention = Sync.TrafficRetentionSeconds;
-            Sync.TrafficRetentionSeconds = 0.5f;
+            var retention = TrafficLog.RetentionSeconds;
+            TrafficLog.RetentionSeconds = 0.5f;
 
             try
             {
@@ -241,7 +241,7 @@ namespace HCIKonstanz.Colibri.E2E
             }
             finally
             {
-                Sync.TrafficRetentionSeconds = retention;
+                TrafficLog.RetentionSeconds = retention;
             }
         }
     }

@@ -1,0 +1,132 @@
+:host {
+    display: grid;
+    // minmax(0, 1fr), not the implicit auto column: that one grows to the header's widest
+    // content and widens the whole page.
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+
+    height: 100vh;
+    height: 100dvh;
+}
+
+.appbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    height: 48px;
+    padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 16px;
+
+    color: var(--text-strong);
+    font-size: 18px;
+    font-weight: 500;
+
+    img {
+        height: 28px;
+    }
+}
+
+.tabs {
+    display: flex;
+    align-self: stretch;
+
+    a {
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+
+        color: var(--text-muted);
+        font-size: 14px;
+        font-weight: 500;
+        border-bottom: 2px solid transparent;
+        // the bottom border sits on the app bar's own border
+        margin-bottom: -1px;
+
+        &:hover {
+            color: var(--text-strong);
+        }
+
+        &.active {
+            color: var(--text-strong);
+            border-bottom-color: var(--accent);
+        }
+    }
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    padding: 4px 10px;
+
+    color: var(--text-muted);
+    font-size: 13px;
+    border-radius: 12px;
+    background: var(--bg);
+
+    .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-muted);
+    }
+
+    &.connected .dot {
+        background: var(--ok);
+    }
+
+    &.reconnecting {
+        color: var(--warn);
+
+        .dot {
+            background: var(--warn);
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+    }
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.content {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+}
+
+@media (max-width: 479.98px) {
+    .brand {
+        margin-right: 4px;
+
+        span {
+            display: none;
+        }
+    }
+
+    .status {
+        padding: 8px;
+
+        .label {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip-path: inset(50%);
+        }
+    }
+}

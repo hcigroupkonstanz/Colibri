@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../../src/server/modules/core/payload.js';
+import { MAX_PAYLOAD_DEPTH, Payload, nestsDeeperThan } from '../../src/server/modules/protocol/payload.js';
 
 describe('Payload', () => {
     it('fromString: asString() returns the raw string without parsing', () => {

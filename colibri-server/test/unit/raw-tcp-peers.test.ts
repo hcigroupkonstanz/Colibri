@@ -16,8 +16,9 @@ import {
     protocolRejection,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../../src/server/modules/networking/protocol.js';
-import { TestCertificate, createTestCertificate } from '../tls-test-certificate.js';
+} from '../../src/server/modules/protocol/protocol.js';
+import type { TestCertificate } from '../tls-test-certificate.js';
+import { createTestCertificate } from '../tls-test-certificate.js';
 
 // The scripts under test/ that talk to a server over raw TCP, the way a Unity client does.
 const TEST_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

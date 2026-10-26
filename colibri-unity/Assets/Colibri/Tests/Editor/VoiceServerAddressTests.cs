@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Threading;
+using HCIKonstanz.Colibri.Communication.Codecs;
 using HCIKonstanz.Colibri.Networking;
 using NUnit.Framework;
 using UnityEngine;
@@ -33,7 +34,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void LocalhostResolvedIPv6FirstStillGivesTheIPv4Loopback()
         {
-            var chosen = VoiceServerConnection.SelectServerAddress(new[] { IPAddress.IPv6Loopback, IPAddress.Loopback }, EveryRoute);
+            var chosen = VoiceServerAddress.SelectServerAddress(new[] { IPAddress.IPv6Loopback, IPAddress.Loopback }, EveryRoute);
 
             Assert.That(chosen, Is.EqualTo(IPAddress.Loopback));
         }
@@ -41,7 +42,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void TheFirstIPv4AddressIsChosenWhenThereAreSeveral()
         {
-            var chosen = VoiceServerConnection.SelectServerAddress(new[] { V6, V4, OtherV4 }, EveryRoute);
+            var chosen = VoiceServerAddress.SelectServerAddress(new[] { V6, V4, OtherV4 }, EveryRoute);
 
             Assert.That(chosen, Is.EqualTo(V4));
         }
@@ -49,7 +50,7 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void AnIPv4MappedIPv6AddressCountsAsIPv4()
         {
-            var chosen = VoiceServerConnection.SelectServerAddress(new[] { V6, V4.MapToIPv6() }, EveryRoute);
+            var chosen = VoiceServerAddress.SelectServerAddress(new[] { V6, V4.MapToIPv6() }, EveryRoute);
 
             Assert.That(chosen, Is.EqualTo(V4));
             Assert.That(chosen.AddressFamily, Is.EqualTo(AddressFamily.InterNetwork));
@@ -58,23 +59,23 @@ namespace HCIKonstanz.Colibri.Tests
         [Test]
         public void AnIPv4AddressWinsOverAnEarlierIPv6Address()
         {
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { GlobalV6, V4 }, EveryRoute), Is.EqualTo(V4));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { GlobalV6, V4 }, EveryRoute), Is.EqualTo(V4));
         }
 
         /// <summary>A server whose name has only AAAA records, its IPv4 address being behind carrier-grade NAT, say.</summary>
         [Test]
         public void OnlyIPv6AddressesGiveTheFirstOfThem()
         {
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { GlobalV6, IPAddress.IPv6Loopback }, EveryRoute), Is.EqualTo(GlobalV6));
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { IPAddress.IPv6Loopback, GlobalV6 }, EveryRoute), Is.EqualTo(IPAddress.IPv6Loopback));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { GlobalV6, IPAddress.IPv6Loopback }, EveryRoute), Is.EqualTo(GlobalV6));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { IPAddress.IPv6Loopback, GlobalV6 }, EveryRoute), Is.EqualTo(IPAddress.IPv6Loopback));
         }
 
         /// <summary>A link-local address names no interface without a scope, so nothing can be sent to it.</summary>
         [Test]
         public void ALinkLocalIPv6AddressWithoutAScopeIsSkipped()
         {
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { V6, GlobalV6 }, EveryRoute), Is.EqualTo(GlobalV6));
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { V6 }, EveryRoute), Is.Null);
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { V6, GlobalV6 }, EveryRoute), Is.EqualTo(GlobalV6));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { V6 }, EveryRoute), Is.Null);
         }
 
         [Test]
@@ -82,22 +83,22 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var scoped = IPAddress.Parse("fe80::1%2");
 
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { scoped }, EveryRoute), Is.EqualTo(scoped));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { scoped }, EveryRoute), Is.EqualTo(scoped));
         }
 
         [Test]
         public void NoAddressesGiveNothing()
         {
-            Assert.That(VoiceServerConnection.SelectServerAddress(new IPAddress[0], EveryRoute), Is.Null);
-            Assert.That(VoiceServerConnection.SelectServerAddress(null, EveryRoute), Is.Null);
+            Assert.That(VoiceServerAddress.SelectServerAddress(new IPAddress[0], EveryRoute), Is.Null);
+            Assert.That(VoiceServerAddress.SelectServerAddress(null, EveryRoute), Is.Null);
         }
 
         /// <summary>The real resolver on this machine, which is where the ::1-first order comes from.</summary>
         [Test]
         public void LocalhostOnThisMachineGivesAnIPv4Loopback()
         {
-            var chosen = VoiceServerConnection.SelectServerAddress(Dns.GetHostAddresses("localhost"),
-                candidate => WebServerConnection.HasRoute(candidate, VoicePort));
+            var chosen = VoiceServerAddress.SelectServerAddress(Dns.GetHostAddresses("localhost"),
+                candidate => AddressResolver.HasRoute(candidate, VoicePort));
 
             Assert.That(chosen, Is.Not.Null);
             Assert.That(chosen.AddressFamily, Is.EqualTo(AddressFamily.InterNetwork));
@@ -113,8 +114,8 @@ namespace HCIKonstanz.Colibri.Tests
         {
             var routed = IPAddress.Parse("2001:db8::2");
 
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { GlobalV6 }, NoRoute), Is.Null);
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { GlobalV6, routed }, candidate => candidate.Equals(routed)), Is.EqualTo(routed));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { GlobalV6 }, NoRoute), Is.Null);
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { GlobalV6, routed }, candidate => candidate.Equals(routed)), Is.EqualTo(routed));
         }
 
         /// <summary>IPv4 is taken as before, route or not: a device still joining Wi-Fi starts sending once it has one.</summary>
@@ -128,18 +129,18 @@ namespace HCIKonstanz.Colibri.Tests
                 return false;
             };
 
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { GlobalV6, V4 }, noRouteAsked), Is.EqualTo(V4));
-            Assert.That(VoiceServerConnection.SelectServerAddress(new[] { V4.MapToIPv6() }, noRouteAsked), Is.EqualTo(V4));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { GlobalV6, V4 }, noRouteAsked), Is.EqualTo(V4));
+            Assert.That(VoiceServerAddress.SelectServerAddress(new[] { V4.MapToIPv6() }, noRouteAsked), Is.EqualTo(V4));
             Assert.That(asked, Is.Empty);
         }
 
         [Test]
         public void TheLoopbacksHaveARoute()
         {
-            Assert.That(WebServerConnection.HasRoute(IPAddress.Loopback, VoicePort), Is.True);
+            Assert.That(AddressResolver.HasRoute(IPAddress.Loopback, VoicePort), Is.True);
 
             using (OpenIPv6Server())
-                Assert.That(WebServerConnection.HasRoute(IPAddress.IPv6Loopback, VoicePort), Is.True);
+                Assert.That(AddressResolver.HasRoute(IPAddress.IPv6Loopback, VoicePort), Is.True);
         }
 
         /// <summary>
@@ -169,7 +170,7 @@ namespace HCIKonstanz.Colibri.Tests
                 }
             }
 
-            Assert.That(WebServerConnection.HasRoute(to.Address, to.Port), Is.EqualTo(sent));
+            Assert.That(AddressResolver.HasRoute(to.Address, to.Port), Is.EqualTo(sent));
         }
 
         /// <summary>
@@ -186,7 +187,7 @@ namespace HCIKonstanz.Colibri.Tests
             {
                 var voice = gameObject.AddComponent<VoiceServerConnection>();
                 using (var server = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)))
-                using (var client = VoiceServerConnection.OpenSocket(IPAddress.Loopback))
+                using (var client = VoiceServerAddress.OpenSocket(IPAddress.Loopback))
                 {
                     var to = (IPEndPoint)server.Client.LocalEndPoint;
                     var tooLarge = new byte[70000];
@@ -215,14 +216,14 @@ namespace HCIKonstanz.Colibri.Tests
         {
             if (!Socket.OSSupportsIPv6)
                 Assert.Ignore("This machine has no IPv6.");
-            if (WebServerConnection.HasRoute(GlobalV6, 9))
+            if (AddressResolver.HasRoute(GlobalV6, 9))
                 Assert.Ignore("This machine has an IPv6 route to a global address.");
 
             var gameObject = new GameObject("voice-under-test");
             try
             {
                 var voice = gameObject.AddComponent<VoiceServerConnection>();
-                using (var client = VoiceServerConnection.OpenSocket(IPAddress.IPv6Loopback))
+                using (var client = VoiceServerAddress.OpenSocket(IPAddress.IPv6Loopback))
                 {
                     LogAssert.Expect(LogType.Warning, new Regex(@"^Colibri voice: sending to \[2001:db8::1\]:9 failed \(NetworkUnreachable\)"));
                     Assert.DoesNotThrow(() => voice.SendPacket(client, new IPEndPoint(GlobalV6, 9), new byte[] { 1 }));
@@ -251,7 +252,7 @@ namespace HCIKonstanz.Colibri.Tests
                 var received = new List<VoicePacket>();
                 voice.AddVoicePacketListener(7, received.Add);
 
-                using (var client = VoiceServerConnection.OpenSocket(IPAddress.IPv6Loopback))
+                using (var client = VoiceServerAddress.OpenSocket(IPAddress.IPv6Loopback))
                 using (var stop = new CancellationTokenSource())
                 {
                     Assert.That(client.Client.AddressFamily, Is.EqualTo(AddressFamily.InterNetworkV6));

@@ -4,7 +4,7 @@ import {
     forwardedClientAddress,
     forwardedTls,
     parseTrustedProxies,
-} from '../../src/server/modules/networking/trusted-proxies.js';
+} from '../../src/server/modules/net/trusted-proxies.js';
 
 const trusting = (setting: string) => compileTrustedProxies(parseTrustedProxies(setting));
 

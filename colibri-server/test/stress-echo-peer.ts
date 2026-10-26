@@ -20,7 +20,7 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 
 const PROBE_CHANNEL = 'colibri-stress-probe';
 

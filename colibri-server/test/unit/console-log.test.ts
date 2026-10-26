@@ -1,14 +1,16 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Subject } from 'rxjs';
+import type {
+    ConsoleLogOptions,
+} from '../../src/server/modules/core/console-log.js';
 import {
     ConsoleLog,
-    ConsoleLogOptions,
     MAX_CONSOLE_MESSAGE_LENGTH,
     PRINTED_TO_CONSOLE,
 } from '../../src/server/modules/core/console-log.js';
-import { LogLevel, LogMessage, Metadata } from '../../src/server/modules/core/log-message.js';
+import type { LogMessage, Metadata } from '../../src/server/modules/core/log-message.js';
+import { LogLevel } from '../../src/server/modules/core/log-message.js';
 import { Service } from '../../src/server/modules/core/service.js';
-import { RedirectConsole } from '../../src/server/modules/core/redirect-console.js';
 
 const CREATED = new Date('2026-10-19T08:30:00.123Z');
 
@@ -102,24 +104,6 @@ describe('ConsoleLog', () => {
     it('does not print a message a second time that was already written to the console', () => {
         const { log, lines } = capture({ minLevel: LogLevel.Debug });
         log.write(message(LogLevel.Error, 'already printed', { [PRINTED_TO_CONSOLE]: true }));
-        expect(lines).toEqual({ out: [], err: [] });
-    });
-
-    it('does not double-print a console.log that RedirectConsole forwards onto the bus', () => {
-        const original = { debug: console.debug, log: console.log, warn: console.warn, error: console.error };
-        const printed: unknown[] = [];
-        console.log = (msg: unknown) => void printed.push(msg);
-        const { log, lines } = capture({ minLevel: LogLevel.Debug });
-        const subscription = log.attach(Service.output$);
-        try {
-            new RedirectConsole();
-            console.log('Web server listening on 0.0.0.0:9211');
-        } finally {
-            Object.assign(console, original);
-            subscription.unsubscribe();
-        }
-
-        expect(printed).toEqual([ 'Web server listening on 0.0.0.0:9211' ]);
         expect(lines).toEqual({ out: [], err: [] });
     });
 

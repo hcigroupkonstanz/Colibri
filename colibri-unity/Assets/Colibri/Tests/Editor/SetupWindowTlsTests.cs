@@ -26,7 +26,7 @@ namespace HCIKonstanz.Colibri.Tests
             _config.IsSSL = true;
             _config.ServerCertificateSha256 = pin;
 
-            Assert.That(SetupWindow.CertificateSettingsError(_config), Does.StartWith("Server certificate SHA-256 invalid"));
+            Assert.That(ConfigValidation.CertificateSettingsError(_config), Does.StartWith("Server certificate SHA-256 invalid"));
         }
 
         [TestCase("")]
@@ -37,7 +37,7 @@ namespace HCIKonstanz.Colibri.Tests
             _config.IsSSL = true;
             _config.ServerCertificateSha256 = pin;
 
-            Assert.That(SetupWindow.CertificateSettingsError(_config), Is.Null);
+            Assert.That(ConfigValidation.CertificateSettingsError(_config), Is.Null);
         }
 
         /// <summary>Without TLS the settings are not used, so a half-typed fingerprint does not stop the configuration being saved.</summary>
@@ -47,7 +47,7 @@ namespace HCIKonstanz.Colibri.Tests
             _config.IsSSL = false;
             _config.ServerCertificateSha256 = "57:71";
 
-            Assert.That(SetupWindow.CertificateSettingsError(_config), Is.Null);
+            Assert.That(ConfigValidation.CertificateSettingsError(_config), Is.Null);
         }
     }
 }

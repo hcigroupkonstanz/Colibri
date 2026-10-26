@@ -23,7 +23,8 @@
 import { randomUUID } from 'crypto';
 import * as net from 'net';
 import * as tls from 'tls';
-import { io, Socket as WebSocket } from 'socket.io-client';
+import type { Socket as WebSocket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { Config } from '../src/server/configuration.js';
 import {
     COLIBRI_CHANNEL,
@@ -34,8 +35,9 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
-import { PLAIN_PROBE_CLOSED_HINT, ProbeOptions, parseProbeArgs, probeErrorHint } from './tcp-probe-connection.js';
+} from '../src/server/modules/protocol/protocol.js';
+import type { ProbeOptions } from './tcp-probe-connection.js';
+import { PLAIN_PROBE_CLOSED_HINT, parseProbeArgs, probeErrorHint } from './tcp-probe-connection.js';
 
 const USAGE = 'npm run demo -- [--host <name>] [--tls [--insecure]] [--web-port <port>] [--tcp-port <port>] ' +
     '[--minutes <n>] [--apps <n>]';

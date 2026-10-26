@@ -275,7 +275,7 @@ namespace HCIKonstanz.Colibri.E2E
 
             Assert.That(Connection.SuspectedProtocolMismatch, Is.Null,
                 "A link that completed the TLS handshake and then hung up was reported as a suspected protocol mismatch");
-            Assert.That(Connection.ConsecutiveEarlyFrameFailures, Is.Zero);
+            Assert.That(Connection.Diagnostics.ConsecutiveEarlyFrameFailures, Is.Zero);
             Assert.That(Logged(LogType.Warning, Unanswered).Length, Is.EqualTo(1),
                 "Three sessions in a row closed without a frame should be named as such, once");
         }

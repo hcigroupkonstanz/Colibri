@@ -76,6 +76,61 @@ export default tseslint.config(
             'n/no-process-exit': 'off'
         }
     },
-    // must stay last: turns off every formatting rule Prettier now owns
+    {
+        files: ['src/**/*.ts'],
+        rules: {
+            // PascalCase is for the public functions (SendMessage, Synced); names that come from elsewhere,
+            // such as the HTTP header keys in RestStore, are exempt.
+            '@typescript-eslint/naming-convention': [
+                'error',
+                { selector: 'default', format: ['camelCase'], leadingUnderscore: 'allow' },
+                { selector: 'function', format: ['camelCase', 'PascalCase'] },
+                {
+                    selector: 'variable',
+                    modifiers: ['const'],
+                    format: ['camelCase', 'UPPER_CASE', 'PascalCase'],
+                    leadingUnderscore: 'allowDouble'
+                },
+                { selector: 'typeLike', format: ['PascalCase'] },
+                { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
+                // allowDouble for SyncModel.__syncedProperties
+                {
+                    selector: 'classProperty',
+                    modifiers: ['private'],
+                    format: ['camelCase', 'UPPER_CASE', 'PascalCase'],
+                    leadingUnderscore: 'allowDouble'
+                },
+                {
+                    selector: 'classProperty',
+                    modifiers: ['readonly'],
+                    format: ['camelCase', 'UPPER_CASE', 'PascalCase'],
+                    leadingUnderscore: 'allow'
+                },
+                { selector: ['objectLiteralProperty', 'typeProperty', 'import'], format: null }
+            ],
+            '@typescript-eslint/explicit-member-accessibility': ['error', { accessibility: 'explicit' }]
+        }
+    },
+    {
+        files: ['**/*.ts'],
+        rules: {
+            '@typescript-eslint/consistent-type-imports': [
+                'error',
+                { prefer: 'type-imports', fixStyle: 'separate-type-imports' }
+            ]
+        }
+    },
+    // Size guides from docs/dev/conventions.md.
+    {
+        files: ['src/**/*.ts'],
+        rules: {
+            'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
+            'max-lines-per-function': ['error', { max: 40, skipBlankLines: true, skipComments: true }],
+            complexity: ['error', 15],
+            'max-depth': ['error', 4],
+            'max-params': ['error', 5]
+        }
+    },
+    // must stay last: turns off the rules that conflict with Prettier
     eslintConfigPrettier
 );

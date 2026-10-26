@@ -1,6 +1,7 @@
 # colibri-server development
 
 For developers working on colibri-server itself. Using Colibri: [README](../../README.md).
+Code conventions: [conventions.md](conventions.md).
 
 - `npm ci`: install the dependencies.
 - `npm run watch`: development server, recompiles and reloads on changes. Records no commit: it

@@ -10,14 +10,12 @@ const IMAGE_UID = 1000;
 
 /**
  * Checks once, at startup, that the server can write to DATA_ROOT, and says so loudly on stderr
- * when it cannot.
- *
- * Nothing else would say it as plainly: the REST store falls back to memory with one log line,
- * and a voice recording only fails when it is saved. In Docker this is the
- * normal way to get it wrong - the server runs as uid 1000, while a host directory that Docker
- * creates for a bind mount, or the data/ that colibri-server 1.x left behind, belongs to root.
- * The server keeps running either way; it just cannot keep anything past a restart.
+ * when it cannot. The server keeps running, but cannot keep anything past a restart. Nothing else
+ * says it plainly: the REST store falls back to memory with one log line, and a voice recording
+ * fails only when it is saved.
  */
+// In Docker the usual cause is the server running as uid 1000 while the host directory Docker created for a
+// bind mount, or the data/ that colibri-server 1.x left behind, belongs to root.
 export class DataRootCheck extends Service {
     public get serviceName(): string { return 'DataRoot'; }
     public get groupName(): string { return 'core'; }
@@ -29,7 +27,6 @@ export class DataRootCheck extends Service {
         private readonly printError: (text: string) => void = text => console.error(text)
     ) {
         super();
-        // Config.DATA_ROOT keeps the trailing slash of its default; the advice reads better without.
         this.dataRoot = path.resolve(dataRoot);
     }
 
@@ -39,8 +36,7 @@ export class DataRootCheck extends Service {
         if (!error) return true;
 
         this.printError(DataRootCheck.describe(this.dataRoot, error, process.getuid?.(), process.getgid?.()));
-        // The banner above is for `docker logs`; this line is for the admin UI's log, so the
-        // console sink is told to leave it out rather than print the same news twice.
+        // The banner is for `docker logs`; this line is for the admin UI's log, so ConsoleLog skips it.
         this.logError(
             `DATA_ROOT is not writable: ${this.dataRoot} (${error.message}). Nothing will be saved: ` +
             'the data store and voice recordings stay in memory until the server stops.',
@@ -59,7 +55,7 @@ export class DataRootCheck extends Service {
         } catch (err) {
             return err instanceof Error ? err : new Error(String(err));
         }
-        // It could be written, which is all that was asked; a leftover probe file is harmless.
+        // Writable is all that was asked; a leftover probe file is harmless.
         await rm(probeFile, { force: true }).catch(() => undefined);
         return undefined;
     }
@@ -89,30 +85,11 @@ export class DataRootCheck extends Service {
         return lines.join('\n');
     }
 
-    // By error code: this used to advise `chown -R` whatever went wrong, which does nothing for
-    // a read-only mount, a file where the directory should be, or a full disk.
     private static advise(dir: string, code: string | undefined, uid: number | undefined, gid: number | undefined): string[] {
         switch (code) {
             case 'EACCES':
             case 'EPERM':
-                if (uid === undefined) {
-                    return [ 'Fix: make that directory writable for the user running the server, then restart it.' ];
-                }
-                return [
-                    `Fix: give the directory to uid ${uid}, then restart the server:`,
-                    `    chown -R ${uid}:${gid ?? uid} ${dir}`,
-                    // A new named volume takes the owner of what the image has at the mount
-                    // point, the node user. It used to be offered to every uid, but for any other
-                    // (docker run --user 1001, say) it is just as unwritable as the directory.
-                    ...(uid === IMAGE_UID ? [
-                        `With Docker, run that on the host directory mounted at ${dir}, or mount a`,
-                        'named volume there instead of a host directory (-v colibri-data:<that path>).',
-                    ] : [
-                        `With Docker, run that on the host directory mounted at ${dir}.`,
-                        `A named volume would not help: a new one belongs to uid ${IMAGE_UID} (the image's`,
-                        `node user), not to uid ${uid}.`,
-                    ]),
-                ];
+                return DataRootCheck.adviseOwnership(dir, uid, gid);
             case 'EROFS':
                 return [
                     'Fix: it is on a read-only file system. Mount something writable there (with',
@@ -138,5 +115,25 @@ export class DataRootCheck extends Service {
                     'can write to it, or point DATA_ROOT at one that is. Then restart the server.',
                 ];
         }
+    }
+
+    private static adviseOwnership(dir: string, uid: number | undefined, gid: number | undefined): string[] {
+        if (uid === undefined) {
+            return [ 'Fix: make that directory writable for the user running the server, then restart it.' ];
+        }
+        return [
+            `Fix: give the directory to uid ${uid}, then restart the server:`,
+            `    chown -R ${uid}:${gid ?? uid} ${dir}`,
+            // A new named volume takes the owner of the image's mount point, the node user (uid 1000), so
+            // it only helps for that uid.
+            ...(uid === IMAGE_UID ? [
+                `With Docker, run that on the host directory mounted at ${dir}, or mount a`,
+                'named volume there instead of a host directory (-v colibri-data:<that path>).',
+            ] : [
+                `With Docker, run that on the host directory mounted at ${dir}.`,
+                `A named volume would not help: a new one belongs to uid ${IMAGE_UID} (the image's`,
+                `node user), not to uid ${uid}.`,
+            ]),
+        ];
     }
 }

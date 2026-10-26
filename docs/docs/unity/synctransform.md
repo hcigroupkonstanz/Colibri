@@ -17,7 +17,7 @@ The SyncTransform sample shows objects placed in the scene and objects created a
 1. Add the `SyncTransform` component to a GameObject in your scene.
 2. Click *Generate ID* in the `SyncTransform`'s Inspector. The `Id` connects the object to its copies on the other
    clients, so every client must load the object with the same `Id`.
-3. Add the `[SyncTransformManager]` prefab from `Packages/Colibri/Prefabs/` to the scene once. For objects placed
+3. Add the `[SyncTransformManager]` prefab from `Packages/Colibri/Runtime/Prefabs/` to the scene once. For objects placed
    in the scene, it needs no `Template`.
 
 Now, when you move, rotate, scale, hide or show the object on one client, it changes on all other clients too.
@@ -100,7 +100,7 @@ For an object with a `Rigidbody`, only one client calculates the physics. The ot
 
 To sync objects that you create at runtime with `Instantiate`:
 
-1. Add the `[SyncTransformManager]` prefab from `Packages/Colibri/Prefabs/` to the scene.
+1. Add the `[SyncTransformManager]` prefab from `Packages/Colibri/Runtime/Prefabs/` to the scene.
 2. Set its `Template` to the prefab of the object.
 3. In the prefab, set `ModelId` to a name for this prefab, e.g. `cube`, and leave `Id` empty.
 

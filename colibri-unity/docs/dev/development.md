@@ -1,6 +1,7 @@
 # colibri-unity development
 
 For developers working on colibri-unity itself. Using Colibri: [README](../../README.md).
+Code conventions: [conventions.md](conventions.md).
 
 ## Running the tests
 
@@ -90,6 +91,6 @@ copies afterwards. If `Assets/Samples` already exists, the export stops without 
 From the command line, with an absolute output path, since Unity runs in the project folder:
 
 ```sh
-COLIBRI_UNITYPACKAGE="$PWD/Colibri-2.0.0.unitypackage" <Unity> -batchmode -nographics -projectPath colibri-unity \
+COLIBRI_UNITYPACKAGE="$PWD/Colibri-2.1.0.unitypackage" <Unity> -batchmode -nographics -projectPath colibri-unity \
   -executeMethod HCIKonstanz.Colibri.Release.Editor.UnityPackageExport.Export
 ```

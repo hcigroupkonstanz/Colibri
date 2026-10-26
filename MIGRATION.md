@@ -3,6 +3,8 @@
 Colibri 2 does not work with Colibri 1. A Colibri 2 server refuses Colibri 1 clients, and a Colibri 2 Unity client
 cannot connect to a Colibri 1 server. Upgrade the server and all clients together.
 
+Already on Colibri 2.0? See [Unity package 2.0 to 2.1](#unity-package-20-to-21).
+
 ## Checklist
 
 1. [Upgrade the server](#server)
@@ -25,7 +27,7 @@ them as described under [Unity](#unity).
 
 ## Server
 
-1. **Docker:** use the new image and pin its version, e.g. `image: hcikn/colibri:2.0.0`. Without a version, the
+1. **Docker:** use the new image and pin its version, e.g. `image: hcikn/colibri:2.1.0`. Without a version, the
    next pull can switch a server between Colibri 1 and 2 unnoticed.
 2. **Ports:** change the port mappings, firewall rules and reverse proxy to 9211, 9212 and 9213/udp. To keep the old
    ports instead, publish them on the new container ports, e.g. `"9011:9211"`, or set `WEBSERVER_PORT`, `TCP_PORT`
@@ -198,3 +200,22 @@ Where you meant that, e.g. when a component unmounts, call `detach()` instead.
    names match.
 3. **Look at the server's monitoring page** at `http://<server-address>:9211`. It lists every connected client. A
    client still on Colibri 1 is named in the log with the reason it was refused.
+
+## Unity package 2.0 to 2.1
+
+1. **`Codec` and `VoicePacket` are in a namespace.** If your code uses them, add
+   `using HCIKonstanz.Colibri.Communication.Codecs;` for `Codec` and `using HCIKonstanz.Colibri.Networking;` for
+   `VoicePacket`. Before, both were in the global namespace.
+2. **Seven audio types are in a namespace and obsolete.** If your code uses them, add
+   `using HCIKonstanz.Colibri.Communication.Codecs;` for `Opus`, `OpusEncoder`, `OpusDecoder`, `OpusError` and
+   `OpusApplication`, and `using HCIKonstanz.Colibri.Communication;` for `Resampler` and `SamplingUtility`. Before,
+   all were in the global namespace. They are marked `[Obsolete]`, so using them gives warning CS0618, and they
+   become internal in Colibri 3.0 without a public replacement. `SamplingUtility` is a static class now:
+   `new SamplingUtility()` and deriving from it no longer compile.
+3. **Files moved.** The package now has the folders `Runtime/` and `Editor/`, e.g. the prefabs are in
+   `Packages/Colibri/Runtime/Prefabs/`. GUIDs are unchanged, so references in scenes and prefabs keep working. Update
+   only paths written in code, e.g. in editor scripts or `AssetDatabase` lookups.
+4. **Installed from the `.unitypackage`: delete `Assets/Colibri` before you import the 2.1 package.** Importing over an
+   existing install may leave the moved files at their 2.0 paths, which breaks the Editor compile.
+   `Assets/Resources/ColibriConfig.asset` is outside that folder and stays, and references in scenes and prefabs
+   reconnect after the import because GUIDs are unchanged. Package Manager installs need nothing.

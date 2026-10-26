@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fellBackToIPv4, hostPort, listenHost, normalizeAddress } from '../../src/server/modules/networking/addresses.js';
+import { fellBackToIPv4, hostPort, listenHost, normalizeAddress } from '../../src/server/modules/net/addresses.js';
 
 describe('normalizeAddress', () => {
     it.each([

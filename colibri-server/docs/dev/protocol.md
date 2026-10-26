@@ -9,7 +9,7 @@ Colibri relays real-time object synchronization between two kinds of clients:
 Both transports feed the same `{ channel, command, payload }` message into the transport-independent
 `ConnectionPool`, so a relayed message reaches the app's clients on both. Only the hooks
 `ModelSynchronization`, `MeasureLatency`, `WebLog` and `ClientLogger`, and the admin UI's `AdminData`,
-read payloads, through `Payload` (`src/server/modules/core/payload.ts`).
+read payloads, through `Payload` (`src/server/modules/protocol/payload.ts`).
 
 `Payload` keeps the form a message arrived in: a JSON string (TCP, or Socket.IO sent as a string), a
 parsed value (Socket.IO) or raw bytes (TCP). It converts to another form on first use and caches the
@@ -90,7 +90,7 @@ app keeps its models.
 ### Version checking
 
 The server compares `version` with `PROTOCOL_VERSION` in
-[`protocol.ts`](../../src/server/modules/networking/protocol.ts), currently `2`. It supports one version
+[`protocol.ts`](../../src/server/modules/protocol/protocol.ts), currently `2`. It supports one version
 at a time and **refuses** every other one. There is no negotiation or downgrade, since v1 and v3 share
 no subset.
 
@@ -268,10 +268,10 @@ The `broadcast::` prefix of `command` makes the server relay the message
 and colibri-web's `Sync.send*` use the commands in [Payload shapes](#payload-shapes) for state, position
 and other continuous updates.
 
-`BroadcastLogger` (`src/server/modules/command-hooks/broadcast-logger.ts`) logs each one at debug level
+`BroadcastLogger` (`src/server/modules/hooks/broadcast-logger.ts`) logs each one at debug level
 with `metadata.broadcastTraffic = true`. The admin UI's *Sync traffic* toggle filters on that tag,
 independent of the level filter, because this continuous traffic would drown out everything else.
-See `WebLog.isVisibleToClient` (`src/server/modules/web/web-log.ts`).
+See `WebLog.isVisibleToClient` (`src/server/modules/admin/web-log.ts`).
 
 #### Payload shapes
 
@@ -305,12 +305,12 @@ API. Unity routes the two commands to separate listener lists, so a Unity client
 from web clients with `Sync.Receive<float>`. colibri-web's `receiveNumber` listens for both commands.
 
 **The `log` channel is not JSON.** `ClientLogger` treats its payload as text, so colibri-unity sends it
-as raw UTF-8 (`WebServerConnection.EncodePayload`). The server unwraps a JSON string value before
+as raw UTF-8 (`PayloadCodec.EncodePayload`). The server unwraps a JSON string value before
 logging it, so a web client's log line reaches the admin UI without JSON quotes.
 
 ### Frame parsing
 
-`FrameReader` (`src/server/modules/networking/protocol.ts`) is a growable buffer with read and write
+`FrameReader` (`src/server/modules/protocol/protocol.ts`) is a growable buffer with read and write
 cursors that TCP data is appended to. It returns every complete frame buffered. When compacting, it
 copies only the trailing partial frame, which avoids an O(streamLength²) `Buffer.concat` cost on a
 long-lived, often fragmented connection. A malformed or oversized frame (declared length `<= 0` or above
@@ -791,7 +791,7 @@ written for `STORE_EXPIRY_DAYS` (30) is deleted. colibri-unity's `Store` and
 colibri-web's `getRestObject` / `setRestObject` use it.
 
 Values travel as JSON in the media type `application/vnd.colibri.v2+json` (`REST_MEDIA_TYPE` in
-[`protocol.ts`](../../src/server/modules/networking/protocol.ts)), which names the protocol version like the
+[`protocol.ts`](../../src/server/modules/protocol/protocol.ts)), which names the protocol version like the
 handshake's `version`:
 
 - **Request bodies:** a `PUT` must send its value with `Content-Type: application/vnd.colibri.v2+json`.
@@ -858,7 +858,7 @@ client's packets can mix both.
 byte XOR it in and multiply by `0x01000193`, modulo 2^32. The empty name hashes to `0x811c9dc5`, `a` to
 `0xe40c292c`. colibri-unity hashes the app name its TCP handshake sends: the *App Name* of its Colibri
 configuration, with `::` and a `:` at either end replaced by `_` (`VoicePacketCodec.AppId`). The
-server's implementation is `voiceAppId` in `src/server/modules/web/voice-packet.ts`.
+server's implementation is `voiceAppId` in `src/server/modules/voice/voice-packet.ts`.
 
 The server accepts a valid packet only from the address of a Unity client of its app, connected on
 the TCP port. An IPv4-mapped IPv6 address (`::ffff:192.0.2.1`) counts as the IPv4 address it maps.

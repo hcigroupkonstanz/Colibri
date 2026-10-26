@@ -119,7 +119,7 @@ namespace HCIKonstanz.Colibri.Tests
         [TestCase("app", "app")]
         public void SanitizedHandshakeFieldsSurviveTheRoundTrip(string raw, string expected)
         {
-            var sanitized = WebServerConnection.SanitizeHandshakeField(raw);
+            var sanitized = PayloadCodec.SanitizeHandshakeField(raw);
             Assert.That(sanitized, Is.EqualTo(expected));
 
             var frame = FrameCodec.EncodeHandshake("2", sanitized, sanitized);

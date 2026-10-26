@@ -11,7 +11,7 @@ import {
     encodeHandshakeFrame,
     encodeHeartbeatFrame,
     encodeMessageFrame,
-} from '../src/server/modules/networking/protocol.js';
+} from '../src/server/modules/protocol/protocol.js';
 
 const [app, channel, command, payload, repeatsRaw] = process.argv.slice(2);
 const repeats = Number(repeatsRaw ?? 1);
