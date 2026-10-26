@@ -1,4 +1,4 @@
-import { Subject, bufferTime, filter, map, share } from 'rxjs';
+import { Subject, auditTime, buffer, filter, map, share } from 'rxjs';
 
 export abstract class SyncModel<T> {
     // Non-enumerable (stays out of Object.keys() and JSON), defined per instance by registerSyncedProperty().
@@ -12,7 +12,8 @@ export abstract class SyncModel<T> {
 
     public readonly modelChanges = new Subject<string>();
     public readonly modelChanges$ = this.modelChanges.pipe(
-        bufferTime(1),
+        // auditTime arms its timer on the first change only; bufferTime keeps an interval running while idle.
+        buffer(this.modelChanges.pipe(auditTime(1))),
         map(changes => changes.filter(this.uniq)),
         filter(changes => changes.length > 0),
         share()

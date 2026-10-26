@@ -10,6 +10,8 @@ All notable changes to `@hcikn/colibri`. Upgrading from Colibri 1: [Migration Gu
   and behaviour do not change.
 - `package.json` declares `"sideEffects": false`, so bundlers can leave the package out when nothing from it is
   imported.
+- Synced models no longer run a timer while nothing changes. Before, every model woke up each millisecond, which
+  used CPU when many models were registered. The messages sent do not change.
 
 ## [2.0.0] - Unreleased
 
