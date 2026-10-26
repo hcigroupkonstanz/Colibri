@@ -43,3 +43,5 @@ Works only with colibri-server 2.0.0 or newer.
 - `import { ColibriError } from '@hcikn/colibri'` works.
 - `require()` gets the CommonJS build with its own type declarations.
 - No more `console.log` on every model registration.
+- Synced models no longer run a timer while nothing changes. Before, every model woke up each millisecond, which
+  used CPU when many models were registered. The messages sent do not change.
