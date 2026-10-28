@@ -15,8 +15,6 @@ Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log na
 - **Breaking:** the data store accepts only the media type `application/vnd.colibri.v2+json`. Both Colibri 2 clients
   send it.
 - **Breaking:** running without Docker needs Node.js 24.15 or newer.
-- **Breaking:** a data store value that is not written again for 30 days is deleted. `STORE_EXPIRY_DAYS` sets the
-  days, `0` keeps values for good.
 - The Docker image runs the server as the non-root user `node` (uid 1000) and takes over the data directory on
   startup. It is about half as large and has a health check.
 - The data store accepts any JSON value up to 5 MiB, not only objects and arrays up to 100 kB.
@@ -43,6 +41,8 @@ Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log na
 - Support for reverse proxies with `TRUSTED_PROXIES`, so the log shows the clients' real addresses.
 - `PROXY_TLS_ADDRESSES` shows the certificate of a reverse proxy that handles TLS on the monitoring page, with a
   warning before it expires.
+- `STORE_EXPIRY_DAYS` deletes data store values that are not written again for that many days, for a shared server.
+  Off by default.
 - `STORE_MAX_MB` limits the size of the data store. Off by default.
 - `store-export.js` prints the data store as JSON, for backups.
 

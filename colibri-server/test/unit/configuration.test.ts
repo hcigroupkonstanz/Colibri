@@ -168,8 +168,8 @@ describe('Config', () => {
     });
     
     describe('data store', () => {
-        it('defaults to deleting values not written for 30 days, and takes 0 to keep them', async () => {
-            expect((await loadConfig({ STORE_EXPIRY_DAYS: undefined })).STORE_EXPIRY_DAYS).toBe(30);
+        it('defaults to keeping values for good, and takes a number of days to delete those not written since', async () => {
+            expect((await loadConfig({ STORE_EXPIRY_DAYS: undefined })).STORE_EXPIRY_DAYS).toBe(0);
             expect((await loadConfig({ STORE_EXPIRY_DAYS: '0' })).STORE_EXPIRY_DAYS).toBe(0);
             expect((await loadConfig({ STORE_EXPIRY_DAYS: '7' })).STORE_EXPIRY_DAYS).toBe(7);
         });

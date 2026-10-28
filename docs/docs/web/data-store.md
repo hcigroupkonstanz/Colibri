@@ -7,8 +7,8 @@ title: Data Store
 
 The data store keeps small amounts of data on the server, e.g. the color a player selected, the settings of a game
 or the condition of a study. Unlike messages and synchronized objects, the data stays saved after all clients
-disconnect, and also when the server restarts. A value that is not saved again for 30 days is deleted
-([server configuration](../server/configuration.md#data-store)).
+disconnect, and also when the server restarts. A server can be set to delete values that are not saved again for some
+days. The public test server deletes them after 30 days ([server configuration](../server/configuration.md#data-store)).
 
 ## Example: the player's color
 

@@ -151,7 +151,7 @@ The server and the clients keep checking that a connection is alive:
 ## Data store
 
 The data store keeps values on the server, in `store.db` in the data directory. Unlike synchronized objects, the
-values survive restarts. A value that is not written again for 30 days is deleted
+values survive restarts, unless the server is set to delete values that are not written again for some days
 ([Data store](./configuration.md#data-store)). Clients read and write them over HTTP on the web port. Each value
 belongs to an app and has a key.
 

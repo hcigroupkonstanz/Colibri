@@ -787,7 +787,7 @@ and lost in a second drop soon after is still recognised.
 
 A key-value store over HTTP on the web port, separate from the model store. Values are kept per app in
 `store.db`, an SQLite database in the data directory (`DATA_ROOT`), and survive restarts. A value not
-written for `STORE_EXPIRY_DAYS` (30) is deleted. colibri-unity's `Store` and
+written for `STORE_EXPIRY_DAYS` (default 0: never) is deleted. colibri-unity's `Store` and
 colibri-web's `getRestObject` / `setRestObject` use it.
 
 Values travel as JSON in the media type `application/vnd.colibri.v2+json` (`REST_MEDIA_TYPE` in

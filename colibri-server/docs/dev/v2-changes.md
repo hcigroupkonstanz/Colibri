@@ -605,7 +605,7 @@ EditMode tests, which `npm run test:vectors` checks in CI.
   connection checkpoints itself only after 4000 pages (about 16 MiB) of log, and
   `journal_size_limit` cuts the log back to 16 MiB: the worker's PASSIVE checkpoints never start
   the log over, so under a few hundred PUTs a second it grew without limit.
-- **Expiry and a size limit.** Values not written for `STORE_EXPIRY_DAYS` (default 30, `0` never)
+- **Expiry and a size limit.** Values not written for `STORE_EXPIRY_DAYS` (default `0`, never)
   are deleted at startup and every hour. `STORE_MAX_MB` (default `0`, off) answers 507 to a `PUT`
   that would take the store above it; a replaced value counts only by how much it grows. Without
   either, anyone who can reach the server could grow the store until the disk is full. A failing

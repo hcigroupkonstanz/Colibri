@@ -65,7 +65,7 @@ The message names the variable. `docker logs colibri` shows it.
 | ------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
 | `DATA_ROOT`         | `../../data` | Data directory with `store.db` and voice recordings. Leave it unset with Docker.                                 |
 | `WEBSERVER_ROOT`    | `../ui/`     | Files of the monitoring page. You do not need to change it.                                                      |
-| `STORE_EXPIRY_DAYS` | `30`         | Days after which a data store value that was not written again is deleted. `0`: never                            |
+| `STORE_EXPIRY_DAYS` | `0`          | Days after which a data store value that was not written again is deleted. `0`: never                            |
 | `STORE_MAX_MB`      | `0`          | MiB that all data store values may take together. `0`: no limit                                                  |
 
 `DATA_ROOT` and `WEBSERVER_ROOT` may be absolute paths, e.g. `DATA_ROOT=/var/lib/colibri`. A relative path starts
@@ -460,8 +460,10 @@ The server forgets all objects of an app, deleted or not, when the app's last cl
 ## Data store
 
 The server keeps the values of the [data store](./protocol.md#data-store) in `store.db` in the data directory, an
-SQLite database. A value that is not written again for `STORE_EXPIRY_DAYS` (30 days) is deleted. Reading it does not
-count. Set `STORE_EXPIRY_DAYS=0` to keep values for good, for example study data that stays on the server for months.
+SQLite database. Values are kept for good. On a shared server, such as the public test server, `STORE_EXPIRY_DAYS`
+deletes a value that is not written again for that many days, e.g. `STORE_EXPIRY_DAYS=30`. Reading a value does not
+count. Do not set it on a server with study data: a value that a study only reads, such as its conditions, would be
+deleted.
 
 `STORE_MAX_MB` limits how much all values may take together. A `PUT` that would go above it gets `507` and stores
 nothing. Without a limit, the data store grows until the disk is full: anyone who can reach the server can store values.
