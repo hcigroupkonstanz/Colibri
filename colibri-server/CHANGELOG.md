@@ -2,7 +2,7 @@
 
 All notable changes to the Colibri server. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-10-28
 
 Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log names each of them.
 

@@ -2,7 +2,7 @@
 
 All notable changes to `@hcikn/colibri`. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-10-28
 
 Works only with colibri-server 2.0.0 or newer.
 

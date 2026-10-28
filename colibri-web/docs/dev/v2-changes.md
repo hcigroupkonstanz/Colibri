@@ -3,7 +3,7 @@
 Developer notes on every change in colibri-web 2.0.0, with the reasons behind them. The user-facing summary is in
 [CHANGELOG.md](../../CHANGELOG.md).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-10-28
 
 Made for colibri-server 2.0.0 or newer: that server refuses colibri-web 1.x, and this release
 warns about an older server. [MIGRATION.md](../../../MIGRATION.md) walks through upgrading every

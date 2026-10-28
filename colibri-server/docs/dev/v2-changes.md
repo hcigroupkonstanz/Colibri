@@ -9,7 +9,7 @@ this is the server's full detail.
 
 ---
 
-## 2.0.0 (unreleased)
+## 2.0.0 (2026-10-28)
 
 **Breaking changes**
 

@@ -3,7 +3,7 @@
 Developer notes on every change in colibri-unity 2.0.0, with the reasons behind them. The user-facing summary is in
 [CHANGELOG.md](../../CHANGELOG.md).
 
-**2.0.0, unreleased.**
+**2.0.0, released 2026-10-28.**
 
 Summary of everything that changed in the `1.3.1` → `2.0.0` modernization, closing out the v2
 release across all three packages. `colibri-server` 2.0.0 replaced the v1 TCP framing with a fixed
