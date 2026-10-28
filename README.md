@@ -57,9 +57,16 @@ You can start with the public test server
 Colibri 2 does not work with Colibri 1. Clients and server must all run Colibri 2. To upgrade a project, follow the
 [migration guide](MIGRATION.md).
 
+To stay on Colibri 1, pin the version. Otherwise the next update installs Colibri 2:
+
+- Unity: `https://github.com/hcigroupkonstanz/Colibri.git?path=colibri-unity/Assets/Colibri#v1.3.1`
+- TypeScript: `npm install @hcikn/colibri@1`
+- Server: `image: hcikn/colibri:1.3.1`, or the [`v1.3.1`](https://github.com/hcigroupkonstanz/Colibri/tree/v1.3.1)
+  sources
+
 ## Citation
 
-> Sebastian Hubenschmid\*, Daniel Immanuel Fink\*, Johannes Zagermann, Jonathan Wieland, Harald Reiterer, Tiare Feuchtner. In: *ISMAR'23 Adjunct.* 2023. **Colibri: A toolkit for rapid prototyping of networking across realities**. doi: [10.1109/ISMAR-Adjunct60411.2023.00010](https://doi.org/10.1109/ISMAR-Adjunct60411.2023.00010)
+> Sebastian Hubenschmid\*, Daniel Immanuel Fink\*, Johannes Zagermann, Jonathan Wieland, Harald Reiterer, Tiare Feuchtner. In: *ISMAR'23 Adjunct.* 2023. **Colibri: A toolkit for rapid prototyping of networking across realities**. doi: [10.1109/ISMAR-Adjunct60411.2023.00010](https://doi.org/10.1109/ISMAR-Adjunct60411.2023.00010) \*Contributed equally
 
 Published at the ISMAR'23 Adjunct "1st Joint Workshop on Cross Reality". Metadata: [CITATION.cff](CITATION.cff).
 Contact: [Sebastian Hubenschmid](https://www.au.dk/en/ssh@cs.au.dk/) ([GitHub](https://github.com/SebiH)), [Daniel Fink](https://hci.uni-konstanz.de/members/research-assistants/daniel-fink/) ([GitHub](https://github.com/dunifi91)).
@@ -71,6 +78,8 @@ Contact: [Sebastian Hubenschmid](https://www.au.dk/en/ssh@cs.au.dk/) ([GitHub](h
 | [![ReLive](https://img.youtube.com/vi/BaNZ02QkZ_k/0.jpg)](https://www.youtube.com/watch?v=BaNZ02QkZ_k "ReLive") | [![STREAM](https://img.youtube.com/vi/5tEgNzuehuM/0.jpg)](https://www.youtube.com/watch?v=5tEgNzuehuM "STREAM") |
 | [**Re-Locations**](https://github.com/hcigroupkonstanz/Re-locations) | [**ARound the Smartphone**](https://github.com/hcigroupkonstanz/ARound-the-Smartphone) |
 | [![Re-Locations](https://img.youtube.com/vi/_D0_B4Rux1U/0.jpg)](https://www.youtube.com/watch?v=_D0_B4Rux1U "Re-Locations") | [![ARound the Smartphone](https://img.youtube.com/vi/p6cHwLxHWJg/0.jpg)](https://www.youtube.com/watch?v=p6cHwLxHWJg "ARound the Smartphone") |
+| [**Push2AR**](https://github.com/hcigroupkonstanz/Push2AR) |  |
+| [![Push2AR](https://img.youtube.com/vi/Gkwah6YJX2s/0.jpg)](https://www.youtube.com/watch?v=Gkwah6YJX2s "Push2AR") |  |
 
 ## Development
 
