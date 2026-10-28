@@ -6,8 +6,8 @@ title: Configuration
 # Configuration
 
 Colibri needs to know which server to connect to and which app your clients belong to. You set both once per
-project in the *Colibri Setup* window. This page also covers the settings for TLS, other server ports and builds for
-Meta Quest and Android.
+project in the *Colibri Setup* window. This page also covers the settings for TLS, other server ports and the Player
+settings a build needs.
 
 ## Colibri Setup window
 
@@ -140,25 +140,12 @@ Otherwise every data store request fails with "Insecure connection not allowed".
 
 If the connection fails because of TLS, see [TLS errors](./troubleshooting.md#tls-errors).
 
-## Meta Quest and Android
-
-Meta Quest apps are Android builds. Switch the platform to Android in *File → Build Settings* (*File → Build
-Profiles* in Unity 6). The Quest needs ARM64, which on Android requires the IL2CPP scripting backend.
-
-- Use the server's LAN IPv4 address as the server address, not `localhost` ([Server addresses](#server-addresses)).
-- *Run In Background* has no effect on Android.
-- On Android, [voice chat](./voice-chat.md) asks for the microphone permission when it starts.
-- Keep *Project Settings → Player → Other Settings → Managed Stripping Level* at *Minimal* if you send your own
-  classes as JSON or save them in the data store. Higher levels may remove members of classes that only Newtonsoft
-  JSON uses. Alternatively, mark these classes with `[Preserve]` or list them in a `link.xml`. `[Sync]` members are
-  always kept.
-
-### Build settings check
+## Build settings check
 
 Two Player settings fail only in the built app, where you have no console. Colibri checks them after every script
 reload, after switching the build target and at the start of every build, and warns in the console. The build
 continues anyway. *Window → Colibri Configuration* lists the issues with a button that fixes each one, under
-**Android / Meta Quest** (Android target) or **Player build** (other targets).
+**Android build** (Android target) or **Player build** (other targets).
 
 | Setting (*Player → Other Settings*) | Required | Checked | Warning | Otherwise |
 |---|---|---|---|---|

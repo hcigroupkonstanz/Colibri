@@ -198,7 +198,8 @@ it.
 
 :::note
 On IL2CPP builds with a *Managed Stripping Level* above *Minimal*, Unity may remove members of classes that only
-Newtonsoft JSON uses. See [Meta Quest and Android](./configuration.md#meta-quest-and-android).
+Newtonsoft JSON uses. Keep the level at *Minimal*, or mark these classes with `[Preserve]` or list them in a
+`link.xml`. `[Sync]` members are always kept.
 :::
 
 ## Removing listeners

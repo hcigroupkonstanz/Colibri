@@ -414,7 +414,7 @@ namespace HCIKonstanz.Colibri.Setup
 
             GUILayout.Space(15f);
             EditorGUILayout.LabelField(EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android
-                ? "Android / Meta Quest"
+                ? "Android build"
                 : "Player build", EditorStyles.boldLabel);
 
             foreach (var issue in issues)

@@ -128,12 +128,6 @@ Codec* on `VoiceBroadcast`.
 The voice plays at the position of the `VoiceReceiver`. For spatial audio, enable *Spatialize* on its `AudioSource`
 and set *Spatial Blend* to `1`. Spatializer plugins set in the audio settings work too.
 
-## Android and Meta Quest
-
-On Android, `VoiceBroadcast` asks the user for the microphone permission when it starts. If the user refuses, it
-logs `[VoiceBroadcast] Voice Broadcast initialization failed: Microphone permission NOT granted` and does not
-broadcast.
-
 ## Changing the app name at runtime
 
 After the app name changes at runtime, voice stops until the client reconnects with the new app name. Messages and

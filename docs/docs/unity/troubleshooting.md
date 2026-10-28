@@ -27,7 +27,7 @@ On a headset or smartphone, add the `[RemoteLogger]` prefab and read the log on 
 | `Store.Get` or `Store.Put` fails | Wrong server address, or plain HTTP blocked ("Insecure connection not allowed") | Check the URL in the log. Allow HTTP or enable TLS ([Allow downloads over HTTP](./configuration.md#allow-downloads-over-http)). |
 | `NullReferenceException` in `TMP_Settings` in a sample scene | TextMeshPro essential resources missing | *Window → TextMeshPro → Import TMP Essential Resources* ([TextMeshPro resources](./installation.md#textmeshpro-resources)) |
 | Unknown objects or messages appear | Another project uses the same app name. Unity reports nothing. | Choose a unique [app name](./configuration.md#app-name). The server log warns when an app has more than 8 clients. |
-| Works in the Editor but not on the Quest | Android Player settings, or a server address the headset cannot reach, such as `localhost` | Use the server's LAN IPv4 address. Fix the settings named in the `Colibri (Android build): …` and `Colibri (build): …` warnings ([Meta Quest and Android](./configuration.md#meta-quest-and-android)). |
+| Works in the Editor but not on the Quest | Android Player settings, or a server address the headset cannot reach, such as `localhost` | Use the server's LAN IPv4 address. Fix the settings named in the `Colibri (Android build): …` and `Colibri (build): …` warnings ([Build settings check](./configuration.md#build-settings-check)). |
 | UniRx or UniTask errors after installing | Colibri 1 is installed | Install Colibri 2 ([Installation](./installation.md)) |
 
 ## Console messages

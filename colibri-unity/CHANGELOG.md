@@ -33,8 +33,8 @@ Works only with colibri-server 2.0.0 or newer.
 - TLS for the connection to the server, with optional self-signed certificates and certificate pinning.
 - *Max Send Rate* in *Window → Colibri Configuration*.
 - A 10 second timeout for all `Store` requests. Before, a wrong server address made them wait forever.
-- Warnings for an app name others probably use too, such as `test`, and for player settings that break a Meta Quest
-  build.
+- Warnings for an app name others probably use too, such as `test`, and for player settings that break a build,
+  such as *Internet Access* on Android.
 - The `Network Stress` sample, to find out how many objects your setup can sync.
 
 ### Fixed

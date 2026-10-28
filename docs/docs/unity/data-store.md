@@ -113,7 +113,7 @@ list or an object of your own class.
 
 :::note
 On IL2CPP builds with a *Managed Stripping Level* above *Minimal*, Unity may remove members of classes that only the
-data store uses. See [Meta Quest and Android](./configuration.md#meta-quest-and-android).
+data store uses. Keep the level at *Minimal*, or mark these classes with `[Preserve]` or list them in a `link.xml`.
 :::
 
 ## Server connection
