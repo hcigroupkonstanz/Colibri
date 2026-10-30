@@ -76,6 +76,10 @@ exchange data, start the same sample in a second terminal, or run it next to a U
 | [remote-logging](samples/remote-logging.ts) | Sending the console log to the server              |
 | [rest-api](samples/rest-api.ts)             | Saving and loading values in the data store        |
 | [sync-transform](samples/sync-transform.ts) | Showing and moving Unity's `SyncTransform` objects |
+| [webxr](samples/webxr/)                     | The same in WebXR with three.js, in the browser    |
+
+`npm run samples/webxr` serves the WebXR sample at `https://localhost:5173`, also to headsets in the same network.
+How to open it and choose the server: [SyncTransform in WebXR](https://colibri.hci.uni-konstanz.de/web/synctransform#in-webxr).
 
 ## Usage
 

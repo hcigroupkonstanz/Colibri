@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Colibri WebXR sample</title>
+        <style>
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+                overflow: hidden;
+                background: #20242a;
+                font-family: system-ui, sans-serif;
+            }
+            #info {
+                position: absolute;
+                top: 12px;
+                left: 12px;
+                max-width: 420px;
+                padding: 10px 14px;
+                border-radius: 6px;
+                background: rgba(0, 0, 0, 0.6);
+                color: #eee;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            #info code {
+                color: #ffd479;
+            }
+            #status.error {
+                color: #ff8a80;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="info">
+            <div>App <code id="app"></code> on <code id="server"></code></div>
+            <div id="status">Connecting…</div>
+            <div>
+                Enter VR, point a controller at an object and hold the trigger to move it. Change the app or server with
+                <code>?app=…&amp;server=…</code>.
+            </div>
+        </div>
+        <script type="module" src="./main.ts"></script>
+    </body>
+</html>

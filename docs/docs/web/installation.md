@@ -149,10 +149,13 @@ Unity client with that app name.
 | [rest-api](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/rest-api.ts)                   | [Saving and loading values in the data store](./data-store.md)                  | `npm run samples/rest-api`                           |
 | [sync-transform](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/sync-transform.ts)       | [Showing and moving the objects of Unity's `SyncTransform`](./synctransform.md) | `npm run samples/sync-transform`                     |
 | [verification-peer](https://github.com/hcigroupkonstanz/Colibri/blob/develop/colibri-web/samples/verification-peer.ts) | Receiving and sending one value of every message type                           | `npm run samples/verification-peer -- [host] [port]` |
+| [webxr](https://github.com/hcigroupkonstanz/Colibri/tree/develop/colibri-web/samples/webxr)                            | [Unity's `SyncTransform` objects in WebXR](./synctransform.md#in-webxr)         | `npm run samples/webxr`                              |
 
 `verification-peer` does not ask for anything. It takes the server address and port as arguments (default:
 `localhost` and 9211), logs every message it receives on `myChannel`, and after 5 seconds sends one value of every
 message type. Use it to check that a Unity client and the web client understand each other.
+
+`webxr` runs in the browser instead of a terminal. See [SyncTransform in WebXR](./synctransform.md#in-webxr).
 
 :::note
 Everyone who runs the samples on one server with the same app name is in one app and sees the others' data. Without

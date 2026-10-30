@@ -142,6 +142,30 @@ npm run samples/sync-transform
 
 Type `list` to see the objects, and e.g. `move <id> 0 1 0` to move one. The start of an id is enough.
 
+## In WebXR
+
+The [webxr](https://github.com/hcigroupkonstanz/Colibri/tree/develop/colibri-web/samples/webxr) sample shows the
+objects of Unity's SyncTransform sample in WebXR with [three.js](https://threejs.org/). Point a controller at an
+object and hold the trigger to move it. Unity and the other web clients see it move.
+
+```sh
+cd colibri-web
+npm ci
+npm run samples/webxr
+```
+
+This builds the package and serves the page over `https://` with a self-signed certificate. Browsers offer WebXR
+only on `https://` pages, or on `http://localhost`.
+
+- On this computer, open `https://localhost:5173`. Without a headset, a WebXR emulator extension for the browser, such
+  as the Immersive Web Emulator, provides the controllers.
+- On a headset in the same network, open the `Network` address the command prints, e.g. `https://192.168.0.10:5173`.
+- The browser warns about the certificate the first time. Accept it to continue.
+- Add your app name to the address: `https://localhost:5173/?app=<app name>`, the same as in Unity.
+- The page connects to the public test server over TLS on port 443. For your own server, add
+  `&server=https://<server-address>:9211`. A page on `https://` can only connect to a server with
+  [TLS](./configuration.md#tls), or through a reverse proxy that adds it.
+
 ## Limitations
 
 `SyncTransform` is a ready-made [`SyncModel`](./syncmodel.md), so the [limitations of SyncModel](./syncmodel.md#limitations)

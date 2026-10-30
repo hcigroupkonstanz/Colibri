@@ -2,6 +2,12 @@
 
 All notable changes to `@hcikn/colibri`. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
+## [Unreleased]
+
+### Added
+
+- The `webxr` sample: the objects of Unity's `SyncTransform` in WebXR with three.js, moved with the controllers.
+
 ## [2.0.0] - 2026-10-28
 
 Works only with colibri-server 2.0.0 or newer.
