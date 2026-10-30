@@ -90,6 +90,9 @@ or sends its own if the server has none.
 - The `Template` can also be an inactive object in the scene. An active one would sync as an object of its own.
 - The manager creates the copies at the top level of the scene hierarchy. It activates each copy, so the copy runs
   `Awake`, and then applies the synchronized values.
+- The code that instantiates the prefab does not run for the copies on the other clients. What it sets is missing on
+  a copy, and so are references to objects in the scene, such as the player's hands: a prefab cannot hold them. Look
+  them up in `Start`, when every object in the scene has run its `Awake`.
 - An object can have more than one synced component, e.g. a `SyncTransform` on the head and on each hand of an
   avatar. Leave their `Id` empty. The components on the object's top GameObject share its `Id`, and a component on a
   child adds its path, e.g. `<Id>/LeftHand`. Set the manager's `Template` to a component on the top GameObject.
