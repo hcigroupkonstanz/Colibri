@@ -6,7 +6,8 @@ All notable changes to `@hcikn/colibri`. Upgrading from Colibri 1: [Migration Gu
 
 ### Added
 
-- The `webxr` sample: the objects of Unity's `SyncTransform` in WebXR with three.js, moved with the controllers.
+- The `webxr` sample: Unity's `SyncTransform` sample in WebXR with three.js. The controllers move, turn, scale and
+  create objects.
 
 ## [2.0.0] - 2026-10-28
 

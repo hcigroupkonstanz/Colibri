@@ -144,9 +144,15 @@ Type `list` to see the objects, and e.g. `move <id> 0 1 0` to move one. The star
 
 ## In WebXR
 
-The [webxr](https://github.com/hcigroupkonstanz/Colibri/tree/develop/colibri-web/samples/webxr) sample shows the
-objects of Unity's SyncTransform sample in WebXR with [three.js](https://threejs.org/). Point a controller at an
-object and hold the trigger to move it. Unity and the other web clients see it move.
+The [webxr](https://github.com/hcigroupkonstanz/Colibri/tree/develop/colibri-web/samples/webxr) sample is Unity's
+SyncTransform sample in WebXR with [three.js](https://threejs.org/): the same four cubes with the same ids, and the
+cubes and spheres created at runtime. Like in Unity, `CubeAll` syncs position, rotation and scale, and `CubePosOnly`,
+`CubeRotOnly` and `CubeScaleOnly` only what their names say.
+
+- Point a controller at an object and hold the trigger to move and turn it. Meanwhile, the thumbstick scales it.
+  Unity and the other web clients see it change.
+- The grip, or the _Add cube_ and _Add sphere_ buttons on the page, create new objects.
+- Without Unity, open the page on two devices with the same app name.
 
 ```sh
 cd colibri-web

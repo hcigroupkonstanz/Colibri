@@ -31,6 +31,11 @@
             #status.error {
                 color: #ff8a80;
             }
+            .buttons {
+                display: flex;
+                gap: 8px;
+                margin-top: 8px;
+            }
         </style>
     </head>
     <body>
@@ -38,8 +43,17 @@
             <div>App <code id="app"></code> on <code id="server"></code></div>
             <div id="status">Connecting…</div>
             <div>
-                Enter VR, point a controller at an object and hold the trigger to move it. Change the app or server with
+                The cubes of Unity's SyncTransform sample: <code>CubeAll</code> syncs position, rotation and scale,
+                the others only what their name says.
+            </div>
+            <div>
+                Enter VR, point a controller at an object and hold the trigger to move and turn it. Meanwhile, the
+                thumbstick scales it. The grip adds a cube or a sphere. Change the app or server with
                 <code>?app=…&amp;server=…</code>.
+            </div>
+            <div class="buttons">
+                <button id="add-cube">Add cube</button>
+                <button id="add-sphere">Add sphere</button>
             </div>
         </div>
         <script type="module" src="./main.ts"></script>
