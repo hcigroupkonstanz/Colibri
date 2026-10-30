@@ -4,6 +4,11 @@ All notable changes to Colibri for Unity. Upgrading from Colibri 1: [Migration G
 
 ## [Unreleased]
 
+### Changed
+
+- The `.unitypackage` no longer contains Colibri's own tests. In a project with the Test Framework, they showed up
+  in the Test Runner.
+
 ### Fixed
 
 - The Colibri Setup window, which opens by itself in a project without a configuration, could open at its smallest

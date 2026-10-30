@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,6 +14,9 @@ namespace HCIKonstanz.Colibri.Release.Editor
     /// Assets/Samples/Colibri/{version}/{displayName}, where the Package Manager's Import puts them
     /// too, exported with the package and deleted again afterwards. Copying the .meta files keeps
     /// the GUIDs, so the scenes keep their references.
+    ///
+    /// Colibri's own tests (Assets/Colibri/Tests) are left out: in a project with the Test
+    /// Framework, they would show up in the user's Test Runner.
     ///
     /// Run from the menu (Tools → Colibri → Export .unitypackage), or as: Unity -batchmode -projectPath
     /// colibri-unity -executeMethod HCIKonstanz.Colibri.Release.Editor.UnityPackageExport.Export
@@ -36,6 +40,7 @@ namespace HCIKonstanz.Colibri.Release.Editor
 
         private const string PackageRoot = "Assets/Colibri";
         private const string SamplesRoot = "Assets/Samples";
+        private const string TestsRoot = PackageRoot + "/Tests";
 
         [MenuItem("Tools/Colibri/Export .unitypackage")]
         private static void ExportFromMenu()
@@ -86,8 +91,13 @@ namespace HCIKonstanz.Colibri.Release.Editor
                 }
 
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-                AssetDatabase.ExportPackage(new[] { PackageRoot, SamplesRoot }, output, ExportPackageOptions.Recurse);
-                Debug.Log($"[UnityPackageExport] Exported Colibri {version} with samples to {output}");
+                // Listed one by one instead of with ExportPackageOptions.Recurse, which cannot leave out the tests.
+                var assets = AssetDatabase.GetAllAssetPaths()
+                    .Where(path => IsBelow(path, PackageRoot) || IsBelow(path, SamplesRoot))
+                    .Where(path => !IsBelow(path, TestsRoot))
+                    .ToArray();
+                AssetDatabase.ExportPackage(assets, output);
+                Debug.Log($"[UnityPackageExport] Exported Colibri {version} with samples, without tests, to {output}");
                 return true;
             }
             catch (Exception e)
@@ -101,6 +111,11 @@ namespace HCIKonstanz.Colibri.Release.Editor
                 FileUtil.DeleteFileOrDirectory(SamplesRoot + ".meta");
                 AssetDatabase.Refresh();
             }
+        }
+
+        private static bool IsBelow(string path, string folder)
+        {
+            return path == folder || path.StartsWith(folder + "/", StringComparison.Ordinal);
         }
 
         private static PackageJson ReadPackage()

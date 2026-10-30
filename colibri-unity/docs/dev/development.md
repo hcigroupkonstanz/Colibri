@@ -86,6 +86,7 @@ page. The samples are in `Assets/Colibri/Samples~`, which Unity does not import,
 Package* leaves them out. The export copies them with their `.meta` files to
 `Assets/Samples/Colibri/<version>/<sample name>`, exports them with the package and deletes the
 copies afterwards. If `Assets/Samples` already exists, the export stops without changing anything.
+`Assets/Colibri/Tests` is left out, so Colibri's tests do not show up in the users' Test Runner.
 
 From the command line, with an absolute output path, since Unity runs in the project folder:
 
