@@ -2,6 +2,13 @@
 
 All notable changes to Colibri for Unity. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
+## [Unreleased]
+
+### Fixed
+
+- The Colibri Setup window, which opens by itself in a project without a configuration, could open at its smallest
+  size. It now opens at full size in the middle of the editor.
+
 ## [2.0.0] - 2026-10-28
 
 Works only with colibri-server 2.0.0 or newer.

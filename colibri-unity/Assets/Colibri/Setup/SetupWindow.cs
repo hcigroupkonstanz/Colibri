@@ -46,7 +46,13 @@ namespace HCIKonstanz.Colibri.Setup
         [DidReloadScripts]
         static void OnReload()
         {
-            Init();
+            // Deferred to the editor's next update: right after the reload that opens a project, the
+            // main window may not be laid out yet, and a window shown then opened at its minimum size.
+            if (_waitingToLoad)
+                return;
+
+            _waitingToLoad = true;
+            EditorApplication.update += Init;
         }
 
         // TODO: this is rather inflexible. Maybe there's a better way to detect the configuration (Resources.Load is not allowed in static methods)?
@@ -54,26 +60,14 @@ namespace HCIKonstanz.Colibri.Setup
 
         static void Init()
         {
+            if (EditorApplication.isCompiling)
+                return;
+
+            EditorApplication.update -= Init;
+            _waitingToLoad = false;
+
             if (!ConfigExists())
-            {
-                if (EditorApplication.isCompiling && !_waitingToLoad)
-                {
-                    _waitingToLoad = true;
-                    EditorApplication.update += Init;
-                    return;
-                }
-
-                if (!EditorApplication.isCompiling)
-                {
-                    if (_waitingToLoad)
-                    {
-                        EditorApplication.update -= Init;
-                        _waitingToLoad = false;
-                    }
-
-                    ShowConfigurationWindow();
-                }
-            }
+                ShowConfigurationWindow();
         }
 
 
@@ -89,8 +83,14 @@ namespace HCIKonstanz.Colibri.Setup
             {
                 var window = CreateInstance<SetupWindow>();
                 window.titleContent = new GUIContent("Colibri Setup", EditorGUIUtility.IconContent("_Popup").image);
-                window.position = new Rect(Screen.width / 2.0f, Screen.height / 2.0f, 500, 550);
+                window.minSize = new Vector2(400, 300);
                 window.ShowUtility();
+
+                // After ShowUtility, which would replace it with the size saved when the window last
+                // closed. Centered on the editor: Screen is the current view in pixels, not the screen.
+                var main = EditorGUIUtility.GetMainWindowPosition();
+                if (main.width > 0 && main.height > 0)
+                    window.position = new Rect(main.center.x - 250, main.center.y - 275, 500, 550);
             }
         }
 
