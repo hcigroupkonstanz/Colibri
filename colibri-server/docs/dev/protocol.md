@@ -540,10 +540,8 @@ sending the previous one; the next replaces it.
   are on, so the proxy terminates TLS for every `tcp` client through it, whether or not one is
   connected. `voice` is `{ listening, recording, samplingRate, clients }`.
   `counts` is `{ tcpClients, webClients, adminPages, apps, models, modelApps, modelChannels,
-  deletedModels, storeApps, storeKeys }`. `uptime` is in seconds. `build` is `{ commit, dirty, builtAt }`:
-  the full hash of the git commit the server was built from, whether `colibri-server` had uncommitted
-  changes then, and the build time. `commit` is `null` for a build without git information, `builtAt`
-  for a build that did not record it (`tsc` alone).
+  deletedModels, storeApps, storeKeys }`. `uptime` is in seconds. The answer names neither the
+  commit nor the Node.js version: on a public server, anyone can open the admin UI.
 - **`clients`:** every client except admin UI pages. A row is
   `{ id, app, name, transport, version, tls, tlsAtProxy, address, connectedAt, latency, in, out, limit, held }`:
   `transport` is `tcp` or `web`, `address` the client's own address (from the PROXY protocol header or

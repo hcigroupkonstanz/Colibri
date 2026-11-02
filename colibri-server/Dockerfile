@@ -7,12 +7,6 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-# The commit the admin UI shows. The build context has no .git (see .dockerignore), so it comes in
-# as a build argument: `npm run publish` passes it, and so can any build:
-# docker build --build-arg COLIBRI_COMMIT=$(git rev-parse HEAD) .
-# Without it, the server reports its commit as unknown.
-ARG COLIBRI_COMMIT
-ARG COLIBRI_COMMIT_DIRTY
 RUN npm run build
 
 # ---- Runtime: production dependencies and build output only ----

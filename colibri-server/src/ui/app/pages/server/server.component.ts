@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { AdminService, BuildInfo, ServerSnapshot, SettingValue, TlsInfo } from '../../services';
+import { AdminService, ServerSnapshot, SettingValue, TlsInfo } from '../../services';
 import { LiveStatusComponent } from '../../components/live-status/live-status.component';
 import { OfflineBannerComponent } from '../../components/offline-banner/offline-banner.component';
 import { bytes, count, duration } from '../../format';
@@ -66,25 +66,6 @@ const limit = function (label: string, variable: string, value: SettingValue | u
     return n === 0
         ? { label, variable, value: 'Off', tone: 'off' }
         : { label, variable, value: n === null ? text(value) : format(n) };
-};
-
-// As the server's log names it: unique in the repository, and git takes it wherever it takes a hash.
-const SHORT_COMMIT_LENGTH = 10;
-
-/** The commit it was built from, for a build with its own changes; the full hash and the build time on hover. */
-const commit = function (build: BuildInfo, format: (time: number) => string): Fact {
-    const built = build.builtAt === null ? [] : [ `Built ${format(build.builtAt)}` ];
-    if (build.commit === null) {
-        return {
-            label: 'Commit', value: 'unknown', tone: 'off',
-            title: [ 'Built without git information, e.g. a Docker build without COLIBRI_COMMIT', ...built ].join('\n')
-        };
-    }
-    return {
-        label: 'Commit', value: build.commit.slice(0, SHORT_COMMIT_LENGTH), mono: true,
-        note: build.dirty ? 'uncommitted changes' : undefined,
-        title: [ build.commit, ...built ].join('\n')
-    };
 };
 
 const onOff = function (label: string, on: boolean, variable?: string, note?: string): Fact {
@@ -168,9 +149,7 @@ export const serverSections = function (s: ServerSnapshot, format: (time: number
         {
             id: 'server', title: 'Server', facts: [
                 { label: 'Version', value: s.version, mono: true },
-                commit(s.build, format),
                 { label: 'Protocol version', value: s.protocolVersion, mono: true },
-                { label: 'Node.js', value: s.node, mono: true },
                 { label: 'Started', value: format(s.startedAt) },
                 { label: 'Uptime', value: duration(s.uptime) }
             ]

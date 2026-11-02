@@ -1,6 +1,6 @@
 import { filter } from 'rxjs';
 
-import { BuildInfo, CertificateInfo, Payload, ProxyCertificateResult, Service } from '../core/index.js';
+import { CertificateInfo, Payload, ProxyCertificateResult, Service } from '../core/index.js';
 import { DataStore, NetworkMessage } from '../command-hooks/index.js';
 import { RateLimit, TokenBucket } from '../networking/inbound-limits.js';
 import { SocketIoClient, SocketIOServer } from '../networking/socket-io-server.js';
@@ -51,7 +51,6 @@ export interface AdminSources {
     socketio: SocketIOServer;
     tcp: TCPServerProxy;
     version: string;
-    build: BuildInfo;
     // Date.now() of the start.
     startedAt: number;
     settings: ServerSettings;
@@ -291,7 +290,6 @@ export class AdminData extends Service {
             case 'server':
                 return serverSnapshot({
                     version: sources.version,
-                    build: sources.build,
                     startedAt: sources.startedAt,
                     settings: sources.settings,
                     tls: sources.tls?.info,

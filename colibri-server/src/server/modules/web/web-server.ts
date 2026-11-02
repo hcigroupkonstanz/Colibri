@@ -59,6 +59,8 @@ export class WebServer extends Service {
         // Nothing is listening yet: start() logs 'Web server listening on ...' once listen()
         // has succeeded, and the console sink prints that line too.
         this.app = express();
+        // X-Powered-By: Express tells an attacker what to try, and nothing reads it.
+        this.app.disable('x-powered-by');
         this.app.set('port', this.webPort);
         // So that req.ip names the same client as SocketIOServer does. It also lets a trusted proxy
         // set req.protocol and req.hostname (X-Forwarded-Proto and X-Forwarded-Host), which nothing

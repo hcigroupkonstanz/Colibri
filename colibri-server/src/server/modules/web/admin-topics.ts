@@ -2,7 +2,7 @@
 // are asked for and sent. Every snapshot is read only and bounded in size: a page of models, not the
 // store; a model's JSON up to a limit; names cut to a length. None of these functions changes the
 // state it reads.
-import { BuildInfo, CertificateInfo, ProxyCertificateResult, RingBuffer } from '../core/index.js';
+import { CertificateInfo, ProxyCertificateResult, RingBuffer } from '../core/index.js';
 import { DataStore, ModelEntry, NetworkClient, Tombstone } from '../command-hooks/index.js';
 import { ClientActivity, LoadLimit, RateSample } from '../networking/client-activity.js';
 import { PROTOCOL_VERSION } from '../networking/protocol.js';
@@ -564,7 +564,6 @@ export interface VoiceStatus {
 
 export interface ServerSources {
     version: string;
-    build: BuildInfo;
     // Date.now() of the start.
     startedAt: number;
     settings: ServerSettings;
@@ -603,11 +602,7 @@ const tlsSnapshot = (info: CertificateInfo): TlsSnapshot => ({
 export interface ServerSnapshot {
     at: number;
     version: string;
-    // The commit it was built from, whether colibri-server had uncommitted changes then, and
-    // Date.now() of the build; commit and time null if the build did not record them.
-    build: BuildInfo;
     protocolVersion: string;
-    node: string;
     startedAt: number;
     // Seconds.
     uptime: number;
@@ -686,9 +681,7 @@ export const serverSnapshot = function (sources: ServerSources): ServerSnapshot 
     return {
         at: now,
         version: sources.version,
-        build: sources.build,
         protocolVersion: PROTOCOL_VERSION,
-        node: process.version,
         startedAt: sources.startedAt,
         uptime: Math.max(0, Math.round((now - sources.startedAt) / 1000)),
         settings: sources.settings,

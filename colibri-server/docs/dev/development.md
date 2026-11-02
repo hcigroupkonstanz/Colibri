@@ -3,12 +3,10 @@
 For developers working on colibri-server itself. Using Colibri: [README](../../README.md).
 
 - `npm ci`: install the dependencies.
-- `npm run watch`: development server, recompiles and reloads on changes. Records no commit: it
-  removes `dist/server/build-info.json`, and the *Server* page shows the commit as unknown.
-- `npm run build`: compile. Records the commit in `dist/server/build-info.json`, from
-  `COLIBRI_COMMIT` and `COLIBRI_COMMIT_DIRTY` (`true`) if set, else from git.
+- `npm run watch`: development server, recompiles and reloads on changes.
+- `npm run build`: compile.
 - `npm start`: start the server. Compile first.
-- `npm run publish`: maintainers only. Builds the image with the commit, then pushes
+- `npm run publish`: maintainers only. Builds the image, then pushes
   `hcikn/colibri:<version>` and `hcikn/colibri:latest`.
 - `npm run lint`: lint the server and admin UI sources.
 - `npm test`: vitest unit tests. The TLS tests need `openssl` 3.0 or newer on `PATH` (Git for Windows

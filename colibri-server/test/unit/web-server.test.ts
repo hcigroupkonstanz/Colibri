@@ -335,6 +335,14 @@ describe('WebServer over HTTP', () => {
         });
     });
 
+    it('does not name Express in its answers', async () => {
+        for (const url of [ `${baseUrl}/`, storeUrl('UnityApp', 'missing'), `${baseUrl}/api/fails` ]) {
+            const response = await fetch(url);
+            await response.arrayBuffer();
+            expect(response.headers.get('x-powered-by')).toBeNull();
+        }
+    });
+
     // Express's default error handler wrote the stack trace, with absolute paths into the
     // install, into the response whenever NODE_ENV wasn't "production" - as it isn't for a
     // server started from a checkout, and wasn't in the Docker image either until it set it.

@@ -1,5 +1,4 @@
 import { format } from 'util';
-import { BuildInfo, describeBuild } from './build-info.js';
 import { Service } from './service.js';
 
 export interface ShutdownStep {
@@ -29,9 +28,9 @@ export class ServerProcess extends Service {
         super();
     }
 
-    /** Logs version and build, e.g. `Colibri 2.0.0, commit 1a2b3c4d5e (with uncommitted changes)`. */
-    public reportStart(version: string, build: BuildInfo): void {
-        this.logInfo(`Colibri ${version}, ${describeBuild(build)}`);
+    /** Logs the version, e.g. `Colibri 2.0.0`. */
+    public reportStart(version: string): void {
+        this.logInfo(`Colibri ${version}`);
     }
 
     public reportWarning(text: string): void {

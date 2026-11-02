@@ -91,7 +91,7 @@ object.
 
 The _Server_ page shows:
 
-- the server's version, the commit it was built from, the protocol version, the Node.js version and the uptime
+- the server's version, the protocol version and the uptime
 - the settings in effect, with the variables that set them: ports, TLS, reverse proxy, load limits, idle timeout,
   deleted objects and voice chat ([Configuration](./configuration.md))
 - the TLS certificate's names, issuer, validity and fingerprint, with a warning 30 days before it expires

@@ -149,21 +149,15 @@ nothing: data store values and voice recordings stay in memory and are lost when
 To run a changed server, build the image from a checkout of the repository. In `colibri-server`, run:
 
 ```sh
-COLIBRI_COMMIT=$(git rev-parse HEAD) docker compose up -d --build
+docker compose up -d --build
 ```
 
 The `docker-compose.yml` in `colibri-server` builds the image from the source and keeps the data in `./data`.
-`COLIBRI_COMMIT` is optional. With it, the monitoring page's _Server_ page shows the commit the server was built
-from. Add `COLIBRI_COMMIT_DIRTY=true` if the checkout has changes you have not committed.
 
-In your own compose file, replace the `image:` line with a `build:` section:
+In your own compose file, replace the `image:` line with a `build:` line:
 
 ```yaml
-        build:
-            context: <path to the checkout>/colibri-server
-            args:
-                COLIBRI_COMMIT: ${COLIBRI_COMMIT:-}
-                COLIBRI_COMMIT_DIRTY: ${COLIBRI_COMMIT_DIRTY:-}
+        build: <path to the checkout>/colibri-server
 ```
 
 ## Node.js

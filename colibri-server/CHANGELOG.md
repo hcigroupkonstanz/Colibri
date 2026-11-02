@@ -2,6 +2,19 @@
 
 All notable changes to the Colibri server. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
+## [Unreleased]
+
+### Security
+
+- The monitoring page no longer shows the commit the server was built from or the Node.js version, and the log no
+  longer names the commit. On a public server, anyone can open the monitoring page.
+- The web port no longer answers with the header `X-Powered-By: Express`.
+
+### Removed
+
+- The Docker build arguments `COLIBRI_COMMIT` and `COLIBRI_COMMIT_DIRTY`. A build that still passes them builds as
+  before.
+
 ## [2.0.0] - 2026-10-28
 
 Works only with Colibri 2 clients. Colibri 1 clients are refused, and the log names each of them.

@@ -11,9 +11,7 @@ const snapshot = (overrides: Partial<ServerSnapshot> = {}): ServerSnapshot => ({
     request: 1,
     at: 100 * DAY,
     version: '2.0.0',
-    build: { commit: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6', dirty: false, builtAt: 99 * DAY },
     protocolVersion: '2',
-    node: 'v24.21.0',
     startedAt: 100 * DAY - 3_725_000,
     uptime: 3725,
     settings: {
@@ -46,23 +44,9 @@ describe('serverSections', () => {
         expect(fact(s, 'counts', 'REST store')).toEqual(expect.objectContaining({ value: '7 values', note: 'in 1 app, 1.5 KiB' }));
     });
 
-    it('shows the commit after the version, short, with the full hash and the build time on hover', () => {
-        const s = snapshot();
-        expect(serverSections(s, String).find(x => x.id === 'server')?.facts.map(f => f.label).slice(0, 2)).toEqual([ 'Version', 'Commit' ]);
-        expect(fact(s, 'server', 'Commit')).toEqual({
-            label: 'Commit', value: '3e2855e0c1', mono: true, note: undefined,
-            title: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6\nBuilt 1970-04-10T00:00:00.000Z'
-        });
-    });
-
-    it('says when the build had uncommitted changes, or no git information', () => {
-        expect(fact(snapshot({ build: { commit: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6', dirty: true, builtAt: null } }), 'server', 'Commit'))
-            .toEqual(expect.objectContaining({ value: '3e2855e0c1', note: 'uncommitted changes', title: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6' }));
-
-        const unknown = fact(snapshot({ build: { commit: null, dirty: false, builtAt: null } }), 'server', 'Commit');
-        expect(unknown).toEqual(expect.objectContaining({ value: 'unknown', tone: 'off' }));
-        expect(unknown?.mono).toBeUndefined();
-        expect(unknown?.title).toBe('Built without git information, e.g. a Docker build without COLIBRI_COMMIT');
+    it('names the release and the protocol, but not the commit or the Node.js version', () => {
+        const labels = serverSections(snapshot(), String).find(x => x.id === 'server')?.facts.map(f => f.label);
+        expect(labels).toEqual([ 'Version', 'Protocol version', 'Started', 'Uptime' ]);
     });
 
     it('says which limits are off, and which variable sets each', () => {
@@ -323,16 +307,6 @@ describe('ServerComponent', () => {
         };
     };
 
-    const shown = (build: ServerSnapshot['build']) => row({ build }, 'Commit');
-
-    it('shows the commit in mono with the full hash on hover, and a note for uncommitted changes', () => {
-        const { value, note } = shown({ commit: '3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6', dirty: true, builtAt: null });
-        expect(value.textContent?.trim()).toBe('3e2855e0c1');
-        expect(value.classList.contains('mono')).toBe(true);
-        expect(value.getAttribute('title')).toBe('3e2855e0c1d2b3a4f5e6d7c8b9a0f1e2d3c4b5a6');
-        expect(note).toBe('uncommitted changes');
-    });
-
     it('shows TLS terminated by proxy as Off with a note, X-Forwarded-Proto on hover', () => {
         const { value, note } = row({ tlsAtProxy: { web: true, tcp: false } }, 'TLS');
         expect(value.textContent?.trim()).toBe('Off');
@@ -388,13 +362,5 @@ describe('ServerComponent', () => {
             expect(note).toBe('needs TCP_PROXY_PROTOCOL');
             expect(value.getAttribute('title')).toContain('No effect');
         });
-    });
-
-    it('shows an unknown commit muted, saying why on hover', () => {
-        const { value, note } = shown({ commit: null, dirty: false, builtAt: null });
-        expect(value.textContent?.trim()).toBe('unknown');
-        expect(value.classList.contains('off')).toBe(true);
-        expect(value.getAttribute('title')).toContain('without git information');
-        expect(note).toBeNull();
     });
 });

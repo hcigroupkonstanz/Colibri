@@ -42,19 +42,9 @@ export interface VoiceStatus {
     clients: number;
 }
 
-export interface BuildInfo {
-    /** The full hash of the commit it was built from, null if the build did not record one. */
-    commit: string | null;
-    /** Whether colibri-server had uncommitted changes then. */
-    dirty: boolean;
-    builtAt: number | null;
-}
-
 export interface ServerSnapshot extends Snapshot {
     version: string;
-    build: BuildInfo;
     protocolVersion: string;
-    node: string;
     startedAt: number;
     /** Seconds. */
     uptime: number;

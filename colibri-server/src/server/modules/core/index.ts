@@ -1,4 +1,3 @@
-export * from './build-info.js';
 export * from './console-log.js';
 export * from './data-root-check.js';
 export * from './error-handler.js';

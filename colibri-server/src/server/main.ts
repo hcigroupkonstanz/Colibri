@@ -14,9 +14,9 @@ Error.stackTraceLimit = Config.STACK_TRACE_LIMIT;
 // read here rather than when modules/ is imported, which happens before Config loads .env.
 new colibri.ConsoleLog(colibri.ConsoleLog.optionsFromEnv(process.env)).attach(colibri.Service.output$);
 
-// The release, and the commit it was built from: dist/server/build-info.json, next to this file.
+// The release. Neither the log nor the admin UI names the commit or the Node.js version: on a
+// public server, both are open to anyone, and both tell an attacker what to try.
 const version = colibri.readServerVersion(fileURLToPath(new URL('../../package.json', import.meta.url)));
-const build = colibri.readBuildInfo(fileURLToPath(new URL('./build-info.json', import.meta.url)));
 
 // Print console errors in GUI
 // const redirectConsole = new colibri.RedirectConsole();
@@ -91,7 +91,6 @@ const adminData = new colibri.AdminData({
     socketio: socketioServer,
     tcp: tcpServer,
     version,
-    build,
     startedAt: Date.now(),
     settings: {
         WEBSERVER_HOST: Config.WEBSERVER_HOST,
@@ -148,7 +147,7 @@ const startup = async () => {
 
     // After every init(), so the admin UI's WebLog is listening for these too. First, which
     // server this is.
-    serverProcess.reportStart(version, build);
+    serverProcess.reportStart(version);
     // Settings that have no effect as set.
     for (const warning of configurationWarnings(Config)) serverProcess.reportWarning(warning);
     // Not fatal: the server is still useful without persistence, it just has to say so.
