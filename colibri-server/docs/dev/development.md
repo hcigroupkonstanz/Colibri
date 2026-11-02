@@ -11,8 +11,9 @@ For developers working on colibri-server itself. Using Colibri: [README](../../R
 - `npm run publish`: maintainers only. Builds the image with the commit, then pushes
   `hcikn/colibri:<version>` and `hcikn/colibri:latest`.
 - `npm run lint`: lint the server and admin UI sources.
-- `npm test`: vitest unit tests. The TLS tests need `openssl` on `PATH` (Git for Windows ships it in
-  `usr/bin`). In a test,
+- `npm test`: vitest unit tests. The TLS tests need `openssl` 3.0 or newer on `PATH` (Git for Windows
+  ships it in `usr/bin`; older ones ship 1.1.1, which lacks `x509 -copy_extensions`: update Git then).
+  In a test,
   `createTestCertificate(dir, name, { commonName, keyType: 'ec' | 'rsa', signedBy, serverOnly })`
   from [`test/tls-test-certificate.ts`](../../test/tls-test-certificate.ts) creates a certificate valid
   for 2 days, self-signed or signed by another test certificate.

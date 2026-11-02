@@ -24,8 +24,9 @@ const openssl = function (args: string[]): string {
         return execFileSync('openssl', args, { encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'pipe' ] });
     } catch (err) {
         throw new Error(
-            'The TLS tests make their certificates with the openssl command line tool, which failed. Is it installed ' +
-                `and on PATH? (Git for Windows ships one in usr/bin.) ${err instanceof Error ? err.message : String(err)}`
+            'The TLS tests make their certificates with the openssl command line tool, which failed. Is OpenSSL 3.0 ' +
+                'or newer installed and on PATH? (`openssl version`; Git for Windows ships one in usr/bin, an old Git ' +
+                `OpenSSL 1.1.1.) ${err instanceof Error ? err.message : String(err)}`
         );
     }
 };
