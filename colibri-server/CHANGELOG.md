@@ -2,7 +2,7 @@
 
 All notable changes to the Colibri server. Upgrading from Colibri 1: [Migration Guide](../MIGRATION.md).
 
-## [Unreleased]
+## [2.0.1] - 2026-11-02
 
 ### Security
 

@@ -26,7 +26,7 @@ Save this as `docker-compose.yml` and run `docker compose up -d`:
 ```yaml
 services:
     colibri:
-        image: hcikn/colibri:2.0.0
+        image: hcikn/colibri:2.0.1
         restart: unless-stopped
         container_name: colibri
         # Limits the log size
